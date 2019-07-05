@@ -1,0 +1,16 @@
+#!/bin/bash
+
+SRC=$(dirname ${BASH_SOURCE[0]})
+
+declare -a dirs=(
+ "blocks/Incr/test"
+ "blocks/RegFile/test"
+)
+ 
+for dir in ${dirs[@]}; do
+    echo Generate proxy Makefile for \'$dir\'
+    mkdir -p $dir
+    echo "SRC := $(realpath ${SRC}/$dir)" > ./$dir/Makefile
+    echo "include \$(SRC)/Makefile" >> ./$dir/Makefile
+done
+

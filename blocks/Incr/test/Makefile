@@ -9,9 +9,7 @@ endif
 VERILATOR := $(shell which verilator)
 VERILATOR_ROOT_ := $(dir $(VERILATOR))/..
 
-TC_HOME := /home/ilesik/prj/toolchain/src/toolchain/binutils-gdb
-
-TB_MAIN_CPP := sim_main.cpp
+TB_MAIN_CPP := $(SRC)/sim_main.cpp
 
 TB_TOP := tb_top
 
