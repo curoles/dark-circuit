@@ -9,6 +9,8 @@
 #include <vector>
 #include <argp.h>
 
+#include "isa/isa.h"
+
 const char* argp_program_version = "as 1.0";
 const char* argp_program_bug_address = "<igor@???.org>";
 
@@ -196,10 +198,14 @@ void AsmParser::parse(Options& options)
         while ((c=fgetc(f)) != EOF and isalnum(c)) { s[pos++] = c; }
         s[pos] = '\0';
         printf("instruction: %s\n", s);
-        size_t npos = sym_names_.find_or_insert(s);
-        printf("%lu %s\n", npos, sym_names_.get(npos));
-        SymTable::Sym sym;
-        syms_.add(sym);
+        //size_t npos = sym_names_.find_or_insert(s);
+        //printf("%lu %s\n", npos, sym_names_.get(npos));
+        //SymTable::Sym sym;
+        //syms_.add(sym);
+        OpcodeId op_id = opcode_get_id(s);
+        if (opcode_valid_id(op_id)) {
+            printf("opcode id %u %08x\n", op_id, opcode_encode(op_id));
+        }
     };
 
     while ((c=fgetc(f)) != EOF)
