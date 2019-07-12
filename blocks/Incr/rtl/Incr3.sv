@@ -3,7 +3,7 @@
  *
  *
  */
-module incr3 (
+module Incr3 (
     input  wire [2:0] in,
     output wire [2:0] out
 );
@@ -15,4 +15,4 @@ assign out[2] = ~(~( in[0] &  in[1] & ~in[2]) &
                   ~(         ~in[1] &  in[2]) &
                   ~(~in[0] &  in[1] &  in[2]));
 
-endmodule: incr3
+endmodule: Incr3

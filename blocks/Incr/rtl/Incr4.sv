@@ -1,5 +1,5 @@
 
-module incr4 (
+module Incr4 (
     input  wire [3:0] in,
     output wire [3:0] out
 );
@@ -15,4 +15,4 @@ assign out[3] = ~(~( in[0] &  in[1] &  in[2] & ~in[3]) &
                   ~(         ~in[1] &  in[2] &  in[3]) &
                   ~(~in[0] &  in[1] &  in[2] &  in[3]));
 
-endmodule: incr4
+endmodule: Incr4

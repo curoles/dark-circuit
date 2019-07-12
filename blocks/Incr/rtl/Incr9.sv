@@ -2,7 +2,7 @@
 /* 9-bit Fast Incrementor
  *
  */
-module incr9 (
+module Incr9 (
     input  wire [8:0] in,
     output wire [8:0] out,
     output wire       cy
@@ -26,11 +26,11 @@ assign all1_2_0 = ~nand_2_0;
 assign all1_5_0 = ~(nand_2_0 | nand_5_3);
 assign       cy = ~(nand_2_0 | nand_5_3 | nand_8_6);
 
-incr3 u_incr3_2_0(.in(in[2:0]), .out(out[2:0]));
-incr3 u_incr3_5_3(.in(in[5:3]), .out(incr_5_3));
-incr3 u_incr3_8_6(.in(in[8:6]), .out(incr_8_6));
+Incr3 u_incr3_2_0(.in(in[2:0]), .out(out[2:0]));
+Incr3 u_incr3_5_3(.in(in[5:3]), .out(incr_5_3));
+Incr3 u_incr3_8_6(.in(in[8:6]), .out(incr_8_6));
 
 assign out[5:3] = all1_2_0 ? incr_5_3 : in[5:3];
 assign out[8:6] = all1_5_0 ? incr_8_6 : in[8:6];
 
-endmodule: incr9
+endmodule: Incr9

@@ -18,7 +18,7 @@ module tb_top(
     output  wire        cy16
 );
 
-incr9  u_incr9 (.in(in), .out(out9),  .cy(cy9));
-incr16 u_incr16(.in(in), .out(out16), .cy(cy16));
+Incr9  u_incr9 (.in(in), .out(out9),  .cy(cy9));
+Incr16 u_incr16(.in(in), .out(out16), .cy(cy16));
 
 endmodule: tb_top

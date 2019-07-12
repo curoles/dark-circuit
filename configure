@@ -12,6 +12,7 @@ for dir in ${dirs[@]}; do
     echo Generate proxy Makefile for \'$dir\'
     mkdir -p $dir
     echo "SRC := $(realpath ${SRC}/$dir)" > ./$dir/Makefile
+    echo "SRC_ROOT := $(realpath ${SRC})" >> ./$dir/Makefile
     echo "include \$(SRC)/Makefile" >> ./$dir/Makefile
 done
 
