@@ -1,2 +1,2 @@
 all:
-	gcc -O3 -Wall -Werror as.cpp -o as
+	g++ -O3 -Wall -Werror -lstdc++  as.cpp -o as

@@ -3,7 +3,10 @@
  * @author Igor Lesik 2019
  */
 #include <cstdlib>
+#include <cstring>
 #include <cassert>
+#include <cstdint>
+#include <vector>
 #include <argp.h>
 
 const char* argp_program_version = "as 1.0";
@@ -68,8 +71,103 @@ static char doc[] =
 
 static struct argp argp = { arg_options, parse_opt, 0, doc };
 
+/* User defined names gathered into one table.
+*
+*/
+class StringTable
+{
+    char* tbl_;
+    size_t alloc_size_;
+    size_t size_;
+
+private:
+    size_t insert(const char* s) {
+        if ((strlen(s) + 1) > (alloc_size_ - size_)) {
+            alloc_size_ *= 2;
+            tbl_ = static_cast<char*>(realloc(tbl_, alloc_size_));
+        }
+        size_t pos = size_;
+        strcpy(&tbl_[pos], s);
+        size_ += strlen(s) + 1;
+        return pos;
+    }
+
+public:
+    StringTable():alloc_size_(1024), size_(0) {
+        tbl_ = static_cast<char*>(calloc(alloc_size_, sizeof(char)));
+    }
+
+   ~StringTable() {
+        free(tbl_);
+    }
+
+    // return position of the string in the table
+    size_t find_or_insert(const char* s) {
+        for (size_t i = 0; i < size_; ) {
+            if (0 == strcmp(s, &tbl_[i])) return i;
+            else i += strlen(&tbl_[i]) + 1;
+            while (tbl_[i] == '\0') ++i;
+        }
+        return insert(s);
+    }
+
+    const char* get(size_t pos) const {
+        assert(pos < size_);
+        return &tbl_[pos];
+    }
+};
+
+class SymTable
+{
+public:
+    struct Sym {
+        size_t name_pos;
+        enum Type {ADDR, VAL} type;
+        union {
+            uint64_t addr;
+            uint64_t uint;
+        };
+    };
+
+    using Container = std::vector<Sym>;
+
+private:
+    Container tbl_;
+
+public:
+    size_t add(const Sym& sym) {
+        tbl_.push_back(sym);
+        return tbl_.size() - 1;
+    }
+};
+
+class CodeTable
+{
+public:
+    struct Line {
+        size_t src_line_;
+        enum Type {CODE, LABEL, DIRECTIVE} type;
+    };
+
+    using Container = std::vector<Line>;
+
+private:
+    Container tbl_;
+
+public:
+    size_t add(const Line& line) {
+        tbl_.push_back(line);
+        return tbl_.size() - 1;
+    }
+
+};
+
 class AsmParser
 {
+    StringTable sym_names_;
+    SymTable    syms_;
+    CodeTable   code_;
+
 public:
     void parse(Options& options);
 };
@@ -98,6 +196,10 @@ void AsmParser::parse(Options& options)
         while ((c=fgetc(f)) != EOF and isalnum(c)) { s[pos++] = c; }
         s[pos] = '\0';
         printf("instruction: %s\n", s);
+        size_t npos = sym_names_.find_or_insert(s);
+        printf("%lu %s\n", npos, sym_names_.get(npos));
+        SymTable::Sym sym;
+        syms_.add(sym);
     };
 
     while ((c=fgetc(f)) != EOF)
