@@ -5,6 +5,7 @@ SRC=$(dirname ${BASH_SOURCE[0]})
 declare -a dirs=(
  "tools"
  "blocks/Incr/test"
+ "blocks/AddCmp/test"
  "blocks/RegFile/test"
 )
  
