@@ -40,5 +40,15 @@ Mux8 s2_ #(.WIDTH(REG_WIDTH)) (.in1(s[0]),.in2(s[1]),.in3(s[2]),.in4(s[3]),
                                .in5(s[4]),.in6(s[5]),.in7(s[6]),.in8(s[7]),
                                .sel(wr_addr[5:3]),.out(val));
 
+/*function [1:0]  rf_data_write (
+    input int unsigned ic_set,
+    input int unsigned ic_way,
+    input int unsigned cl_word,
+    input [OP_MSB:0] data
+);
+    // verilator public
+    mem[ic_set][ic_way][cl_word*OP_SZ +: OP_SZ] = data;
+    rf_data_write = {1'b0, 1'b0};
+endfunction*/
 
 endmodule: RegFile
