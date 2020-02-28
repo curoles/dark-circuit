@@ -1,5 +1,12 @@
+bold   := $(shell tput bold)
+red    := $(shell tput setaf 1)
+green  := $(shell tput setaf 2)
+yellow := $(shell tput setaf 3)
+normal := $(shell tput sgr0)
+
+
 ifeq (, $(shell which verilator))
-$(error "No verilator in $$PATH, consider doing export PATH=$$PATH:<path_to_verilator>")
+$(error "$(bold)$(red)No verilator in $$PATH, do export PATH=$$PATH:<path_to_verilator>$(normal)")
 endif
 
 VERILATOR := $(shell which verilator)

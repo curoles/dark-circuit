@@ -5,7 +5,7 @@
 // = patents or pending patent applications. No part of this document may be reproduced in any     =
 // = form and by any means without the express prior written permission of Tachyum.                =
 // =                                                                                               =
-// =                                 COPYRIGHT (C) 2019 Tachyum                                    =
+// =                                 COPYRIGHT (C) 2019 Dark Circuit                               =
 // =                                                                                               =
 // =================================================================================================
 //
