@@ -16,10 +16,12 @@ TB_MAIN_CPP ?= $(SRC)/sim_main.cpp
 
 TB_TOP ?= tb_top
 
+LIB_TYPE ?= generic
+
 VERILATOR_PARAMS := -O3 -Wall -Wno-lint --assert
 VERILATOR_PARAMS += --cc --compiler gcc
 VERILATOR_PARAMS += --exe $(TB_MAIN_CPP) --clk clk
-VERILATOR_PARAMS += -y $(SRC)/../rtl -y $(SRC)/../../../lib
+VERILATOR_PARAMS += -y $(SRC)/../rtl -y $(SRC)/../../../lib/$(LIB_TYPE)
 VERILATOR_PARAMS += -CFLAGS "-O3"
 VERILATOR_PARAMS += --top-module $(TB_TOP) $(SRC)/$(TB_TOP).sv
 
