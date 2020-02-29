@@ -29,6 +29,7 @@ declare -a dirs=(
  "tools"
  "blocks/Incr/test"
  "blocks/AddCmp/test"
+ "blocks/ShiftReg/test"
  "blocks/RegFile/test"
 )
  

@@ -25,6 +25,7 @@ endef
 build:
 	$(call build_block,AddCmp)
 	$(call build_block,Incr)
+	$(call build_block,ShiftReg)
 
 .PHONY: test_AddCmp
 test_AddCmp:

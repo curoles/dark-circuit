@@ -10,7 +10,10 @@ $(error "$(bold)$(red)No verilator in $$PATH, do export PATH=$$PATH:<path_to_ver
 endif
 
 VERILATOR := $(shell which verilator)
+
+ifneq ("$(dir $(VERILATOR))", "/usr/bin/")
 VERILATOR_ROOT_ := $(dir $(VERILATOR))/..
+endif
 
 TB_MAIN_CPP ?= $(SRC)/sim_main.cpp
 
@@ -28,7 +31,9 @@ VERILATOR_PARAMS += --top-module $(TB_TOP) $(SRC)/$(TB_TOP).sv
 VMAKE := make -C ./obj_dir
 
 .PHONY: tb_exe
+ifdef VERILATOR_ROOT_
 tb_exe: export VERILATOR_ROOT=$(VERILATOR_ROOT_)
+endif
 tb_exe: tb
 	$(VMAKE) -j -f V$(TB_TOP).mk $(CFLAGS) V$(TB_TOP)
 
