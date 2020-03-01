@@ -27,6 +27,12 @@ build:
 	$(call build_block,Incr)
 	$(call build_block,ShiftReg)
 
+DOXYGEN := /home/igor/tools/doxygen-verilog/build/bin/doxygen
+
+.PHONY: doc
+doc:
+	SRC_ROOT=$(SRC_ROOT) $(DOXYGEN) $(SRC_ROOT)/Doxyfile
+
 .PHONY: test_AddCmp
 test_AddCmp:
 	$(call test_block,AddCmp)
