@@ -18,7 +18,7 @@ define test_block
 	@echo "$(bold)$(green)                     $1 $(normal)"
 	@echo "$(bold)$(green)-----------------------------------------------------$(normal)"
 	@echo ""
-	cd blocks/$1/test && make run_test
+	cd blocks/$1/test && make test
 endef
 
 .PHONY: build

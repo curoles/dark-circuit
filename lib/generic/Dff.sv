@@ -8,7 +8,7 @@
 module Dff #(
     parameter WIDTH = 1
 )(
-    input  wire [WIDTH-1:0] clk,
+    input  wire             clk,
     input  wire [WIDTH-1:0] in,
     output reg  [WIDTH-1:0] out
 );

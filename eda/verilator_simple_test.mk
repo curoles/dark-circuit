@@ -24,9 +24,11 @@ LIB_TYPE ?= generic
 VERILATOR_PARAMS := -O3 -Wall -Wno-lint --assert
 VERILATOR_PARAMS += --cc --compiler gcc
 VERILATOR_PARAMS += --exe $(TB_MAIN_CPP) --clk clk
-VERILATOR_PARAMS += -y $(SRC)/../rtl -y $(SRC)/../../../lib/$(LIB_TYPE)
+VERILATOR_PARAMS += -y $(SRC)/../rtl -y $(SRC_ROOT)//lib/$(LIB_TYPE)
+VERILATOR_PARAMS += -CFLAGS "-I$(SRC_ROOT)"
 VERILATOR_PARAMS += -CFLAGS "-O3"
 VERILATOR_PARAMS += --top-module $(TB_TOP) $(SRC)/$(TB_TOP).sv
+VERILATOR_PARAMS += $(SRC_ROOT)/eda/verilator_tick.cpp
 
 VMAKE := make -C ./obj_dir
 
@@ -41,8 +43,8 @@ tb_exe: tb
 tb: $(TB_MAIN_CPP)
 	$(VERILATOR) $(VERILATOR_PARAMS)
 
-.PHONY: run_test
-run_test: tb_exe
+.PHONY: test
+test: tb_exe
 	./obj_dir/V$(TB_TOP)
 
 
