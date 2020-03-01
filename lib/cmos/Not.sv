@@ -2,6 +2,27 @@
  * @brief CMOS inverter
  *
  * See book by Yamin Li, Computer principles and design in Verilog HDL.
+ *  
+ *           +-------+-----+ vdd
+ *                   |
+ *               +   |
+ *             + +---+
+ *       +----o| |      p1
+ *       |     + +---+
+ *       |       +   |
+ *       |           |
+ *  +----+           +------+
+ *       |           |
+ *       |       +   |
+ *       |     + +---+
+ *       +-----+ |     n1
+ *             + +---+
+ *               +   |
+ *                   |
+ *                   |
+ *         +---------+----+ gnd
+ *  
+ *  
  */
 module Not(
     output wire out, // out = ~in

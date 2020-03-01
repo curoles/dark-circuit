@@ -22,10 +22,12 @@ module tb_top(
 );
 
 ShiftReg#(.WIDTH(32)) shift_reg_(
-  .clk(clk),
-  .srl_prl(srl_prl),
-  .srl_in(srl_in),
-  .prl_in(prl_in)
+    .clk(clk),
+    .srl_prl(srl_prl),
+    .srl_in(srl_in),
+    .prl_in(prl_in),
+    .srl_out(srl_out),
+    .prl_out(prl_out)
 );
 
 endmodule: tb_top
