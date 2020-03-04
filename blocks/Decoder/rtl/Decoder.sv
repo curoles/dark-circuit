@@ -22,13 +22,20 @@ module Decoder #(
     output wire [WIDTH-1:0] out
 );
 
+/*
+always @* begin
+  out = {WIDTH{1'b0}};
+  out[in] = 1'b1;
+end
+*/
+
 wire [SIZE-1:0] nin;
 assign nin = ~in;
 
 genvar i, j;
 generate
 for (i = 0; i < WIDTH; i = i + 1) begin
-    wire [ADDR_SIZE-1:0] sel;
+    wire [SIZE-1:0] sel;
     for (j = 0; j < SIZE; j = j + 1) begin
         assign sel[j] = i[j] ? in[j] : nin[j];
     end

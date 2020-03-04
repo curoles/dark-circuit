@@ -31,6 +31,7 @@ declare -a dirs=(
  "blocks/AddCmp/test"
  "blocks/ShiftReg/test"
  "blocks/RegFile/test"
+ "blocks/Decoder/test"
 )
  
 for dir in ${dirs[@]}; do

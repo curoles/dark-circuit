@@ -16,6 +16,10 @@ double sc_time_stamp() {
     return main_time;
 }
 
+uint64_t sim_time() {
+    return main_time;
+}
+
 void sim_change_clk(Vtb_top& top)
 {
     top.clk = main_time & 1;

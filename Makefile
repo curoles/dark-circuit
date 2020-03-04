@@ -26,6 +26,7 @@ build:
 	$(call build_block,AddCmp)
 	$(call build_block,Incr)
 	$(call build_block,ShiftReg)
+	$(call build_block,Decoder)
 
 DOXYGEN := /home/igor/tools/doxygen-verilog/build/bin/doxygen
 

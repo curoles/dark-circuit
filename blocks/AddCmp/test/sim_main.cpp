@@ -8,42 +8,18 @@
 #include <limits>
 
 #include "Vtb_top.h"
-#include "verilated.h"
+#include "eda/verilator_tick.h"
 
-// Current simulation time.
-//
-// This is a 64-bit integer to reduce wrap over issues and allow modulus.
-static vluint64_t main_time = 0;
-
-// sc_time_stamp is called by $time in Verilog.
-// Converts to double, to match what SystemC does.
-double sc_time_stamp () {
-    return main_time;
-}
-
-static void change_clk(Vtb_top& top)
-{
-    top.clk = main_time % 2;
-    top.eval();
-
-    main_time++;
-}
-
-static void tick(Vtb_top& top)
-{
-    change_clk(top);
-    change_clk(top);
-}
 
 static void tik_tok(Vtb_top& top)
 {
-    tick(top);
-    tick(top);
+    sim_tick(top);
+    sim_tick(top);
 }
 
 static bool test_2plus3_eq5(Vtb_top& top)
 {
-    printf("%lu: Testing 2+3==5...\n", main_time);
+    printf("%lu: Testing 2+3==5...\n", sim_time());
 
     top.a = 2;
     top.b = 3;

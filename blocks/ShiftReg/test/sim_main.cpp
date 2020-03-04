@@ -11,8 +11,6 @@
 #include "eda/verilator_tick.h"
 
 
-
-
 int main(int argc, char* argv[])
 {
     printf("\n\nTest Shift Register\n");

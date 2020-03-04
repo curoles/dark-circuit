@@ -10,6 +10,8 @@
 
 void sim_change_clk(Vtb_top& top);
 
+uint64_t sim_time();
+ 
 static inline void sim_tick(Vtb_top& top)
 {
     sim_change_clk(top);
