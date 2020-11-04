@@ -170,42 +170,46 @@ Module "Not",
 
 </ul>
 
-<p>@brief CMOS inverter</p>
-<p>See book by Yamin Li, Computer principles and design in Verilog HDL.</p>
-<div class="codehilite"><pre><span></span><code><span class="err">       +-------+-----+ vdd</span>
-<span class="err">               |</span>
-<span class="err">           +   |</span>
-<span class="err">         + +---+</span>
-<span class="err">   +----o| |      p1</span>
-<span class="err">   |     + +---+</span>
-<span class="err">   |       +   |</span>
-<span class="err">   |           |</span>
+<p>CMOS Inverter gate.</p>
+<p>Use Verilog keywords <code>pmos</code> and <code>nmos</code> to define 2 transistors:</p>
+<div class="codehilite"><pre><span></span><code> <span class="k">pmos</span> <span class="n">p1</span> <span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">vdd</span><span class="p">,</span> <span class="n">in</span><span class="p">);</span> <span class="c1">// out = HI(vdd) if in is LO</span>
+ <span class="k">nmos</span> <span class="n">n1</span> <span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">gnd</span><span class="p">,</span> <span class="n">in</span><span class="p">);</span> <span class="c1">// out = LO(gnd) if in is HI</span>
 </code></pre></div>
 
-<p>+----+           +------+
-       |           |
-       |       +   |
-       |     + +---+
-       +-----+ |     n1
-             + +---+
-               +   |
-                   |
-                   |
-         +---------+----+ gnd</p>
+<p>See book by Yamin Li, Computer principles and design in Verilog HDL.</p>
+<pre>
+          +-------+-----+ vdd
+                  |
+              +   |
+            + +---+
+      +----o| |      p1
+      |     + +---+
+      |       +   |
+      |           |
+ +----+           +------+
+      |           |
+      |       +   |
+      |     + +---+
+      +-----+ |     n1
+            + +---+
+              +   |
+                  |
+                  |
+        +---------+----+ gnd
+</pre>
 <p>Source code:</p>
 <pre><code class="lang-verilog">module Not(
     output wire out, // out = ~in
     input wire in
 );
+    supply1 vdd; // logic 1 (power)
+    supply0 gnd; // logic 0 (ground)
 
-supply1 vdd; // logic 1 (power)
-supply0 gnd; // logic 0 (ground)
+    // pmos (drain, source, gate);
+    pmos p1 (out, vdd, in);
 
-// pmos (drain, source, gate);
-pmos p1 (out, vdd, in);
-
-// nmos (drain, source, gate);
-nmos n1 (out, gnd, in);
+    // nmos (drain, source, gate);
+    nmos n1 (out, gnd, in);
 
 endmodule</code></pre>
 
