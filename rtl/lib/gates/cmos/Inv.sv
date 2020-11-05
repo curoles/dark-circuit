@@ -1,5 +1,13 @@
 /* CMOS Inverter gate.
  *
+ * <script type="WaveDrom">
+ * { assign:[
+ *   ["out",
+ *     ["~", "in"]
+ *   ]
+ * ]}
+ * </script>
+ *
  * Use Verilog keywords `pmos` and `nmos` to define 2 transistors:
  *
  * ```verilog
@@ -31,9 +39,9 @@
  * </pre>
  *  
  */
-module Not(
-    output wire out, // out = ~in
-    input wire in
+module Inv(
+    input wire in,
+    output wire out // out = ~in
 );
     supply1 vdd; // logic 1 (power)
     supply0 gnd; // logic 0 (ground)

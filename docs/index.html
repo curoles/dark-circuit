@@ -146,11 +146,21 @@ p {font-family: Verdana, Geneva, sans-serif;}
 
 <body onload="WaveDrom.ProcessAll()">
 <div class="sidenav">
-    <a href="#module_">Not</a>
+    <h3>- builtin</h3>
+    <a href="#module_builtin/INV.sv">INV</a>
+    <a href="#module_builtin/Inv.sv">Inv</a>
+    <a href="#module_builtin/NAnd2.sv">NAnd2</a>
+    <h3>- cmos</h3>
+    <a href="#module_cmos/INV.sv">INV</a>
+    <a href="#module_cmos/Inv.sv">Inv</a>
+    <a href="#module_cmos/NAND2.sv">NAND2</a>
+    <a href="#module_cmos/NAnd2.sv">NAnd2</a>
+    <a href="#module_cmos/NOR2.sv">NOR2</a>
+    <a href="#module_cmos/NOr2.sv">NOr2</a>
 </div>
 <div class="main">
-<h3 id="module_">
-Module "Not", 
+<h3 id="module_builtin/INV.sv">
+Module "INV", builtin/INV.sv
 </h3>
 
 <h4>Parameters:</h4>
@@ -160,17 +170,192 @@ Module "Not",
 <h4>Ports:</h4>
 <ul>
     <li>
+    <pre>in       input    wire</pre>
+    </li>
+
+    <li>
     <pre>out      output   wire</pre>
      out = ~in
     </li>
 
+</ul>
+
+<p>Inverter.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~", "in"]
+  ]
+]}
+</script>
+
+<p>Wrapper around Inv.</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module INV(
+    input wire in,
+    output wire out // out = ~in
+);
+    Inv inv_(.in(in), .out(out));
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_builtin/Inv.sv">
+Module "Inv", builtin/Inv.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
     <li>
     <pre>in       input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+     out = ~in
+    </li>
+
+</ul>
+
+<p>Inverter.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~", "in"]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Inv(
+    input wire in,
+    output wire out // out = ~in
+);
+    not /*(strength)*/ /*#(2 delays)*/ not_(out, in);
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_builtin/NAnd2.sv">
+Module "NAnd2", builtin/NAnd2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2-input NAND.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~&", "in1", "in2"]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NAnd2 (
+    input  wire in1,
+    input  wire in2,
+    output wire out
+);
+
+    nand /*(strength)*/ /*#(3 delays)*/ nand_(out, in1, in2);
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/INV.sv">
+Module "INV", cmos/INV.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in       input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+     out = ~in
+    </li>
+
+</ul>
+
+<p>Inverter.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~", "in"]
+  ]
+]}
+</script>
+
+<p>Wrapper around Inv.</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module INV(
+    input wire in,
+    output wire out // out = ~in
+);
+    Inv inv_(.in(in), .out(out));
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/Inv.sv">
+Module "Inv", cmos/Inv.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in       input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+     out = ~in
     </li>
 
 </ul>
 
 <p>CMOS Inverter gate.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~", "in"]
+  ]
+]}
+</script>
+
 <p>Use Verilog keywords <code>pmos</code> and <code>nmos</code> to define 2 transistors:</p>
 <div class="codehilite"><pre><span></span><code> <span class="k">pmos</span> <span class="n">p1</span> <span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">vdd</span><span class="p">,</span> <span class="n">in</span><span class="p">);</span> <span class="c1">// out = HI(vdd) if in is LO</span>
  <span class="k">nmos</span> <span class="n">n1</span> <span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">gnd</span><span class="p">,</span> <span class="n">in</span><span class="p">);</span> <span class="c1">// out = LO(gnd) if in is HI</span>
@@ -198,9 +383,9 @@ Module "Not",
         +---------+----+ gnd
 </pre>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module Not(
-    output wire out, // out = ~in
-    input wire in
+<pre><code class="lang-verilog">module Inv(
+    input wire in,
+    output wire out // out = ~in
 );
     supply1 vdd; // logic 1 (power)
     supply0 gnd; // logic 0 (ground)
@@ -210,6 +395,240 @@ Module "Not",
 
     // nmos (drain, source, gate);
     nmos n1 (out, gnd, in);
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/NAND2.sv">
+Module "NAND2", cmos/NAND2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2-input NAND.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~&", "in1", "in2"]
+  ]
+]}
+</script>
+
+<p>Wrapper around NAnd2</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NAND2 (
+    input  wire in1,
+    input  wire in2,
+    output wire out
+);
+
+    NAnd2 nand2_(.in1(in1), .in2(in2), .out(out));
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/NAnd2.sv">
+Module "NAnd2", cmos/NAnd2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2-input NAND.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~&", "in1", "in2"]
+  ]
+]}
+</script>
+
+<pre>
+   ---------+-------------+------ vdd
+            |             |
+      +--o| p1      +--o| p2
+      |     |       |     |
+      |     +-------------+------ out
+      |             |     |
+ in1 -+-----------------| n1
+                    |     |
+ in2 ---------------+---| n2
+                          |
+                  --------+------ gnd
+</pre>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NAnd2 (
+    input  wire in1,
+    input  wire in2,
+    output wire out
+);
+
+    supply1 vdd;
+    supply0 gnd;
+
+    wire w_n; // connects 2 nmos transistors
+
+    // pmos drain source gate
+    pmos p1(out,  vdd,   in1);
+    pmos p2(out,  vdd,   in2);
+
+    // nmos drain source gate
+    pmos n1(out,  w_n,   in1);
+    pmos n2(w_n,  vdd,   in2);
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/NOR2.sv">
+Module "NOR2", cmos/NOR2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2-input NOR</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~|", "in1", "in2"]
+  ]
+]}
+</script>
+
+<p>Wrapper around NOr2 </p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NOR2 (
+    input  wire in1,
+    input  wire in2,
+    output wire out
+);
+
+    NOr2 nor2_(.in1(in1), .in2(in2), .out(out));
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/NOr2.sv">
+Module "NOr2", cmos/NOr2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2-input NOR</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~|", "in1", "in2"]
+  ]
+]}
+</script>
+
+<pre> 
+             -------------+------ vdd
+                          |
+ in1 ---+--------------o| p1
+        |                 |
+ in2 -------------+----o| p2
+        |         |       |
+        |    +------------+------ out
+        |    |    |       |
+        +--| n1   +-----| n2
+             |            |
+          ---+------------+---- gnd
+</pre>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NOr2 (
+    input  wire in1,
+    input  wire in2,
+    output wire out
+);
+
+    supply1 vdd;
+    supply0 gnd;
+
+    wire w_p; // connects 2 pmos transistors
+
+    // nmos drain source gate
+    pmos n1(out,  gnd,   in1);
+    pmos n2(out,  gnd,   in2);
+
+    // pmos drain source gate
+    pmos p1(w_p,  vdd,   in1);
+    pmos p2(out,  w_p,   in2);
 
 endmodule</code></pre>
 
