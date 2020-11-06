@@ -3,7 +3,7 @@
  * @author Igor Lesik 2020
  *
  */
-#include "eda/verilator_tick.h"
+#include "verilator_tick.h"
 
 // Current simulation time.
 //
@@ -20,7 +20,7 @@ uint64_t sim_time() {
     return main_time;
 }
 
-void sim_change_clk(Vtb_top& top)
+void sim_change_clk(VTbTop& top)
 {
     top.clk = main_time & 1;
     top.eval();

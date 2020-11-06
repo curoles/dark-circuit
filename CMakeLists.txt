@@ -24,7 +24,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DARKCIRCUIT_COMMON_CXX_FLAGS}")
 # Install inside the build directory.
 set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install)
 
+enable_testing()
+
 add_subdirectory(docs)
+add_subdirectory(test)
 
 # Log CMake variables.
 MESSAGE( STATUS "CMAKE_C_COMPILER:     " ${CMAKE_C_COMPILER} )

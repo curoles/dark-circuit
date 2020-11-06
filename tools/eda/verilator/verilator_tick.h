@@ -5,14 +5,14 @@
  */
 #pragma once
 
-#include "Vtb_top.h"
+#include "VTbTop.h"
 #include "verilated.h"
 
-void sim_change_clk(Vtb_top& top);
+void sim_change_clk(VTbTop& top);
 
 uint64_t sim_time();
  
-static inline void sim_tick(Vtb_top& top)
+static inline void sim_tick(VTbTop& top)
 {
     sim_change_clk(top);
     sim_change_clk(top);
@@ -20,9 +20,9 @@ static inline void sim_tick(Vtb_top& top)
 
 struct Tick
 {
-    Vtb_top& tb_;
+    VTbTop& tb_;
 
-    Tick(Vtb_top& top):tb_(top){}
+    Tick(VTbTop& top):tb_(top){}
 
     void tick() {sim_tick(tb_);}
 

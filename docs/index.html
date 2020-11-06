@@ -151,6 +151,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_builtin/Inv.sv">Inv</a>
     <a href="#module_builtin/NAnd2.sv">NAnd2</a>
     <h3>- cmos</h3>
+    <a href="#module_cmos/AND2.sv">AND2</a>
     <a href="#module_cmos/INV.sv">INV</a>
     <a href="#module_cmos/Inv.sv">Inv</a>
     <a href="#module_cmos/NAND2.sv">NAND2</a>
@@ -280,6 +281,52 @@ Module "NAnd2", builtin/NAnd2.sv
 );
 
     nand /*(strength)*/ /*#(3 delays)*/ nand_(out, in1, in2);
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/AND2.sv">
+Module "AND2", cmos/AND2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2-input AND.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["&", "in1", "in2"]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module AND2 (
+    input  wire in1,
+    input  wire in2,
+    output wire out
+);
+    wire nand_output;
+    NAnd2 nand2_(.in1(in1), .in2(in2), .out(nand_output));
+    Inv   inv_  (.in(nand_output), .out(out));
 
 endmodule</code></pre>
 
