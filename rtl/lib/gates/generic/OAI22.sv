@@ -23,7 +23,7 @@
  * </script>
  */
 module OAI22 #(
-    parameter WIDTH = 8 // number of 1-bit gates
+    parameter WIDTH = 1
 )(
     input  wire [WIDTH-1:0] in1, // to be OR-ed with in2
     input  wire [WIDTH-1:0] in2, // to be OR-ed with in1

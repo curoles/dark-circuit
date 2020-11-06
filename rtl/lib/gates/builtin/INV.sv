@@ -12,9 +12,11 @@
  *
  *
  */
-module INV(
-    input wire in,
-    output wire out // out = ~in
+module INV #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in,
+    output wire [WIDTH-1:0] out // out = ~in
 );
-    Inv inv_(.in(in), .out(out));
+    Inv#(WIDTH) inv_(.in(in), .out(out));
 endmodule

@@ -39,8 +39,8 @@
  * </pre>
  *  
  */
-module Inv(
-    input wire in,
+module Inv (
+    input  wire in,
     output wire out // out = ~in
 );
     supply1 vdd; // logic 1 (power)

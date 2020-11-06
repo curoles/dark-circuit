@@ -166,16 +166,20 @@ Module "INV", builtin/INV.sv
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
 <ul>
     <li>
-    <pre>in       input    wire</pre>
+    <pre>in       input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>out      output   wire</pre>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
      out = ~in
     </li>
 
@@ -192,11 +196,13 @@ Module "INV", builtin/INV.sv
 
 <p>Wrapper around Inv.</p>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module INV(
-    input wire in,
-    output wire out // out = ~in
+<pre><code class="lang-verilog">module INV #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in,
+    output wire [WIDTH-1:0] out // out = ~in
 );
-    Inv inv_(.in(in), .out(out));
+    Inv#(WIDTH) inv_(.in(in), .out(out));
 endmodule</code></pre>
 
 
@@ -207,16 +213,20 @@ Module "Inv", builtin/Inv.sv
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
 <ul>
     <li>
-    <pre>in       input    wire</pre>
+    <pre>in       input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>out      output   wire</pre>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
      out = ~in
     </li>
 
@@ -231,9 +241,11 @@ Module "Inv", builtin/Inv.sv
 ]}
 </script>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module Inv(
-    input wire in,
-    output wire out // out = ~in
+<pre><code class="lang-verilog">module Inv #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in,
+    output wire [WIDTH-1:0] out // out = ~in
 );
     not /*(strength)*/ /*#(2 delays)*/ not_(out, in);
 
@@ -338,16 +350,20 @@ Module "INV", cmos/INV.sv
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
 <ul>
     <li>
-    <pre>in       input    wire</pre>
+    <pre>in       input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>out      output   wire</pre>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
      out = ~in
     </li>
 
@@ -362,13 +378,21 @@ Module "INV", cmos/INV.sv
 ]}
 </script>
 
-<p>Wrapper around Inv.</p>
+<p>Uses Inv.</p>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module INV(
-    input wire in,
-    output wire out // out = ~in
+<pre><code class="lang-verilog">module INV #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in,
+    output wire [WIDTH-1:0] out // out = ~in
 );
-    Inv inv_(.in(in), .out(out));
+    genvar i;
+    generate
+    for (i = 0; i < WIDTH; i = i + 1) begin
+        Inv inv_(.in(in[i]), .out(out[i]));
+    end
+    endgenerate
+
 endmodule</code></pre>
 
 
@@ -430,8 +454,8 @@ Module "Inv", cmos/Inv.sv
         +---------+----+ gnd
 </pre>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module Inv(
-    input wire in,
+<pre><code class="lang-verilog">module Inv (
+    input  wire in,
     output wire out // out = ~in
 );
     supply1 vdd; // logic 1 (power)

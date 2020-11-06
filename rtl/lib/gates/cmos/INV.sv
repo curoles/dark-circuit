@@ -8,13 +8,20 @@
  * ]}
  * </script>
  *
- * Wrapper around Inv.
- *
+ * Uses Inv.
  *
  */
-module INV(
-    input wire in,
-    output wire out // out = ~in
+module INV #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in,
+    output wire [WIDTH-1:0] out // out = ~in
 );
-    Inv inv_(.in(in), .out(out));
+    genvar i;
+    generate
+    for (i = 0; i < WIDTH; i = i + 1) begin
+        Inv inv_(.in(in[i]), .out(out[i]));
+    end
+    endgenerate
+
 endmodule
