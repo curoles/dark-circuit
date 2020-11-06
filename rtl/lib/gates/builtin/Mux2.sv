@@ -1,9 +1,19 @@
-/**@file
- * @brief     Multiplexer 
- * @author    Igor Lesik
- * @copyright Igor Lesik 2020
+/* Multiplexer made with NAND
  *
- *  
+ * Author: Igor Lesik 2020.
+ *
+ * <script type="WaveDrom">
+ * { assign:[
+ *   ["out",
+ *     ["~&",
+ *       ["~&", "in1", "sel"],
+ *       ["~&", "in2", "~sel"]
+ *     ]
+ *   ]
+ * ]}
+ * </script>
+ *
+ * <pre> 
  *                  +------+
  *                  |      |
  *  in1 +-----------+ NAND |
@@ -19,9 +29,8 @@
  *  in2 +-----------+      |
  *                  |      |
  *                  +------+
- *  
+ *  </pre>
  */
-
 module Mux2 #(
     parameter WIDTH = 1
 )(
@@ -31,6 +40,9 @@ module Mux2 #(
     output wire [WIDTH-1:0]  out
 );
 
-//TODO
+    wire [WIDTH-1:0] o1, o2;
+    NAND#(WIDTH) nand1_(.out(o1), .in1(in1), .in2(WIDTH{sel}));
+    NAND#(WIDTH) nand2_(.out(o2), .in1(in2), .in2(WIDTH{~sel}));
+    NAND#(WIDTH) nand3_(.out(out), .in1(o1), .in2(o2));
 
 endmodule

@@ -149,6 +149,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <h3>- builtin</h3>
     <a href="#module_builtin/INV.sv">INV</a>
     <a href="#module_builtin/Inv.sv">Inv</a>
+    <a href="#module_builtin/Mux2.sv">Mux2</a>
     <a href="#module_builtin/NAND2.sv">NAND2</a>
     <a href="#module_builtin/NAnd2.sv">NAnd2</a>
     <h3>- cmos</h3>
@@ -159,6 +160,11 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_cmos/NAnd2.sv">NAnd2</a>
     <a href="#module_cmos/NOR2.sv">NOR2</a>
     <a href="#module_cmos/NOr2.sv">NOr2</a>
+    <h3>- generic</h3>
+    <a href="#module_generic/Dff.sv">Dff</a>
+    <a href="#module_generic/INV.sv">INV</a>
+    <a href="#module_generic/Mux2.sv">Mux2</a>
+    <a href="#module_generic/NAND2.sv">NAND2</a>
 </div>
 <div class="main">
 <h3 id="module_builtin/INV.sv">
@@ -254,6 +260,84 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_builtin/Mux2.sv">
+Module "Mux2", builtin/Mux2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>Multiplexer made with NAND</p>
+<p>Author: Igor Lesik 2020.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~&",
+      ["~&", "in1", "sel"],
+      ["~&", "in2", "~sel"]
+    ]
+  ]
+]}
+</script>
+
+<pre> 
+                 +------+
+                 |      |
+ in1 +-----------+ NAND |
+                 |      |o+-+    +------+
+ sel +-----+-----+      |   |    |      |
+           |     |      |   |    |      |
+           |     +------+   +----+ NAND |
+           |                     |      |o+----+ out
+           |     +------+   +----+      |
+           |     |      |   |    |      |
+           +---+o| NAND |   |    |      |
+                 |      |o+-+    +------+
+ in2 +-----------+      |
+                 |      |
+                 +------+
+ </pre>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Mux2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0]  in1,
+    input  wire [WIDTH-1:0]  in2,
+    input  wire              sel,
+    output wire [WIDTH-1:0]  out
+);
+
+//TODO
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_builtin/NAND2.sv">
 Module "NAND2", builtin/NAND2.sv
 </h3>
@@ -299,7 +383,7 @@ Module "NAND2", builtin/NAND2.sv
     output wire [WIDTH-1:0] out
 );
 
-    NAnd2 nand_(.in1(in1), .in2(in2), .out(out));
+    NAnd2#(WIDTH) nand_(.in1(in1), .in2(in2), .out(out));
 
 endmodule</code></pre>
 
@@ -769,6 +853,216 @@ Module "NOr2", cmos/NOr2.sv
     // pmos drain source gate
     pmos p1(w_p,  vdd,   in1);
     pmos p2(out,  w_p,   in2);
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_generic/Dff.sv">
+Module "Dff", generic/Dff.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>clk      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in       input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>out      output   reg [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>@file
+ @brief     Rising edge triggered D Flip Flop
+ @author    Igor Lesik
+ @copyright Igor Lesik 2014</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Dff #(
+    parameter WIDTH = 1
+)(
+    input  wire             clk,
+    input  wire [WIDTH-1:0] in,
+    output reg  [WIDTH-1:0] out
+);
+  
+always_ff @(posedge clk)
+    out[WIDTH-1:0] <= in[WIDTH-1:0];
+
+`ifdef DFF_RANDOMIZE_INITIAL_VALUE
+initial begin
+    out = $urandom_range(2**WIDTH - 1, 0);
+end
+`endif
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_generic/INV.sv">
+Module "INV", generic/INV.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in       input    wire [WIDTH-1:0]</pre>
+     to be inverted
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+     out is inverted in
+    </li>
+
+</ul>
+
+<p>Inverter.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~", "in"]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module INV #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in,  // to be inverted
+    output wire [WIDTH-1:0] out  // out is inverted in
+);
+
+    assign out = ~in;
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_generic/Mux2.sv">
+Module "Mux2", generic/Mux2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>2-input Multiplexer.</p>
+<p>Author: Igor Lesik 2014.</p>
+<!--script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["?", "sel", "in1", "in2"]
+  ]
+]}
+</script-->
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Mux2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0]  in1,
+    input  wire [WIDTH-1:0]  in2,
+    input  wire              sel,
+    output wire [WIDTH-1:0]  out
+);
+
+    assign out = (sel == 0) ? in1 : in2;
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_generic/NAND2.sv">
+Module "NAND2", generic/NAND2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>2-input NAND.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~&", "in1", "in2"]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NAND2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    output wire [WIDTH-1:0] out
+);
+
+    assign out = ~(in1 & in2);
 
 endmodule</code></pre>
 
