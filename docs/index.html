@@ -149,6 +149,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <h3>- builtin</h3>
     <a href="#module_builtin/INV.sv">INV</a>
     <a href="#module_builtin/Inv.sv">Inv</a>
+    <a href="#module_builtin/NAND2.sv">NAND2</a>
     <a href="#module_builtin/NAnd2.sv">NAnd2</a>
     <h3>- cmos</h3>
     <a href="#module_cmos/AND2.sv">AND2</a>
@@ -253,26 +254,30 @@ endmodule</code></pre>
 
 
 <hr />
-<h3 id="module_builtin/NAnd2.sv">
-Module "NAnd2", builtin/NAnd2.sv
+<h3 id="module_builtin/NAND2.sv">
+Module "NAND2", builtin/NAND2.sv
 </h3>
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
 <ul>
     <li>
-    <pre>in1      input    wire</pre>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>in2      input    wire</pre>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>out      output   wire</pre>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
     </li>
 
 </ul>
@@ -286,10 +291,63 @@ Module "NAnd2", builtin/NAnd2.sv
 ]}
 </script>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module NAnd2 (
-    input  wire in1,
-    input  wire in2,
-    output wire out
+<pre><code class="lang-verilog">module NAND2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    output wire [WIDTH-1:0] out
+);
+
+    NAnd2 nand_(.in1(in1), .in2(in2), .out(out));
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_builtin/NAnd2.sv">
+Module "NAnd2", builtin/NAnd2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>2-input NAND.</p>
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~&", "in1", "in2"]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module NAnd2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    output wire [WIDTH-1:0] out
 );
 
     nand /*(strength)*/ /*#(3 delays)*/ nand_(out, in1, in2);
@@ -477,20 +535,24 @@ Module "NAND2", cmos/NAND2.sv
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
 <ul>
     <li>
-    <pre>in1      input    wire</pre>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>in2      input    wire</pre>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
     </li>
 
     <li>
-    <pre>out      output   wire</pre>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
     </li>
 
 </ul>
@@ -504,15 +566,22 @@ Module "NAND2", cmos/NAND2.sv
 ]}
 </script>
 
-<p>Wrapper around NAnd2</p>
+<p>Uses NAnd2</p>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module NAND2 (
-    input  wire in1,
-    input  wire in2,
-    output wire out
+<pre><code class="lang-verilog">module NAND2  #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    output wire [WIDTH-1:0] out
 );
 
-    NAnd2 nand2_(.in1(in1), .in2(in2), .out(out));
+    genvar i;
+    generate
+    for (i = 0; i < WIDTH; i = i + 1) begin
+        NAnd2 nand2_(.in1(in1[i]), .in2(in2[i]), .out(out[i]));
+    end
+    endgenerate
 
 endmodule</code></pre>
 

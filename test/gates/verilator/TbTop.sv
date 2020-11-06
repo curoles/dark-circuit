@@ -7,9 +7,13 @@
 module TbTop(
     input  wire          clk,
     input  wire [64-1:0] in1,
-    output wire [64-1:0] out_inv
+    input  wire [64-1:0] in2,
+    output wire [64-1:0] out_inv,
+    output wire [64-1:0] out_nand2
 );
 
     INV#(64) inv_(.in(in1), .out(out_inv));
+
+    NAND2#(64) nand2_(.in1(in1), .in2(in2), .out(out_nand2));
 
 endmodule: TbTop

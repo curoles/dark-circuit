@@ -10,11 +10,12 @@
  * </script>
  * 
  */
-
-module NAnd2 (
-    input  wire in1,
-    input  wire in2,
-    output wire out
+module NAnd2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    output wire [WIDTH-1:0] out
 );
 
     nand /*(strength)*/ /*#(3 delays)*/ nand_(out, in1, in2);
