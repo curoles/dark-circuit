@@ -15,7 +15,7 @@ module TbTop #(
     output reg [DATA_WIDTH-1:0] rd_data,
     input wire                  wr_en,
     input wire [ADDR_WIDTH-1:0] wr_addr,
-    input reg  [DATA_WIDTH-1:0] wr_data
+    input wire [DATA_WIDTH-1:0] wr_data
 );
 
     SimRAM#(.DATA_SIZE(DATA_SIZE), .ADDR_WIDTH(ADDR_WIDTH))
