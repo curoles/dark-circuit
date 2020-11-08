@@ -1,4 +1,4 @@
-/* 2-input Multiplexer.
+/* 2:1 Multiplexer.
  * 
  * Author: Igor Lesik 2014.
  *
@@ -9,6 +9,15 @@
  *   ]
  * ]}
  * </script-->
+ *
+ * <pre>
+ *           +-----+
+ * in1 ------| 1   |
+ *           | MUX |--- out   
+ * in2 ------| 0   |
+ *           +--+--+
+ *         sel  |
+ * </pre>
  */
 module Mux2 #(
     parameter WIDTH = 1
@@ -19,6 +28,6 @@ module Mux2 #(
     output wire [WIDTH-1:0]  out
 );
 
-    assign out = (sel == 0) ? in1 : in2;
+    assign out = (sel == 1) ? in1 : in2;
 
 endmodule

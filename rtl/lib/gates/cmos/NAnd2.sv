@@ -23,7 +23,6 @@
  *                   --------+------ gnd
  * </pre>
  */
-
 module NAnd2 (
     input  wire in1,
     input  wire in2,
@@ -40,7 +39,7 @@ module NAnd2 (
     pmos p2(out,  vdd,   in2);
 
     // nmos drain source gate
-    pmos n1(out,  w_n,   in1);
-    pmos n2(w_n,  vdd,   in2);
+    nmos n1(out,  w_n,   in1);
+    nmos n2(w_n,  gnd,   in2);
 
 endmodule

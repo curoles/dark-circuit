@@ -149,6 +149,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <h3>- builtin</h3>
     <a href="#module_builtin/INV.sv">INV</a>
     <a href="#module_builtin/Inv.sv">Inv</a>
+    <a href="#module_builtin/MUX2.sv">MUX2</a>
     <a href="#module_builtin/Mux2.sv">Mux2</a>
     <a href="#module_builtin/NAND2.sv">NAND2</a>
     <a href="#module_builtin/NAnd2.sv">NAnd2</a>
@@ -156,6 +157,8 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_cmos/AND2.sv">AND2</a>
     <a href="#module_cmos/INV.sv">INV</a>
     <a href="#module_cmos/Inv.sv">Inv</a>
+    <a href="#module_cmos/MUX2.sv">MUX2</a>
+    <a href="#module_cmos/Mux2.sv">Mux2</a>
     <a href="#module_cmos/NAND2.sv">NAND2</a>
     <a href="#module_cmos/NAnd2.sv">NAnd2</a>
     <a href="#module_cmos/NOR2.sv">NOR2</a>
@@ -163,6 +166,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <h3>- generic</h3>
     <a href="#module_generic/Dff.sv">Dff</a>
     <a href="#module_generic/INV.sv">INV</a>
+    <a href="#module_generic/MUX2.sv">MUX2</a>
     <a href="#module_generic/Mux2.sv">Mux2</a>
     <a href="#module_generic/NAND2.sv">NAND2</a>
 </div>
@@ -260,6 +264,55 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_builtin/MUX2.sv">
+Module "MUX2", builtin/MUX2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>2:1 Multiplexer</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module MUX2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0]  in1,
+    input  wire [WIDTH-1:0]  in2,
+    input  wire              sel,
+    output wire [WIDTH-1:0]  out
+);
+
+    Mux2#(WIDTH) mux2_(.in1(in1), .in2(in2), .sel(sel), .out(out));
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_builtin/Mux2.sv">
 Module "Mux2", builtin/Mux2.sv
 </h3>
@@ -332,7 +385,10 @@ Module "Mux2", builtin/Mux2.sv
     output wire [WIDTH-1:0]  out
 );
 
-//TODO
+    wire [WIDTH-1:0] o1, o2;
+    NAND2#(WIDTH) nand1_(.out(o1), .in1(in1), .in2({WIDTH{sel}}));
+    NAND2#(WIDTH) nand2_(.out(o2), .in1(in2), .in2({WIDTH{~sel}}));
+    NAND2#(WIDTH) nand3_(.out(out), .in1(o1), .in2(o2));
 
 endmodule</code></pre>
 
@@ -613,6 +669,144 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_cmos/MUX2.sv">
+Module "MUX2", cmos/MUX2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>2:1 Multiplexer.</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module MUX2  #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    input  wire             sel,
+    output wire [WIDTH-1:0] out
+);
+
+    genvar i;
+    generate
+    for (i = 0; i < WIDTH; i = i + 1) begin
+        Mux2 mux2_(.in1(in1[i]), .in2(in2[i]), .sel(sel), .out(out[i]));
+    end
+    endgenerate
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_cmos/Mux2.sv">
+Module "Mux2", cmos/Mux2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire</pre>
+    </li>
+
+</ul>
+
+<p>2:1 Multiplexer.</p>
+<pre>
+   ---------+-------------+------ vdd
+            |             |
+   in1 +--o| p1  in2 +--o| p3
+            |             |      pmos is open when gate 0
+            |             |
+  ~sel +--o| p2  sel +--o| p4
+            |             |
+            +-------------+---------INV----->
+            |             |
+   sel +---| n1 ~sel +--o| n3
+            |             |      nmos is open when gate 1
+            |             |
+   in1 +---| n2  in2 +---| n4
+            |             |
+            |             |
+          --+-------------+------ gnd
+</pre>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Mux2 (
+    input  wire in1,
+    input  wire in2,
+    input  wire sel,
+    output wire out
+);
+
+    supply1 vdd;
+    supply0 gnd;
+
+    wire nsel;
+    INV inv_sel_(.in(sel), .out(nsel));
+
+    wire o;
+    INV inv_out_(.in(o), .out(out));
+
+    wire p1_p2, p3_p4, n1_n2, n3_n4;
+
+    // pmos drain source gate
+    pmos p1(p1_p2,  vdd,   in1);
+    pmos p2(o,    p1_p2,   nsel);
+
+    pmos p3(p3_p4,  vdd,   in2);
+    pmos p4(o,    p3_p4,   sel);
+
+    // nmos drain source gate
+    nmos n1(o,    n1_n2,   sel);
+    nmos n2(n1_n2,  gnd,   in1);
+
+    nmos n3(o,    n3_n4,  nsel);
+    nmos n4(n3_n4,  gnd,   in2);
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_cmos/NAND2.sv">
 Module "NAND2", cmos/NAND2.sv
 </h3>
@@ -734,8 +928,8 @@ Module "NAnd2", cmos/NAnd2.sv
     pmos p2(out,  vdd,   in2);
 
     // nmos drain source gate
-    pmos n1(out,  w_n,   in1);
-    pmos n2(w_n,  vdd,   in2);
+    nmos n1(out,  w_n,   in1);
+    nmos n2(w_n,  gnd,   in2);
 
 endmodule</code></pre>
 
@@ -960,6 +1154,55 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_generic/MUX2.sv">
+Module "MUX2", generic/MUX2.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>2:1 Multiplexer</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module MUX2 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0]  in1,
+    input  wire [WIDTH-1:0]  in2,
+    input  wire              sel,
+    output wire [WIDTH-1:0]  out
+);
+
+    Mux2#(WIDTH) mux2_(.in1(in1), .in2(in2), .sel(sel), .out(out));
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_generic/Mux2.sv">
 Module "Mux2", generic/Mux2.sv
 </h3>
@@ -992,7 +1235,7 @@ Module "Mux2", generic/Mux2.sv
 
 </ul>
 
-<p>2-input Multiplexer.</p>
+<p>2:1 Multiplexer.</p>
 <p>Author: Igor Lesik 2014.</p>
 <!--script type="WaveDrom">
 { assign:[
@@ -1001,6 +1244,15 @@ Module "Mux2", generic/Mux2.sv
   ]
 ]}
 </script-->
+
+<pre>
+          +-----+
+in1 ------| 1   |
+          | MUX |--- out   
+in2 ------| 0   |
+          +--+--+
+        sel  |
+</pre>
 <p>Source code:</p>
 <pre><code class="lang-verilog">module Mux2 #(
     parameter WIDTH = 1
@@ -1011,7 +1263,7 @@ Module "Mux2", generic/Mux2.sv
     output wire [WIDTH-1:0]  out
 );
 
-    assign out = (sel == 0) ? in1 : in2;
+    assign out = (sel == 1) ? in1 : in2;
 
 endmodule</code></pre>
 

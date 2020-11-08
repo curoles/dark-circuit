@@ -5,3 +5,5 @@ NAND2.sv
 NOr2.sv
 NOR2.sv
 AND2.sv
+Mux2.sv
+MUX2.sv

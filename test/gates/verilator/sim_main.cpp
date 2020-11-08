@@ -19,6 +19,7 @@ static void set_inputs(VTbTop& top)
 
     top.in1 = random(rand_engine);
     top.in2 = random(rand_engine);
+    top.in3 = random(rand_engine);
 }
 
 static bool check_outputs(const VTbTop& top)
@@ -29,6 +30,9 @@ static bool check_outputs(const VTbTop& top)
         printf("%lx != %lx\n", top.out_nand2, ~(top.in1 & top.in2));
         return false;
     }
+
+    if (uint64_t mux2 = (top.in3 & 0b1)? top.in1 : top.in2;
+        top.out_mux2 != mux2) return false;
 
     return true;
 }

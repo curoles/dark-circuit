@@ -6,7 +6,7 @@ set(VERILATOR_PARAMS_${TEST_NAME}
     --Mdir obj_dir_${TEST_NAME}
     ${TB_FLIST}
     -CFLAGS "-I${DARKCIRCUIT_SOURCE_DIR}/tools"
-    -CFLAGS "-O3"
+    -CFLAGS "-O3 -std=c++1z"
     --top-module ${TB_TOP} ${TB_TOP_FILE}
     ${DARKCIRCUIT_SOURCE_DIR}/tools/eda/verilator/verilator_tick.cpp
 )
