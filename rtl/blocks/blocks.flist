@@ -1,4 +1,5 @@
 SimROM/rtl/SimROM.sv
+SimRAM/rtl/SimRAM.sv
 Encoder/rtl/Encoder8_3.sv
 Decoder/rtl/Decoder.sv
 ShiftReg/rtl/ShiftReg.sv
