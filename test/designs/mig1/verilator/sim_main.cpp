@@ -9,8 +9,17 @@
 #include <limits>
 #include <random>
 
+#include "svdpi.h"
+
 #include "VTbTop.h"
+#include "VTbTop__Dpi.h"
 #include "eda/verilator/verilator_tick.h"
+
+static uint32_t getPC(const VTbTop& top)
+{
+    svSetScope(svGetScopeFromName("TOP.TbTop.cpu_"));
+    return top.public_get_PC();
+}
 
 int main(int argc, char* argv[])
 {
@@ -23,7 +32,17 @@ int main(int argc, char* argv[])
 
     Tick tick(top);
 
+    top.rst = 1;
+    top.rst_addr = 16;
+    for (unsigned int i = 0; i < 5; ++i) {tick();}
+    top.rst = 0;
 
+    for (unsigned int i = 0; i < 10; ++i) {
+        tick();
+        printf("PC:%x\n", getPC(top));
+    }
+
+    //while (!Verilated::gotFinish()) { top->eval(); }
     printf("\n\nSUCCESS\n");
 
     return 0;

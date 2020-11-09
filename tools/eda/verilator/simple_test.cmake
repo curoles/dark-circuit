@@ -21,3 +21,5 @@ add_test(NAME test_${TEST_NAME}
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/obj_dir_${TEST_NAME}/V${TB_TOP}
 )
 
+# TODO
+# check chapter "CMake" in https://www.veripool.org/wiki/verilator/Manual-verilator
