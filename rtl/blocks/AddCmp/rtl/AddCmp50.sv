@@ -1,17 +1,3 @@
-// =================================================================================================
-// =                                                                                               =
-// = This document is protected by copyright and other related rights and the practice or          =
-// = implementation of the information contained in this document may be protected by one or more  =
-// = patents or pending patent applications. No part of this document may be reproduced in any     =
-// = form and by any means without the express prior written permission of Tachyum.                =
-// =                                                                                               =
-// =                                 COPYRIGHT (C) 2019 Dark Circuit                               =
-// =                                                                                               =
-// =================================================================================================
-//
-//       |         |         |         |         |         |         |         |         |         |
-//      10        20        30        40        50        60        70        80        90       100
-// 4567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
 
 module AddCmp50 (
     input  wire [50-1:0] a,

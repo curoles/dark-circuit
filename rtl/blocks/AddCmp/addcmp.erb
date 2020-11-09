@@ -1,20 +1,9 @@
 <%#Template to generate A+B==Z adder-comparator-%>
 <%#Reference: The Power of Carry-Save Addition, D. R. Lutz 1994-%>
-// =================================================================================================
-// =                                                                                               =
-// = This document is protected by copyright and other related rights and the practice or          =
-// = implementation of the information contained in this document may be protected by one or more  =
-// = patents or pending patent applications. No part of this document may be reproduced in any     =
-// = form and by any means without the express prior written permission of Tachyum.                =
-// =                                                                                               =
-// =                                 COPYRIGHT (C) 2019 Dark Circuit                               =
-// =                                                                                               =
-// =================================================================================================
-//
-//       |         |         |         |         |         |         |         |         |         |
-//      10        20        30        40        50        60        70        80        90       100
-// 4567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
-
+/*
+ *
+ * See The Power of Carry-Save Addition, D. R. Lutz 1994
+ */
 <%size = sz.to_i; groups = (size + 3)/4 -%>
 module AddCmp<%=size%> (
     input  wire [<%=size%>-1:0] a,
