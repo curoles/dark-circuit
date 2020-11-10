@@ -1,5 +1,9 @@
 /* Logic-in-Memory DFF.
  *
+ * A smart-memory is a specialized memory block that is customized
+ * to perform extra functionalities, such that the output of a smart-memory
+ * is not just stored data, but a function of the input and the stored data.
+ *
  * Operations:
  * 1. Set new value: do_force=1, do_invert=1|0.
  * 2. Do not change current value: do_force=0, do_nand=do_nxor=0, do_invert=1, in=0.
