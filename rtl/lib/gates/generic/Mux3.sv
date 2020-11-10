@@ -15,7 +15,7 @@ module Mux3 #(
     output wire [WIDTH-1:0]  out
 );
 
-assign out = (sel == 0) ? in1 :
-             (sel == 1) ? in2 : in3;
+assign out = (sel == 0) ? in3 :
+             (sel == 1) ? in2 : in1;
 
 endmodule
