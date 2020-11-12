@@ -7,6 +7,7 @@ set(flists
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/gates/cmos/cmos.flist
     ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/gates/builtin/builtin.flist
     ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/gates/generic/generic.flist
+    ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/parts/parts.flist
 )
 
 add_custom_command(
