@@ -21,8 +21,11 @@ module RippleCarryAdder #(
     output wire [WIDTH-1:0] sum
 );
 
+    /* verilator lint_off UNOPTFLAT */
     wire [WIDTH:0] carry;
+    /* verilator lint_on UNOPTFLAT */
     assign carry[0] = ci;
+    assign co = carry[WIDTH];
 
     genvar i;
     generate

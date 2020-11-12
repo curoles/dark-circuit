@@ -164,6 +164,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_gates/cmos/NOR2.sv">NOR2</a>
     <a href="#module_gates/cmos/NOr2.sv">NOr2</a>
     <h3>- gates/generic</h3>
+    <a href="#module_gates/generic/AOI22.sv">AOI22</a>
     <a href="#module_gates/generic/Dff.sv">Dff</a>
     <a href="#module_gates/generic/INV.sv">INV</a>
     <a href="#module_gates/generic/MUX2.sv">MUX2</a>
@@ -171,6 +172,7 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_gates/generic/NAND2.sv">NAND2</a>
     <h3>- parts</h3>
     <a href="#module_parts/FullAdderAOI.sv">FullAdderAOI</a>
+    <a href="#module_parts/RippleCarryAdder.sv">RippleCarryAdder</a>
 </div>
 <div class="main">
 <h3 id="module_gates/builtin/INV.sv">
@@ -1054,6 +1056,85 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_gates/generic/AOI22.sv">
+Module "AOI22", gates/generic/AOI22.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+     to be AND-ed with in2
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+     to be AND-ed with in1
+    </li>
+
+    <li>
+    <pre>in3      input    wire [WIDTH-1:0]</pre>
+     to be AND-ed with in4
+    </li>
+
+    <li>
+    <pre>in4      input    wire [WIDTH-1:0]</pre>
+     to be AND-ed with in3
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+     NOR the results of two ANDs
+    </li>
+
+</ul>
+
+<p>Complex gate And-Or-Invertor.</p>
+<pre>
+ in1 ----------+--\
+               AND +----+
+ in2 ----------+--/|    |
+                   |NOR |o-----
+ in3 ----------+--\|    |
+               AND +----+
+ in4 ----------+--/
+</pre>
+
+<script type="WaveDrom">
+{ assign:[
+  ["out",
+    ["~|",
+      ["&", "in1", "in2"],
+      ["&", "in3", "in4"]
+    ]
+  ]
+]}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module AOI22 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0] in1, // to be AND-ed with in2
+    input  wire [WIDTH-1:0] in2, // to be AND-ed with in1
+    input  wire [WIDTH-1:0] in3, // to be AND-ed with in4
+    input  wire [WIDTH-1:0] in4, // to be AND-ed with in3
+    output wire [WIDTH-1:0] out  // NOR the results of two ANDs
+);
+
+    assign out = ~((in1 & in2) | (in3 & in4));
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_gates/generic/Dff.sv">
 Module "Dff", gates/generic/Dff.sv
 </h3>
@@ -1357,6 +1438,7 @@ Module "FullAdderAOI", parts/FullAdderAOI.sv
 </ul>
 
 <p>Full Adder using And-Or-Invert (AOI) logic.</p>
+<p>Author: Igor Lesik 2020.</p>
 <p>AOI logic is a technique of using equivalent Boolean logic expressions
 to reduce the number of gates required for a particular expression.
 This, in turn, reduces capacitance and consequently propagation times.</p>
@@ -1391,9 +1473,88 @@ and uses fewer gates to calculate the rest of the expression.</p>
     output wire co   // carry out
 );
 
-assign sum = (in1 ^ in2) ^ ci;
+     wire co_n, sum_n;
 
-assign co = (in1 & in2) | (in1 & ci) | (in2 & ci);
+     assign co = ~co_n;
+     assign sum = ~sum_n;
+
+     AOI22 aoi_co_(.out(co_n), .in1(in1|in2), .in2(ci), .in3(in1), .in4(in2));
+
+     AOI22 aoi_sum_(.out(sum_n), .in1(co_n), .in2(in1|in2|ci), .in3(in1), .in4(in2 & ci));
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_parts/RippleCarryAdder.sv">
+Module "RippleCarryAdder", parts/RippleCarryAdder.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>ci       input    wire</pre>
+    </li>
+
+    <li>
+    <pre>co       output   wire</pre>
+    </li>
+
+    <li>
+    <pre>sum      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<ul>
+<li><a href="https://www.computer.org/csdl/pds/api/csdl/proceedings/download-article/12OmNyfvpTj/pdf">Fast Ripple-Carry Adders in Standard-Cell CMOS VLSI</a>
+ -<a href="http://web.engr.uky.edu/~elias/projects/10.pdf">CMOS Binary Full Adder, A Survey of Possible Implementations</a></li>
+</ul>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module RippleCarryAdder #(
+    parameter WIDTH
+)(
+    input  wire [WIDTH-1:0] in1,
+    input  wire [WIDTH-1:0] in2,
+    input  wire             ci,
+    output wire             co,
+    output wire [WIDTH-1:0] sum
+);
+
+    /* verilator lint_off UNOPTFLAT */
+    wire [WIDTH:0] carry;
+    /* verilator lint_on UNOPTFLAT */
+    assign carry[0] = ci;
+    assign co = carry[WIDTH];
+
+    genvar i;
+    generate
+        for (i = 0; i < WIDTH; i++) begin : fa_gen
+            FullAdderAOI fa_(
+                .in1(in1[i]),
+                .in2(in2[i]),
+                .ci (carry[i]),
+                .sum(sum[i]),
+                .co (carry[i+1])
+            );
+        end
+    endgenerate
 
 endmodule</code></pre>
 

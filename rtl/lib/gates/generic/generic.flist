@@ -3,3 +3,4 @@ NAND2.sv
 Mux2.sv
 MUX2.sv
 Dff.sv
+AOI22.sv
