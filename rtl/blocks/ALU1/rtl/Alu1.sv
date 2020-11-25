@@ -1,5 +1,5 @@
-localparam ALU1_CMD_WIDTH=2;
-localparam ALU1_NR_COMMANDS=2;
+localparam ALU1_CMD_WIDTH=3;
+localparam ALU1_NR_COMMANDS=8;
 
 /*
  *
@@ -13,7 +13,15 @@ localparam ALU1_NR_COMMANDS=2;
  * 2. B' = ~B = B XOR sub_add.
  *
  *
- *
+ * <script type="WaveDrom">
+ * { assign:[
+ *   ["adder_input2",
+ *     ["|", ["&", "in", "S0"],
+ *           ["&", ["~","in"], "S1"]
+ *     ]
+ *   ]
+ * ]}
+ * </script>
  *
  *
  *
@@ -32,9 +40,22 @@ module Alu1 #(
     output wire [WIDTH-1:0]     out
 );
 
-    localparam CMD_ADD = 0;
-    localparam CMD_SUB = 1;
+                                   //S012 C cmd
+    localparam CMD_TRANSFER   = 0; // 000 0 000 out = in1
+    localparam CMD_INC        = 1; // 000 1 001 out = in1 + 1
+    localparam CMD_ADD        = 2; // 100 0 010 out = in1 + in2
+    localparam CMD_ADD_PLUS1  = 3; // 100 1 011 out = in1 + in2 + 1
+    localparam CMD_SUB_MINUS1 = 4; // 010 0 100 out = in1 + ~in2
+    localparam CMD_SUB        = 5; // 010 1 101 out = in1 + ~in2 + 1
+    localparam CMD_DEC        = 6; // 110 0 110 out = in1 - 1 (in1 + 111=in1 + 000 - 1=in1 - 1)
+    localparam CMD_TRANSFER2  = 7; // 110 1 111 out = in1
 
+    wire [2:0] opsel;
+
+    assign opsel[0] = (cmd == CMD_ADD || cmd == CMD_ADD_PLUS1 ||
+        cmd == CMD_DEC || cmd == CMD_TRANSFER2);
+
+    assign opsel[1] = cmd[2];
 
     wire [WIDTH-1:0] in2_inv;
 
@@ -47,13 +68,23 @@ module Alu1 #(
 
     assign adder_in1 = in1;
 
-    assign adder_ci = (cmd == CMD_SUB)? 1 : 0;
+    assign adder_ci = cmd[0];
 
-    assign adder_in2 = (cmd == CMD_SUB)? in2_inv : in2;
+    generate; genvar i;
+    for (i = 0; i < WIDTH; i++) begin : in2_sel
+        assign adder_in2[i] = (in2[i] & opsel[0]) | (in2_inv[i] & opsel[1]);
+    end
+    endgenerate
 
-    RippleCarryAdder#(WIDTH) adder(adder_in1, adder_in1, adder_ci, co, adder_out);
+    RippleCarryAdder#(WIDTH) adder_(
+        .in1(adder_in1),
+        .in2(adder_in2),
+        .ci(adder_ci),
+        .co(co),
+        .sum(adder_out)
+    );
 
-
+    assign out = adder_out;
 
 
 endmodule: Alu1

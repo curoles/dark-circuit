@@ -26,12 +26,22 @@ static void set_inputs(VTbTop& top)
 
 static bool check_outputs(const VTbTop& top)
 {
-    uint64_t sum = top.in1 + top.in2;
+    uint64_t correct_val{0};
 
-    //printf("HW %lx vs correct %lx\n", top.sum, sum);
+    switch (top.cmd)
+    {
+        case 0: correct_val = top.in1; break;
+        case 1: correct_val = top.in1 + 1; break;
+        case 2: correct_val = top.in1 + top.in2; break;
+        case 3: correct_val = top.in1 + top.in2 + 1; break;
+        case 4: correct_val = top.in1 - top.in2 - 1; break;
+        case 5: correct_val = top.in1 - top.in2; break;
+        case 6: correct_val = top.in1 - 1; break;
+        case 7: correct_val = top.in1; break;
+    }
 
-    if (top.out != sum) {
-        printf("HW %lx vs correct %lx\n", top.out, sum);
+    if (top.out != correct_val) {
+        printf("HW %lx vs correct %lx, cmd=%u\n", top.out, correct_val, top.cmd);
         return false;
     }
 
@@ -49,7 +59,7 @@ int main(int argc, char* argv[])
 
     Tick tick(top);
 
-    for (unsigned int i = 0; i < 100; ++i)
+    for (unsigned int i = 0; i < 1000; ++i)
     {
         set_inputs(top);
         tick();
@@ -57,6 +67,7 @@ int main(int argc, char* argv[])
             printf("\n\nFAIL i:%u\n", i);
             return 1;
         }
+        //printf("%u cmd=%u\n", i, top.cmd);
     }
 
     printf("\n\nSUCCESS\n");
