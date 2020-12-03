@@ -11,7 +11,7 @@ function(make_xrun_compile_options ret_options)
         #-fast_recompilation
         -64bit
         -sv
-        #-disable_sem2009
+        -disable_sem2009
         -l ${CMAKE_CURRENT_BINARY_DIR}/xrun.compile.log
         #-setenv HOME=${RTLHOME}
         -uvmhome '${UVMHOME}'
@@ -49,6 +49,7 @@ function(make_xrun_elaborate_options ret_options)
         -noupdate
         -uvmhome '${UVMHOME}'
         #-fast_recompilation
+        -disable_sem2009
         -l ${CMAKE_CURRENT_BINARY_DIR}/xrun.elaborate.log
         -top ${TB_TOP}
     )

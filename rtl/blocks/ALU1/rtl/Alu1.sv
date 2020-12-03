@@ -30,7 +30,7 @@ localparam ALU1_NR_COMMANDS = 8+4;
  *
  */
 module Alu1 #(
-    parameter WIDTH,
+    parameter WIDTH = 64,
     localparam CMD_WIDTH = ALU1_CMD_WIDTH
 )(
     input  wire [CMD_WIDTH-1:0] cmd,
@@ -77,7 +77,8 @@ module Alu1 #(
 
     assign adder_ci = cmd[0];
 
-    generate; genvar i;
+    genvar i;
+    generate
     for (i = 0; i < WIDTH; i++) begin : in2_sel
         assign adder_in2[i] = (in2[i] & opsel[0]) | (in2_inv[i] & opsel[1]);
     end

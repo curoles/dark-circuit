@@ -6,8 +6,8 @@
  * Assumes RISC style fixed instruction word size.
  */
 module PrgCounter #(
-    parameter   ADDR_WIDTH,
-    parameter   INSN_SIZE,
+    parameter   ADDR_WIDTH = 32,
+    parameter   INSN_SIZE  = 4,
     localparam  INSN_WIDTH = INSN_SIZE * 8,
     localparam  ADDR_OFS   = (INSN_SIZE <= 1)? 0 :
                              (INSN_SIZE <= 2)? 1 :

@@ -12,7 +12,7 @@
  *
  */
 module RippleCarryAdder #(
-    parameter WIDTH
+    parameter WIDTH = 64
 )(
     input  wire [WIDTH-1:0] in1,
     input  wire [WIDTH-1:0] in2,
