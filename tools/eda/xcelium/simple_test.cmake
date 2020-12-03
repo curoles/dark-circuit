@@ -67,9 +67,9 @@ add_custom_target(elaborate_rtl
 )
 
 # Do not include(tcl.cmake), call it as a script.
-#add_custom_command(OUTPUT sim.tcl
-#    COMMAND ${CMAKE_COMMAND} -DDUT=${DUT} -P ${PROJECT_SOURCE_DIR}/tcl.cmake
-#)
+add_custom_command(OUTPUT sim.tcl
+    COMMAND ${CMAKE_COMMAND} -DDUT=${DUT} -P ${DARKCIRCUIT_SOURCE_DIR}/tools/eda/xcelium/sim_tcl.cmake
+)
 
 function(make_xrun_options ret_xrun_options)
 
@@ -108,11 +108,12 @@ add_custom_command(OUTPUT xrun-cmd
 add_custom_target(make_run ALL
     DEPENDS elaborate_rtl
     DEPENDS xrun-cmd
+    DEPENDS sim.tcl
 )
 
 add_custom_target(run_rtl
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/xrun-cmd
-    #DEPENDS sim.tcl
+    DEPENDS sim.tcl
     DEPENDS xrun-cmd
 )
 
