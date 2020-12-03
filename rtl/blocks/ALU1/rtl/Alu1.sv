@@ -24,8 +24,8 @@ localparam ALU1_NR_COMMANDS = 8+4;
  * </script>
  *
  *
- *
- *
+ * References:
+ * - https://www.egr.msu.edu/classes/ece410/mason/files/Ch12.pdf
  *
  *
  */
