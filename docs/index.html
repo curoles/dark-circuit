@@ -1453,7 +1453,7 @@ Module "Mux4", gates/generic/Mux4.sv
 
 </ul>
 
-<p>4:1 Multiplexer 
+<p>4:1 Multiplexer
 Author: Igor Lesik 2014</p>
 <p>Source code:</p>
 <pre><code class="lang-verilog">module Mux4 #(
@@ -1471,7 +1471,7 @@ assign out = (sel == 0) ? in1 :
              (sel == 1) ? in2 :
              (sel == 2) ? in3 : in4;
 /*
- assign Z =    (~S1 & ~S0 & I0) 
+ assign Z =    (~S1 & ~S0 & I0)
               | (~S1 &  S0 & I1)
               | ( S1 & ~S0 & I2)
               | ( S1 &  S0 & I3);*/

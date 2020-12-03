@@ -14,6 +14,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Configuration options
+# Verilator is default Verilog compiler, to turn it off:
+# cmake -D USE_VERILATOR=OFF ../dark-circuit/
+option(USE_VERILATOR "Use Verilator to compile" ON)
+
 # Compiler options.
 set(DARKCIRCUIT_M_CFLAGS "-march=native")
 set(DARKCIRCUIT_W_CFLAGS "-Werror -Wall -Wextra")
@@ -30,7 +35,8 @@ add_subdirectory(docs)
 add_subdirectory(test)
 
 # Log CMake variables.
-MESSAGE( STATUS "CMAKE_C_COMPILER:     " ${CMAKE_C_COMPILER} )
-MESSAGE( STATUS "CMAKE_CXX_COMPILER:   " ${CMAKE_CXX_COMPILER} )
-MESSAGE( STATUS "CMAKE_CXX_FLAGS:      " ${CMAKE_CXX_FLAGS} )
+MESSAGE( STATUS "CMAKE_C_COMPILER    : " ${CMAKE_C_COMPILER} )
+MESSAGE( STATUS "CMAKE_CXX_COMPILER  : " ${CMAKE_CXX_COMPILER} )
+MESSAGE( STATUS "CMAKE_CXX_FLAGS     : " ${CMAKE_CXX_FLAGS} )
 MESSAGE( STATUS "CMAKE_INSTALL_PREFIX: " ${CMAKE_INSTALL_PREFIX} )
+MESSAGE( STATUS "USE VERILATOR       : " ${USE_VERILATOR} )
