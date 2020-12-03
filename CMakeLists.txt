@@ -18,6 +18,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Verilator is default Verilog compiler, to turn it off:
 # cmake -D USE_VERILATOR=OFF ../dark-circuit/
 option(USE_VERILATOR "Use Verilator to compile" ON)
+option(USE_XCELIUM "Use Cadence Xcelium to compile and simulate" OFF)
 
 # Compiler options.
 set(DARKCIRCUIT_M_CFLAGS "-march=native")
@@ -40,3 +41,4 @@ MESSAGE( STATUS "CMAKE_CXX_COMPILER  : " ${CMAKE_CXX_COMPILER} )
 MESSAGE( STATUS "CMAKE_CXX_FLAGS     : " ${CMAKE_CXX_FLAGS} )
 MESSAGE( STATUS "CMAKE_INSTALL_PREFIX: " ${CMAKE_INSTALL_PREFIX} )
 MESSAGE( STATUS "USE VERILATOR       : " ${USE_VERILATOR} )
+MESSAGE( STATUS "USE XCELIUM         : " ${USE_XCELIUM} )
