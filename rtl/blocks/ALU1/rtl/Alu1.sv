@@ -1,5 +1,5 @@
-localparam ALU1_CMD_WIDTH=3;
-localparam ALU1_NR_COMMANDS=8;
+localparam ALU1_CMD_WIDTH   = 4;
+localparam ALU1_NR_COMMANDS = 8+4;
 
 /*
  *
@@ -41,21 +41,28 @@ module Alu1 #(
 );
 
                                    //S012 C cmd
-    localparam CMD_TRANSFER   = 0; // 000 0 000 out = in1
-    localparam CMD_INC        = 1; // 000 1 001 out = in1 + 1
-    localparam CMD_ADD        = 2; // 100 0 010 out = in1 + in2
-    localparam CMD_ADD_PLUS1  = 3; // 100 1 011 out = in1 + in2 + 1
-    localparam CMD_SUB_MINUS1 = 4; // 010 0 100 out = in1 + ~in2
-    localparam CMD_SUB        = 5; // 010 1 101 out = in1 + ~in2 + 1
-    localparam CMD_DEC        = 6; // 110 0 110 out = in1 - 1 (in1 + 111=in1 + 000 - 1=in1 - 1)
-    localparam CMD_TRANSFER2  = 7; // 110 1 111 out = in1
+    localparam CMD_TRANSFER   = 0; // 000 0 0000 out = in1
+    localparam CMD_INC        = 1; // 000 1 0001 out = in1 + 1
+    localparam CMD_ADD        = 2; // 100 0 0010 out = in1 + in2
+    localparam CMD_ADD_PLUS1  = 3; // 100 1 0011 out = in1 + in2 + 1
+    localparam CMD_SUB_MINUS1 = 4; // 010 0 0100 out = in1 + ~in2
+    localparam CMD_SUB        = 5; // 010 1 0101 out = in1 + ~in2 + 1
+    localparam CMD_DEC        = 6; // 110 0 0110 out = in1 - 1 (in1 + 111=in1 + 000 - 1=in1 - 1)
+    localparam CMD_TRANSFER2  = 7; // 110 1 0111 out = in1
+
+    localparam CMD_AND        = 8; // 001   1000 out = in1 & in2
+    localparam CMD_OR         = 9; // 101   1001 out = in1 | in2
+    localparam CMD_XOR        =10; // 011   1010 out = in1 ^ in2
+    localparam CMD_NOT        =11; // 111   1011 out = ~in1
 
     wire [2:0] opsel;
 
     assign opsel[0] = (cmd == CMD_ADD || cmd == CMD_ADD_PLUS1 ||
-        cmd == CMD_DEC || cmd == CMD_TRANSFER2);
+        cmd == CMD_DEC || cmd == CMD_TRANSFER2 || cmd == CMD_OR || cmd == CMD_NOT);
 
-    assign opsel[1] = cmd[2];
+    assign opsel[1] = cmd[2] | (cmd[3] & cmd[1]);
+
+    assign opsel[2] = cmd[3];
 
     wire [WIDTH-1:0] in2_inv;
 
@@ -84,7 +91,18 @@ module Alu1 #(
         .sum(adder_out)
     );
 
-    assign out = adder_out;
+    wire [WIDTH-1:0] logic_block_out;
+
+    MUX4#(WIDTH) logic_block_(
+        .in1(in1 & in2), // AND
+        .in2(in1 | in2), // OR
+        .in3(in1 ^ in2), // XOR
+        .in4(~in1),      // NOT
+        .sel(opsel[1:0]),
+        .out(logic_block_out)
+    );
+
+    assign out = (opsel[2] == 1)? logic_block_out : adder_out;
 
 
 endmodule: Alu1

@@ -168,7 +168,9 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_gates/generic/Dff.sv">Dff</a>
     <a href="#module_gates/generic/INV.sv">INV</a>
     <a href="#module_gates/generic/MUX2.sv">MUX2</a>
+    <a href="#module_gates/generic/MUX4.sv">MUX4</a>
     <a href="#module_gates/generic/Mux2.sv">Mux2</a>
+    <a href="#module_gates/generic/Mux4.sv">Mux4</a>
     <a href="#module_gates/generic/NAND2.sv">NAND2</a>
     <h3>- parts</h3>
     <a href="#module_parts/FullAdderAOI.sv">FullAdderAOI</a>
@@ -1286,6 +1288,65 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_gates/generic/MUX4.sv">
+Module "MUX4", gates/generic/MUX4.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in3      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in4      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire [1:0]</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>4:1 Multiplexer</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module MUX4 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0]  in1,
+    input  wire [WIDTH-1:0]  in2,
+    input  wire [WIDTH-1:0]  in3,
+    input  wire [WIDTH-1:0]  in4,
+    input  wire [1:0]        sel,
+    output wire [WIDTH-1:0]  out
+);
+
+    Mux4#(WIDTH) mux4_(.in1, .in2, .in3, .in4, .sel, .out);
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_gates/generic/Mux2.sv">
 Module "Mux2", gates/generic/Mux2.sv
 </h3>
@@ -1348,6 +1409,72 @@ in2 ------| 0   |
 
     assign out = (sel == 1) ? in1 : in2;
 
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_gates/generic/Mux4.sv">
+Module "Mux4", gates/generic/Mux4.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<ul>
+    <li>
+    <pre>in1      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in3      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>in4      input    wire [WIDTH-1:0]</pre>
+    </li>
+
+    <li>
+    <pre>sel      input    wire [1:0]</pre>
+    </li>
+
+    <li>
+    <pre>out      output   wire [WIDTH-1:0]</pre>
+    </li>
+
+</ul>
+
+<p>4:1 Multiplexer 
+Author: Igor Lesik 2014</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Mux4 #(
+    parameter WIDTH = 1
+)(
+    input  wire [WIDTH-1:0]  in1,
+    input  wire [WIDTH-1:0]  in2,
+    input  wire [WIDTH-1:0]  in3,
+    input  wire [WIDTH-1:0]  in4,
+    input  wire [1:0]        sel,
+    output wire [WIDTH-1:0]  out
+);
+
+assign out = (sel == 0) ? in1 :
+             (sel == 1) ? in2 :
+             (sel == 2) ? in3 : in4;
+/*
+ assign Z =    (~S1 & ~S0 & I0) 
+              | (~S1 &  S0 & I1)
+              | ( S1 & ~S0 & I2)
+              | ( S1 &  S0 & I3);*/
 endmodule</code></pre>
 
 

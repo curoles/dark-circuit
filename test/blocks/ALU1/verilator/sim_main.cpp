@@ -30,18 +30,23 @@ static bool check_outputs(const VTbTop& top)
 
     switch (top.cmd)
     {
-        case 0: correct_val = top.in1; break;
-        case 1: correct_val = top.in1 + 1; break;
-        case 2: correct_val = top.in1 + top.in2; break;
-        case 3: correct_val = top.in1 + top.in2 + 1; break;
-        case 4: correct_val = top.in1 - top.in2 - 1; break;
-        case 5: correct_val = top.in1 - top.in2; break;
-        case 6: correct_val = top.in1 - 1; break;
-        case 7: correct_val = top.in1; break;
+        case  0: correct_val = top.in1; break;
+        case  1: correct_val = top.in1 + 1; break;
+        case  2: correct_val = top.in1 + top.in2; break;
+        case  3: correct_val = top.in1 + top.in2 + 1; break;
+        case  4: correct_val = top.in1 - top.in2 - 1; break;
+        case  5: correct_val = top.in1 - top.in2; break;
+        case  6: correct_val = top.in1 - 1; break;
+        case  7: correct_val = top.in1; break;
+        case  8: correct_val = top.in1 & top.in2; break;
+        case  9: correct_val = top.in1 | top.in2; break;
+        case 10: correct_val = top.in1 ^ top.in2; break;
+        case 11: correct_val = ~top.in1; break;
     }
 
     if (top.out != correct_val) {
-        printf("HW %lx vs correct %lx, cmd=%u\n", top.out, correct_val, top.cmd);
+        printf("HW %lx vs correct %lx, cmd=%u, in1=%lx, in2=%lx\n",
+            top.out, correct_val, top.cmd, top.in1, top.in2);
         return false;
     }
 

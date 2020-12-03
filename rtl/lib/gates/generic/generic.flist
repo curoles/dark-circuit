@@ -2,5 +2,7 @@ INV.sv
 NAND2.sv
 Mux2.sv
 MUX2.sv
+Mux4.sv
+MUX4.sv
 Dff.sv
 AOI22.sv
