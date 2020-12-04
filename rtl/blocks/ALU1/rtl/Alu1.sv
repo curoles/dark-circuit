@@ -1,6 +1,21 @@
 localparam ALU1_CMD_WIDTH   = 4;
 localparam ALU1_NR_COMMANDS = 8+4;
 
+typedef enum bit[ALU1_CMD_WIDTH-1:0] {
+    ALU1_OP_TRANSFER   = 0,
+    ALU1_OP_INC        = 1,
+    ALU1_OP_ADD        = 2,
+    ALU1_OP_ADD_PLUS1  = 3,
+    ALU1_OP_SUB_MINUS1 = 4,
+    ALU1_OP_SUB        = 5,
+    ALU1_OP_DEC        = 6,
+    ALU1_OP_TRANSFER2  = 7,
+    ALU1_OP_AND        = 8,
+    ALU1_OP_OR         = 9,
+    ALU1_OP_XOR        = 10,
+    ALU1_OP_NOT        = 11
+} Alu1Op;
+
 /*
  *
  *
