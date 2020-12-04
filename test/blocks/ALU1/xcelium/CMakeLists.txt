@@ -10,5 +10,6 @@ set(TB_FLIST
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/parts/parts.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/gates/generic/generic.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/sim/sim.flist
+    -F ${CMAKE_CURRENT_SOURCE_DIR}/tb.flist
 )
 include(${DARKCIRCUIT_SOURCE_DIR}/tools/eda/xcelium/simple_test.cmake)

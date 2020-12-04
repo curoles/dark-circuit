@@ -1,6 +1,7 @@
 # Author: Igor Lesik 2020
 
 option(XPROP_ENABLE "enable x-propagation detection" OFF)
+option(COVERAGE_ENABLE "enable coverage" ON)
 set(UVMHOME "CDNS-1.2" CACHE STRING "UVM files location")
 
 function(make_xrun_compile_options ret_options)
@@ -54,6 +55,10 @@ function(make_xrun_elaborate_options ret_options)
         -top ${TB_TOP}
     )
 
+    if (COVERAGE_ENABLE)
+        list(APPEND options -coverage A)
+    endif()
+
     set(${ret_options} ${options} PARENT_SCOPE)
 endfunction()
 
@@ -88,6 +93,10 @@ function(make_xrun_options ret_xrun_options)
             +UVM_VERBOSITY=${UVM_VERBOSITY}
             +UVM_TESTNAME=${UVM_TESTNAME}
         )
+    endif()
+
+    if (COVERAGE_ENABLE)
+        list(APPEND options -covoverwrite)
     endif()
 
     set(${ret_xrun_options} ${options} PARENT_SCOPE)
