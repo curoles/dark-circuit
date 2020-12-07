@@ -1,4 +1,5 @@
 alu1_bfm.sv
-tester.sv
-scoreboard.sv
-coverage.sv
+Tester.sv
+Scoreboard.sv
+Coverage.sv
+TestBench.sv

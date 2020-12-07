@@ -1,5 +1,3 @@
-import Alu1Tb::*;
-
 module TbTop (
 
 );
@@ -13,11 +11,8 @@ module TbTop (
         alu_(.cmd(bfm.alu_cmd), .in1(bfm.alu_in1), .in2(bfm.alu_in2),
         .co(bfm.alu_co), .out(bfm.alu_out));
 
-    TestBench tb;
-
-    initial begin
-        tb = new(bfm);
-        tb.execute();
-    end
+    Tester#(WIDTH)     tester_(bfm);
+    Scoreboard#(WIDTH) scoreboard_(bfm);
+    Coverage#(WIDTH)   coverage_(bfm);
 
 endmodule: TbTop
