@@ -5,7 +5,7 @@ enable_testing()
 set(TB_TOP TbTop)
 set(TB_TOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/TbTop.sv)
 
-set(TEST_NAME ALU1)
+set(TEST_NAME BarrelShifter)
 
 set(TB_FLIST
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/blocks/blocks.flist

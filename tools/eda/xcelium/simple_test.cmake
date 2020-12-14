@@ -34,7 +34,7 @@ endfunction()
 set(XRUN_COMPILE_OPTIONS "")
 make_xrun_compile_options(XRUN_COMPILE_OPTIONS)
 
-add_custom_target(compile_rtl
+add_custom_target(compile_rtl_${TEST_NAME}
     xrun -compile ${XRUN_COMPILE_OPTIONS}
 )
 
@@ -66,9 +66,9 @@ endfunction()
 set(XRUN_ELABORATE_OPTIONS "")
 make_xrun_elaborate_options(XRUN_ELABORATE_OPTIONS)
 
-add_custom_target(elaborate_rtl
+add_custom_target(elaborate_rtl_${TEST_NAME}
     xrun -elaborate ${XRUN_ELABORATE_OPTIONS}
-    DEPENDS compile_rtl
+    DEPENDS compile_rtl_${TEST_NAME}
 )
 
 # Do not include(tcl.cmake), call it as a script.
@@ -114,13 +114,13 @@ add_custom_command(OUTPUT xrun-cmd
     COMMAND chmod a+x xrun-cmd
 )
 
-add_custom_target(make_run ALL
-    DEPENDS elaborate_rtl
+add_custom_target(make_run_${TEST_NAME} ALL
+    DEPENDS elaborate_rtl_${TEST_NAME}
     DEPENDS xrun-cmd
     DEPENDS sim.tcl
 )
 
-add_custom_target(run_rtl
+add_custom_target(run_rtl_${TEST_NAME}
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/xrun-cmd
     DEPENDS sim.tcl
     DEPENDS xrun-cmd
