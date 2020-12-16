@@ -9,10 +9,12 @@ module TbTop (
     bit  [SHIFT_WIDTH-1:0] shift_amount;
     bit                    shift_rotate;
     bit                    left_right;
+    bit                    shift_in_bit;
     wire [VALUE_WIDTH-1:0] out_val;
 
     BarrelShifter#(VALUE_WIDTH, SHIFT_WIDTH) shifter_(
         .in(in_val),
+        .shift_in_bit(shift_in_bit),
         .shift(shift_amount),
         .shift_rotate(shift_rotate),
         .left_right(left_right),
@@ -33,9 +35,10 @@ module TbTop (
         repeat (1000) begin
             @(negedge clk);
             in_val = generate_data();
-            shift_rotate = 0;//in_val[0];
+            shift_rotate = in_val[0];
             left_right = in_val[1];
-            shift_amount = 1;//in_val[SHIFT_WIDTH-1:0];
+            shift_amount = in_val[SHIFT_WIDTH-1:0];
+            shift_in_bit = 0; // TODO implement arithmetic shifts
             //$display("%h left/right:%h shift/rot:%h amount:%d",
             //    in_val, left_right, shift_rotate, shift_amount);
             @(posedge clk);

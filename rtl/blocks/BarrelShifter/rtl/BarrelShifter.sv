@@ -10,6 +10,7 @@ module BarrelShifter #(
     parameter SHIFT_WIDTH = `CLOG2(WIDTH) // number of shift/rotate bits
 )(
     input  wire [WIDTH-1:0]       in,
+    input  wire                   shift_in_bit, // 0 for logical shift
     input  wire [SHIFT_WIDTH-1:0] shift,        // number of shifts
     input  wire                   shift_rotate, // shift or rotate
     input  wire                   left_right,   // shift/rotate left or right
@@ -54,7 +55,9 @@ module BarrelShifter #(
         begin: stage_mux
             Mux2 #(.WIDTH(WIDTH)) mux(
                .in2(stage[i+1]),
-               .in1({stage[i+1][WIDTH-(2**i)-1:0], stage[i+1][WIDTH-1:WIDTH-(2**i)]}),
+               .in1({stage[i+1][WIDTH-(2**i)-1:0],
+                        (shift_rotate)? {(2**i){shift_in_bit}} : stage[i+1][WIDTH-1:WIDTH-(2**i)]
+                    }),
                .sel(shift[i]), // i-th bit of shift
                .out(stage[i])  // i-th stage either copy of prev. stage
             );
