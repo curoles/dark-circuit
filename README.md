@@ -6,4 +6,5 @@ https://curoles.github.io/dark-circuit/
 $ make test
 ```
 
-set `PATH` and `VERILATOR_ROOT` if not installed
+Set `PATH` and `VERILATOR_ROOT` if Verilator is not installed
+by OS package installer.

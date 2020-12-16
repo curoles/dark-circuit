@@ -1,11 +1,13 @@
+`include "clog2.svh"
+
 /* Barrel Shifter
  * Author: Igor Lesik 2019-2020
  * Copyright: Igor Lesik 2019-2020
  *
  */
 module BarrelShifter #(
-    parameter WIDTH,
-    parameter SHIFT_WIDTH = `CLOG(WIDTH) // number of shift/rotate bits
+    parameter WIDTH = 64,
+    parameter SHIFT_WIDTH = `CLOG2(WIDTH) // number of shift/rotate bits
 )(
     input  wire [WIDTH-1:0]       in,
     input  wire [SHIFT_WIDTH-1:0] shift,        // number of shifts
@@ -23,11 +25,11 @@ module BarrelShifter #(
     // We implement internal logic that shift/rotate LEFT.
     // The direction of the final shift/rotate operation is implemented by reversing
     // the input and output vector.
-    generate: reverse_vectors
+    generate //: reverse_vectors
         for (i = 0; i < WIDTH; i = i + 1)
         begin: gen_reverse
-            Mux mux_reverse_in_  #(.WIDTH(1))(.in1(in[i]), .in2(in[WIDTH-1-i]), .sel(left_right), .out(ain[i]));
-            Mux mux_reverse_out_ #(.WIDTH(1))(.in1(res[i]), .in2(res[WIDTH-1-i]), .sel(left_right), .out(out[i]));
+            MUX2#(.WIDTH(1)) mux_reverse_in_ (.in1(in[i]), .in2(in[WIDTH-1-i]), .sel(left_right), .out(ain[i]));
+            MUX2#(.WIDTH(1)) mux_reverse_out_ (.in1(res[i]), .in2(res[WIDTH-1-i]), .sel(left_right), .out(out[i]));
         end: gen_reverse
     endgenerate
 
@@ -47,17 +49,17 @@ module BarrelShifter #(
     assign stage[SHIFT_WIDTH] = in;
     assign res = stage[0];
 
-    generate: stage_select
+    generate //: stage_select
         for (i = 0; i < SHIFT_WIDTH; i = i + 1)
         begin: stage_mux
             Mux2 #(.WIDTH(WIDTH)) mux(
-               .in0(stage[i+1]),
+               .in2(stage[i+1]),
                .in1({stage[i+1][WIDTH-(2**i)-1:0], stage[i+1][WIDTH-1:WIDTH-(2**i)]}),
                .sel(shift[i]), // i-th bit of shift
                .out(stage[i])  // i-th stage either copy of prev. stage
             );
         end: stage_mux
-    endgenerate: stage_select
+    endgenerate //: stage_select
 
 
 endmodule: BarrelShifter

@@ -8,6 +8,7 @@ set(TB_TOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/TbTop.sv)
 set(TEST_NAME ALU1)
 
 set(TB_FLIST
+    -incdir ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/macros
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/blocks/blocks.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/parts/parts.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/gates/generic/generic.flist
