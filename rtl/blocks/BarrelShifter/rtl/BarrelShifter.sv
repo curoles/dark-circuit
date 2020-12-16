@@ -46,7 +46,7 @@ module BarrelShifter #(
     // s0 = {s1[6:0],s1[7:7]} -> 07654321
 
     wire [WIDTH-1:0] stage[SHIFT_WIDTH:0];
-    assign stage[SHIFT_WIDTH] = in;
+    assign stage[SHIFT_WIDTH] = ain;
     assign res = stage[0];
 
     generate //: stage_select
