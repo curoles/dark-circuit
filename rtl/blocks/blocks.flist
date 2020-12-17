@@ -4,6 +4,7 @@ PrgCounter/rtl/PrgCounter.sv
 ALU1/rtl/Alu1.sv
 ALU1/rtl/Alu1Pkg.sv
 BarrelShifter/rtl/BarrelShifter.sv
+Counter/rtl/Counter.sv
 Encoder/rtl/Encoder8_3.sv
 Decoder/rtl/Decoder.sv
 ShiftReg/rtl/ShiftReg.sv
