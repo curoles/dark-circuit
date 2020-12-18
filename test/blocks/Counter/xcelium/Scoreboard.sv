@@ -17,10 +17,14 @@ class Scoreboard extends uvm_component;
     endfunction: build_phase
 
     task run_phase(uvm_phase phase);
-        //shortint result;
+        longint unsigned result;
         forever begin
             @(posedge bfm.clk);
-        //    result = num of clks after reset
+            result = bfm.cnt;
+            if (bfm.count_en && bfm.out_val !== result) begin
+                $display("counter is %d instead of %d", bfm.out_val, result);
+                $fatal(1, "wrong counter");
+            end
         end
     endtask: run_phase
 

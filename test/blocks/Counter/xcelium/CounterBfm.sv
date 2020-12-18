@@ -14,15 +14,19 @@ interface CounterBfm #(
     wire             carry_out;
 
     longint unsigned clk_cnt;
+    longint unsigned cnt;
 
     initial begin
         rst = 0;
         clk_cnt = 0;
+        cnt = 0;
+        count_en = 0;
         clk = 0;
         forever begin
             #1;
             clk = ~clk;
             clk_cnt = clk_cnt + 1;
+            if (clk && count_en) cnt = cnt + ((up_down)? 1:-1);
         end
     end
 
@@ -30,13 +34,16 @@ interface CounterBfm #(
         rst = 1;
         repeat(2) @(posedge clk);
         rst = 0;
-        clk_cnt = 0;
+        cnt = 0;
     endtask: send_reset
 
     task send_load(input IO load_val);
         @(posedge clk);
+        load = 1;
         in_val = load_val;
-        clk_cnt = 0;
+        @(posedge clk);
+        load = 0;
+        cnt = load_val;
     endtask: send_load
 
 endinterface: CounterBfm
