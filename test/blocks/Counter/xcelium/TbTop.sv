@@ -1,3 +1,6 @@
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+
 module TbTop (
 
 );
@@ -26,5 +29,9 @@ module TbTop (
 
     SimClkGen#(.PERIOD(1)) clk_gen_(.clk(clk));
 
+    initial begin
+        //uvm_config_db #(virtual tinyalu_bfm)::set(null, "*", "bfm", bfm);
+        run_test();
+    end
 
 endmodule: TbTop

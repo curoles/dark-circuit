@@ -34,7 +34,7 @@ endfunction()
 set(XRUN_COMPILE_OPTIONS "")
 make_xrun_compile_options(XRUN_COMPILE_OPTIONS)
 
-add_custom_target(compile_rtl_${TEST_NAME}
+add_custom_target(compile_rtl_xcelium_${TEST_NAME}
     xrun -compile ${XRUN_COMPILE_OPTIONS}
 )
 
@@ -66,9 +66,9 @@ endfunction()
 set(XRUN_ELABORATE_OPTIONS "")
 make_xrun_elaborate_options(XRUN_ELABORATE_OPTIONS)
 
-add_custom_target(elaborate_rtl_${TEST_NAME}
+add_custom_target(elaborate_rtl_xcelium_${TEST_NAME}
     xrun -elaborate ${XRUN_ELABORATE_OPTIONS}
-    DEPENDS compile_rtl_${TEST_NAME}
+    DEPENDS compile_rtl_xcelium_${TEST_NAME}
 )
 
 # Do not include(tcl.cmake), call it as a script.
@@ -106,21 +106,40 @@ endfunction()
 set(XRUN_OPTIONS "")
 make_xrun_options(XRUN_OPTIONS)
 
+function(make_xrun_commands ret_xrun_commands)
+
+    set(commands "")
+
+    if (DEFINED TB_UVM_TESTS)
+        foreach(uvm_test IN LISTS TB_UVM_TESTS)
+            list(APPEND commands xrun ${XRUN_OPTIONS} +UVM_TESTNAME=${uvm_test})
+        endforeach()
+    else()
+        list(APPEND commands xrun ${XRUN_OPTIONS})
+    endif()
+
+    set(${ret_xrun_commands} ${commands} PARENT_SCOPE)
+endfunction()
+
+set(XRUN_COMMANDS "")
+make_xrun_commands(XRUN_COMMANDS)
+
 set(HASH_LITERAL "#")
 
 add_custom_command(OUTPUT xrun-cmd
     COMMAND echo \"${HASH_LITERAL}!/bin/bash\" > xrun-cmd
-    COMMAND echo xrun ${XRUN_OPTIONS} >> xrun-cmd
+    COMMAND echo ${XRUN_COMMANDS} >> xrun-cmd
+    COMMAND sed -i 's/xrun /\\nxrun /g' xrun-cmd
     COMMAND chmod a+x xrun-cmd
 )
 
-add_custom_target(make_run_${TEST_NAME} ALL
-    DEPENDS elaborate_rtl_${TEST_NAME}
+add_custom_target(make_run_xcelium_${TEST_NAME} ALL
+    DEPENDS elaborate_rtl_xcelium_${TEST_NAME}
     DEPENDS xrun-cmd
     DEPENDS sim.tcl
 )
 
-add_custom_target(run_rtl_${TEST_NAME}
+add_custom_target(run_rtl_xcelium_${TEST_NAME}
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/xrun-cmd
     DEPENDS sim.tcl
     DEPENDS xrun-cmd
