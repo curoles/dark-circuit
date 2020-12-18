@@ -1,20 +1,19 @@
 import uvm_pkg::*;
 `include "uvm_macros.svh"
 
-class CounterIncTest extends uvm_test;
+class DecTester extends uvm_component;
 
-    `uvm_component_utils(CounterIncTest)
+    `uvm_component_utils(DecTester)
 
-    IncTester tester_;
-    Scoreboard scoreboard_;
+    virtual CounterBfm bfm;
 
     function new(string name, uvm_component parent);
         super.new(name, parent);
     endfunction: new
 
     function void build_phase(uvm_phase phase);
-        tester_     = new("tester_", this);
-        scoreboard_ = new("scoreboard_", this);
+        if(!uvm_config_db #(virtual CounterBfm)::get(null, "*","bfm", bfm))
+            $fatal(1, "Failed to get BFM");
     endfunction: build_phase
 
     task run_phase(uvm_phase phase);

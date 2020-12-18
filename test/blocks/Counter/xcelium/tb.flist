@@ -1,2 +1,6 @@
+CounterBfm.sv
+Scoreboard.sv
+IncTester.sv
+DecTester.sv
 CounterIncTest.sv
 CounterDecTest.sv
