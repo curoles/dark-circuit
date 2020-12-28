@@ -1,4 +1,5 @@
-
+/* 16-bit Incrementor.
+ */
 module Incr16 (
     input  wire [15:0] in,
     output wire [15:0] out,

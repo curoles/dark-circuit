@@ -13,3 +13,5 @@ Incr/rtl/Incr4.sv
 Incr/rtl/Incr9.sv
 Incr/rtl/Incr16.sv
 AddCmp/rtl/AddCmp50.sv
+JtagCoreDbg/rtl/JtagTapFsm.sv
+JtagCoreDbg/rtl/JtagTap.sv

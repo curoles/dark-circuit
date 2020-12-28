@@ -1,4 +1,5 @@
-
+/*
+ */
 module AddCmp50 (
     input  wire [50-1:0] a,
     input  wire [50-1:0] b,

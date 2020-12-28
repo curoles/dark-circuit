@@ -1,4 +1,3 @@
-
 /* 9-bit Fast Incrementor
  *
  */

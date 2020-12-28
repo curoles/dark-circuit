@@ -1,4 +1,3 @@
-
 /* 3-bit Incrementor block to be used in building Nx3 Fast Incrementor.
  *
  *

@@ -1,4 +1,6 @@
-
+/* 4-bit Incrementor.
+ *
+ */
 module Incr4 (
     input  wire [3:0] in,
     output wire [3:0] out
