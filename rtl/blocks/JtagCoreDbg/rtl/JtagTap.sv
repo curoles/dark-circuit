@@ -26,12 +26,35 @@
 module JtagTap #(
     //
 )(
-    //
+    input  wire tck,
+    input  wire trstn,
+    input  wire tdi,
+    input  wire tms,
+    output reg  tdo
 );
 
-    JtagTapFsm _fsm();
+    wire insn_tdo;
 
+    JtagTapFsm _fsm(
+        .tck(tck),
+        .trstn(trstn),
+        .tms(tms)
+    );
 
+    JtagTapInsnReg _insn_reg(
+        .tck(tck),
+        .trstn(trstn),
+        .tdi(tdi),
+        .insn_tdo(insn_tdo)
+    );
+
+    JtagTapDRegs _dregs(
+        .tck(tck),
+        .trstn(trstn),
+        .tdi(tdi),
+        .tdo(tdo),
+        .insn_tdo(insn_tdo)
+    );
 
 
 endmodule: JtagTap
