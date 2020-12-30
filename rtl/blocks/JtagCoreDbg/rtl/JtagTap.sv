@@ -1,12 +1,14 @@
 /* JTAG device TAP.
+ *
  * Author: Igor Lesik 2020
  *
  * In JTAG, devices expose one or more test access ports (TAPs).
  * A daisy chain of TAPs is called a scan chain.
  *
- * ![scan chain](https://en.wikipedia.org/wiki/File:Jtag_chain.svg "Scan chain")
+ * ![scan chain](https://upload.wikimedia.org/wikipedia/commons/c/c9/Jtag_chain.svg "Scan chain")
  *
- * The TAP connector pins are: 
+ * The TAP connector pins are:
+ *
  * - TDI: Test Data In
  * - TDO: Test Data Out
  * - TCK: Test Clock
@@ -25,6 +27,7 @@
  * on which higher layer protocols build.
  *
  * The test access point (TAP) is composed of:
+ *
  * - the TAP controller,
  * - an instruction register,
  * - and several test data registers,
@@ -39,13 +42,29 @@
  *
  * The data output pin is used to read data from the boundary cells,
  * or to read data from the instruction or data registers.
+ *
+ * References:
+ *
+ * - [IEEE 1149.1-1990 - IEEE Standard Test Access Port and Boundary-Scan Architecture](
+ *   https://standards.ieee.org/standard/1149_1-1990.html)
+ * - [Timeline of JTAG-related standards](
+ *   https://www.corelis.com/wp-content/uploads/2017/05/timeline_72dpi1.png)
+ * - [JTAG connectors and interfaces](
+ *   https://www.allaboutcircuits.com/technical-articles/jtag-connectors-and-interfaces/)
+ * - [practical example of JTAG interface programming with Black Magic Probe](
+ *   https://github.com/blacksphere/blackmagic)
+ * - [JTAG Primer from TI](https://www.ti.com/lit/an/ssya002c/ssya002c.pdf)
+ * - [Boundary-scan test example](
+ *   https://www.corelis.com/education/tutorials/jtag-tutorial/what-is-jtag/)
+ * - [Adding User Specific Registers to JTAG](
+ *   https://www.embecosm.com/appnotes/ean5/html/ch02s01s02.html)
  */
 module JtagTap #(
-    localparam INSN_WIDTH=4,
+    localparam INSN_WIDTH=8,
     localparam STATE_WIDTH=4
 )(
     input  wire tck,   // test clock
-    input  wire trstn, // test reset
+    input  wire trst,  // test reset
     input  wire tdi,   // test Data In
     input  wire tms,   // test Mode Select
     output reg  tdo    // test Data Out
@@ -80,7 +99,7 @@ module JtagTap #(
 
     JtagTapFsm _fsm(
         .tck(tck),
-        .trstn(trstn),
+        .trst(trst),
         .tms(tms),
         .state(state),
         .tms_reset(tms_reset), // 5 consecutive TMS=1 causes reset
@@ -104,7 +123,7 @@ module JtagTap #(
 
     JtagTapInsnReg _insn_reg(
         .tck(tck),
-        .trstn(trstn),
+        .trst(trst),
         .tdi(tdi),
         .insn_tdo(insn_tdo),
         .state_test_logic_reset(state_test_logic_reset),
@@ -115,7 +134,7 @@ module JtagTap #(
 
     JtagTapDRegs _dregs(
         .tck(tck),
-        .trstn(trstn),
+        .trst(trst),
         .tdi(tdi),
         .tdo(tdo),
         .state_test_logic_reset(state_test_logic_reset),

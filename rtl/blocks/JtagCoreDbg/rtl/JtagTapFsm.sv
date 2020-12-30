@@ -68,7 +68,7 @@ module JtagTapFsm #(
     localparam WIDTH = JTAG_TAP_STATE_VAR_WIDTH
 )(
     input  wire             tck,
-    input  wire             trstn,
+    input  wire             trst,
     input  wire             tms,
     output reg  [WIDTH-1:0] state,
 
@@ -112,7 +112,7 @@ module JtagTapFsm #(
 
     // A transition between the states only occurs on the rising edge of TCK.
     always @(posedge tck) begin
-        if (trstn == 0 || tms_reset)
+        if (trst == 1 || tms_reset)
             state <= JTAG_TAP_STATE_TEST_LOGIC_RESET;
         else
             state <= next_state;

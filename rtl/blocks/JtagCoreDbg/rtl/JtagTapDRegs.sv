@@ -7,10 +7,10 @@ localparam DEFAULT_IDCODE_VALUE = 32'b0001_0100100101010001_00011100001_1;
  */
 module JtagTapDRegs #(
     parameter IDCODE_VALUE=DEFAULT_IDCODE_VALUE,
-    parameter INSN_WIDTH=4
+    parameter INSN_WIDTH=8
 )(
     input  wire                  tck,
-    input  wire                  trstn,
+    input  wire                  trst,
     input  wire                  tdi,
     input  wire                  state_test_logic_reset,
     input  wire                  state_capture_dr,
@@ -32,12 +32,12 @@ module JtagTapDRegs #(
     output reg                   insn_debug_select,
     output reg                   insn_bypass_select
 );
-    localparam INSN_EXTEST         = 4'b0000;
-    localparam INSN_SAMPLE_PRELOAD = 4'b0001;
-    localparam INSN_IDCODE         = 4'b0010;
-    localparam INSN_DEBUG          = 4'b1000;
-    localparam INSN_MBIST          = 4'b1001;
-    localparam INSN_BYPASS         = 4'b1111;
+    localparam INSN_EXTEST         = 8'b0000_0000;
+    localparam INSN_SAMPLE_PRELOAD = 8'b0000_0001;
+    localparam INSN_IDCODE         = 8'b0000_0010;
+    localparam INSN_DEBUG          = 8'b0000_1000;
+    localparam INSN_MBIST          = 8'b0000_1001;
+    localparam INSN_BYPASS         = 8'b1111_1111; // all 1's required by the standard
 
     wire idcode_tdo, bypass_tdo;
 
@@ -77,7 +77,7 @@ module JtagTapDRegs #(
 
     always @(posedge tck)
     begin
-        if (trstn == 0)
+        if (trst == 1)
             idcode_reg <= IDCODE_VALUE; // IDCODE selected after reset
         else if (state_test_logic_reset)
             idcode_reg <= IDCODE_VALUE; // IDCODE selected after reset
@@ -94,7 +94,7 @@ module JtagTapDRegs #(
 
     always @(posedge tck)
     begin
-        if (trstn == 0)
+        if (trst == 1)
             bypass_reg <= 1'b0;
         else if (state_test_logic_reset == 1)
             bypass_reg <= 1'b0;
