@@ -2,6 +2,6 @@ module TbTop (
 
 );
 
-    JtagTap _tap();
+    DbgAccPort _dap();
 
 endmodule: TbTop

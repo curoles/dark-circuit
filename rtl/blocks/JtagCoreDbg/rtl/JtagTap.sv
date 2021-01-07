@@ -71,6 +71,8 @@ module JtagTap #(
 );
 
     wire insn_tdo; // TAP InsnReg TDO wire
+    wire jdpacc_tdo;
+    wire cdpacc_tdo;
     wire debug_tdo;
     wire bs_chain_tdo;
     wire mbist_tdo;
@@ -93,6 +95,8 @@ module JtagTap #(
     wire insn_mbist_select;
     wire insn_debug_select;
     wire insn_bypass_select;
+    wire insn_jdpacc_select;
+    wire insn_cdpacc_select;
 
     wire [INSN_WIDTH-1:0] latched_jtag_ir;
     wire [STATE_WIDTH-1:0] state;
@@ -145,12 +149,15 @@ module JtagTap #(
         .bs_chain_tdo(debug_tdo),
         .mbist_tdo(mbist_tdo),
         .insn_tdo(insn_tdo),
+        .jdpacc_tdo(jdpacc_tdo),
+        .cdpacc_tdo(cdpacc_tdo),
         .insn_extest_select(insn_extest_select),
         .insn_sample_preload_select(insn_sample_preload_select),
         .insn_idcode_select(insn_idcode_select),
         .insn_mbist_select(insn_mbist_select),
         .insn_debug_select(insn_debug_select),
-        .insn_bypass_select(insn_bypass_select)
+        .insn_bypass_select(insn_bypass_select),
+        .insn_jdpacc_select(insn_jdpacc_select)
     );
 
 

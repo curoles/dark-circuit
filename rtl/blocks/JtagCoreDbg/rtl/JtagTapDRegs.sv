@@ -2,6 +2,7 @@
 localparam DEFAULT_IDCODE_VALUE = 32'b0001_0100100101010001_00011100001_1;
 
 /* JTAG TAP Data Registers and TDO MUX.
+ *
  * Author: Igor Lesik 2020
  *
  */
@@ -22,6 +23,8 @@ module JtagTapDRegs #(
     input  wire                  bs_chain_tdo,
     input  wire                  mbist_tdo,
     input  wire                  insn_tdo,
+    input  wire                  jdpacc_tdo,
+    input  wire                  cdpacc_tdo,
 
     output reg                   tdo,
     // 1-bit telling instruction type
@@ -30,13 +33,17 @@ module JtagTapDRegs #(
     output reg                   insn_idcode_select,
     output reg                   insn_mbist_select,
     output reg                   insn_debug_select,
-    output reg                   insn_bypass_select
+    output reg                   insn_bypass_select,
+    output reg                   insn_jdpacc_select,
+    output reg                   insn_cdpacc_select
 );
     localparam INSN_EXTEST         = 8'b0000_0000;
     localparam INSN_SAMPLE_PRELOAD = 8'b0000_0001;
     localparam INSN_IDCODE         = 8'b0000_0010;
     localparam INSN_DEBUG          = 8'b0000_1000;
     localparam INSN_MBIST          = 8'b0000_1001;
+    localparam INSN_JDPACC         = 8'b0000_0100;
+    localparam INSN_CDPACC         = 8'b0000_0101;
     localparam INSN_BYPASS         = 8'b1111_1111; // all 1's required by the standard
 
     wire idcode_tdo, bypass_tdo;
@@ -47,6 +54,8 @@ module JtagTapDRegs #(
     assign insn_mbist_select            = (latched_jtag_ir == INSN_MBIST);
     assign insn_debug_select            = (latched_jtag_ir == INSN_DEBUG);
     assign insn_bypass_select           = (latched_jtag_ir == INSN_BYPASS);
+    assign insn_jdpacc_select           = (latched_jtag_ir == INSN_JDPACC);
+    assign insn_cdpacc_select           = (latched_jtag_ir == INSN_CDPACC);
 
     // TDO is muxed/selected based on value of Instruction Register (IR).
     reg tdo_mux;
@@ -67,6 +76,8 @@ module JtagTapDRegs #(
                 INSN_SAMPLE_PRELOAD: tdo_mux = bs_chain_tdo;
                 INSN_EXTEST:         tdo_mux = bs_chain_tdo;
                 INSN_MBIST:          tdo_mux = mbist_tdo;
+                INSN_JDPACC:         tdo_mux = jdpacc_tdo;
+                INSN_CDPACC:         tdo_mux = cdpacc_tdo;
                 default:             tdo_mux = bypass_tdo;
             endcase
         end

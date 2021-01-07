@@ -49,7 +49,8 @@ import JtagTapStatesPkg::*;
 /* JTAG TAP state machine.
  * Author: Igor Lesik 2020
  *
- * ![TAP states](https://upload.wikimedia.org/wikipedia/commons/1/1a/JTAG_TAP_Controller_State_Diagram.svg "JTAG TAP Controller State Diagram")
+ * <!-- ![TAP states](https://upload.wikimedia.org/wikipedia/commons/1/1a/JTAG_TAP_Controller_State_Diagram.svg "JTAG TAP Controller State Diagram") -->
+ * ![TAP states](https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/JTAG_TAP_Controller_State_Diagram.svg/563px-JTAG_TAP_Controller_State_Diagram.svg.png)
  *
  * The state machine is simple, comprising two paths: DR path and IR path.
  * The state machine progresses on the test clock (TCK) edge,

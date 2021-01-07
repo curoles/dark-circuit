@@ -17,3 +17,5 @@ JtagCoreDbg/rtl/JtagTapFsm.sv
 JtagCoreDbg/rtl/JtagTapInsnReg.sv
 JtagCoreDbg/rtl/JtagTapDRegs.sv
 JtagCoreDbg/rtl/JtagTap.sv
+JtagCoreDbg/rtl/CoreDbgPort.sv
+JtagCoreDbg/rtl/DbgAccPort.sv

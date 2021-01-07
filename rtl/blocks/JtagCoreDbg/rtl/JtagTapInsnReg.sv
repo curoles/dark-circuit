@@ -1,4 +1,5 @@
 /* JTAG TAP Instruction Register.
+ *
  * Author: Igor Lesik 2020
  *
  * Most JTAG instructions can broadly be described as connecting different
