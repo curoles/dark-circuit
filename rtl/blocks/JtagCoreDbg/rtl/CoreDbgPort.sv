@@ -11,6 +11,12 @@
  * - memory bus interface to Core Debug logic..
  */
 module CoreDbgPort (
+    input  wire tck,        // test clock
+    input  wire trst,       // test reset
+    input  wire tdi,        // test Data In
+    input  wire tms,        // test Mode Select
+    output reg  jdpacc_tdo,
+    output reg  cdpacc_tdo
 );
 
 

@@ -67,12 +67,13 @@ module JtagTap #(
     input  wire trst,  // test reset
     input  wire tdi,   // test Data In
     input  wire tms,   // test Mode Select
-    output reg  tdo    // test Data Out
+    output reg  tdo,   // test Data Out
+
+    input wire jdpacc_tdo,
+    input wire cdpacc_tdo
 );
 
     wire insn_tdo; // TAP InsnReg TDO wire
-    wire jdpacc_tdo;
-    wire cdpacc_tdo;
     wire debug_tdo;
     wire bs_chain_tdo;
     wire mbist_tdo;
@@ -145,6 +146,7 @@ module JtagTap #(
         .state_capture_dr(state_capture_dr),
         .state_shift_dr(state_shift_dr),
         .state_shift_ir(state_shift_ir),
+        .latched_jtag_ir(latched_jtag_ir),
         .debug_tdo(debug_tdo),
         .bs_chain_tdo(debug_tdo),
         .mbist_tdo(mbist_tdo),
@@ -157,7 +159,8 @@ module JtagTap #(
         .insn_mbist_select(insn_mbist_select),
         .insn_debug_select(insn_debug_select),
         .insn_bypass_select(insn_bypass_select),
-        .insn_jdpacc_select(insn_jdpacc_select)
+        .insn_jdpacc_select(insn_jdpacc_select),
+        .insn_cdpacc_select(insn_cdpacc_select)
     );
 
 

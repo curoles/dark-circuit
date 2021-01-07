@@ -30,12 +30,18 @@ module DbgAccPort (
         .trst(trst),
         .tdi(tdi),
         .tms(tms),
-        .tdo(tdo)
+        .tdo(tdo),
+        .jdpacc_tdo(jdpacc_tdo),
+        .cdpacc_tdo(cdpacc_tdo)
     );
 
     CoreDbgPort _cdp(
-
-
+        .tck(tck),
+        .trst(trst),
+        .tdi(tdi),
+        .tms(tms),
+        .jdpacc_tdo(jdpacc_tdo),
+        .cdpacc_tdo(cdpacc_tdo)
     );
 
 endmodule: DbgAccPort
