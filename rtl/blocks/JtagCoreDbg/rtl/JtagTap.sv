@@ -69,8 +69,13 @@ module JtagTap #(
     input  wire tms,   // test Mode Select
     output reg  tdo,   // test Data Out
 
-    input wire jdpacc_tdo,
-    input wire cdpacc_tdo
+    input wire  jdpacc_tdo,
+    input wire  cdpacc_tdo,
+
+    output reg  state_test_logic_reset,
+    output reg  state_capture_dr,
+    output reg  state_shift_dr,
+    output reg  state_update_dr
 );
 
     wire insn_tdo; // TAP InsnReg TDO wire
@@ -78,10 +83,10 @@ module JtagTap #(
     wire bs_chain_tdo;
     wire mbist_tdo;
 
-    wire state_test_logic_reset;
-    wire state_capture_dr;
+    //wire state_test_logic_reset;
+    //wire state_capture_dr;
     wire state_capture_ir;
-    wire state_shift_dr;
+    //wire state_shift_dr;
     wire state_shift_ir;
     wire state_update_ir;
     wire state_pause_ir;

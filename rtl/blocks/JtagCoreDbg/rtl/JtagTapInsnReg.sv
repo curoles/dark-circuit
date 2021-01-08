@@ -33,7 +33,7 @@ module JtagTapInsnReg #(
         else if (state_test_logic_reset == 1)
 	        jtag_ir <= {WIDTH{1'b0}};
         else if (state_capture_ir)
-            jtag_ir <= 4'b0101; // This value is fixed for easier fault detection; TODO ???
+            jtag_ir <= 8'b1111_0101; // This value is fixed for easier fault detection; TODO ???
         else if (state_shift_ir)
             jtag_ir <= {tdi, jtag_ir[WIDTH-1:1]};
     end

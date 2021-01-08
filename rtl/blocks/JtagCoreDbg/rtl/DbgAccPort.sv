@@ -25,6 +25,11 @@ module DbgAccPort (
     wire insn_jdpacc_select;
     wire insn_cdpacc_select;
 
+    wire state_test_logic_reset;
+    wire state_capture_dr;
+    wire state_shift_dr;
+    wire state_update_dr;
+
     JtagTap _jtag_tap(
         .tck(tck),
         .trst(trst),
@@ -32,7 +37,11 @@ module DbgAccPort (
         .tms(tms),
         .tdo(tdo),
         .jdpacc_tdo(jdpacc_tdo),
-        .cdpacc_tdo(cdpacc_tdo)
+        .cdpacc_tdo(cdpacc_tdo),
+        .state_test_logic_reset,
+        .state_capture_dr,
+        .state_shift_dr,
+        .state_update_dr
     );
 
     CoreDbgPort _cdp(
@@ -40,6 +49,12 @@ module DbgAccPort (
         .trst(trst),
         .tdi(tdi),
         .tms(tms),
+        .insn_jdpacc_select(insn_jdpacc_select),
+        .insn_cdpacc_select(insn_cdpacc_select),
+        .state_test_logic_reset,
+        .state_capture_dr,
+        .state_shift_dr,
+        .state_update_dr,
         .jdpacc_tdo(jdpacc_tdo),
         .cdpacc_tdo(cdpacc_tdo)
     );
