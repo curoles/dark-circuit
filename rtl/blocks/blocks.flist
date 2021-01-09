@@ -19,3 +19,4 @@ JtagCoreDbg/rtl/JtagTapDRegs.sv
 JtagCoreDbg/rtl/JtagTap.sv
 JtagCoreDbg/rtl/CoreDbgPort.sv
 JtagCoreDbg/rtl/DbgAccPort.sv
+JtagCoreDbg/rtl/Jtag2MemiSync.sv

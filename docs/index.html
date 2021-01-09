@@ -94,6 +94,20 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     <style>
 p {font-family: Verdana, Geneva, sans-serif;}
 
+table, th, td {
+  border: 1px solid #ddd;
+  border-collapse: collapse;
+}
+th, td {
+  padding: 0.5rem;
+}
+tr:nth-child(even) {
+  background-color: #eee;
+}
+th {
+  background-color: #efe;
+}
+
  /* The sidebar menu */
 .sidenav {
   height: 100%; /* Full-height: remove this if you want "auto" height */
@@ -164,8 +178,13 @@ p {font-family: Verdana, Geneva, sans-serif;}
     <a href="#module_blocks/Incr/rtl/Incr4.sv">Incr4</a>
     <a href="#module_blocks/Incr/rtl/Incr9.sv">Incr9</a>
     <h3>- blocks/JtagCoreDbg/rtl</h3>
+    <a href="#module_blocks/JtagCoreDbg/rtl/CoreDbgPort.sv">CoreDbgPort</a>
+    <a href="#module_blocks/JtagCoreDbg/rtl/DbgAccPort.sv">DbgAccPort</a>
+    <a href="#module_blocks/JtagCoreDbg/rtl/Jtag2MemiSync.sv">Jtag2MemiSync</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/JtagTap.sv">JtagTap</a>
+    <a href="#module_blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv">JtagTapDRegs</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/JtagTapFsm.sv">JtagTapFsm</a>
+    <a href="#module_blocks/JtagCoreDbg/rtl/JtagTapInsnReg.sv">JtagTapInsnReg</a>
     <h3>- blocks/PrgCounter/rtl</h3>
     <a href="#module_blocks/PrgCounter/rtl/PrgCounter.sv">PrgCounter</a>
     <h3>- blocks/ShiftReg/rtl</h3>
@@ -222,28 +241,39 @@ Module "Alu1", blocks/ALU1/rtl/Alu1.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>cmd      input    wire [CMD_WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>cmd</td> <td>input</td> <td>wire [CMD_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>co       output   wire</pre>
-    </li>
+    <tr>
+    <td>co</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Substraction is using 2's complements.
  Negating B is to find its 2's complement, 2's complement of B is ~B + 1,
@@ -355,24 +385,33 @@ Module "AddCmp50", blocks/AddCmp/rtl/AddCmp50.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>a        input    wire [50-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>a</td> <td>input</td> <td>wire [50-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>b        input    wire [50-1:0]</pre>
-    </li>
+    <tr>
+    <td>b</td> <td>input</td> <td>wire [50-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>c        input    wire [50-1:0]</pre>
-    </li>
+    <tr>
+    <td>c</td> <td>input</td> <td>wire [50-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>eq       output   wire</pre>
-    </li>
+    <tr>
+    <td>eq</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 
 <p>Source code:</p>
@@ -541,36 +580,49 @@ Module "BarrelShifter", blocks/BarrelShifter/rtl/BarrelShifter.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>shift_in_bit input    wire</pre>
+    <tr>
+    <td>shift_in_bit</td> <td>input</td> <td>wire</td>
+    <td>
      0 for logical shift
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>shift    input    wire [SHIFT_WIDTH-1:0]</pre>
+    <tr>
+    <td>shift</td> <td>input</td> <td>wire [SHIFT_WIDTH-1:0]</td>
+    <td>
      number of shifts
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>shift_rotate input    wire</pre>
+    <tr>
+    <td>shift_rotate</td> <td>input</td> <td>wire</td>
+    <td>
      shift or rotate
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>left_right input    wire</pre>
+    <tr>
+    <td>left_right</td> <td>input</td> <td>wire</td>
+    <td>
      shift/rotate left or right
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Barrel Shifter
 Author: Igor Lesik 2019-2020
@@ -653,40 +705,57 @@ Module "Counter", blocks/Counter/rtl/Counter.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>clk      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>rst_n    input    wire</pre>
-    </li>
+    <tr>
+    <td>rst_n</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>load     input    wire</pre>
-    </li>
+    <tr>
+    <td>load</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>up_down  input    wire</pre>
-    </li>
+    <tr>
+    <td>up_down</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>count_en input    wire</pre>
-    </li>
+    <tr>
+    <td>count_en</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   reg [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>reg [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>co       output   reg</pre>
-    </li>
+    <tr>
+    <td>co</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 
 <p>Source code:</p>
@@ -740,20 +809,27 @@ Module "Decoder", blocks/Decoder/rtl/Decoder.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [SIZE-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [SIZE-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>en       input    wire</pre>
-    </li>
+    <tr>
+    <td>en</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>i[j] - take j-th bit of number i
  For example, for 3-8 decoder:
@@ -808,20 +884,27 @@ Module "Encoder8_3", blocks/Encoder/rtl/Encoder8_3.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [8-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [8-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [3-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [3-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>d        input     [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>d</td> <td>input</td> <td> [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 
 <p>Source code:</p>
@@ -861,20 +944,27 @@ Module "Incr16", blocks/Incr/rtl/Incr16.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [15:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [15:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [15:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [15:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>cy       output   wire</pre>
-    </li>
+    <tr>
+    <td>cy</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>16-bit Incrementor.</p>
 <p>Source code:</p>
@@ -923,16 +1013,21 @@ Module "Incr3", blocks/Incr/rtl/Incr3.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [2:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [2:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [2:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [2:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>3-bit Incrementor block to be used in building Nx3 Fast Incrementor.</p>
 <p>Source code:</p>
@@ -961,16 +1056,21 @@ Module "Incr4", blocks/Incr/rtl/Incr4.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [3:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [3:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [3:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [3:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>4-bit Incrementor.</p>
 <p>Source code:</p>
@@ -1003,20 +1103,27 @@ Module "Incr9", blocks/Incr/rtl/Incr9.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [8:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [8:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [8:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [8:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>cy       output   wire</pre>
-    </li>
+    <tr>
+    <td>cy</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>9-bit Fast Incrementor</p>
 <p>Source code:</p>
@@ -1055,6 +1162,504 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/CoreDbgPort.sv">
+Module "CoreDbgPort", blocks/JtagCoreDbg/rtl/CoreDbgPort.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>tck</td> <td>input</td> <td>wire</td>
+    <td>
+     test clock
+    </td>
+    </tr>
+
+    <tr>
+    <td>trst</td> <td>input</td> <td>wire</td>
+    <td>
+     test reset
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdi</td> <td>input</td> <td>wire</td>
+    <td>
+     test Data In
+    </td>
+    </tr>
+
+    <tr>
+    <td>tms</td> <td>input</td> <td>wire</td>
+    <td>
+     test Mode Select
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_jdpacc_select</td> <td>input</td> <td>wire</td>
+    <td>
+     IR==JDPACC
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_cdpacc_select</td> <td>input</td> <td>wire</td>
+    <td>
+     IR==CDPACC
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_test_logic_reset</td> <td>input</td> <td>wire</td>
+    <td>
+     TAP_STATE==TEST_LOGIC_REST
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_capture_dr</td> <td>input</td> <td>wire</td>
+    <td>
+     TAP_STATE==CAPTURE_DR
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_shift_dr</td> <td>input</td> <td>wire</td>
+    <td>
+     TAP_STATE==SHIFT_DR
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_update_dr</td> <td>input</td> <td>wire</td>
+    <td>
+     TAP_STATE==UPDATE_DR
+    </td>
+    </tr>
+
+    <tr>
+    <td>jdpacc_tdo</td> <td>output</td> <td>reg</td>
+    <td>
+     JDPACC DR output
+    </td>
+    </tr>
+
+    <tr>
+    <td>cdpacc_tdo</td> <td>output</td> <td>reg</td>
+    <td>
+     CDPACC DR output
+    </td>
+    </tr>
+
+    <tr>
+    <td>jdpacc</td> <td>input</td> <td> [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+</table>
+
+<p>Core Debug Port (CDP).</p>
+<p>Authors: Igor Lesik 2021</p>
+<p>Core Debug Port makes the communation channel
+between JTAG and Core Debug logic.</p>
+<p>CDP has two interfaces:</p>
+<ul>
+<li>JTAG interface and</li>
+<li>memory bus interface to Core Debug logic.</li>
+</ul>
+<p>The debugger uses the JTAG interface to execute instructions JDPACC, CDPACC
+by going through the TAP state machine, then the instructions take the data
+and load it into the JDPACC, CDPACC registers, and depending on the data,
+different registers within the JDP or CDP are accessed, providing the desired
+comminication to the Core Debug logic.</p>
+<p>In the <strong>Capture-DR</strong> state, the result of the previous transaction,
+if any, is returned, together with a 4-bit ACK response.</p>
+<script type="WaveDrom">
+{ reg: [
+  {bits: 4, name: 'ACK', attr: ''},
+  {bits: 32, name: 'DATA', attr: 'Read Result'}
+], 
+  config:{bits: 36}
+}
+</script>
+
+<p>In the <strong>Shift-DR</strong> state, ACK[3:0] is shifted out first, then 32 bits
+of "Read Result" data is shifted out.
+As the returned data is shifted out to <code>TDO</code>,
+new data is shifted in from <code>TDI</code>.</p>
+<script type="WaveDrom">
+{ reg: [
+  {bits: 4, name: 'DATA', attr: 'Data[3:0]'},
+  {bits: 32, name: 'DATA', attr: 'Data[35:4]'}
+], 
+  config:{bits: 36}
+}
+</script>
+
+<p><strong>Update-DR</strong> operation fulfills the read or write request that is
+formed by the values that were shifted into the scan chain.</p>
+<script type="WaveDrom">
+{ reg: [
+  {bits: 1, name: 'WR', attr: ''},
+  {bits: 3, name: 'ADDR', attr: 'select'},
+  {bits: 32, name: 'DATA', attr: 'Data[35:4]'}
+], 
+  config:{bits: 36}
+}
+</script>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module CoreDbgPort (
+    input  wire tck,        // test clock
+    input  wire trst,       // test reset
+    input  wire tdi,        // test Data In
+    input  wire tms,        // test Mode Select
+    input  wire insn_jdpacc_select,     // IR==JDPACC
+    input  wire insn_cdpacc_select,     // IR==CDPACC
+    input  wire state_test_logic_reset, // TAP_STATE==TEST_LOGIC_REST
+    input  wire state_capture_dr,       // TAP_STATE==CAPTURE_DR
+    input  wire state_shift_dr,         // TAP_STATE==SHIFT_DR
+    input  wire state_update_dr,        // TAP_STATE==UPDATE_DR
+    output reg  jdpacc_tdo,             // JDPACC DR output
+    output reg  cdpacc_tdo              // CDPACC DR output
+);
+
+    localparam WIDTH = 36;
+
+    reg [WIDTH-1:0] jdpacc_reg;
+    reg [WIDTH-1:0] cdpacc_reg;
+
+    assign jdpacc_tdo = jdpacc_reg[0];
+    assign cdpacc_tdo = cdpacc_reg[0];
+
+    localparam JDPACC_ID = 36'h0;
+
+    always @(posedge tck)
+    begin
+        if (trst == 1)
+            jdpacc_reg <= JDPACC_ID;
+        else if (state_test_logic_reset)
+            jdpacc_reg <= JDPACC_ID;
+        else if (insn_jdpacc_select & state_shift_dr)
+            jdpacc_reg <= {tdi, jdpacc_reg[WIDTH-1:1]};
+        else if (insn_jdpacc_select & state_capture_dr)
+            jdpacc_reg <= jdpacc_capture_dr();
+        else if (insn_jdpacc_select & state_update_dr)
+            jdpacc_reg <= jdpacc_update_dr(jdpacc_reg);
+    end
+
+    function [WIDTH-1:0] jdpacc_capture_dr();
+        jdpacc_capture_dr = 'h0;
+    endfunction
+
+    function [WIDTH-1:0] jdpacc_update_dr(input [WIDTH-1:0] jdpacc);
+        jdpacc_update_dr = jdpacc;
+    endfunction
+
+
+    reg cdp_req, cdp_cmd_wr, cdp_cmd_rd;
+    reg [2:0] cdp_cmd_op;
+    reg [31:0] cdp_cmd_data;
+
+    always_ff @(posedge tck)
+    begin
+        if (trst == 1) begin
+            cdpacc_reg <= 'h0;
+            cdp_req    <= 0;
+        end else if (state_test_logic_reset) begin
+            cdpacc_reg <= 'h0;
+            cdp_req    <= 0;
+        end else if (insn_cdpacc_select & state_shift_dr) begin
+            cdpacc_reg <= {tdi, cdpacc_reg[WIDTH-1:1]};
+            cdp_req    <= 0;
+        end else if (insn_cdpacc_select & state_capture_dr) begin
+            cdpacc_reg <= cdpacc_capture_dr();
+            cdp_req    <= 0;
+        else if (insn_cdpacc_select & state_update_dr) begin
+            // **Update-DR** operation fulfills the read or write request that is
+            // formed by the values that were shifted into the scan chain.
+
+            cdpacc_reg   <=  cdpacc_reg;
+            cdp_req      <=  1;
+            cdp_cmd_wr   <=  cdpacc_reg[0];
+            cdp_cmd_rd   <= ~cdpacc_reg[0];
+            cdp_cmd_op   <=  cdpacc_reg[3:1];
+            cdp_cmd_data <=  cdpacc_reg[35:4];
+        end
+    end
+
+    // Toggle synchronizer is used to synchronize a pulse generating
+    // in source clock domain to destination clock domain.
+    // Signal `cdp_req` is a pulse because `state_capture_dr` is HIGH for 1 cycle.
+    // https://www.edn.com/get-those-clock-domains-in-sync/
+    // https://www.edn.com/synchronizer-techniques-for-multi-clock-domain-socs-fpgas/
+    // https://www.verilogpro.com/clock-domain-crossing-part-2/
+    always_ff @(posedge tck)
+    begin
+        if (trst)
+            cdp_req_toggle <= 1'b0;
+        else if (cdp_req)
+            cdp_req_toggle <= ~cdp_req_toggle;
+    end
+
+    // 2FF cdp_req_toggle synchronizer
+
+
+    reg [31:0] cdpacc_result;
+    reg [ 3:0] cdpacc_ack;
+
+    // In the **Capture-DR** state, the result of the previous transaction,
+    // if any, is returned, together with a 4-bit ACK response.
+    //
+    function [WIDTH-1:0] cdpacc_capture_dr();
+        cdpacc_capture_dr = {cdpacc_ack, cdpacc_result};
+    endfunction
+
+    localparam CDP_SELECT = 3'b000,
+               CDP_TADDR  = 3'b001,
+               CDP_DTR    = 3'b010;
+
+    reg [31:0] cdp_dr_select, cdp_dr_taddr, cdp_dr_dtr;
+
+    always @(posedge tck)
+    begin
+        if (cdp_cmd_wr) begin
+            case (cdp_cmd_op)
+                CDP_SELECT: cdp_dr_select <= cdp_cmd_data;
+                CDP_TADDR:  cdp_dr_taddr  <= cdp_cmd_data;
+                CDP_DTR:    cdp_dr_dtr    <= cdp_cmd_data;
+                default: begin end
+            endcase
+        end
+    end
+
+    /*
+    * memi_clk
+    input wire [MEMI_ADDR_WIDTH-1:0]  memi_addr,
+    input wire [MEMI_NR_SLAVES-1:0]   memi_sel,     // slave is selected and data transfer is required
+    input wire                   memi_wr_rd,   // direction=HIGH? wr:rd
+    input wire [MEMI_WDATA_WIDTH-1:0] wdata,   // driven by Bridge when wr_rd=HIGH
+    */
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/DbgAccPort.sv">
+Module "DbgAccPort", blocks/JtagCoreDbg/rtl/DbgAccPort.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>tck</td> <td>input</td> <td>wire</td>
+    <td>
+     test clock
+    </td>
+    </tr>
+
+    <tr>
+    <td>trst</td> <td>input</td> <td>wire</td>
+    <td>
+     test reset
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdi</td> <td>input</td> <td>wire</td>
+    <td>
+     test Data In
+    </td>
+    </tr>
+
+    <tr>
+    <td>tms</td> <td>input</td> <td>wire</td>
+    <td>
+     test Mode Select
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdo</td> <td>output</td> <td>reg</td>
+    <td>
+     test Data Out
+    </td>
+    </tr>
+
+</table>
+
+<p>Debug Access Port (DAP).</p>
+<p>Authors: Igor Lesik 2021</p>
+<p>Debug Access Port (DAP) is an implementation of Debug Interface.
+DAP provides external debugger with a standard interface to access
+Core debug facilities.</p>
+<p>DAP contains:</p>
+<ul>
+<li>JTAG TAP Controller with TAP FSM.</li>
+<li>JTAG Debug Port and Core Debug Port.</li>
+</ul>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module DbgAccPort (
+    input  wire tck,   // test clock
+    input  wire trst,  // test reset
+    input  wire tdi,   // test Data In
+    input  wire tms,   // test Mode Select
+    output reg  tdo    // test Data Out
+);
+
+    wire jdpacc_tdo;
+    wire cdpacc_tdo;
+
+    wire insn_jdpacc_select;
+    wire insn_cdpacc_select;
+
+    wire state_test_logic_reset;
+    wire state_capture_dr;
+    wire state_shift_dr;
+    wire state_update_dr;
+
+    JtagTap _jtag_tap(
+        .tck(tck),
+        .trst(trst),
+        .tdi(tdi),
+        .tms(tms),
+        .tdo(tdo),
+        .jdpacc_tdo(jdpacc_tdo),
+        .cdpacc_tdo(cdpacc_tdo),
+        .state_test_logic_reset,
+        .state_capture_dr,
+        .state_shift_dr,
+        .state_update_dr
+    );
+
+    CoreDbgPort _cdp(
+        .tck(tck),
+        .trst(trst),
+        .tdi(tdi),
+        .tms(tms),
+        .insn_jdpacc_select(insn_jdpacc_select),
+        .insn_cdpacc_select(insn_cdpacc_select),
+        .state_test_logic_reset,
+        .state_capture_dr,
+        .state_shift_dr,
+        .state_update_dr,
+        .jdpacc_tdo(jdpacc_tdo),
+        .cdpacc_tdo(cdpacc_tdo)
+    );
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/Jtag2MemiSync.sv">
+Module "Jtag2MemiSync", blocks/JtagCoreDbg/rtl/Jtag2MemiSync.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>src_clk</td> <td>input</td> <td>wire</td>
+    <td>
+     slow Source domain clock
+    </td>
+    </tr>
+
+    <tr>
+    <td>src_rst</td> <td>input</td> <td>wire</td>
+    <td>
+     Source domain reset
+    </td>
+    </tr>
+
+    <tr>
+    <td>src_req</td> <td>input</td> <td>wire</td>
+    <td>
+     Source domain signal to be synchronized
+    </td>
+    </tr>
+
+    <tr>
+    <td>dst_clk</td> <td>input</td> <td>wire</td>
+    <td>
+     fast Destination domain clock
+    </td>
+    </tr>
+
+    <tr>
+    <td>dst_rst</td> <td>input</td> <td>wire</td>
+    <td>
+     Destination domain reset
+    </td>
+    </tr>
+
+    <tr>
+    <td>dst_req</td> <td>output</td> <td>reg</td>
+    <td>
+     Destination domain signal that follows src_req
+    </td>
+    </tr>
+
+</table>
+
+<p>Slow JTAG to fast Memory Interface clock domain synchronization.</p>
+<p>Author: Igor Lesik 2021</p>
+<p>Toggle synchronizer is used to synchronize a pulse generating
+in source clock domain to destination clock domain.
+Signal <code>cdp_req</code> is a pulse because <code>state_capture_dr</code> is HIGH for 1 cycle.</p>
+<p>First, stretch source impulse.</p>
+<p><img alt="toggle" src="https://www.verilogpro.com/wp-content/uploads/2016/03/cdc_part2_pulse_2_toggle_gen_diag.png" /></p>
+<p><img alt="src_toggle timing" src="https://www.verilogpro.com/wp-content/uploads/2016/03/cdc_part2_pulse_2_toggle_gen.png" /></p>
+<p>Next, a circuit in the destination clock domain to convert the toggle back into a pulse.</p>
+<p><img alt="dest pulse" src="https://www.verilogpro.com/wp-content/uploads/2016/03/cdc_part2_toggle_2_pulse_gen_diag.png" /></p>
+<p><img alt="dest timing" src="https://www.verilogpro.com/wp-content/uploads/2016/03/cdc_part2_toggle_2_pulse_gen_wave.png" /></p>
+<p>References:</p>
+<ul>
+<li>https://www.edn.com/get-those-clock-domains-in-sync/</li>
+<li>https://www.edn.com/synchronizer-techniques-for-multi-clock-domain-socs-fpgas/</li>
+<li>https://www.verilogpro.com/clock-domain-crossing-part-2/</li>
+</ul>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module Jtag2MemiSync (
+    input  wire src_clk, // slow Source domain clock
+    input  wire src_rst, // Source domain reset
+    input  wire src_req, // Source domain signal to be synchronized
+    input  wire dst_clk, // fast Destination domain clock
+    input  wire dst_rst, // Destination domain reset
+    output reg  dst_req  // Destination domain signal that follows src_req
+);
+
+    reg src_toggle;
+
+    always_ff @(posedge src_clk)
+    begin
+        if (src_rst)
+            src_toggle <= 1'b0;
+        else if (src_req)
+            src_toggle <= ~src_toggle;
+    end
+
+    // 2FF cdp_req_toggle synchronizer
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_blocks/JtagCoreDbg/rtl/JtagTap.sv">
 Module "JtagTap", blocks/JtagCoreDbg/rtl/JtagTap.sv
 </h3>
@@ -1064,37 +1669,515 @@ Module "JtagTap", blocks/JtagCoreDbg/rtl/JtagTap.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-</ul>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>tck</td> <td>input</td> <td>wire</td>
+    <td>
+     test clock
+    </td>
+    </tr>
 
-<p>JTAG device TAP.
-Author: Igor Lesik 2020</p>
+    <tr>
+    <td>trst</td> <td>input</td> <td>wire</td>
+    <td>
+     test reset
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdi</td> <td>input</td> <td>wire</td>
+    <td>
+     test Data In
+    </td>
+    </tr>
+
+    <tr>
+    <td>tms</td> <td>input</td> <td>wire</td>
+    <td>
+     test Mode Select
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdo</td> <td>output</td> <td>reg</td>
+    <td>
+     test Data Out
+    </td>
+    </tr>
+
+    <tr>
+    <td>jdpacc_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>cdpacc_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_test_logic_reset</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_capture_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_shift_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_update_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+</table>
+
+<p>JTAG device TAP.</p>
+<p>Author: Igor Lesik 2020</p>
 <p>In JTAG, devices expose one or more test access ports (TAPs).
 A daisy chain of TAPs is called a scan chain.</p>
-<p><img alt="scan chain" src="https://en.wikipedia.org/wiki/File:Jtag_chain.svg" title="Scan chain" /></p>
-<p>The TAP connector pins are: 
-- TDI: Test Data In
-- TDO: Test Data Out
-- TCK: Test Clock
-- TMS: Test Mode Select
-- TRST: Test Reset (optional)</p>
+<p><img alt="scan chain" src="https://upload.wikimedia.org/wikipedia/commons/c/c9/Jtag_chain.svg" title="Scan chain" /></p>
+<p>The TAP connector pins are:</p>
+<ul>
+<li>TDI: Test Data In</li>
+<li>TDO: Test Data Out</li>
+<li>TCK: Test Clock</li>
+<li>TMS: Test Mode Select</li>
+<li>TRST: Test Reset (optional)</li>
+</ul>
 <p>To use JTAG, a host is connected to the target's JTAG signals (TMS, TCK, TDI, TDO, etc.)
-through some kind of JTAG adapter, which may need to handle issues like level shifting and galvanic isolation.
+through some kind of JTAG adapter, which may need to handle issues like level shifting
+and galvanic isolation.
 The adapter connects to the host using some interface such as USB, PCI, Ethernet, and so forth.</p>
 <p>The host communicates with the TAPs by manipulating TMS and TDI in conjunction with TCK,
 and reading results through TDO.</p>
 <p>TMS/TDI/TCK transitions create the basic JTAG communication primitive
 on which higher layer protocols build.</p>
+<p>The test access point (TAP) is composed of:</p>
+<ul>
+<li>the TAP controller,</li>
+<li>an instruction register,</li>
+<li>and several test data registers,</li>
+<li>in addition to some glue-logic.</li>
+</ul>
+<p>The TAP controller contains the testing state machine, and is responsible
+for interpreting the TCK and TMS signals.</p>
+<p>The data input pin is used for loading data into the boundary cells
+between physical pins and the IC core, and loading data into the instruction
+register or one of the data registers.</p>
+<p>The data output pin is used to read data from the boundary cells,
+or to read data from the instruction or data registers.</p>
+<p>References:</p>
+<ul>
+<li><a href="https://standards.ieee.org/standard/1149_1-1990.html">IEEE 1149.1-1990 - IEEE Standard Test Access Port and Boundary-Scan Architecture</a></li>
+<li><a href="https://www.corelis.com/wp-content/uploads/2017/05/timeline_72dpi1.png">Timeline of JTAG-related standards</a></li>
+<li><a href="https://www.allaboutcircuits.com/technical-articles/jtag-connectors-and-interfaces/">JTAG connectors and interfaces</a></li>
+<li><a href="https://github.com/blacksphere/blackmagic">practical example of JTAG interface programming with Black Magic Probe</a></li>
+<li><a href="https://www.ti.com/lit/an/ssya002c/ssya002c.pdf">JTAG Primer from TI</a></li>
+<li><a href="https://www.corelis.com/education/tutorials/jtag-tutorial/what-is-jtag/">Boundary-scan test example</a></li>
+<li><a href="https://www.embecosm.com/appnotes/ean5/html/ch02s01s02.html">Adding User Specific Registers to JTAG</a></li>
+</ul>
 <p>Source code:</p>
 <pre><code class="lang-verilog">module JtagTap #(
-    //
+    localparam INSN_WIDTH=8,
+    localparam STATE_WIDTH=4
 )(
-    //
+    input  wire tck,   // test clock
+    input  wire trst,  // test reset
+    input  wire tdi,   // test Data In
+    input  wire tms,   // test Mode Select
+    output reg  tdo,   // test Data Out
+
+    input wire  jdpacc_tdo,
+    input wire  cdpacc_tdo,
+
+    output reg  state_test_logic_reset,
+    output reg  state_capture_dr,
+    output reg  state_shift_dr,
+    output reg  state_update_dr
 );
 
-    JtagTapFsm _fsm();
+    wire insn_tdo; // TAP InsnReg TDO wire
+    wire debug_tdo;
+    wire bs_chain_tdo;
+    wire mbist_tdo;
+
+    //wire state_test_logic_reset;
+    //wire state_capture_dr;
+    wire state_capture_ir;
+    //wire state_shift_dr;
+    wire state_shift_ir;
+    wire state_update_ir;
+    wire state_pause_ir;
+    wire state_pause_dr;
+    wire state_exit1_ir, state_exit2_ir;
+    wire state_exit1_dr, state_exit2_dr;
+    wire state_run_test_idle, state_select_dr_scan;
+
+    wire insn_extest_select;
+    wire insn_sample_preload_select;
+    wire insn_idcode_select;
+    wire insn_mbist_select;
+    wire insn_debug_select;
+    wire insn_bypass_select;
+    wire insn_jdpacc_select;
+    wire insn_cdpacc_select;
+
+    wire [INSN_WIDTH-1:0] latched_jtag_ir;
+    wire [STATE_WIDTH-1:0] state;
+
+    JtagTapFsm _fsm(
+        .tck(tck),
+        .trst(trst),
+        .tms(tms),
+        .state(state),
+        .tms_reset(tms_reset), // 5 consecutive TMS=1 causes reset
+        .state_test_logic_reset(state_test_logic_reset),
+        .state_run_test_idle(state_run_test_idle),
+        .state_select_dr_scan(state_select_dr_scan),
+        .state_capture_dr(state_capture_dr),
+        .state_shift_dr(state_shift_dr),
+        .state_exit1_dr(state_exit1_dr),
+        .state_pause_dr(state_pause_dr),
+        .state_exit2_dr(state_exit2_dr),
+        .state_update_dr(state_update_dr),
+        .state_select_ir_scan(state_select_ir_scan),
+        .state_capture_ir(state_capture_ir),
+        .state_shift_ir(state_shift_ir),
+        .state_exit1_ir(state_exit1_ir),
+        .state_pause_ir(state_pause_ir),
+        .state_exit2_ir(state_exit2_ir),
+        .state_update_ir(state_update_ir)
+    );
+
+    JtagTapInsnReg _insn_reg(
+        .tck(tck),
+        .trst(trst),
+        .tdi(tdi),
+        .insn_tdo(insn_tdo),
+        .state_test_logic_reset(state_test_logic_reset),
+        .state_capture_ir(state_capture_ir),
+        .state_shift_ir(state_shift_ir),
+        .state_update_ir(state_update_ir)
+    );
+
+    JtagTapDRegs _dregs(
+        .tck(tck),
+        .trst(trst),
+        .tdi(tdi),
+        .tdo(tdo),
+        .state_test_logic_reset(state_test_logic_reset),
+        .state_capture_dr(state_capture_dr),
+        .state_shift_dr(state_shift_dr),
+        .state_shift_ir(state_shift_ir),
+        .latched_jtag_ir(latched_jtag_ir),
+        .debug_tdo(debug_tdo),
+        .bs_chain_tdo(debug_tdo),
+        .mbist_tdo(mbist_tdo),
+        .insn_tdo(insn_tdo),
+        .jdpacc_tdo(jdpacc_tdo),
+        .cdpacc_tdo(cdpacc_tdo),
+        .insn_extest_select(insn_extest_select),
+        .insn_sample_preload_select(insn_sample_preload_select),
+        .insn_idcode_select(insn_idcode_select),
+        .insn_mbist_select(insn_mbist_select),
+        .insn_debug_select(insn_debug_select),
+        .insn_bypass_select(insn_bypass_select),
+        .insn_jdpacc_select(insn_jdpacc_select),
+        .insn_cdpacc_select(insn_cdpacc_select)
+    );
 
 
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv">
+Module "JtagTapDRegs", blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    IDCODE_VALUE
+    </li>
+
+    <li>
+    INSN_WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>tck</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>trst</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdi</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_test_logic_reset</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_capture_dr</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_shift_dr</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_shift_ir</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>latched_jtag_ir</td> <td>input</td> <td>wire [INSN_WIDTH-1:0]</td>
+    <td>
+     TDI signals from other modules Data Registers
+    </td>
+    </tr>
+
+    <tr>
+    <td>debug_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>bs_chain_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>mbist_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>jdpacc_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>cdpacc_tdo</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdo</td> <td>output</td> <td>reg</td>
+    <td>
+     1-bit telling instruction type
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_extest_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_sample_preload_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_idcode_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_mbist_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_debug_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_bypass_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_jdpacc_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_cdpacc_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+</table>
+
+<p>JTAG TAP Data Registers and TDO MUX.</p>
+<p>Author: Igor Lesik 2020</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module JtagTapDRegs #(
+    parameter IDCODE_VALUE=DEFAULT_IDCODE_VALUE,
+    parameter INSN_WIDTH=8
+)(
+    input  wire                  tck,
+    input  wire                  trst,
+    input  wire                  tdi,
+    input  wire                  state_test_logic_reset,
+    input  wire                  state_capture_dr,
+    input  wire                  state_shift_dr,
+    input  wire                  state_shift_ir,
+    input  wire [INSN_WIDTH-1:0] latched_jtag_ir,
+    // TDI signals from other modules Data Registers
+    input  wire                  debug_tdo,
+    input  wire                  bs_chain_tdo,
+    input  wire                  mbist_tdo,
+    input  wire                  insn_tdo,
+    input  wire                  jdpacc_tdo,
+    input  wire                  cdpacc_tdo,
+
+    output reg                   tdo,
+    // 1-bit telling instruction type
+    output reg                   insn_extest_select,
+    output reg                   insn_sample_preload_select,
+    output reg                   insn_idcode_select,
+    output reg                   insn_mbist_select,
+    output reg                   insn_debug_select,
+    output reg                   insn_bypass_select,
+    output reg                   insn_jdpacc_select,
+    output reg                   insn_cdpacc_select
+);
+    localparam INSN_EXTEST         = 8'b0000_0000;
+    localparam INSN_SAMPLE_PRELOAD = 8'b0000_0001;
+    localparam INSN_IDCODE         = 8'b0000_0010;
+    localparam INSN_DEBUG          = 8'b0000_1000;
+    localparam INSN_MBIST          = 8'b0000_1001;
+    localparam INSN_JDPACC         = 8'b0000_0100;
+    localparam INSN_CDPACC         = 8'b0000_0101;
+    localparam INSN_BYPASS         = 8'b1111_1111; // all 1's required by the standard
+
+    wire idcode_tdo, bypass_tdo;
+
+    assign insn_extest_select           = (latched_jtag_ir == INSN_EXTEST);
+    assign insn_sample_preload_select   = (latched_jtag_ir == INSN_SAMPLE_PRELOAD);
+    assign insn_idcode_select           = (latched_jtag_ir == INSN_IDCODE);
+    assign insn_mbist_select            = (latched_jtag_ir == INSN_MBIST);
+    assign insn_debug_select            = (latched_jtag_ir == INSN_DEBUG);
+    assign insn_bypass_select           = (latched_jtag_ir == INSN_BYPASS);
+    assign insn_jdpacc_select           = (latched_jtag_ir == INSN_JDPACC);
+    assign insn_cdpacc_select           = (latched_jtag_ir == INSN_CDPACC);
+
+    // TDO is muxed/selected based on value of Instruction Register (IR).
+    reg tdo_mux;
+
+    // TDO changes state at negative edge of TCK
+    always @(negedge tck) begin
+        tdo = tdo_mux;
+    end
+
+    // MUX-ing TDOs of the Data Registers
+    always_comb begin
+        if (state_shift_ir)
+            tdo_mux = insn_tdo;
+        else begin
+            case (latched_jtag_ir)
+                INSN_IDCODE:         tdo_mux = idcode_tdo;
+                INSN_DEBUG:          tdo_mux = debug_tdo;
+                INSN_SAMPLE_PRELOAD: tdo_mux = bs_chain_tdo;
+                INSN_EXTEST:         tdo_mux = bs_chain_tdo;
+                INSN_MBIST:          tdo_mux = mbist_tdo;
+                INSN_JDPACC:         tdo_mux = jdpacc_tdo;
+                INSN_CDPACC:         tdo_mux = cdpacc_tdo;
+                default:             tdo_mux = bypass_tdo;
+            endcase
+        end
+    end
+
+    // IDCODE Data Register
+    reg [31:0] idcode_reg;
+
+    always @(posedge tck)
+    begin
+        if (trst == 1)
+            idcode_reg <= IDCODE_VALUE; // IDCODE selected after reset
+        else if (state_test_logic_reset)
+            idcode_reg <= IDCODE_VALUE; // IDCODE selected after reset
+        else if (insn_idcode_select & state_capture_dr)
+            idcode_reg <= IDCODE_VALUE;
+        else if (insn_idcode_select & state_shift_dr)
+            idcode_reg <= {tdi, idcode_reg[31:1]};
+    end
+
+    assign idcode_tdo = idcode_reg[0];
+
+    // BYPASS Data Register
+    reg bypass_reg; // 1-bit register
+
+    always @(posedge tck)
+    begin
+        if (trst == 1)
+            bypass_reg <= 1'b0;
+        else if (state_test_logic_reset == 1)
+            bypass_reg <= 1'b0;
+        else if (insn_bypass_select & state_capture_dr)
+            bypass_reg <= 1'b0;
+        else if (insn_bypass_select & state_shift_dr)
+            bypass_reg <= tdi;
+    end
+
+    assign bypassed_tdo = bypass_reg;
 
 
 endmodule</code></pre>
@@ -1110,97 +2193,141 @@ Module "JtagTapFsm", blocks/JtagCoreDbg/rtl/JtagTapFsm.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>tck      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>tck</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>trstn    input    wire</pre>
-    </li>
+    <tr>
+    <td>trst</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>tms      input    wire</pre>
-    </li>
+    <tr>
+    <td>tms</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state    output   reg [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>state</td> <td>output</td> <td>reg [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>tms_reset output   reg</pre>
+    <tr>
+    <td>tms_reset</td> <td>output</td> <td>reg</td>
+    <td>
      5 consecutive TMS=1 causes reset
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_test_logic_reset output   reg</pre>
-    </li>
+    <tr>
+    <td>state_test_logic_reset</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_run_test_idle output   reg</pre>
-    </li>
+    <tr>
+    <td>state_run_test_idle</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_select_dr_scan output   reg</pre>
-    </li>
+    <tr>
+    <td>state_select_dr_scan</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_capture_dr output   reg</pre>
-    </li>
+    <tr>
+    <td>state_capture_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_shift_dr output   reg</pre>
-    </li>
+    <tr>
+    <td>state_shift_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_exit1_dr output   reg</pre>
-    </li>
+    <tr>
+    <td>state_exit1_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_pause_dr output   reg</pre>
-    </li>
+    <tr>
+    <td>state_pause_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_exit2_dr output   reg</pre>
-    </li>
+    <tr>
+    <td>state_exit2_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_update_dr output   reg</pre>
-    </li>
+    <tr>
+    <td>state_update_dr</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_select_ir_scan output   reg</pre>
-    </li>
+    <tr>
+    <td>state_select_ir_scan</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_capture_ir output   reg</pre>
-    </li>
+    <tr>
+    <td>state_capture_ir</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_shift_ir output   reg</pre>
-    </li>
+    <tr>
+    <td>state_shift_ir</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_exit1_ir output   reg</pre>
-    </li>
+    <tr>
+    <td>state_exit1_ir</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_pause_ir output   reg</pre>
-    </li>
+    <tr>
+    <td>state_pause_ir</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_exit2_ir output   reg</pre>
-    </li>
+    <tr>
+    <td>state_exit2_ir</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>state_update_ir output   reg</pre>
-    </li>
+    <tr>
+    <td>state_update_ir</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>JTAG TAP state machine.
 Author: Igor Lesik 2020</p>
-<p><img alt="TAP states" src="https://upload.wikimedia.org/wikipedia/commons/1/1a/JTAG_TAP_Controller_State_Diagram.svg" title="JTAG TAP Controller State Diagram" /></p>
+<!-- ![TAP states](https://upload.wikimedia.org/wikipedia/commons/1/1a/JTAG_TAP_Controller_State_Diagram.svg "JTAG TAP Controller State Diagram") -->
+<p><img alt="TAP states" src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/JTAG_TAP_Controller_State_Diagram.svg/563px-JTAG_TAP_Controller_State_Diagram.svg.png" /></p>
 <p>The state machine is simple, comprising two paths: DR path and IR path.
 The state machine progresses on the test clock (TCK) edge,
 with the value of the test mode select (TMS) pin controlling the behavior/transition.</p>
@@ -1216,7 +2343,7 @@ setting the data in the instruction register as the current instruction
     localparam WIDTH = JTAG_TAP_STATE_VAR_WIDTH
 )(
     input  wire             tck,
-    input  wire             trstn,
+    input  wire             trst,
     input  wire             tms,
     output reg  [WIDTH-1:0] state,
 
@@ -1260,7 +2387,7 @@ setting the data in the instruction register as the current instruction
 
     // A transition between the states only occurs on the rising edge of TCK.
     always @(posedge tck) begin
-        if (trstn == 0 || tms_reset)
+        if (trst == 1 || tms_reset)
             state <= JTAG_TAP_STATE_TEST_LOGIC_RESET;
         else
             state <= next_state;
@@ -1339,6 +2466,127 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/JtagTapInsnReg.sv">
+Module "JtagTapInsnReg", blocks/JtagCoreDbg/rtl/JtagTapInsnReg.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    WIDTH
+    </li>
+
+    <li>
+    INSN_IDCODE
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>tck</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>trst</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>tdi</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_test_logic_reset</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_capture_ir</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_shift_ir</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>state_update_ir</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>insn_tdo</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+</table>
+
+<p>JTAG TAP Instruction Register.</p>
+<p>Author: Igor Lesik 2020</p>
+<p>Most JTAG instructions can broadly be described as connecting different
+data registers to the TDI/TDO path. The BYPASS instruction connects
+TDI directly to TDO through a 1-bit shift register,
+the IDCODE instruction connects the identification code register to TDO,
+the EXTEST, INTEST, SAMPLE, PRELOAD instructions all connect
+the boundary-scan register (BSR) data register to TDI and TDO, and so on.</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module JtagTapInsnReg #(
+    parameter WIDTH=8,
+    parameter INSN_IDCODE=8'b0000_0010
+)(
+    input  wire tck,
+    input  wire trst,
+    input  wire tdi,
+    input  wire state_test_logic_reset,
+    input  wire state_capture_ir,
+    input  wire state_shift_ir,
+    input  wire state_update_ir,
+    output reg  insn_tdo
+);
+
+    reg [WIDTH-1:0]  jtag_ir;         // Instruction register
+    reg [WIDTH-1:0]  latched_jtag_ir; // Insn Reg latched on negedge of TCK
+
+    always @(posedge tck) begin
+        if (trst == 1)
+            jtag_ir <= {WIDTH{1'b0}};
+        else if (state_test_logic_reset == 1)
+	        jtag_ir <= {WIDTH{1'b0}};
+        else if (state_capture_ir)
+            jtag_ir <= 8'b1111_0101; // This value is fixed for easier fault detection; TODO ???
+        else if (state_shift_ir)
+            jtag_ir <= {tdi, jtag_ir[WIDTH-1:1]};
+    end
+
+    assign insn_tdo = jtag_ir[0];
+
+    always @(negedge tck) begin
+        if (trst== 1)
+            latched_jtag_ir <= INSN_IDCODE;
+        else if (state_test_logic_reset)
+            latched_jtag_ir <= INSN_IDCODE;
+        else if (state_update_ir)
+            latched_jtag_ir <= jtag_ir;
+    end
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_blocks/PrgCounter/rtl/PrgCounter.sv">
 Module "PrgCounter", blocks/PrgCounter/rtl/PrgCounter.sv
 </h3>
@@ -1364,44 +2612,63 @@ Module "PrgCounter", blocks/PrgCounter/rtl/PrgCounter.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>clk      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>rst      input    </pre>
-    </li>
+    <tr>
+    <td>rst</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>rst_addr input    </pre>
-    </li>
+    <tr>
+    <td>rst_addr</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>pc_addr  output   reg [ADDR_WIDTH-1:ADDR_OFS]</pre>
-    </li>
+    <tr>
+    <td>pc_addr</td> <td>output</td> <td>reg [ADDR_WIDTH-1:ADDR_OFS]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>bit      input    </pre>
-    </li>
+    <tr>
+    <td>bit</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>ADDR_WIDTH input    </pre>
-    </li>
+    <tr>
+    <td>ADDR_WIDTH</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>1        input    </pre>
-    </li>
+    <tr>
+    <td>1</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>ADDR_OFS input    </pre>
-    </li>
+    <tr>
+    <td>ADDR_OFS</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>current_pc input    </pre>
-    </li>
+    <tr>
+    <td>current_pc</td> <td>input</td> <td></td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Program Counter.</p>
 <p>Author: Igor Lesik 2020
@@ -1466,32 +2733,45 @@ Module "ShiftReg", blocks/ShiftReg/rtl/ShiftReg.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>clk      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>srl_prl  input    wire</pre>
-    </li>
+    <tr>
+    <td>srl_prl</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>srl_in   input    wire</pre>
-    </li>
+    <tr>
+    <td>srl_in</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>prl_in   input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>prl_in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>srl_out  output   wire</pre>
-    </li>
+    <tr>
+    <td>srl_out</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>prl_out  output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>prl_out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>@file
  @brief  Shift register
@@ -1578,36 +2858,51 @@ Module "SimRAM", blocks/SimRAM/rtl/SimRAM.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>clk      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>rd_en    input    wire</pre>
-    </li>
+    <tr>
+    <td>rd_en</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>rd_addr  input    wire [ADDR_WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>rd_addr</td> <td>input</td> <td>wire [ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>wr_en    input    wire</pre>
-    </li>
+    <tr>
+    <td>wr_en</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>wr_addr  input    wire [ADDR_WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>wr_addr</td> <td>input</td> <td>wire [ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>wr_data  input    wire [DATA_WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>wr_data</td> <td>input</td> <td>wire [DATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>rd_data  output   reg [DATA_WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>rd_data</td> <td>output</td> <td>reg [DATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Verilog simulation RAM model.</p>
 <p>Author: Igor Lesik 2013-2020</p>
@@ -1699,20 +2994,27 @@ Module "SimROM", blocks/SimROM/rtl/SimROM.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>clk      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>addr     input    wire [ADDR_WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>addr</td> <td>input</td> <td>wire [ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>data     output   reg [DATA_WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>data</td> <td>output</td> <td>reg [DATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Verilog simulation ROM model.</p>
 <p>Author: Igor Lesik 2013-2020</p>
@@ -1783,17 +3085,22 @@ Module "INV", lib/gates/builtin/INV.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      out = ~in
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Inverter.</p>
 <script type="WaveDrom">
@@ -1830,17 +3137,22 @@ Module "Inv", lib/gates/builtin/Inv.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      out = ~in
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Inverter.</p>
 <script type="WaveDrom">
@@ -1876,24 +3188,33 @@ Module "MUX2", lib/gates/builtin/MUX2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2:1 Multiplexer</p>
 <p>Source code:</p>
@@ -1925,24 +3246,33 @@ Module "Mux2", lib/gates/builtin/Mux2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Multiplexer made with NAND</p>
 <p>Author: Igor Lesik 2020.</p>
@@ -2006,20 +3336,27 @@ Module "NAND2", lib/gates/builtin/NAND2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NAND.</p>
 <script type="WaveDrom">
@@ -2057,20 +3394,27 @@ Module "NAnd2", lib/gates/builtin/NAnd2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NAND.</p>
 <script type="WaveDrom">
@@ -2104,20 +3448,27 @@ Module "AND2", lib/gates/cmos/AND2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input AND.</p>
 <script type="WaveDrom">
@@ -2154,17 +3505,22 @@ Module "INV", lib/gates/cmos/INV.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      out = ~in
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Inverter.</p>
 <script type="WaveDrom">
@@ -2203,17 +3559,22 @@ Module "Inv", lib/gates/cmos/Inv.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire</pre>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire</td>
+    <td>
      out = ~in
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>CMOS Inverter gate.</p>
 <script type="WaveDrom">
@@ -2281,24 +3642,33 @@ Module "MUX2", lib/gates/cmos/MUX2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2:1 Multiplexer.</p>
 <p>Source code:</p>
@@ -2331,24 +3701,33 @@ Module "Mux2", lib/gates/cmos/Mux2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2:1 Multiplexer.</p>
 <pre>
@@ -2419,20 +3798,27 @@ Module "NAND2", lib/gates/cmos/NAND2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NAND.</p>
 <script type="WaveDrom">
@@ -2473,20 +3859,27 @@ Module "NAnd2", lib/gates/cmos/NAnd2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NAND.</p>
 <script type="WaveDrom">
@@ -2543,20 +3936,27 @@ Module "NOR2", lib/gates/cmos/NOR2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NOR</p>
 <script type="WaveDrom">
@@ -2590,20 +3990,27 @@ Module "NOr2", lib/gates/cmos/NOr2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NOR</p>
 <script type="WaveDrom">
@@ -2664,33 +4071,44 @@ Module "AOI22", lib/gates/generic/AOI22.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      to be AND-ed with in2
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      to be AND-ed with in1
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in3      input    wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>in3</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      to be AND-ed with in4
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in4      input    wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>in4</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      to be AND-ed with in3
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      NOR the results of two ANDs
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Complex gate And-Or-Invertor.</p>
 <pre>
@@ -2743,20 +4161,27 @@ Module "Dff", lib/gates/generic/Dff.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>clk      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   reg [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>reg [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>@file
  @brief     Rising edge triggered D Flip Flop
@@ -2797,18 +4222,23 @@ Module "INV", lib/gates/generic/INV.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in       input    wire [WIDTH-1:0]</pre>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      to be inverted
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
      out is inverted in
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Inverter.</p>
 <script type="WaveDrom">
@@ -2845,24 +4275,33 @@ Module "MUX2", lib/gates/generic/MUX2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2:1 Multiplexer</p>
 <p>Source code:</p>
@@ -2894,32 +4333,45 @@ Module "MUX4", lib/gates/generic/MUX4.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in3      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in3</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in4      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in4</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire [1:0]</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire [1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>4:1 Multiplexer</p>
 <p>Source code:</p>
@@ -2953,24 +4405,33 @@ Module "Mux2", lib/gates/generic/Mux2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2:1 Multiplexer.</p>
 <p>Author: Igor Lesik 2014.</p>
@@ -3019,32 +4480,45 @@ Module "Mux4", lib/gates/generic/Mux4.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in3      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in3</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in4      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in4</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sel      input    wire [1:0]</pre>
-    </li>
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire [1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>4:1 Multiplexer
 Author: Igor Lesik 2014</p>
@@ -3085,20 +4559,27 @@ Module "NAND2", lib/gates/generic/NAND2.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>out      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>out</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>2-input NAND.</p>
 <script type="WaveDrom">
@@ -3132,30 +4613,41 @@ Module "FullAdderAOI", lib/parts/FullAdderAOI.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>ci       input    wire</pre>
+    <tr>
+    <td>ci</td> <td>input</td> <td>wire</td>
+    <td>
      carry in
-    </li>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sum      output   wire</pre>
-    </li>
+    <tr>
+    <td>sum</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>co       output   wire</pre>
+    <tr>
+    <td>co</td> <td>output</td> <td>wire</td>
+    <td>
      carry out
-    </li>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <p>Full Adder using And-Or-Invert (AOI) logic.</p>
 <p>Author: Igor Lesik 2020.</p>
@@ -3219,28 +4711,39 @@ Module "RippleCarryAdder", lib/parts/RippleCarryAdder.sv
 </ul>
 
 <h4>Ports:</h4>
-<ul>
-    <li>
-    <pre>in1      input    wire [WIDTH-1:0]</pre>
-    </li>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>in1</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>in2      input    wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>in2</td> <td>input</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>ci       input    wire</pre>
-    </li>
+    <tr>
+    <td>ci</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>co       output   wire</pre>
-    </li>
+    <tr>
+    <td>co</td> <td>output</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
 
-    <li>
-    <pre>sum      output   wire [WIDTH-1:0]</pre>
-    </li>
+    <tr>
+    <td>sum</td> <td>output</td> <td>wire [WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
 
-</ul>
+</table>
 
 <ul>
 <li><a href="https://www.computer.org/csdl/pds/api/csdl/proceedings/download-article/12OmNyfvpTj/pdf">Fast Ripple-Carry Adders in Standard-Cell CMOS VLSI</a>
