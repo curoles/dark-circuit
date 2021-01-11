@@ -65,7 +65,7 @@ module DbgApbBus #(
 
     // Signals driven by current Slave
     output reg                   ready, // slave uses this signal to extend an APB transfer
-    output reg [RDATA_WIDTH-1:0] rdata
+    output reg [RDATA_WIDTH-1:0] rdata,
     // not implemented slave_err
 
     // Signals driven by Slaves
@@ -97,7 +97,7 @@ module DbgApbBus #(
         rdata = {RDATA_WIDTH{1'b0}};
         for (int unsigned slave_id = 0; slave_id < NR_SLAVES; slave_id++)
         begin
-            rdata |= sel_s2m_data;
+            rdata |= sel_s2m_data[slave_id];
         end
     end
  
@@ -111,7 +111,7 @@ module DbgApbBus #(
     reg [1:0] state;
     localparam [1:0] IDLE=0, SETUP=1, ACCESS=2, ILLEGAL_STATE=3;
 
-    always (posedge clk)
+    always @(posedge clk)
     begin
         if (!rst_n) begin
             state <= IDLE;

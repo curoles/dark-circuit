@@ -8,9 +8,9 @@
  *
  */
 module CoreDbgApb #(
-    parameter APB_ADDR_WIDTH =32,
+    parameter APB_ADDR_WIDTH =5,
     parameter APB_WDATA_WIDTH=32,
-    parameter APB_RDATA_WIDTH=32,
+    parameter APB_RDATA_WIDTH=32
 )(
     input wire                 clk, // rising edge of `clk` times all transfers on the APB
     input wire                 rst_n,
@@ -25,7 +25,7 @@ module CoreDbgApb #(
 
     // Signals driven by current Slave
     output reg                   ready, // slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
-    output reg [RDATA_WIDTH-1:0] rdata
+    output reg [APB_RDATA_WIDTH-1:0] rdata
     // not implemented slave_err
 );
 
@@ -34,7 +34,7 @@ module CoreDbgApb #(
     reg [1:0] state;
     localparam [1:0] IDLE=0, WRITE=1, READ=2;
 
-    always (posedge clk)
+    always @(posedge clk)
     begin
         if (!rst_n) begin
             state <= IDLE;

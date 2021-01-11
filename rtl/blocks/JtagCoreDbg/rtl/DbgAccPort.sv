@@ -11,12 +11,23 @@
  * - JTAG TAP Controller with TAP FSM.
  * - JTAG Debug Port and Core Debug Port.
  */
-module DbgAccPort (
+module DbgAccPort #(
+    parameter MEMI_NR_SLAVES=1,
+    parameter MEMI_ADDR_WIDTH=5,
+    parameter MEMI_WDATA_WIDTH=32
+)(
     input  wire tck,   // test clock
     input  wire trst,  // test reset
     input  wire tdi,   // test Data In
     input  wire tms,   // test Mode Select
-    output reg  tdo    // test Data Out
+    output reg  tdo,   // test Data Out
+
+    input  wire                        memi_clk,
+    input  wire                        memi_rst,
+    output reg  [MEMI_ADDR_WIDTH-1:0]  memi_addr,
+    output reg  [MEMI_NR_SLAVES-1:0]   memi_sel,
+    output reg                         memi_wr_rd,
+    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata
 );
 
     wire jdpacc_tdo;
@@ -56,7 +67,13 @@ module DbgAccPort (
         .state_shift_dr,
         .state_update_dr,
         .jdpacc_tdo(jdpacc_tdo),
-        .cdpacc_tdo(cdpacc_tdo)
+        .cdpacc_tdo(cdpacc_tdo),
+        .memi_clk,
+        .memi_rst,
+        .memi_addr,
+        .memi_sel,
+        .memi_wr_rd,
+        .memi_wdata
     );
 
 endmodule: DbgAccPort
