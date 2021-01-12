@@ -43,6 +43,15 @@ endmodule: TestCore
 module TbTop (
 
 );
+    JtagBfm _jtag_bfm();
+
+    ApbBfm#(
+        .ADDR_WIDTH(5),
+        .WDATA_WIDTH(32),
+        .RDATA_WIDTH(32),
+        .NR_SLAVES(1)
+    )  _apb_bfm();
+
     wire tck;   // test clock
     wire trst;  // test reset
     wire tdi;   // test Data In
