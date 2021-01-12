@@ -178,8 +178,10 @@ th {
     <a href="#module_blocks/Incr/rtl/Incr4.sv">Incr4</a>
     <a href="#module_blocks/Incr/rtl/Incr9.sv">Incr9</a>
     <h3>- blocks/JtagCoreDbg/rtl</h3>
+    <a href="#module_blocks/JtagCoreDbg/rtl/CoreDbgApb.sv">CoreDbgApb</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/CoreDbgPort.sv">CoreDbgPort</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/DbgAccPort.sv">DbgAccPort</a>
+    <a href="#module_blocks/JtagCoreDbg/rtl/DbgApbBus.sv">DbgApbBus</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/Jtag2MemiSync.sv">Jtag2MemiSync</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/JtagTap.sv">JtagTap</a>
     <a href="#module_blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv">JtagTapDRegs</a>
@@ -1162,12 +1164,184 @@ endmodule</code></pre>
 
 
 <hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/CoreDbgApb.sv">
+Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    APB_ADDR_WIDTH
+    </li>
+
+    <li>
+    APB_WDATA_WIDTH
+    </li>
+
+    <li>
+    APB_RDATA_WIDTH
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+     rising edge of `clk` times all transfers on the APB
+    </td>
+    </tr>
+
+    <tr>
+    <td>rst_n</td> <td>input</td> <td>wire</td>
+    <td>
+     Signals from APB Master and APB bus
+    </td>
+    </tr>
+
+    <tr>
+    <td>addr</td> <td>input</td> <td>wire [APB_ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire</td>
+    <td>
+     slave is selected and data transfer is required
+    </td>
+    </tr>
+
+    <tr>
+    <td>enable</td> <td>input</td> <td>wire</td>
+    <td>
+     indicates the second+ cycles of an APB transfer
+    </td>
+    </tr>
+
+    <tr>
+    <td>wr_rd</td> <td>input</td> <td>wire</td>
+    <td>
+     direction=HIGH? wr:rd
+    </td>
+    </tr>
+
+    <tr>
+    <td>wdata</td> <td>input</td> <td>wire [APB_WDATA_WIDTH-1:0]</td>
+    <td>
+     driven by Bridge when wr_rd=HIGH
+    </td>
+    </tr>
+
+    <tr>
+    <td>wstrobe</td> <td>input</td> <td>wire [3:0]</td>
+    <td>
+     Signals driven by current Slave
+    </td>
+    </tr>
+
+    <tr>
+    <td>ready</td> <td>output</td> <td>reg</td>
+    <td>
+     slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
+    </td>
+    </tr>
+
+    <tr>
+    <td>rdata</td> <td>output</td> <td>reg [APB_RDATA_WIDTH-1:0]</td>
+    <td>
+     not implemented slave_err
+    </td>
+    </tr>
+
+</table>
+
+<p>Core Debug APB bus interface.</p>
+<p>Authors: Igor Lesik 2020</p>
+<p>Module CoreDbgApb is APB bus slave.</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module CoreDbgApb #(
+    parameter APB_ADDR_WIDTH =5,
+    parameter APB_WDATA_WIDTH=32,
+    parameter APB_RDATA_WIDTH=32
+)(
+    input wire                 clk, // rising edge of `clk` times all transfers on the APB
+    input wire                 rst_n,
+
+    // Signals from APB Master and APB bus
+    input wire [APB_ADDR_WIDTH-1:0]  addr,
+    input wire                       sel,     // slave is selected and data transfer is required
+    input wire                       enable,  // indicates the second+ cycles of an APB transfer
+    input wire                       wr_rd,   // direction=HIGH? wr:rd
+    input wire [APB_WDATA_WIDTH-1:0] wdata,   // driven by Bridge when wr_rd=HIGH
+    input wire [3:0]                 wstrobe, // which byte lanes to update during a write transfer wdata[(8n + 7):(8n)]
+
+    // Signals driven by current Slave
+    output reg                   ready, // slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
+    output reg [APB_RDATA_WIDTH-1:0] rdata
+    // not implemented slave_err
+);
+
+    assign ready = 1; // TODO check later if Dbg Logic may need extended transfers
+
+    reg [1:0] state;
+    localparam [1:0] IDLE=0, WRITE=1, READ=2;
+
+    always @(posedge clk)
+    begin
+        if (!rst_n) begin
+            state <= IDLE;
+        end else begin
+            case (state)
+                IDLE: begin
+                    state <= sel? (wr_rd? WRITE:READ) : IDLE;
+                end
+                WRITE: begin
+                    if (sel && wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
+                        // write to Dbg Page using addr and wdata
+                    end
+                    state <= IDLE;
+                end
+                READ: begin
+                    if (sel && !wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
+                        // read to rdata from Dbg Page using addr
+                    end
+                    state <= IDLE;
+                end
+                default: begin
+                    state <= IDLE;
+                end
+            endcase
+        end
+    end
+
+
+
+
+endmodule</code></pre>
+
+
+<hr />
 <h3 id="module_blocks/JtagCoreDbg/rtl/CoreDbgPort.sv">
 Module "CoreDbgPort", blocks/JtagCoreDbg/rtl/CoreDbgPort.sv
 </h3>
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    MEMI_NR_SLAVES
+    </li>
+
+    <li>
+    MEMI_ADDR_WIDTH
+    </li>
+
+    <li>
+    MEMI_WDATA_WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
@@ -1258,6 +1432,44 @@ Module "CoreDbgPort", blocks/JtagCoreDbg/rtl/CoreDbgPort.sv
     </tr>
 
     <tr>
+    <td>memi_clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_rst</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_addr</td> <td>output</td> <td>reg [MEMI_ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_sel</td> <td>output</td> <td>reg [MEMI_NR_SLAVES-1:0]</td>
+    <td>
+     slave selected & data transfer required
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_wr_rd</td> <td>output</td> <td>reg</td>
+    <td>
+     direction=HIGH? wr:rd
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_wdata</td> <td>output</td> <td>reg [MEMI_WDATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
     <td>jdpacc</td> <td>input</td> <td> [WIDTH-1:0]</td>
     <td>
     </td>
@@ -1315,11 +1527,16 @@ formed by the values that were shifted into the scan chain.</p>
 }
 </script>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module CoreDbgPort (
+<pre><code class="lang-verilog">module CoreDbgPort #(
+    parameter MEMI_NR_SLAVES=1,
+    parameter MEMI_ADDR_WIDTH=5,
+    parameter MEMI_WDATA_WIDTH=32
+)(
     input  wire tck,        // test clock
     input  wire trst,       // test reset
     input  wire tdi,        // test Data In
     input  wire tms,        // test Mode Select
+
     input  wire insn_jdpacc_select,     // IR==JDPACC
     input  wire insn_cdpacc_select,     // IR==CDPACC
     input  wire state_test_logic_reset, // TAP_STATE==TEST_LOGIC_REST
@@ -1327,7 +1544,14 @@ formed by the values that were shifted into the scan chain.</p>
     input  wire state_shift_dr,         // TAP_STATE==SHIFT_DR
     input  wire state_update_dr,        // TAP_STATE==UPDATE_DR
     output reg  jdpacc_tdo,             // JDPACC DR output
-    output reg  cdpacc_tdo              // CDPACC DR output
+    output reg  cdpacc_tdo,             // CDPACC DR output
+
+    input  wire                        memi_clk,
+    input  wire                        memi_rst,
+    output reg  [MEMI_ADDR_WIDTH-1:0]  memi_addr,
+    output reg  [MEMI_NR_SLAVES-1:0]   memi_sel, // slave selected & data transfer required
+    output reg                         memi_wr_rd, // direction=HIGH? wr:rd
+    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata
 );
 
     localparam WIDTH = 36;
@@ -1362,6 +1586,9 @@ formed by the values that were shifted into the scan chain.</p>
         jdpacc_update_dr = jdpacc;
     endfunction
 
+    localparam CDP_OP_SELECT = 3'b000,
+               CDP_OP_TADDR  = 3'b001,
+               CDP_OP_DTR    = 3'b010;
 
     reg cdp_req, cdp_cmd_wr, cdp_cmd_rd;
     reg [2:0] cdp_cmd_op;
@@ -1381,12 +1608,12 @@ formed by the values that were shifted into the scan chain.</p>
         end else if (insn_cdpacc_select & state_capture_dr) begin
             cdpacc_reg <= cdpacc_capture_dr();
             cdp_req    <= 0;
-        else if (insn_cdpacc_select & state_update_dr) begin
+        end else if (insn_cdpacc_select & state_update_dr) begin
             // **Update-DR** operation fulfills the read or write request that is
             // formed by the values that were shifted into the scan chain.
 
             cdpacc_reg   <=  cdpacc_reg;
-            cdp_req      <=  1;
+            cdp_req      <=  (cdpacc_reg[3:1] == CDP_OP_DTR);
             cdp_cmd_wr   <=  cdpacc_reg[0];
             cdp_cmd_rd   <= ~cdpacc_reg[0];
             cdp_cmd_op   <=  cdpacc_reg[3:1];
@@ -1394,21 +1621,18 @@ formed by the values that were shifted into the scan chain.</p>
         end
     end
 
-    // Toggle synchronizer is used to synchronize a pulse generating
-    // in source clock domain to destination clock domain.
-    // Signal `cdp_req` is a pulse because `state_capture_dr` is HIGH for 1 cycle.
-    // https://www.edn.com/get-those-clock-domains-in-sync/
-    // https://www.edn.com/synchronizer-techniques-for-multi-clock-domain-socs-fpgas/
-    // https://www.verilogpro.com/clock-domain-crossing-part-2/
-    always_ff @(posedge tck)
-    begin
-        if (trst)
-            cdp_req_toggle <= 1'b0;
-        else if (cdp_req)
-            cdp_req_toggle <= ~cdp_req_toggle;
-    end
+    // cdp_req synchronized to Memory Interface clock
+    reg memi_req;
 
-    // 2FF cdp_req_toggle synchronizer
+    Jtag2MemiSync _jtag2memi_sync(
+        .src_clk(tck),      // Source domain slow clock
+        .src_rst(trst),     // Source domain reset
+        .src_req(cdp_req),  // Source domain signal to be synchronized
+        .dst_clk(memi_clk), // Destination domain fast clock
+        .dst_rst(memi_rst), // Destination domain reset
+        .dst_req(memi_req)  // Destination domain signal that follows src_req
+    );
+
 
 
     reg [31:0] cdpacc_result;
@@ -1421,9 +1645,6 @@ formed by the values that were shifted into the scan chain.</p>
         cdpacc_capture_dr = {cdpacc_ack, cdpacc_result};
     endfunction
 
-    localparam CDP_SELECT = 3'b000,
-               CDP_TADDR  = 3'b001,
-               CDP_DTR    = 3'b010;
 
     reg [31:0] cdp_dr_select, cdp_dr_taddr, cdp_dr_dtr;
 
@@ -1431,21 +1652,36 @@ formed by the values that were shifted into the scan chain.</p>
     begin
         if (cdp_cmd_wr) begin
             case (cdp_cmd_op)
-                CDP_SELECT: cdp_dr_select <= cdp_cmd_data;
-                CDP_TADDR:  cdp_dr_taddr  <= cdp_cmd_data;
-                CDP_DTR:    cdp_dr_dtr    <= cdp_cmd_data;
+                CDP_OP_SELECT: cdp_dr_select <= cdp_cmd_data;
+                CDP_OP_TADDR:  cdp_dr_taddr  <= cdp_cmd_data;
+                CDP_OP_DTR:    cdp_dr_dtr    <= cdp_cmd_data;
                 default: begin end
             endcase
         end
     end
 
-    /*
-    * memi_clk
-    input wire [MEMI_ADDR_WIDTH-1:0]  memi_addr,
-    input wire [MEMI_NR_SLAVES-1:0]   memi_sel,     // slave is selected and data transfer is required
-    input wire                   memi_wr_rd,   // direction=HIGH? wr:rd
-    input wire [MEMI_WDATA_WIDTH-1:0] wdata,   // driven by Bridge when wr_rd=HIGH
-    */
+
+    // APB transaction starts when one-hot bit of `memi_sel` is HIGH.
+    //
+    always_ff @(posedge memi_clk)
+    begin
+        if (memi_rst)
+            memi_sel <= 'h0;
+        else if (memi_req)
+            memi_sel <= 1;// FIXME TODO decode cdp_dr_select;
+        else
+            memi_sel <= 'h0;
+    end
+ 
+    always_ff @(posedge memi_clk)
+    begin
+        if (memi_req)
+        begin
+            memi_addr  <= cdp_dr_taddr;
+            memi_wdata <= cdp_dr_dtr;
+            memi_wr_rd <= cdp_cmd_wr;
+        end
+    end
 
 endmodule</code></pre>
 
@@ -1457,6 +1693,18 @@ Module "DbgAccPort", blocks/JtagCoreDbg/rtl/DbgAccPort.sv
 
 <h4>Parameters:</h4>
 <ul>
+    <li>
+    MEMI_NR_SLAVES
+    </li>
+
+    <li>
+    MEMI_ADDR_WIDTH
+    </li>
+
+    <li>
+    MEMI_WDATA_WIDTH
+    </li>
+
 </ul>
 
 <h4>Ports:</h4>
@@ -1497,6 +1745,42 @@ Module "DbgAccPort", blocks/JtagCoreDbg/rtl/DbgAccPort.sv
     </td>
     </tr>
 
+    <tr>
+    <td>memi_clk</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_rst</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_addr</td> <td>output</td> <td>reg [MEMI_ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_sel</td> <td>output</td> <td>reg [MEMI_NR_SLAVES-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_wr_rd</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>memi_wdata</td> <td>output</td> <td>reg [MEMI_WDATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
 </table>
 
 <p>Debug Access Port (DAP).</p>
@@ -1510,12 +1794,23 @@ Core debug facilities.</p>
 <li>JTAG Debug Port and Core Debug Port.</li>
 </ul>
 <p>Source code:</p>
-<pre><code class="lang-verilog">module DbgAccPort (
+<pre><code class="lang-verilog">module DbgAccPort #(
+    parameter MEMI_NR_SLAVES=1,
+    parameter MEMI_ADDR_WIDTH=5,
+    parameter MEMI_WDATA_WIDTH=32
+)(
     input  wire tck,   // test clock
     input  wire trst,  // test reset
     input  wire tdi,   // test Data In
     input  wire tms,   // test Mode Select
-    output reg  tdo    // test Data Out
+    output reg  tdo,   // test Data Out
+
+    input  wire                        memi_clk,
+    input  wire                        memi_rst,
+    output reg  [MEMI_ADDR_WIDTH-1:0]  memi_addr,
+    output reg  [MEMI_NR_SLAVES-1:0]   memi_sel,
+    output reg                         memi_wr_rd,
+    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata
 );
 
     wire jdpacc_tdo;
@@ -1555,8 +1850,275 @@ Core debug facilities.</p>
         .state_shift_dr,
         .state_update_dr,
         .jdpacc_tdo(jdpacc_tdo),
-        .cdpacc_tdo(cdpacc_tdo)
+        .cdpacc_tdo(cdpacc_tdo),
+        .memi_clk,
+        .memi_rst,
+        .memi_addr,
+        .memi_sel,
+        .memi_wr_rd,
+        .memi_wdata
     );
+
+endmodule</code></pre>
+
+
+<hr />
+<h3 id="module_blocks/JtagCoreDbg/rtl/DbgApbBus.sv">
+Module "DbgApbBus", blocks/JtagCoreDbg/rtl/DbgApbBus.sv
+</h3>
+
+<h4>Parameters:</h4>
+<ul>
+    <li>
+    ADDR_WIDTH
+    </li>
+
+    <li>
+    WDATA_WIDTH
+    </li>
+
+    <li>
+    RDATA_WIDTH
+    </li>
+
+    <li>
+    NR_SLAVES
+    </li>
+
+</ul>
+
+<h4>Ports:</h4>
+<table style="width:100%">
+    <th>Name</th> <th>Direction</th> <th>Type</th> <th>Description</th>
+    <tr>
+    <td>clk</td> <td>input</td> <td>wire</td>
+    <td>
+     rising edge of `clk` times all transfers on the APB
+    </td>
+    </tr>
+
+    <tr>
+    <td>rst_n</td> <td>input</td> <td>wire</td>
+    <td>
+     Signals driven by APB bridge
+    </td>
+    </tr>
+
+    <tr>
+    <td>addr</td> <td>input</td> <td>wire [ADDR_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>sel</td> <td>input</td> <td>wire [NR_SLAVES-1:0]</td>
+    <td>
+     slave is selected and data transfer is required
+    </td>
+    </tr>
+
+    <tr>
+    <td>enable</td> <td>output</td> <td>reg</td>
+    <td>
+     indicates the second+ cycles of an APB transfer
+    </td>
+    </tr>
+
+    <tr>
+    <td>wr_rd</td> <td>input</td> <td>wire</td>
+    <td>
+     direction=HIGH? wr:rd
+    </td>
+    </tr>
+
+    <tr>
+    <td>wdata</td> <td>input</td> <td>wire [WDATA_WIDTH-1:0]</td>
+    <td>
+     driven by Bridge when wr_rd=HIGH
+    </td>
+    </tr>
+
+    <tr>
+    <td>wstrobe</td> <td>input</td> <td>wire [3:0]</td>
+    <td>
+     Signals driven by current Slave
+    </td>
+    </tr>
+
+    <tr>
+    <td>ready</td> <td>output</td> <td>reg</td>
+    <td>
+     slave uses this signal to extend an APB transfer
+    </td>
+    </tr>
+
+    <tr>
+    <td>rdata</td> <td>output</td> <td>reg [RDATA_WIDTH-1:0]</td>
+    <td>
+     Signals driven by Slaves
+    </td>
+    </tr>
+
+    <tr>
+    <td>s2m_ready</td> <td>input</td> <td>wire [NR_SLAVES-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>s2m_data</td> <td>input</td> <td>wire [RDATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>NR_SLAVES</td> <td>input</td> <td>wire [RDATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+</table>
+
+<p>APB bus.</p>
+<p>Author: Igor Lesik 2020</p>
+<p>The Advanced Peripheral Bus (APB) is used for connecting
+low bandwidth peripherals.
+It is a simple non-pipelined protocol that can be used to read/write
+from a master to a number of slaves through the shared bus.
+The reads and writes shares the same set of signals
+and no burst data transfers are supported.
+APB is a simple interface that could be used to provide
+access to the programmable control registers of peripheral devices.</p>
+<p>Unpipelined protocol means that a second transfer
+cannot start before the first transfer completes.
+Every transfer takes at least two cycles.</p>
+<div class="codehilite"><pre><span></span><code><span class="err">             Master/APB Bridge</span>
+<span class="err">                ^</span>
+<span class="err">                |</span>
+<span class="err">                v</span>
+<span class="err">  bus ------------------------------</span>
+<span class="err">          ^         ^          ^</span>
+<span class="err">          |         |          |</span>
+<span class="err">          v         v          v</span>
+<span class="err">       slave1    slave2     slave3</span>
+</code></pre></div>
+
+<p>Programming the control registers of internal CPU devices,
+for example, Debug Logic control registers can be implemented
+with JTAG TAP connected to APB.</p>
+<div class="codehilite"><pre><span></span><code><span class="err">  TDI -----&gt;| R/W | Address | DATA |-----&gt; TDO</span>
+<span class="err">               |       |       |</span>
+<span class="err">               |       |       +---&gt;</span>
+<span class="err">               |       +-----------&gt; APB transaction</span>
+<span class="err">               +-------------------&gt;</span>
+</code></pre></div>
+
+<p>The APB protocol has two independent data buses, one for read data and one for write data.
+Because the buses do not have their own individual handshake signals,
+it is not possible for data transfers to occur on both buses at the same time.</p>
+<p>Verilog module ApbBus takes inputs from APB Bridge and outputs Slave
+signals to APB Bridge.</p>
+<p>Source code:</p>
+<pre><code class="lang-verilog">module DbgApbBus #(
+    parameter ADDR_WIDTH=32,
+    parameter WDATA_WIDTH=32,
+    parameter RDATA_WIDTH=32,
+    parameter NR_SLAVES=1
+)(
+    input wire                 clk, // rising edge of `clk` times all transfers on the APB
+    input wire                 rst_n,
+
+    // Signals driven by APB bridge
+    input wire [ADDR_WIDTH-1:0]  addr,
+    input wire [NR_SLAVES-1:0]   sel,     // slave is selected and data transfer is required
+    output reg                   enable,  // indicates the second+ cycles of an APB transfer
+    input wire                   wr_rd,   // direction=HIGH? wr:rd
+    input wire [WDATA_WIDTH-1:0] wdata,   // driven by Bridge when wr_rd=HIGH
+    input wire [3:0]             wstrobe, // which byte lanes to update during a write transfer wdata[(8n + 7):(8n)]
+
+    // Signals driven by current Slave
+    output reg                   ready, // slave uses this signal to extend an APB transfer
+    output reg [RDATA_WIDTH-1:0] rdata,
+    // not implemented slave_err
+
+    // Signals driven by Slaves
+    input wire [NR_SLAVES-1:0]   s2m_ready,
+    input wire [RDATA_WIDTH-1:0] s2m_data[NR_SLAVES]
+);
+    genvar i;
+
+    // ====================================================================
+    // Mux all s2m signals based on currently selected Slave using OR gates.
+    // ====================================================================
+
+    wire [NR_SLAVES-1:0]   sel_s2m_ready; // AND2(sel[n], ~s2m_ready[n])
+    wire [RDATA_WIDTH-1:0] sel_s2m_data[NR_SLAVES];
+
+    generate
+        for (i = 0; i < NR_SLAVES; i = i + 1) begin
+            assign sel_s2m_ready[i] = sel[i] & ~s2m_ready[i];
+            assign sel_s2m_data[i] = {NR_SLAVES{sel[i]}} & s2m_data[i];
+        end
+    endgenerate
+
+    wire ready_n;
+    assign ready_n = |sel_s2m_ready;
+    assign ready = ~ready;
+
+    always_comb
+    begin
+        rdata = {RDATA_WIDTH{1'b0}};
+        for (int unsigned slave_id = 0; slave_id < NR_SLAVES; slave_id++)
+        begin
+            rdata |= sel_s2m_data[slave_id];
+        end
+    end
+ 
+    // =========================
+    // APB bus state transitions
+    // =========================
+
+    wire transfer_required;
+    assign transfer_required = |sel; // start transfer if some Slave is selected
+
+    reg [1:0] state;
+    localparam [1:0] IDLE=0, SETUP=1, ACCESS=2, ILLEGAL_STATE=3;
+
+    always @(posedge clk)
+    begin
+        if (!rst_n) begin
+            state <= IDLE;
+        end else begin
+            case (state)
+            IDLE: begin
+                state <= transfer_required? SETUP:IDLE;
+            end
+            SETUP: begin
+                // The bus only remains in the SETUP state for one clock cycle
+                // and always moves to the ACCESS state on the next
+                // rising edge of the clock.
+                state <= ACCESS;
+            end
+            ACCESS: begin
+                // Exit from the ACCESS state is controlled by the READY signal from the slave:
+                // - If READY is held LOW by the slave then the peripheral bus remains in
+                //   the ACCESS state.
+                // - If READY is driven HIGH by the slave then the ACCESS state is exited
+                //   and the bus returns to the IDLE state if no more transfers are required.
+                // Alternatively, the bus moves directly to the SETUP state if another transfer follows.
+                state <= ready? (transfer_required? SETUP:IDLE) : ACCESS;
+            end
+            ILLEGAL_STATE: begin
+                state <= IDLE;
+            end
+            endcase
+        end
+    end
+
+    // The enable signal, ENABLE, is asserted in the ACCESS state.
+    assign enable = (state == ACCESS);
+
+
 
 endmodule</code></pre>
 
@@ -1654,7 +2216,33 @@ Signal <code>cdp_req</code> is a pulse because <code>state_capture_dr</code> is 
             src_toggle <= ~src_toggle;
     end
 
-    // 2FF cdp_req_toggle synchronizer
+    // 2FF Synchronizer
+    reg q1, q2;
+
+    always_ff @(posedge dst_clk) begin
+        if (dst_rst)
+            q1 <= 1'b0;
+        else
+            q1 <= src_toggle;
+    end
+
+    always_ff @(posedge dst_clk) begin
+        if (dst_rst)
+            q2 <= 1'b0;
+        else
+            q2 <= q1;
+    end
+
+    // Convert toggle back to pulse
+    reg q3;
+    always_ff @(posedge dst_clk) begin
+        if (dst_rst)
+            q3 <= 1'b0;
+        else
+            q3 <= q2;
+    end
+
+    assign dst_req = q3 ^ q2;
 
 endmodule</code></pre>
 

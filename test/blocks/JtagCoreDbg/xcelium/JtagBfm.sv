@@ -5,16 +5,16 @@ interface JtagBfm;
     initial begin
         tck = 0;
         forever begin
-            #1;
+            #10;
             tck = ~tck;
         end
     end
 
     initial begin
         trst = 0;
-        #1;
+        #10;
         trst = 1;
-        #5;
+        #50;
         trst = 0;
     end
 

@@ -128,4 +128,10 @@ module TbTop (
         .s2m_data(core_apb_data_out)
     );
 
+    initial begin
+        uvm_config_db #(virtual JtagBfm)::set(null, "*", "_jtag_bfm", _jtag_bfm);
+        uvm_config_db #(virtual  ApbBfm)::set(null, "*", "_apb_bfm", _apb_bfm);
+        run_test();
+    end
+
 endmodule: TbTop

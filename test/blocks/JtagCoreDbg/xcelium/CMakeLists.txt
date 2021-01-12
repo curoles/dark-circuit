@@ -15,4 +15,10 @@ set(TB_FLIST
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/sim/sim.flist
     -F ${CMAKE_CURRENT_SOURCE_DIR}/tb.flist
 )
+
+#set(TB_UVM_TESTS
+#    CounterIncTest
+#    CounterDecTest
+#)
+
 include(${DARKCIRCUIT_SOURCE_DIR}/tools/eda/xcelium/simple_test.cmake)
