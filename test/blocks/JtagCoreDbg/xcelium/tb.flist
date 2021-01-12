@@ -2,3 +2,4 @@ JtagBfm.sv
 ApbBfm.sv
 Tester.sv
 Env.sv
+TestBypass.sv

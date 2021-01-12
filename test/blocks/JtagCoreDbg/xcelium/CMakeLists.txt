@@ -16,9 +16,8 @@ set(TB_FLIST
     -F ${CMAKE_CURRENT_SOURCE_DIR}/tb.flist
 )
 
-#set(TB_UVM_TESTS
-#    CounterIncTest
-#    CounterDecTest
-#)
+set(TB_UVM_TESTS
+    TestBypass
+)
 
 include(${DARKCIRCUIT_SOURCE_DIR}/tools/eda/xcelium/simple_test.cmake)
