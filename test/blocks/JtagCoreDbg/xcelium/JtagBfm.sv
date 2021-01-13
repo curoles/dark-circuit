@@ -10,12 +10,52 @@ interface JtagBfm;
         end
     end
 
-    initial begin
+    /*initial begin
         trst = 0;
         #10;
         trst = 1;
         #50;
         trst = 0;
-    end
+    end*/
+
+    task tick(input bit [1:0] tdi_tms);
+        tdi = tdi_tms[0];
+        tms = tdi_tms[1];
+        @(posedge tck);
+        //$display("%t TDI:%b TMS:%b", $time, tdi, tms);
+    endtask: tick
+
+    task tick4(input bit [1:0] b1, b2, b3, b4);
+        tick(b1); tick(b2); tick(b3); tick(b4);
+    endtask
+
+    task tick5(input bit [1:0] b1, b2, b3, b4, b5);
+        tick(b1); tick(b2); tick(b3); tick(b4); tick(b5);
+    endtask: tick5
+
+    task tick8(input bit [1:0] b1, b2, b3, b4, b5, b6, b7, b8);
+        tick(b1); tick(b2); tick(b3); tick(b4);
+        tick(b5); tick(b6); tick(b7); tick(b8);
+    endtask: tick8
+
+    task go_shift_ir();
+        tick5(2'b00,2'b10,2'b10,2'b00,2'b00);
+    endtask
+
+    task go_shift_dr();
+        tick4(2'b00,2'b10,2'b00,2'b00);
+    endtask
+
+    task do_ir_idcode();
+        tick8(2'b00,2'b01,2'b00,2'b00,2'b00,2'b00,2'b00,2'b10);
+    endtask
+
+    task do_ir_bypass();
+        tick8(2'b01,2'b01,2'b01,2'b01,2'b01,2'b01,2'b01,2'b11);
+    endtask
+
+    task do_reset_5tms();
+        tick5(2'b10,2'b10,2'b10,2'b10,2'b10);
+    endtask
 
 endinterface: JtagBfm

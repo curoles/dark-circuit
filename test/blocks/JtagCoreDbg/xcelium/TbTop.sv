@@ -52,12 +52,6 @@ module TbTop (
         .NR_SLAVES(1)
     )  _apb_bfm();
 
-    wire tck;   // test clock
-    wire trst;  // test reset
-    wire tdi;   // test Data In
-    wire tms;   // test Mode Select
-    wire tdo;   // test Data Out
-
     localparam NR_CORES = 1;
     localparam APB_ADDR_WIDTH = 5;
     localparam APB_WDATA_WIDTH = 32;
@@ -77,11 +71,11 @@ module TbTop (
         .MEMI_ADDR_WIDTH(APB_ADDR_WIDTH),
         .MEMI_WDATA_WIDTH(APB_WDATA_WIDTH)
     ) _dap(
-        .tck(tck),
-        .trst(trst),
-        .tdi(tdi),
-        .tms(tms),
-        .tdo(tdo),
+        .tck (_jtag_bfm.tck),
+        .trst(_jtag_bfm.trst),
+        .tdi (_jtag_bfm.tdi),
+        .tms (_jtag_bfm.tms),
+        .tdo (_jtag_bfm.tdo),
         .memi_clk(clk),
         .memi_rst(rst),
         .memi_addr(apb_addr),

@@ -139,7 +139,8 @@ module JtagTap #(
         .state_test_logic_reset(state_test_logic_reset),
         .state_capture_ir(state_capture_ir),
         .state_shift_ir(state_shift_ir),
-        .state_update_ir(state_update_ir)
+        .state_update_ir(state_update_ir),
+        .latched_jtag_ir(latched_jtag_ir)
     );
 
     JtagTapDRegs _dregs(

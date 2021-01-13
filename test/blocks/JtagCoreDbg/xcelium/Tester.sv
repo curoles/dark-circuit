@@ -25,14 +25,5 @@ class Tester extends uvm_component;
             $fatal(1, "Failed to get APB BFM");
     endfunction: build_phase
 
-    task run_phase(uvm_phase phase);
-        phase.raise_objection(this);
-        //bfm.up_down = 1;
-        //bfm.count_en = 1;
-        //bfm.send_reset();
-        repeat(128) @(posedge _apb_bfm.clk);
-        //$display("after 128 clocks UP counter is:%d", bfm.out_val);
-        phase.drop_objection(this);
-    endtask: run_phase
 
 endclass

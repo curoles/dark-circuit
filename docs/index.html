@@ -2458,7 +2458,8 @@ or to read data from the instruction or data registers.</p>
         .state_test_logic_reset(state_test_logic_reset),
         .state_capture_ir(state_capture_ir),
         .state_shift_ir(state_shift_ir),
-        .state_update_ir(state_update_ir)
+        .state_update_ir(state_update_ir),
+        .latched_jtag_ir(latched_jtag_ir)
     );
 
     JtagTapDRegs _dregs(
@@ -2728,6 +2729,7 @@ Module "JtagTapDRegs", blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv
                 INSN_MBIST:          tdo_mux = mbist_tdo;
                 INSN_JDPACC:         tdo_mux = jdpacc_tdo;
                 INSN_CDPACC:         tdo_mux = cdpacc_tdo;
+                INSN_BYPASS:         tdo_mux = bypass_tdo;
                 default:             tdo_mux = bypass_tdo;
             endcase
         end
@@ -2744,8 +2746,10 @@ Module "JtagTapDRegs", blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv
             idcode_reg <= IDCODE_VALUE; // IDCODE selected after reset
         else if (insn_idcode_select & state_capture_dr)
             idcode_reg <= IDCODE_VALUE;
-        else if (insn_idcode_select & state_shift_dr)
+        else if (insn_idcode_select & state_shift_dr) begin
             idcode_reg <= {tdi, idcode_reg[31:1]};
+            //$display("JTAG TAP IDCODE Shift-DR %h", idcode_reg);
+        end
     end
 
     assign idcode_tdo = idcode_reg[0];
@@ -2765,7 +2769,7 @@ Module "JtagTapDRegs", blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv
             bypass_reg <= tdi;
     end
 
-    assign bypassed_tdo = bypass_reg;
+    assign bypass_tdo = bypass_reg;
 
 
 endmodule</code></pre>
@@ -2977,8 +2981,11 @@ setting the data in the instruction register as the current instruction
     always @(posedge tck) begin
         if (trst == 1 || tms_reset)
             state <= JTAG_TAP_STATE_TEST_LOGIC_RESET;
-        else
+        else begin
             state <= next_state;
+            //if (state != next_state)
+            //    $display("JTAG TAP FSIM state %h -> %h", state, next_state);
+        end
     end
 
     // Determination of next state
@@ -3037,9 +3044,12 @@ setting the data in the instruction register as the current instruction
                 next_state = JTAG_TAP_STATE_TEST_LOGIC_RESET;
             end
         endcase
+        //$display("JTAG TAP FSIM state=%h", next_state);
     end
 
-    // 5 consecutive TMS=1 causes reset
+    // 5 consecutive TMS=1 causes 5 FSM transitions terminating in RESET state;
+    // here we duplicate "5 TMS->RESET" in case FSM gets broken somehow (unlikely),
+    // perhaps we should remove this code.
     reg tms_q1, tms_q2, tms_q3, tms_q4;
     assign tms_reset = tms & tms_q1 & tms_q2 & tms_q3 & tms_q4;
 
@@ -3121,6 +3131,13 @@ Module "JtagTapInsnReg", blocks/JtagCoreDbg/rtl/JtagTapInsnReg.sv
     </td>
     </tr>
 
+    <tr>
+    <td>latched_jtag_ir</td> <td>output</td> <td>reg [WIDTH-1:0]</td>
+    <td>
+     Insn Reg latched on negedge of TCK
+    </td>
+    </tr>
+
 </table>
 
 <p>JTAG TAP Instruction Register.</p>
@@ -3143,11 +3160,12 @@ the boundary-scan register (BSR) data register to TDI and TDO, and so on.</p>
     input  wire state_capture_ir,
     input  wire state_shift_ir,
     input  wire state_update_ir,
-    output reg  insn_tdo
+    output reg  insn_tdo,
+    output reg  [WIDTH-1:0]  latched_jtag_ir // Insn Reg latched on negedge of TCK
 );
 
     reg [WIDTH-1:0]  jtag_ir;         // Instruction register
-    reg [WIDTH-1:0]  latched_jtag_ir; // Insn Reg latched on negedge of TCK
+    //reg [WIDTH-1:0]  latched_jtag_ir; // Insn Reg latched on negedge of TCK
 
     always @(posedge tck) begin
         if (trst == 1)

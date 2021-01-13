@@ -115,8 +115,11 @@ module JtagTapFsm #(
     always @(posedge tck) begin
         if (trst == 1 || tms_reset)
             state <= JTAG_TAP_STATE_TEST_LOGIC_RESET;
-        else
+        else begin
             state <= next_state;
+            //if (state != next_state)
+            //    $display("JTAG TAP FSIM state %h -> %h", state, next_state);
+        end
     end
 
     // Determination of next state
@@ -175,9 +178,12 @@ module JtagTapFsm #(
                 next_state = JTAG_TAP_STATE_TEST_LOGIC_RESET;
             end
         endcase
+        //$display("JTAG TAP FSIM state=%h", next_state);
     end
 
-    // 5 consecutive TMS=1 causes reset
+    // 5 consecutive TMS=1 causes 5 FSM transitions terminating in RESET state;
+    // here we duplicate "5 TMS->RESET" in case FSM gets broken somehow (unlikely),
+    // perhaps we should remove this code.
     reg tms_q1, tms_q2, tms_q3, tms_q4;
     assign tms_reset = tms & tms_q1 & tms_q2 & tms_q3 & tms_q4;
 

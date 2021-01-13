@@ -78,6 +78,7 @@ module JtagTapDRegs #(
                 INSN_MBIST:          tdo_mux = mbist_tdo;
                 INSN_JDPACC:         tdo_mux = jdpacc_tdo;
                 INSN_CDPACC:         tdo_mux = cdpacc_tdo;
+                INSN_BYPASS:         tdo_mux = bypass_tdo;
                 default:             tdo_mux = bypass_tdo;
             endcase
         end
@@ -94,8 +95,10 @@ module JtagTapDRegs #(
             idcode_reg <= IDCODE_VALUE; // IDCODE selected after reset
         else if (insn_idcode_select & state_capture_dr)
             idcode_reg <= IDCODE_VALUE;
-        else if (insn_idcode_select & state_shift_dr)
+        else if (insn_idcode_select & state_shift_dr) begin
             idcode_reg <= {tdi, idcode_reg[31:1]};
+            //$display("JTAG TAP IDCODE Shift-DR %h", idcode_reg);
+        end
     end
 
     assign idcode_tdo = idcode_reg[0];
@@ -115,7 +118,7 @@ module JtagTapDRegs #(
             bypass_reg <= tdi;
     end
 
-    assign bypassed_tdo = bypass_reg;
+    assign bypass_tdo = bypass_reg;
 
 
 endmodule

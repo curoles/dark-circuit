@@ -21,11 +21,12 @@ module JtagTapInsnReg #(
     input  wire state_capture_ir,
     input  wire state_shift_ir,
     input  wire state_update_ir,
-    output reg  insn_tdo
+    output reg  insn_tdo,
+    output reg  [WIDTH-1:0]  latched_jtag_ir // Insn Reg latched on negedge of TCK
 );
 
     reg [WIDTH-1:0]  jtag_ir;         // Instruction register
-    reg [WIDTH-1:0]  latched_jtag_ir; // Insn Reg latched on negedge of TCK
+    //reg [WIDTH-1:0]  latched_jtag_ir; // Insn Reg latched on negedge of TCK
 
     always @(posedge tck) begin
         if (trst == 1)
