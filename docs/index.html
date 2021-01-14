@@ -1618,7 +1618,13 @@ formed by the values that were shifted into the scan chain.</p>
             cdp_cmd_rd   <= ~cdpacc_reg[0];
             cdp_cmd_op   <=  cdpacc_reg[3:1];
             cdp_cmd_data <=  cdpacc_reg[35:4];
+
+            $display("CDP Update-DR %b", $time, cdpacc_reg[3:1]);
         end
+    end
+
+    always_comb begin
+        if (insn_cdpacc_select) $display("CDPACC select ------------------");
     end
 
     // cdp_req synchronized to Memory Interface clock
@@ -1784,7 +1790,7 @@ Module "DbgAccPort", blocks/JtagCoreDbg/rtl/DbgAccPort.sv
 </table>
 
 <p>Debug Access Port (DAP).</p>
-<p>Authors: Igor Lesik 2021</p>
+<p>Author: Igor Lesik 2021</p>
 <p>Debug Access Port (DAP) is an implementation of Debug Interface.
 DAP provides external debugger with a standard interface to access
 Core debug facilities.</p>
@@ -2721,6 +2727,7 @@ Module "JtagTapDRegs", blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv
         if (state_shift_ir)
             tdo_mux = insn_tdo;
         else begin
+            $display("%t JTAG IR=%h", $time, latched_jtag_ir);
             case (latched_jtag_ir)
                 INSN_IDCODE:         tdo_mux = idcode_tdo;
                 INSN_DEBUG:          tdo_mux = debug_tdo;

@@ -3,3 +3,4 @@ ApbBfm.sv
 Tester.sv
 Env.sv
 TestBypass.sv
+TestApbWrite.sv

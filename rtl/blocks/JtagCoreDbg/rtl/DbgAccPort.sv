@@ -1,6 +1,6 @@
 /* Debug Access Port (DAP).
  *
- * Authors: Igor Lesik 2021
+ * Author: Igor Lesik 2021
  *
  * Debug Access Port (DAP) is an implementation of Debug Interface.
  * DAP provides external debugger with a standard interface to access

@@ -146,7 +146,13 @@ module CoreDbgPort #(
             cdp_cmd_rd   <= ~cdpacc_reg[0];
             cdp_cmd_op   <=  cdpacc_reg[3:1];
             cdp_cmd_data <=  cdpacc_reg[35:4];
+
+            $display("CDP Update-DR %b", $time, cdpacc_reg[3:1]);
         end
+    end
+
+    always_comb begin
+        if (insn_cdpacc_select) $display("CDPACC select ------------------");
     end
 
     // cdp_req synchronized to Memory Interface clock

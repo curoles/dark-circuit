@@ -70,6 +70,7 @@ module JtagTapDRegs #(
         if (state_shift_ir)
             tdo_mux = insn_tdo;
         else begin
+            $display("%t JTAG IR=%h", $time, latched_jtag_ir);
             case (latched_jtag_ir)
                 INSN_IDCODE:         tdo_mux = idcode_tdo;
                 INSN_DEBUG:          tdo_mux = debug_tdo;

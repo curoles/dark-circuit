@@ -18,6 +18,7 @@ set(TB_FLIST
 
 set(TB_UVM_TESTS
     TestBypass
+    TestApbWrite
 )
 
 include(${DARKCIRCUIT_SOURCE_DIR}/tools/eda/xcelium/simple_test.cmake)

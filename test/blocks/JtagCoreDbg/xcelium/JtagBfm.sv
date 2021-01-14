@@ -46,6 +46,22 @@ interface JtagBfm;
         tick4(2'b00,2'b10,2'b00,2'b00);
     endtask
 
+    task go_idle_to_shift_dr();
+        tick4(2'b00,2'b10,2'b00,2'b00);
+    endtask
+
+    task go_shift_to_update_dr();
+        tick(2'b10); tick(2'b10);
+    endtask
+
+    task go_exit_ir_to_idle();
+        tick(2'b10); tick(2'b00);
+    endtask
+
+    task go_capture_dr();
+        tick(2'b00); tick(2'b10); tick(2'b00);
+    endtask
+
     task do_ir_idcode();
         tick8(2'b00,2'b01,2'b00,2'b00,2'b00,2'b00,2'b00,2'b10);
     endtask
@@ -54,8 +70,20 @@ interface JtagBfm;
         tick8(2'b01,2'b01,2'b01,2'b01,2'b01,2'b01,2'b01,2'b11);
     endtask
 
+    //CDPACC = 8'b0000_0101;
+    task do_ir_cdpacc();
+        tick8(2'b01,2'b00,2'b01,2'b00,2'b00,2'b00,2'b00,2'b10);
+    endtask
+
     task do_reset_5tms();
         tick5(2'b10,2'b10,2'b10,2'b10,2'b10);
+    endtask
+
+    task do_shiftin_int32(input bit [31:0] d);
+        for (integer i = 0; i < 32; i++) begin
+            //$display("%t JTAG shiftin %b", $time, d[i]);
+            tick({d[i], 1'b0});
+        end
     endtask
 
 endinterface: JtagBfm
