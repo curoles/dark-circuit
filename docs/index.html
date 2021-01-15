@@ -1256,6 +1256,33 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
     </td>
     </tr>
 
+    <tr>
+    <td>core_dbg_req</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>core_dbg_wr_rd</td> <td>output</td> <td>reg</td>
+    <td>
+     Debug register write/read request
+    </td>
+    </tr>
+
+    <tr>
+    <td>core_dbg_addr</td> <td>output</td> <td>reg [APB_ADDR_WIDTH-1:0]</td>
+    <td>
+     Debug register address
+    </td>
+    </tr>
+
+    <tr>
+    <td>core_dbg_wdata</td> <td>output</td> <td>reg [APB_WDATA_WIDTH-1:0]</td>
+    <td>
+     Debug register write data
+    </td>
+    </tr>
+
 </table>
 
 <p>Core Debug APB bus interface.</p>
@@ -1280,8 +1307,13 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
 
     // Signals driven by current Slave
     output reg                   ready, // slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
-    output reg [APB_RDATA_WIDTH-1:0] rdata
+    output reg [APB_RDATA_WIDTH-1:0] rdata,
     // not implemented slave_err
+
+    output reg                       core_dbg_req,
+    output reg                       core_dbg_wr_rd, // Debug register write/read request
+    output reg [APB_ADDR_WIDTH-1:0]  core_dbg_addr,  // Debug register address
+    output reg [APB_WDATA_WIDTH-1:0] core_dbg_wdata  // Debug register write data
 );
 
     assign ready = 1; // TODO check later if Dbg Logic may need extended transfers
@@ -1293,14 +1325,19 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
     begin
         if (!rst_n) begin
             state <= IDLE;
+            core_dbg_req <= 0;
         end else begin
             case (state)
                 IDLE: begin
                     state <= sel? (wr_rd? WRITE:READ) : IDLE;
+                    core_dbg_req <= 0;
                 end
                 WRITE: begin
                     if (sel && wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
-                        // write to Dbg Page using addr and wdata
+                        core_dbg_req   <= 1;
+                        core_dbg_wr_rd <= 1;
+                        core_dbg_addr  <= addr;
+                        core_dbg_wdata <= wdata;
                     end
                     state <= IDLE;
                 end
@@ -1312,6 +1349,7 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
                 end
                 default: begin
                     state <= IDLE;
+                    core_dbg_req <= 0;
                 end
             endcase
         end
@@ -1603,6 +1641,7 @@ formed by the values that were shifted into the scan chain.</p>
             cdpacc_reg <= 'h0;
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_shift_dr) begin
+            //$display("%t CDPACC shift-in %b", $time, {tdi, cdpacc_reg[WIDTH-1:1]});
             cdpacc_reg <= {tdi, cdpacc_reg[WIDTH-1:1]};
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_capture_dr) begin
@@ -1619,12 +1658,8 @@ formed by the values that were shifted into the scan chain.</p>
             cdp_cmd_op   <=  cdpacc_reg[3:1];
             cdp_cmd_data <=  cdpacc_reg[35:4];
 
-            $display("CDP Update-DR %b", $time, cdpacc_reg[3:1]);
+            $display("%t CDP Update-DR %b", $time, cdpacc_reg[3:1]);
         end
-    end
-
-    always_comb begin
-        if (insn_cdpacc_select) $display("CDPACC select ------------------");
     end
 
     // cdp_req synchronized to Memory Interface clock
@@ -1673,21 +1708,21 @@ formed by the values that were shifted into the scan chain.</p>
     begin
         if (memi_rst)
             memi_sel <= 'h0;
-        else if (memi_req)
-            memi_sel <= 1;// FIXME TODO decode cdp_dr_select;
-        else
-            memi_sel <= 'h0;
-    end
- 
-    always_ff @(posedge memi_clk)
-    begin
-        if (memi_req)
-        begin
+        else if (memi_req) begin
+            $display("%t MEMI REQ WR/RD=%b addr=%h data=%h",
+                $time, cdp_cmd_wr, cdp_dr_taddr, cdp_dr_dtr);
+            memi_sel   <= 1;// FIXME TODO decode cdp_dr_select;
             memi_addr  <= cdp_dr_taddr;
             memi_wdata <= cdp_dr_dtr;
             memi_wr_rd <= cdp_cmd_wr;
+        end else begin
+            memi_sel   <= 'h0;
+            memi_addr  <= 'h0;
+            memi_wdata <= 'h0;
+            memi_wr_rd <= 0;
         end
     end
+ 
 
 endmodule</code></pre>
 
@@ -1841,7 +1876,8 @@ Core debug facilities.</p>
         .state_test_logic_reset,
         .state_capture_dr,
         .state_shift_dr,
-        .state_update_dr
+        .state_update_dr,
+        .insn_cdpacc_select
     );
 
     CoreDbgPort _cdp(
@@ -2336,6 +2372,12 @@ Module "JtagTap", blocks/JtagCoreDbg/rtl/JtagTap.sv
     </td>
     </tr>
 
+    <tr>
+    <td>insn_cdpacc_select</td> <td>output</td> <td>reg</td>
+    <td>
+    </td>
+    </tr>
+
 </table>
 
 <p>JTAG device TAP.</p>
@@ -2400,7 +2442,9 @@ or to read data from the instruction or data registers.</p>
     output reg  state_test_logic_reset,
     output reg  state_capture_dr,
     output reg  state_shift_dr,
-    output reg  state_update_dr
+    output reg  state_update_dr,
+
+    output reg  insn_cdpacc_select
 );
 
     wire insn_tdo; // TAP InsnReg TDO wire
@@ -2427,7 +2471,7 @@ or to read data from the instruction or data registers.</p>
     wire insn_debug_select;
     wire insn_bypass_select;
     wire insn_jdpacc_select;
-    wire insn_cdpacc_select;
+    //wire insn_cdpacc_select;
 
     wire [INSN_WIDTH-1:0] latched_jtag_ir;
     wire [STATE_WIDTH-1:0] state;
@@ -2727,7 +2771,7 @@ Module "JtagTapDRegs", blocks/JtagCoreDbg/rtl/JtagTapDRegs.sv
         if (state_shift_ir)
             tdo_mux = insn_tdo;
         else begin
-            $display("%t JTAG IR=%h", $time, latched_jtag_ir);
+            //$display("%t JTAG IR=%h", $time, latched_jtag_ir);
             case (latched_jtag_ir)
                 INSN_IDCODE:         tdo_mux = idcode_tdo;
                 INSN_DEBUG:          tdo_mux = debug_tdo;

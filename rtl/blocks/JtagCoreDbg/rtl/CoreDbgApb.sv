@@ -25,8 +25,13 @@ module CoreDbgApb #(
 
     // Signals driven by current Slave
     output reg                   ready, // slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
-    output reg [APB_RDATA_WIDTH-1:0] rdata
+    output reg [APB_RDATA_WIDTH-1:0] rdata,
     // not implemented slave_err
+
+    output reg                       core_dbg_req,
+    output reg                       core_dbg_wr_rd, // Debug register write/read request
+    output reg [APB_ADDR_WIDTH-1:0]  core_dbg_addr,  // Debug register address
+    output reg [APB_WDATA_WIDTH-1:0] core_dbg_wdata  // Debug register write data
 );
 
     assign ready = 1; // TODO check later if Dbg Logic may need extended transfers
@@ -38,14 +43,19 @@ module CoreDbgApb #(
     begin
         if (!rst_n) begin
             state <= IDLE;
+            core_dbg_req <= 0;
         end else begin
             case (state)
                 IDLE: begin
                     state <= sel? (wr_rd? WRITE:READ) : IDLE;
+                    core_dbg_req <= 0;
                 end
                 WRITE: begin
                     if (sel && wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
-                        // write to Dbg Page using addr and wdata
+                        core_dbg_req   <= 1;
+                        core_dbg_wr_rd <= 1;
+                        core_dbg_addr  <= addr;
+                        core_dbg_wdata <= wdata;
                     end
                     state <= IDLE;
                 end
@@ -57,6 +67,7 @@ module CoreDbgApb #(
                 end
                 default: begin
                     state <= IDLE;
+                    core_dbg_req <= 0;
                 end
             endcase
         end

@@ -131,6 +131,7 @@ module CoreDbgPort #(
             cdpacc_reg <= 'h0;
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_shift_dr) begin
+            //$display("%t CDPACC shift-in %b", $time, {tdi, cdpacc_reg[WIDTH-1:1]});
             cdpacc_reg <= {tdi, cdpacc_reg[WIDTH-1:1]};
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_capture_dr) begin
@@ -147,12 +148,8 @@ module CoreDbgPort #(
             cdp_cmd_op   <=  cdpacc_reg[3:1];
             cdp_cmd_data <=  cdpacc_reg[35:4];
 
-            $display("CDP Update-DR %b", $time, cdpacc_reg[3:1]);
+            $display("%t CDP Update-DR %b", $time, cdpacc_reg[3:1]);
         end
-    end
-
-    always_comb begin
-        if (insn_cdpacc_select) $display("CDPACC select ------------------");
     end
 
     // cdp_req synchronized to Memory Interface clock
@@ -201,20 +198,20 @@ module CoreDbgPort #(
     begin
         if (memi_rst)
             memi_sel <= 'h0;
-        else if (memi_req)
-            memi_sel <= 1;// FIXME TODO decode cdp_dr_select;
-        else
-            memi_sel <= 'h0;
-    end
- 
-    always_ff @(posedge memi_clk)
-    begin
-        if (memi_req)
-        begin
+        else if (memi_req) begin
+            $display("%t MEMI REQ WR/RD=%b addr=%h data=%h",
+                $time, cdp_cmd_wr, cdp_dr_taddr, cdp_dr_dtr);
+            memi_sel   <= 1;// FIXME TODO decode cdp_dr_select;
             memi_addr  <= cdp_dr_taddr;
             memi_wdata <= cdp_dr_dtr;
             memi_wr_rd <= cdp_cmd_wr;
+        end else begin
+            memi_sel   <= 'h0;
+            memi_addr  <= 'h0;
+            memi_wdata <= 'h0;
+            memi_wr_rd <= 0;
         end
     end
+ 
 
 endmodule: CoreDbgPort

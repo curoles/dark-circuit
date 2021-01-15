@@ -75,7 +75,9 @@ module JtagTap #(
     output reg  state_test_logic_reset,
     output reg  state_capture_dr,
     output reg  state_shift_dr,
-    output reg  state_update_dr
+    output reg  state_update_dr,
+
+    output reg  insn_cdpacc_select
 );
 
     wire insn_tdo; // TAP InsnReg TDO wire
@@ -102,7 +104,7 @@ module JtagTap #(
     wire insn_debug_select;
     wire insn_bypass_select;
     wire insn_jdpacc_select;
-    wire insn_cdpacc_select;
+    //wire insn_cdpacc_select;
 
     wire [INSN_WIDTH-1:0] latched_jtag_ir;
     wire [STATE_WIDTH-1:0] state;

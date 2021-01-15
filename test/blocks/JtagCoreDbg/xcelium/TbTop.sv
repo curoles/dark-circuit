@@ -18,6 +18,10 @@ module TestCore #(
     output reg apb_ready, // slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
     output reg [APB_RDATA_WIDTH-1:0] apb_rdata
 );
+    wire                       core_dbg_req;   // Debug request
+    wire                       core_dbg_wr_rd; // Debug register write/read request
+    wire [APB_ADDR_WIDTH-1:0]  core_dbg_addr;  // Debug register address
+    wire [APB_WDATA_WIDTH-1:0] core_dbg_wdata; // Debug register write data
 
     CoreDbgApb#(
         .APB_ADDR_WIDTH(APB_ADDR_WIDTH),
@@ -33,8 +37,26 @@ module TestCore #(
         .wdata(apb_wdata),
         .wstrobe(4'b1111),
         .ready(apb_ready),
-        .rdata(apb_rdata)
+        .rdata(apb_rdata),
+        .core_dbg_req,
+        .core_dbg_wr_rd,
+        .core_dbg_addr,
+        .core_dbg_wdata
     );
+
+    always_comb begin
+        if (apb_sel) $display("%t Core APB select", $time);
+    end
+
+    always @(posedge clk)
+    begin
+        if (core_dbg_req) begin
+            if (core_dbg_wr_rd)
+                $display("%t Core Debug write addr=%h val=%h", $time, core_dbg_addr, core_dbg_wdata);
+            else
+                $display("%t Core Debug read addr=%h", $time, core_dbg_addr);
+        end
+    end
 
 endmodule: TestCore
 
@@ -43,28 +65,28 @@ endmodule: TestCore
 module TbTop (
 
 );
-    JtagBfm _jtag_bfm();
-
-    ApbBfm#(
-        .ADDR_WIDTH(5),
-        .WDATA_WIDTH(32),
-        .RDATA_WIDTH(32),
-        .NR_SLAVES(1)
-    )  _apb_bfm();
-
     localparam NR_CORES = 1;
     localparam APB_ADDR_WIDTH = 5;
     localparam APB_WDATA_WIDTH = 32;
     localparam APB_RDATA_WIDTH = 32;
 
-    wire clk, rst;
+    JtagBfm _jtag_bfm();
 
-    wire [APB_ADDR_WIDTH-1:0]  apb_addr;
-    wire [NR_CORES-1:0]        apb_sel;
-    wire                       apb_wr_rd;
-    wire [APB_WDATA_WIDTH-1:0] apb_wdata;
-    wire                       apb_enable;
-    wire                       apb_ready, apb_slave_ready;
+    ApbBfm#(
+        .ADDR_WIDTH(APB_ADDR_WIDTH),
+        .WDATA_WIDTH(APB_WDATA_WIDTH),
+        .RDATA_WIDTH(APB_RDATA_WIDTH),
+        .NR_SLAVES(NR_CORES)
+    )  _apb_bfm();
+
+
+    wire clk, rst, rst_n;
+
+    assign clk = _apb_bfm.clk;
+    assign rst = ~_apb_bfm.rst_n;
+    assign rst_n = _apb_bfm.rst_n;
+
+    wire apb_slave_ready;
 
     DbgAccPort#(
         .MEMI_NR_SLAVES(NR_CORES),
@@ -78,10 +100,10 @@ module TbTop (
         .tdo (_jtag_bfm.tdo),
         .memi_clk(clk),
         .memi_rst(rst),
-        .memi_addr(apb_addr),
-        .memi_sel(apb_sel),
-        .memi_wr_rd(apb_wr_rd),
-        .memi_wdata(apb_wdata)
+        .memi_addr (_apb_bfm.addr),
+        .memi_sel  (_apb_bfm.sel),
+        .memi_wr_rd(_apb_bfm.wr_rd),
+        .memi_wdata(_apb_bfm.wdata)
     );
 
     reg [APB_RDATA_WIDTH-1:0] core_apb_data_out[NR_CORES];
@@ -92,14 +114,14 @@ module TbTop (
         .APB_RDATA_WIDTH(APB_RDATA_WIDTH)
     ) _core(
         .clk(clk),
-        .rst_n(~rst),
-        .apb_addr(apb_addr),
-        .apb_sel(apb_sel),
-        .apb_enable(apb_enable),
-        .apb_wr_rd(apb_wr_rd),
-        .apb_wdata(apb_wdata),
-        .apb_ready(apb_slave_ready),
-        .apb_rdata(core_apb_data_out[0])
+        .rst_n(rst_n),
+        .apb_addr  (_apb_bfm.addr),
+        .apb_sel   (_apb_bfm.sel),
+        .apb_enable(_apb_bfm.enable),
+        .apb_wr_rd (_apb_bfm.wr_rd),
+        .apb_wdata (_apb_bfm.wdata),
+        .apb_ready (apb_slave_ready),
+        .apb_rdata (core_apb_data_out[0])
     );
 
     DbgApbBus#(
@@ -109,15 +131,15 @@ module TbTop (
         .NR_SLAVES(NR_CORES)
     ) _apb_bus(
         .clk(clk),
-        .rst_n(~rst),
-        .addr(apb_addr),
-        .sel(apb_sel),       // slave is selected and data transfer is required
-        .enable(apb_enable),  // indicates the second+ cycles of an APB transfer
-        .wr_rd(apb_wr_rd),   // direction=HIGH? wr:rd
-        .wdata(apb_wdata),   // driven by Bridge when wr_rd=HIGH
+        .rst_n(rst_n),
+        .addr(_apb_bfm.addr),
+        .sel(_apb_bfm.sel),       // slave is selected and data transfer is required
+        .enable(_apb_bfm.enable),  // indicates the second+ cycles of an APB transfer
+        .wr_rd(_apb_bfm.wr_rd),   // direction=HIGH? wr:rd
+        .wdata(_apb_bfm.wdata),   // driven by Bridge when wr_rd=HIGH
         .wstrobe(4'b1111),    // which byte lanes to update during a write transfer wdata[(8n + 7):(8n)]
-        .ready(apb_ready), // slave uses this signal to extend an APB transfer
-        .rdata(apb_rdata),
+        .ready(_apb_bfm.ready), // slave uses this signal to extend an APB transfer
+        .rdata(_apb_bfm.rdata),
         .s2m_ready(apb_slave_ready),
         .s2m_data(core_apb_data_out)
     );

@@ -50,8 +50,8 @@ interface JtagBfm;
         tick4(2'b00,2'b10,2'b00,2'b00);
     endtask
 
-    task go_shift_to_update_dr();
-        tick(2'b10); tick(2'b10);
+    task go_exit1_to_update_dr();
+        tick(2'b10);
     endtask
 
     task go_exit_ir_to_idle();
@@ -82,7 +82,7 @@ interface JtagBfm;
     task do_shiftin_int32(input bit [31:0] d);
         for (integer i = 0; i < 32; i++) begin
             //$display("%t JTAG shiftin %b", $time, d[i]);
-            tick({d[i], 1'b0});
+            if (i==31) tick({1'b1, d[i]}); else tick({1'b0, d[i]});
         end
     endtask
 

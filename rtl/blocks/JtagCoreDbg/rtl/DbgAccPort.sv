@@ -52,7 +52,8 @@ module DbgAccPort #(
         .state_test_logic_reset,
         .state_capture_dr,
         .state_shift_dr,
-        .state_update_dr
+        .state_update_dr,
+        .insn_cdpacc_select
     );
 
     CoreDbgPort _cdp(
