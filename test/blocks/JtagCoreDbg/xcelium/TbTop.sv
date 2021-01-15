@@ -44,9 +44,9 @@ module TestCore #(
         .core_dbg_wdata
     );
 
-    always_comb begin
-        if (apb_sel) $display("%t Core APB select", $time);
-    end
+    //always_comb begin
+    //    if (apb_sel) $display("%t Core APB select", $time);
+    //end
 
     always @(posedge clk)
     begin

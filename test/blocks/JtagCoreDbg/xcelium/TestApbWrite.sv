@@ -65,10 +65,10 @@ class TestApbWrite extends uvm_test;
         // Shift reply out
         $display("%t Set state=Shift-DR", $time);
         _jtag.tick(2'b00);
-        //repeat(32) begin
-        //    @(posedge _jtag.tck);
-        //    $display("%t TDO:%b", $time, _jtag.tdo);
-        //end
+        repeat(5/*32*/) begin
+            @(posedge _jtag.tck);
+            $display("%t TDO:%b", $time, _jtag.tdo);
+        end
 
         phase.drop_objection(this);
     endtask: run_phase

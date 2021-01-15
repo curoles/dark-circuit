@@ -149,6 +149,8 @@ module CoreDbgPort #(
             cdp_cmd_data <=  cdpacc_reg[35:4];
 
             $display("%t CDP Update-DR %b", $time, cdpacc_reg[3:1]);
+        end else begin
+            cdp_req <= 0;
         end
     end
 
