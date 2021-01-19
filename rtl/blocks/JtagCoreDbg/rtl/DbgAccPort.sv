@@ -14,7 +14,8 @@
 module DbgAccPort #(
     parameter MEMI_NR_SLAVES=1,
     parameter MEMI_ADDR_WIDTH=5,
-    parameter MEMI_WDATA_WIDTH=32
+    parameter MEMI_WDATA_WIDTH=32,
+    parameter MEMI_RDATA_WIDTH=32
 )(
     input  wire tck,   // test clock
     input  wire trst,  // test reset
@@ -27,7 +28,8 @@ module DbgAccPort #(
     output reg  [MEMI_ADDR_WIDTH-1:0]  memi_addr,
     output reg  [MEMI_NR_SLAVES-1:0]   memi_sel,
     output reg                         memi_wr_rd,
-    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata
+    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata,
+    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata
 );
 
     wire jdpacc_tdo;
@@ -74,7 +76,8 @@ module DbgAccPort #(
         .memi_addr,
         .memi_sel,
         .memi_wr_rd,
-        .memi_wdata
+        .memi_wdata,
+        .memi_rdata
     );
 
 endmodule: DbgAccPort

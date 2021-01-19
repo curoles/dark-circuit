@@ -56,9 +56,10 @@
  * </script>
  */
 module CoreDbgPort #(
-    parameter MEMI_NR_SLAVES=1,
-    parameter MEMI_ADDR_WIDTH=5,
-    parameter MEMI_WDATA_WIDTH=32
+    parameter MEMI_NR_SLAVES   = 1,
+    parameter MEMI_ADDR_WIDTH  = 5,
+    parameter MEMI_WDATA_WIDTH = 32,
+    parameter MEMI_RDATA_WIDTH = 32
 )(
     input  wire tck,        // test clock
     input  wire trst,       // test reset
@@ -79,7 +80,8 @@ module CoreDbgPort #(
     output reg  [MEMI_ADDR_WIDTH-1:0]  memi_addr,
     output reg  [MEMI_NR_SLAVES-1:0]   memi_sel, // slave selected & data transfer required
     output reg                         memi_wr_rd, // direction=HIGH? wr:rd
-    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata
+    output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata,
+    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata
 );
 
     localparam WIDTH = 36;
@@ -156,6 +158,7 @@ module CoreDbgPort #(
 
     // cdp_req synchronized to Memory Interface clock
     reg memi_req;
+    reg memi_req_d1; // signals MUST be stable for 2 clocks on APB
 
     Jtag2MemiSync _jtag2memi_sync(
         .src_clk(tck),      // Source domain slow clock
@@ -198,22 +201,35 @@ module CoreDbgPort #(
     //
     always_ff @(posedge memi_clk)
     begin
-        if (memi_rst)
+        if (memi_rst) begin
             memi_sel <= 'h0;
-        else if (memi_req) begin
+            memi_req_d1 <= 0;
+        end else if (memi_req) begin
             $display("%t MEMI REQ WR/RD=%b addr=%h data=%h",
                 $time, cdp_cmd_wr, cdp_dr_taddr, cdp_dr_dtr);
-            memi_sel   <= 1;// FIXME TODO decode cdp_dr_select;
-            memi_addr  <= cdp_dr_taddr;
-            memi_wdata <= cdp_dr_dtr;
-            memi_wr_rd <= cdp_cmd_wr;
+            memi_sel    <= 1;// FIXME TODO decode cdp_dr_select;
+            memi_addr   <= cdp_dr_taddr;
+            memi_wdata  <= cdp_dr_dtr;
+            memi_wr_rd  <= cdp_cmd_wr;
+            memi_req_d1 <= 1;
+        end else if (memi_req_d1) begin
+            memi_req_d1 <= 0;
+            memi_sel    <= memi_sel;
+            memi_addr   <= memi_addr;
+            memi_wdata  <= memi_wdata;
+            memi_wr_rd  <= memi_wr_rd;
         end else begin
-            memi_sel   <= 'h0;
-            memi_addr  <= 'h0;
-            memi_wdata <= 'h0;
-            memi_wr_rd <= 0;
+            memi_sel    <= 'h0;
+            memi_addr   <= 'h0;
+            memi_wdata  <= 'h0;
+            memi_wr_rd  <= 0;
+            memi_req_d1 <= 0;
         end
     end
  
+    always_comb
+    begin
+         $display("%t CDP read %h", $time, memi_rdata);
+    end
 
 endmodule: CoreDbgPort

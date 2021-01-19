@@ -47,6 +47,7 @@ module CoreDbgApb #(
         end else begin
             case (state)
                 IDLE: begin
+                    if (sel) $display("%t Core Dbg Apb Slave selected", $time);
                     state <= sel? (wr_rd? WRITE:READ) : IDLE;
                     core_dbg_req <= 0;
                 end
@@ -56,12 +57,17 @@ module CoreDbgApb #(
                         core_dbg_wr_rd <= 1;
                         core_dbg_addr  <= addr;
                         core_dbg_wdata <= wdata;
+                        $display("%t Core Dbg Apb write[%h]=%h", $time, addr, wdata);
                     end
                     state <= IDLE;
                 end
                 READ: begin
                     if (sel && !wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
-                        // read to rdata from Dbg Page using addr
+                        core_dbg_req   <= 1;
+                        core_dbg_wr_rd <= 0;
+                        core_dbg_addr  <= addr;
+                        $display("%t Core Dbg Apb read[%h]=", $time, addr);
+                        rdata <= 32'h123;
                     end
                     state <= IDLE;
                 end

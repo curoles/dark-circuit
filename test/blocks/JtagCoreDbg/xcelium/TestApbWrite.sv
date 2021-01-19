@@ -65,7 +65,23 @@ class TestApbWrite extends uvm_test;
         // Shift reply out
         $display("%t Set state=Shift-DR", $time);
         _jtag.tick(2'b00);
-        repeat(5/*32*/) begin
+        $display("%t shift-out reply, shift-in TDR+R", $time);
+        _jtag.tick4(2'b00, 2'b00, 2'b01, 2'b00); // [0] 0=R [3:1] 010==DTR
+        _jtag.do_shiftin_int32(32'h00000000);
+
+        // Trigger APB transaction
+        $display("%t Set state=Update-DR, trigger APB transaction", $time);
+        _jtag.go_exit1_to_update_dr();
+
+        // Read reply
+        $display("%t Set state=Capture-DR", $time);
+        _jtag.tick(2'b10); _jtag.tick(2'b00);
+
+        // Shift reply out
+        $display("%t Set state=Shift-DR, read reply of reading Debug register", $time);
+        _jtag.tick(2'b00);
+
+        repeat(8/*32*/) begin
             @(posedge _jtag.tck);
             $display("%t TDO:%b", $time, _jtag.tdo);
         end

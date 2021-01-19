@@ -44,17 +44,22 @@ module TestCore #(
         .core_dbg_wdata
     );
 
-    //always_comb begin
+    always_comb begin
     //    if (apb_sel) $display("%t Core APB select", $time);
-    //end
+        $display("%t APB slave rdata %h", $time, apb_rdata);
+    end
+
+    reg [31:0] dbg_reg[32];
 
     always @(posedge clk)
     begin
         if (core_dbg_req) begin
-            if (core_dbg_wr_rd)
+            if (core_dbg_wr_rd) begin
                 $display("%t Core Debug write addr=%h val=%h", $time, core_dbg_addr, core_dbg_wdata);
-            else
+                dbg_reg[core_dbg_addr] <= core_dbg_wdata;
+            end else begin
                 $display("%t Core Debug read addr=%h", $time, core_dbg_addr);
+            end
         end
     end
 
@@ -103,7 +108,8 @@ module TbTop (
         .memi_addr (_apb_bfm.addr),
         .memi_sel  (_apb_bfm.sel),
         .memi_wr_rd(_apb_bfm.wr_rd),
-        .memi_wdata(_apb_bfm.wdata)
+        .memi_wdata(_apb_bfm.wdata),
+        .memi_rdata(_apb_bfm.rdata)
     );
 
     reg [APB_RDATA_WIDTH-1:0] core_apb_data_out[NR_CORES];
@@ -148,6 +154,13 @@ module TbTop (
         uvm_config_db #(virtual JtagBfm)::set(null, "*", "_jtag_bfm", _jtag_bfm);
         uvm_config_db #(virtual  ApbBfm)::set(null, "*", "_apb_bfm", _apb_bfm);
         run_test();
+    end
+
+    always_comb
+    begin
+         $display("%t Top Core APB data out %h", $time, core_apb_data_out[0]);
+         $display("%t Top APB data read %h", $time, _apb_bfm.rdata);
+         $display("%t Top APB sel %h", $time, _apb_bfm.sel);
     end
 
 endmodule: TbTop
