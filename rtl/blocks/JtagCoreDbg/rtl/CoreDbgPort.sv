@@ -81,7 +81,8 @@ module CoreDbgPort #(
     output reg  [MEMI_NR_SLAVES-1:0]   memi_sel, // slave selected & data transfer required
     output reg                         memi_wr_rd, // direction=HIGH? wr:rd
     output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata,
-    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata
+    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata,
+    input  wire                        memi_ready
 );
 
     localparam WIDTH = 36;
@@ -196,6 +197,7 @@ module CoreDbgPort #(
         end
     end
 
+    reg memi_wait_rd_reply;
 
     // APB transaction starts when one-hot bit of `memi_sel` is HIGH.
     //
@@ -219,17 +221,33 @@ module CoreDbgPort #(
             memi_wdata  <= memi_wdata;
             memi_wr_rd  <= memi_wr_rd;
         end else begin
-            memi_sel    <= 'h0;
+            memi_sel    <= memi_wait_rd_reply & ~memi_ready;
             memi_addr   <= 'h0;
             memi_wdata  <= 'h0;
             memi_wr_rd  <= 0;
             memi_req_d1 <= 0;
         end
     end
- 
-    always_comb
+
+
+    always_ff @(posedge memi_clk)
     begin
-         $display("%t CDP read %h", $time, memi_rdata);
+        if (memi_rst) begin
+            memi_wait_rd_reply <= 0;
+        end else begin
+            if (memi_wait_rd_reply) begin
+                memi_wait_rd_reply <= ~memi_ready;
+                if (memi_ready)
+                    $display("%t CDP: APB read reply %h", $time, memi_rdata);
+                else
+                    $display("%t CDP: waiting for APB ready HIGH", $time);
+            end else begin
+                memi_wait_rd_reply <= memi_sel & ~memi_wr_rd;
+                if (memi_sel & ~memi_wr_rd)
+                    $display("%t CDP: Enter wait-rd-reply state", $time);
+            end
+        end
     end
+
 
 endmodule: CoreDbgPort

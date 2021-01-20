@@ -1283,6 +1283,18 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
     </td>
     </tr>
 
+    <tr>
+    <td>core_dbg_rdata</td> <td>input</td> <td>wire [APB_RDATA_WIDTH-1:0]</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
+    <td>core_dbg_rd_ready</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
 </table>
 
 <p>Core Debug APB bus interface.</p>
@@ -1307,16 +1319,16 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
 
     // Signals driven by current Slave
     output reg                   ready, // slave uses this signal to extend an APB transfer, when ready is LOW the transfer extended
-    output reg [APB_RDATA_WIDTH-1:0] rdata,
+    output reg  [APB_RDATA_WIDTH-1:0] rdata,
     // not implemented slave_err
 
-    output reg                       core_dbg_req,
-    output reg                       core_dbg_wr_rd, // Debug register write/read request
-    output reg [APB_ADDR_WIDTH-1:0]  core_dbg_addr,  // Debug register address
-    output reg [APB_WDATA_WIDTH-1:0] core_dbg_wdata  // Debug register write data
+    output reg                        core_dbg_req,
+    output reg                        core_dbg_wr_rd, // Debug register write/read request
+    output reg  [APB_ADDR_WIDTH-1:0]  core_dbg_addr,  // Debug register address
+    output reg  [APB_WDATA_WIDTH-1:0] core_dbg_wdata, // Debug register write data
+    input  wire [APB_RDATA_WIDTH-1:0] core_dbg_rdata,
+    input  wire                       core_dbg_rd_ready
 );
-
-    assign ready = 1; // TODO check later if Dbg Logic may need extended transfers
 
     reg [1:0] state;
     localparam [1:0] IDLE=0, WRITE=1, READ=2;
@@ -1326,36 +1338,49 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
         if (!rst_n) begin
             state <= IDLE;
             core_dbg_req <= 0;
+            ready <= 1;
         end else begin
             case (state)
                 IDLE: begin
-                    if (sel) $display("%t Core Dbg Apb Slave selected", $time);
+                    //if (sel) $display("%t Core Dbg Apb Slave selected", $time);
                     state <= sel? (wr_rd? WRITE:READ) : IDLE;
-                    core_dbg_req <= 0;
+                    core_dbg_req   <= sel;
+                    core_dbg_wr_rd <= wr_rd;
+                    core_dbg_addr  <= addr;
+                    core_dbg_wdata <= wdata;
+                    rdata <= 32'h0000_0000; //FIXME
+                    ready <= ~sel | (sel & wr_rd) ;
                 end
                 WRITE: begin
                     if (sel && wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
-                        core_dbg_req   <= 1;
+                        core_dbg_req   <= 0;
                         core_dbg_wr_rd <= 1;
                         core_dbg_addr  <= addr;
                         core_dbg_wdata <= wdata;
-                        $display("%t Core Dbg Apb write[%h]=%h", $time, addr, wdata);
+                        ready <= 1;
+                        //$display("%t Core Dbg Apb write[%h]=%h", $time, addr, wdata);
                     end
                     state <= IDLE;
                 end
                 READ: begin
-                    if (sel && !wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
-                        core_dbg_req   <= 1;
-                        core_dbg_wr_rd <= 0;
-                        core_dbg_addr  <= addr;
-                        $display("%t Core Dbg Apb read[%h]=", $time, addr);
-                        rdata <= 32'h123;
+                    //if (sel && !wr_rd) begin // sel and other inputs MUST be stable at least 2 cycles
+                    core_dbg_req   <= 0;
+                    core_dbg_wr_rd <= 0;
+                    core_dbg_addr  <= addr;
+                    rdata <= core_dbg_rdata;
+                    ready <= core_dbg_rd_ready;
+                    if (core_dbg_rd_ready) begin
+                        state <= IDLE;
+                        $display("%t CoreDbgApb: read[%h]=%h", $time, addr, core_dbg_rdata);
+                    end else begin
+                        state <= READ;
                     end
-                    state <= IDLE;
+                    //end
                 end
                 default: begin
                     state <= IDLE;
                     core_dbg_req <= 0;
+                    ready <= 1;
                 end
             endcase
         end
@@ -1524,6 +1549,12 @@ Module "CoreDbgPort", blocks/JtagCoreDbg/rtl/CoreDbgPort.sv
     </tr>
 
     <tr>
+    <td>memi_ready</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
+    <tr>
     <td>jdpacc</td> <td>input</td> <td> [WIDTH-1:0]</td>
     <td>
     </td>
@@ -1607,7 +1638,8 @@ formed by the values that were shifted into the scan chain.</p>
     output reg  [MEMI_NR_SLAVES-1:0]   memi_sel, // slave selected & data transfer required
     output reg                         memi_wr_rd, // direction=HIGH? wr:rd
     output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata,
-    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata
+    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata,
+    input  wire                        memi_ready
 );
 
     localparam WIDTH = 36;
@@ -1722,6 +1754,7 @@ formed by the values that were shifted into the scan chain.</p>
         end
     end
 
+    reg memi_wait_rd_reply;
 
     // APB transaction starts when one-hot bit of `memi_sel` is HIGH.
     //
@@ -1745,18 +1778,34 @@ formed by the values that were shifted into the scan chain.</p>
             memi_wdata  <= memi_wdata;
             memi_wr_rd  <= memi_wr_rd;
         end else begin
-            memi_sel    <= 'h0;
+            memi_sel    <= memi_wait_rd_reply & ~memi_ready;
             memi_addr   <= 'h0;
             memi_wdata  <= 'h0;
             memi_wr_rd  <= 0;
             memi_req_d1 <= 0;
         end
     end
- 
-    always_comb
+
+
+    always_ff @(posedge memi_clk)
     begin
-         $display("%t CDP read %h", $time, memi_rdata);
+        if (memi_rst) begin
+            memi_wait_rd_reply <= 0;
+        end else begin
+            if (memi_wait_rd_reply) begin
+                memi_wait_rd_reply <= ~memi_ready;
+                if (memi_ready)
+                    $display("%t CDP: APB read reply %h", $time, memi_rdata);
+                else
+                    $display("%t CDP: waiting for APB ready HIGH", $time);
+            end else begin
+                memi_wait_rd_reply <= memi_sel & ~memi_wr_rd;
+                if (memi_sel & ~memi_wr_rd)
+                    $display("%t CDP: Enter wait-rd-reply state", $time);
+            end
+        end
     end
+
 
 endmodule</code></pre>
 
@@ -1866,6 +1915,12 @@ Module "DbgAccPort", blocks/JtagCoreDbg/rtl/DbgAccPort.sv
     </td>
     </tr>
 
+    <tr>
+    <td>memi_ready</td> <td>input</td> <td>wire</td>
+    <td>
+    </td>
+    </tr>
+
 </table>
 
 <p>Debug Access Port (DAP).</p>
@@ -1897,7 +1952,8 @@ Core debug facilities.</p>
     output reg  [MEMI_NR_SLAVES-1:0]   memi_sel,
     output reg                         memi_wr_rd,
     output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata,
-    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata
+    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata,
+    input  wire                        memi_ready
 );
 
     wire jdpacc_tdo;
@@ -1945,7 +2001,8 @@ Core debug facilities.</p>
         .memi_sel,
         .memi_wr_rd,
         .memi_wdata,
-        .memi_rdata
+        .memi_rdata,
+        .memi_ready
     );
 
 endmodule</code></pre>
@@ -2140,19 +2197,17 @@ signals to APB Bridge.</p>
     // Mux all s2m signals based on currently selected Slave using OR gates.
     // ====================================================================
 
-    wire [NR_SLAVES-1:0]   sel_s2m_ready; // AND2(sel[n], ~s2m_ready[n])
+    wire [NR_SLAVES-1:0]   sel_s2m_ready; // AND2(sel[n], s2m_ready[n])
     wire [RDATA_WIDTH-1:0] sel_s2m_data[NR_SLAVES];
 
     generate
         for (i = 0; i < NR_SLAVES; i = i + 1) begin
-            assign sel_s2m_ready[i] = sel[i] & ~s2m_ready[i];
-            assign sel_s2m_data[i] = {NR_SLAVES{sel[i]}} & s2m_data[i];
+            assign sel_s2m_ready[i] = sel[i] & s2m_ready[i];
+            assign sel_s2m_data[i] = {RDATA_WIDTH{sel[i]}} & s2m_data[i];
         end
     endgenerate
 
-    wire ready_n;
-    assign ready_n = |sel_s2m_ready;
-    assign ready = ~ready;
+    assign ready = |sel_s2m_ready;
 
     always_comb
     begin

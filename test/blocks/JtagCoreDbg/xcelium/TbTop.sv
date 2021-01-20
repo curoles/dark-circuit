@@ -22,6 +22,8 @@ module TestCore #(
     wire                       core_dbg_wr_rd; // Debug register write/read request
     wire [APB_ADDR_WIDTH-1:0]  core_dbg_addr;  // Debug register address
     wire [APB_WDATA_WIDTH-1:0] core_dbg_wdata; // Debug register write data
+    reg  [APB_RDATA_WIDTH-1:0] core_dbg_rdata;
+    reg                        core_dbg_rd_ready;
 
     CoreDbgApb#(
         .APB_ADDR_WIDTH(APB_ADDR_WIDTH),
@@ -41,13 +43,11 @@ module TestCore #(
         .core_dbg_req,
         .core_dbg_wr_rd,
         .core_dbg_addr,
-        .core_dbg_wdata
+        .core_dbg_wdata,
+        .core_dbg_rdata,
+        .core_dbg_rd_ready
     );
 
-    always_comb begin
-    //    if (apb_sel) $display("%t Core APB select", $time);
-        $display("%t APB slave rdata %h", $time, apb_rdata);
-    end
 
     reg [31:0] dbg_reg[32];
 
@@ -55,11 +55,18 @@ module TestCore #(
     begin
         if (core_dbg_req) begin
             if (core_dbg_wr_rd) begin
-                $display("%t Core Debug write addr=%h val=%h", $time, core_dbg_addr, core_dbg_wdata);
-                dbg_reg[core_dbg_addr] <= core_dbg_wdata;
+                $display("%t TestCore: Debug write addr=%h val=%h",
+                    $time, core_dbg_addr, core_dbg_wdata);
+                dbg_reg[integer'(core_dbg_addr)] <= core_dbg_wdata;
+                core_dbg_rd_ready <= 0;
             end else begin
-                $display("%t Core Debug read addr=%h", $time, core_dbg_addr);
+                $display("%t TestCore: Debug read addr[%h]=%h",
+                    $time, core_dbg_addr, dbg_reg[integer'(core_dbg_addr)]);
+                core_dbg_rdata <= dbg_reg[integer'(core_dbg_addr)];
+                core_dbg_rd_ready <= 1;
             end
+        end else begin
+            core_dbg_rd_ready <= 0;
         end
     end
 
@@ -109,7 +116,8 @@ module TbTop (
         .memi_sel  (_apb_bfm.sel),
         .memi_wr_rd(_apb_bfm.wr_rd),
         .memi_wdata(_apb_bfm.wdata),
-        .memi_rdata(_apb_bfm.rdata)
+        .memi_rdata(_apb_bfm.rdata),
+        .memi_ready(_apb_bfm.ready)
     );
 
     reg [APB_RDATA_WIDTH-1:0] core_apb_data_out[NR_CORES];
@@ -156,11 +164,11 @@ module TbTop (
         run_test();
     end
 
-    always_comb
+    /*always @(posedge clk)
     begin
-         $display("%t Top Core APB data out %h", $time, core_apb_data_out[0]);
-         $display("%t Top APB data read %h", $time, _apb_bfm.rdata);
-         $display("%t Top APB sel %h", $time, _apb_bfm.sel);
-    end
+        if (apb_slave_ready) begin
+            $display("%t APB slave ready",$time);
+        end
+    end*/
 
 endmodule: TbTop

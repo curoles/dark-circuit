@@ -29,7 +29,8 @@ module DbgAccPort #(
     output reg  [MEMI_NR_SLAVES-1:0]   memi_sel,
     output reg                         memi_wr_rd,
     output reg  [MEMI_WDATA_WIDTH-1:0] memi_wdata,
-    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata
+    input  wire [MEMI_RDATA_WIDTH-1:0] memi_rdata,
+    input  wire                        memi_ready
 );
 
     wire jdpacc_tdo;
@@ -77,7 +78,8 @@ module DbgAccPort #(
         .memi_sel,
         .memi_wr_rd,
         .memi_wdata,
-        .memi_rdata
+        .memi_rdata,
+        .memi_ready
     );
 
 endmodule: DbgAccPort

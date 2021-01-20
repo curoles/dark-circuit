@@ -78,19 +78,17 @@ module DbgApbBus #(
     // Mux all s2m signals based on currently selected Slave using OR gates.
     // ====================================================================
 
-    wire [NR_SLAVES-1:0]   sel_s2m_ready; // AND2(sel[n], ~s2m_ready[n])
+    wire [NR_SLAVES-1:0]   sel_s2m_ready; // AND2(sel[n], s2m_ready[n])
     wire [RDATA_WIDTH-1:0] sel_s2m_data[NR_SLAVES];
 
     generate
         for (i = 0; i < NR_SLAVES; i = i + 1) begin
-            assign sel_s2m_ready[i] = sel[i] & ~s2m_ready[i];
-            assign sel_s2m_data[i] = {NR_SLAVES{sel[i]}} & s2m_data[i];
+            assign sel_s2m_ready[i] = sel[i] & s2m_ready[i];
+            assign sel_s2m_data[i] = {RDATA_WIDTH{sel[i]}} & s2m_data[i];
         end
     endgenerate
 
-    wire ready_n;
-    assign ready_n = |sel_s2m_ready;
-    assign ready = ~ready;
+    assign ready = |sel_s2m_ready;
 
     always_comb
     begin
