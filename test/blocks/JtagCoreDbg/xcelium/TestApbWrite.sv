@@ -81,9 +81,9 @@ class TestApbWrite extends uvm_test;
         $display("%t Set state=Shift-DR, read reply of reading Debug register", $time);
         _jtag.tick(2'b00);
 
-        repeat(8/*32*/) begin
-            @(posedge _jtag.tck);
+        repeat(12/*32*/) begin
             $display("%t TDO:%b", $time, _jtag.tdo);
+            @(posedge _jtag.tck);
         end
 
         phase.drop_objection(this);

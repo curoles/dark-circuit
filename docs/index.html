@@ -1331,7 +1331,7 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
 );
 
     reg [1:0] state;
-    localparam [1:0] IDLE=0, WRITE=1, READ=2;
+    localparam [1:0] IDLE=0, WRITE=1, READ=2, READ_READY=3;
 
     always @(posedge clk)
     begin
@@ -1370,12 +1370,17 @@ Module "CoreDbgApb", blocks/JtagCoreDbg/rtl/CoreDbgApb.sv
                     rdata <= core_dbg_rdata;
                     ready <= core_dbg_rd_ready;
                     if (core_dbg_rd_ready) begin
-                        state <= IDLE;
+                        state <= READ_READY;
                         $display("%t CoreDbgApb: read[%h]=%h", $time, addr, core_dbg_rdata);
                     end else begin
                         state <= READ;
                     end
                     //end
+                end
+                READ_READY: begin
+                    state <= IDLE;
+                    ready <= 1;
+                    core_dbg_req <= 0;
                 end
                 default: begin
                     state <= IDLE;
@@ -1642,7 +1647,7 @@ formed by the values that were shifted into the scan chain.</p>
     input  wire                        memi_ready
 );
 
-    localparam WIDTH = 36;
+    localparam WIDTH = 32+4;
 
     reg [WIDTH-1:0] jdpacc_reg;
     reg [WIDTH-1:0] cdpacc_reg;
@@ -1695,6 +1700,7 @@ formed by the values that were shifted into the scan chain.</p>
             cdpacc_reg <= {tdi, cdpacc_reg[WIDTH-1:1]};
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_capture_dr) begin
+            //$display("%t captured CDPACC=%h", $time, cdpacc_capture_dr());
             cdpacc_reg <= cdpacc_capture_dr();
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_update_dr) begin
@@ -1736,7 +1742,7 @@ formed by the values that were shifted into the scan chain.</p>
     // if any, is returned, together with a 4-bit ACK response.
     //
     function [WIDTH-1:0] cdpacc_capture_dr();
-        cdpacc_capture_dr = {cdpacc_ack, cdpacc_result};
+        cdpacc_capture_dr = {cdpacc_result, cdpacc_ack};
     endfunction
 
 
@@ -1794,10 +1800,13 @@ formed by the values that were shifted into the scan chain.</p>
         end else begin
             if (memi_wait_rd_reply) begin
                 memi_wait_rd_reply <= ~memi_ready;
-                if (memi_ready)
+                if (memi_ready) begin
                     $display("%t CDP: APB read reply %h", $time, memi_rdata);
-                else
+                    cdpacc_result <= memi_rdata; // TODO fast-slow clock sync?
+                    cdpacc_ack <= 4'b0000;
+                end else begin
                     $display("%t CDP: waiting for APB ready HIGH", $time);
+                end
             end else begin
                 memi_wait_rd_reply <= memi_sel & ~memi_wr_rd;
                 if (memi_sel & ~memi_wr_rd)

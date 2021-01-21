@@ -164,11 +164,5 @@ module TbTop (
         run_test();
     end
 
-    /*always @(posedge clk)
-    begin
-        if (apb_slave_ready) begin
-            $display("%t APB slave ready",$time);
-        end
-    end*/
 
 endmodule: TbTop

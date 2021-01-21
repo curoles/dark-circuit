@@ -85,7 +85,7 @@ module CoreDbgPort #(
     input  wire                        memi_ready
 );
 
-    localparam WIDTH = 36;
+    localparam WIDTH = 32+4;
 
     reg [WIDTH-1:0] jdpacc_reg;
     reg [WIDTH-1:0] cdpacc_reg;
@@ -138,6 +138,7 @@ module CoreDbgPort #(
             cdpacc_reg <= {tdi, cdpacc_reg[WIDTH-1:1]};
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_capture_dr) begin
+            //$display("%t captured CDPACC=%h", $time, cdpacc_capture_dr());
             cdpacc_reg <= cdpacc_capture_dr();
             cdp_req    <= 0;
         end else if (insn_cdpacc_select & state_update_dr) begin
@@ -179,7 +180,7 @@ module CoreDbgPort #(
     // if any, is returned, together with a 4-bit ACK response.
     //
     function [WIDTH-1:0] cdpacc_capture_dr();
-        cdpacc_capture_dr = {cdpacc_ack, cdpacc_result};
+        cdpacc_capture_dr = {cdpacc_result, cdpacc_ack};
     endfunction
 
 
@@ -237,10 +238,13 @@ module CoreDbgPort #(
         end else begin
             if (memi_wait_rd_reply) begin
                 memi_wait_rd_reply <= ~memi_ready;
-                if (memi_ready)
+                if (memi_ready) begin
                     $display("%t CDP: APB read reply %h", $time, memi_rdata);
-                else
+                    cdpacc_result <= memi_rdata; // TODO fast-slow clock sync?
+                    cdpacc_ack <= 4'b0000;
+                end else begin
                     $display("%t CDP: waiting for APB ready HIGH", $time);
+                end
             end else begin
                 memi_wait_rd_reply <= memi_sel & ~memi_wr_rd;
                 if (memi_sel & ~memi_wr_rd)

@@ -37,7 +37,7 @@ module CoreDbgApb #(
 );
 
     reg [1:0] state;
-    localparam [1:0] IDLE=0, WRITE=1, READ=2;
+    localparam [1:0] IDLE=0, WRITE=1, READ=2, READ_READY=3;
 
     always @(posedge clk)
     begin
@@ -76,12 +76,17 @@ module CoreDbgApb #(
                     rdata <= core_dbg_rdata;
                     ready <= core_dbg_rd_ready;
                     if (core_dbg_rd_ready) begin
-                        state <= IDLE;
+                        state <= READ_READY;
                         $display("%t CoreDbgApb: read[%h]=%h", $time, addr, core_dbg_rdata);
                     end else begin
                         state <= READ;
                     end
                     //end
+                end
+                READ_READY: begin
+                    state <= IDLE;
+                    ready <= 1;
+                    core_dbg_req <= 0;
                 end
                 default: begin
                     state <= IDLE;
