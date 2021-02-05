@@ -39,7 +39,7 @@ void dpi_jtag_create
  *
  */
 module SimDpiJtag #(
-    parameter TCK_PERIOD = 10 // relative to `clk` signal
+    parameter TCK_PERIOD = 10, // relative to `clk` signal
     parameter ALWAYS_ENABLE = 1,
     parameter TCP_PORT = 4444
 )(
@@ -64,7 +64,7 @@ module SimDpiJtag #(
 
         if (enable) begin
             tcp_port = TCP_PORT;
-            $value$plusargs("jtag_dpi_tcp_port=%d", tcp_port)
+            void'($value$plusargs("jtag_dpi_tcp_port=%d", tcp_port));
             dpi_jtag_create(tcp_port);
         end
 	end
@@ -82,3 +82,29 @@ module SimDpiJtag #(
 
 endmodule
 
+module SimDpiJtagTestTop();
+
+    reg clk, rst;
+    reg tck, tms, tdi, tdo, trstn;
+
+    initial begin
+        clk = 0;
+        forever begin
+            #1;
+            clk = ~clk;
+        end
+    end
+
+    initial begin
+        rst = 1;
+        #5;
+        rst = 0;
+    end
+
+    SimDpiJtag#(.TCK_PERIOD(10), .ALWAYS_ENABLE(1), .TCP_PORT(4444))
+        _jtag(
+            .clk(), .rst(),
+            .tck(), .tms(), .tdi(), .tdo(), .trstn()
+    );
+
+endmodule
