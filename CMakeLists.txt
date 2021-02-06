@@ -23,8 +23,8 @@ option(USE_XCELIUM "Use Cadence Xcelium to compile and simulate" OFF)
 # Compiler options.
 set(DARKCIRCUIT_M_CFLAGS "-march=native")
 set(DARKCIRCUIT_W_CFLAGS "-Werror -Wall -Wextra")
-set(DARKCIRCUIT_O_CFLAGS "-O3 -flto")
-set(DARKCIRCUIT_COMMON_CXX_FLAGS "${DARKCIRCUIT_M_CFLAGS} ${DARKCIRCUIT_W_CFLAGS} ${DARKCIRCUIT_O_FLAG}")
+set(DARKCIRCUIT_O_CFLAGS "-O3 -flto -std=c++17")
+set(DARKCIRCUIT_COMMON_CXX_FLAGS "${DARKCIRCUIT_M_CFLAGS} ${DARKCIRCUIT_W_CFLAGS} ${DARKCIRCUIT_O_CFLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DARKCIRCUIT_COMMON_CXX_FLAGS}")
 
 # Install inside the build directory.

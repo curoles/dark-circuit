@@ -1,4 +1,4 @@
-package Alu1;
+package Alu1Pkg;
 
 
 localparam CMD_WIDTH   = 4;
@@ -19,4 +19,4 @@ typedef enum bit[CMD_WIDTH-1:0] {
     OP_NOT        = 11
 } Op;
 
-endpackage: Alu1
+endpackage: Alu1Pkg

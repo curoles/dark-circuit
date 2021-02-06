@@ -11,5 +11,6 @@ set(TB_FLIST
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/blocks/blocks.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/parts/parts.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/gates/generic/generic.flist
+    -y ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/macros
 )
 include(${DARKCIRCUIT_SOURCE_DIR}/tools/eda/verilator/simple_test.cmake)

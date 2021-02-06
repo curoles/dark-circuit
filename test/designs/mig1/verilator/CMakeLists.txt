@@ -10,5 +10,6 @@ set(TEST_NAME Mig1CPU)
 set(TB_FLIST
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/blocks/blocks.flist
     -F ${DARKCIRCUIT_SOURCE_DIR}/rtl/designs/mig1/mig1.flist
+    -y ${DARKCIRCUIT_SOURCE_DIR}/rtl/lib/macros
 )
 include(${DARKCIRCUIT_SOURCE_DIR}/tools/eda/verilator/simple_test.cmake)
