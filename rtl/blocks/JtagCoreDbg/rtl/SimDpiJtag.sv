@@ -82,6 +82,7 @@ module SimDpiJtag #(
 
 endmodule
 
+`ifdef SIMDPIJTAGTESTTOP
 module SimDpiJtagTestTop();
 
     reg clk, rst;
@@ -108,3 +109,4 @@ module SimDpiJtagTestTop();
     );
 
 endmodule
+`endif

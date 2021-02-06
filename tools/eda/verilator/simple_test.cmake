@@ -2,7 +2,8 @@ set(VERILATOR_PARAMS_${TEST_NAME}
     -sv
     -O3 -Wall -Wno-lint --assert
     --cc --compiler gcc
-    --exe ${TB_MAIN_CPP} --clk clk
+    --exe ${TB_MAIN_CPP} ${TB_CPP_FILES}
+    --clk clk
     --Mdir obj_dir_${TEST_NAME}
     ${TB_FLIST}
     -CFLAGS "-I${DARKCIRCUIT_SOURCE_DIR}/tools"

@@ -12,7 +12,13 @@ module Mig1CPU #(
 )(
     input wire clk,
     input wire rst,
-    input wire [ADDR_WIDTH-1:2] rst_addr
+    input wire [ADDR_WIDTH-1:2] rst_addr,
+    // JTAG signals
+    input  wire tck,   // test clock
+    input  wire trst,  // test reset
+    input  wire tdi,   // test Data In
+    input  wire tms,   // test Mode Select
+    output reg  tdo    // test Data Out
 );
 
     wire                  ram_rd_en;
