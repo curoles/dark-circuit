@@ -20,6 +20,63 @@ module Mig1CPU #(
     input  wire tms,   // test Mode Select
     output reg  tdo    // test Data Out
 );
+    localparam NR_CORES = 1;
+
+    localparam DBG_APB_ADDR_WIDTH = 5;
+    localparam DBG_APB_RDATA_WIDTH = 32;
+    localparam DBG_APB_WDATA_WIDTH = 32;
+
+    wire [DBG_APB_ADDR_WIDTH-1:0]  dbg_apb_addr;
+    wire [NR_CORES-1:0]            dbg_apb_sel;
+    wire                           dbg_apb_wr_rd;
+    wire [DBG_APB_WDATA_WIDTH-1:0] dbg_apb_wdata;
+    wire [DBG_APB_RDATA_WIDTH-1:0] dbg_apb_rdata;
+    wire                           dbg_apb_ready;
+    wire                           dbg_apb_enable;
+
+    DbgAccPort#(
+        .MEMI_NR_SLAVES(NR_CORES),
+        .MEMI_ADDR_WIDTH(DBG_APB_ADDR_WIDTH),
+        .MEMI_WDATA_WIDTH(DBG_APB_WDATA_WIDTH),
+        .MEMI_RDATA_WIDTH(DBG_APB_RDATA_WIDTH)
+    ) _dbgaccport(
+        .tck(),
+        .trst(),
+        .tdi(),
+        .tms(),
+        .tdo(),
+        .memi_clk(clk),
+        .memi_rst(rst),
+        .memi_addr(dbg_apb_addr),
+        .memi_sel(dbg_apb_sel),
+        .memi_wr_rd(dbg_apb_wr_rd),
+        .memi_wdata(dbg_apb_wdata),
+        .memi_rdata(dbg_apb_rdata),
+        .memi_ready(dbg_apb_ready)
+    );
+
+    reg [DBG_APB_RDATA_WIDTH-1:0] core2dbg_apb_data_out[NR_CORES];
+    wire core2dbg_apb_slave_ready;
+
+    DbgApbBus#(
+        .ADDR_WIDTH(DBG_APB_ADDR_WIDTH),
+        .WDATA_WIDTH(DBG_APB_WDATA_WIDTH),
+        .RDATA_WIDTH(DBG_APB_RDATA_WIDTH),
+        .NR_SLAVES(NR_CORES)
+    ) _apb_bus(
+        .clk(clk),
+        .rst_n(~rst),
+        .addr(dbg_apb_addr),
+        .sel(dbg_apb_sel),       // slave is selected and data transfer is required
+        .enable(dbg_apb_enable),  // indicates the second+ cycles of an APB transfer
+        .wr_rd(dbg_apb_wr_rd),   // direction==HIGH? wr:rd
+        .wdata(dbg_apb_wdata),   // driven by Bridge when wr_rd=HIGH
+        .wstrobe(4'b1111),    // which byte lanes to update during a write transfer wdata[(8n + 7):(8n)]
+        .ready(dbg_apb_ready), // slave uses this signal to extend an APB transfer
+        .rdata(dbg_apb_rdata),
+        .s2m_ready(core2dbg_apb_slave_ready),
+        .s2m_data(core2dbg_apb_data_out)
+    );
 
     wire                  ram_rd_en;
     wire [ADDR_WIDTH-1:0] ram_rd_addr;
