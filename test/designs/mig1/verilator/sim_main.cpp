@@ -42,7 +42,12 @@ int main(int argc, char* argv[])
         printf("PC:%x\n", getPC(top));
     }
 
-    //while (!Verilated::gotFinish()) { top->eval(); }
+    printf("Running. Press Ctrl-C to stop.\n");
+    while (!Verilated::gotFinish()) {
+        //top->eval();
+        tick();
+    }
+
     printf("\n\nSUCCESS\n");
 
     return 0;

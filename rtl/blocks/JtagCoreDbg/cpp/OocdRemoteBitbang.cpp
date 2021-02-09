@@ -163,8 +163,9 @@ execute_oocd_command()
                 abort();
             }
         } else if (num_chars_read == 0) {
-            fprintf(stderr, "No Command Received.\n");
-            keep_waiting = true;
+            //fprintf(stderr, "No Command Received.\n");
+            keep_waiting = false;
+            // We do NOT wait here, but we also do NOT change `tck`, so JTAG is inactive.
         } else {
             keep_waiting = false;
         }
@@ -196,7 +197,7 @@ execute_oocd_command()
     if (do_reply)
     {
         while (1) {
-            ssize_t bytes = write(client_fd_, &reply_char, sizeof(reply_char));
+            ssize_t bytes = ::write(client_fd_, &reply_char, sizeof(reply_char));
 
             if (bytes == -1) {
                 fprintf(stderr, "failed to write to socket: %s (%d)\n", strerror(errno), errno);

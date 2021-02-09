@@ -41,7 +41,7 @@ void dpi_jtag_create
 module SimDpiJtag #(
     parameter TCK_PERIOD = 10, // relative to `clk` signal
     parameter ALWAYS_ENABLE = 1,
-    parameter TCP_PORT = 4444
+    parameter TCP_PORT = 9999
 )(
     input  wire   clk,
     input  wire   rst,
@@ -65,6 +65,7 @@ module SimDpiJtag #(
         if (enable) begin
             tcp_port = TCP_PORT;
             void'($value$plusargs("jtag_dpi_tcp_port=%d", tcp_port));
+            $display("JTAG Remote Bitbang TCP port=%d, use +jtag_dpi_tcp_port=N to set.", tcp_port);
             dpi_jtag_create(tcp_port);
         end
 	end

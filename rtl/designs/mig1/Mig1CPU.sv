@@ -40,11 +40,11 @@ module Mig1CPU #(
         .MEMI_WDATA_WIDTH(DBG_APB_WDATA_WIDTH),
         .MEMI_RDATA_WIDTH(DBG_APB_RDATA_WIDTH)
     ) _dbgaccport(
-        .tck(),
-        .trst(),
-        .tdi(),
-        .tms(),
-        .tdo(),
+        .tck,
+        .trst,
+        .tdi,
+        .tms,
+        .tdo,
         .memi_clk(clk),
         .memi_rst(rst),
         .memi_addr(dbg_apb_addr),
@@ -68,11 +68,11 @@ module Mig1CPU #(
         .rst_n(~rst),
         .addr(dbg_apb_addr),
         .sel(dbg_apb_sel),       // slave is selected and data transfer is required
-        .enable(dbg_apb_enable),  // indicates the second+ cycles of an APB transfer
-        .wr_rd(dbg_apb_wr_rd),   // direction==HIGH? wr:rd
+        .enable(dbg_apb_enable), // indicates the second+ cycles of an APB transfer
+        .wr_rd(dbg_apb_wr_rd),   // direction=HIGH? wr:rd
         .wdata(dbg_apb_wdata),   // driven by Bridge when wr_rd=HIGH
-        .wstrobe(4'b1111),    // which byte lanes to update during a write transfer wdata[(8n + 7):(8n)]
-        .ready(dbg_apb_ready), // slave uses this signal to extend an APB transfer
+        .wstrobe(4'b1111),       // which byte lanes to update during a write transfer wdata[(8n + 7):(8n)]
+        .ready(dbg_apb_ready),   // slave uses this signal to extend an APB transfer
         .rdata(dbg_apb_rdata),
         .s2m_ready(core2dbg_apb_slave_ready),
         .s2m_data(core2dbg_apb_data_out)
@@ -102,6 +102,13 @@ module Mig1CPU #(
             .clk(clk),
             .rst(rst),
             .rst_addr(rst_addr),
+            .dbg_apb_addr,
+            .dbg_apb_sel,
+            .dbg_apb_enable,
+            .dbg_apb_wr_rd,
+            .dbg_apb_wdata,
+            .dbg_apb_ready(core2dbg_apb_slave_ready),
+            .dbg_apb_rdata(core2dbg_apb_data_out[0]),
             .insn_fetch_en(core2mem_fetch_en),
             .insn_fetch_addr(core2mem_fetch_addr)
     );
