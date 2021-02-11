@@ -37,10 +37,10 @@ int main(int argc, char* argv[])
     for (unsigned int i = 0; i < 5; ++i) {tick();}
     top.rst = 0;
 
-    for (unsigned int i = 0; i < 10; ++i) {
+    /*for (unsigned int i = 0; i < 10; ++i) {
         tick();
         printf("PC:%x\n", getPC(top));
-    }
+    }*/
 
     printf("Running. Press Ctrl-C to stop.\n");
     while (!Verilated::gotFinish()) {

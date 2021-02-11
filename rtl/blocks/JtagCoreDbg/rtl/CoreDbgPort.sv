@@ -152,7 +152,8 @@ module CoreDbgPort #(
             cdp_cmd_op   <=  cdpacc_reg[3:1];
             cdp_cmd_data <=  cdpacc_reg[35:4];
 
-            $display("%t CDP Update-DR %b", $time, cdpacc_reg[3:1]);
+            $display("%t CDP Update-DR wr=%b op=%b data=%h", $time,
+                cdpacc_reg[0], cdpacc_reg[3:1], cdpacc_reg[35:4]);
         end else begin
             cdp_req <= 0;
         end
@@ -194,6 +195,11 @@ module CoreDbgPort #(
                 CDP_OP_TADDR:  cdp_dr_taddr  <= cdp_cmd_data;
                 CDP_OP_DTR:    cdp_dr_dtr    <= cdp_cmd_data;
                 default: begin end
+            endcase
+            case (cdp_cmd_op)
+                CDP_OP_SELECT: $display("CDP select core %d", cdp_cmd_data);
+                CDP_OP_TADDR:  $display("CDP select addr %h", cdp_cmd_data);
+                CDP_OP_DTR:    $display("CDP write DTR %h", cdp_cmd_data);
             endcase
         end
     end
