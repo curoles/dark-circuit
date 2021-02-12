@@ -121,7 +121,7 @@ module CoreDbgPort #(
                CDP_OP_TADDR  = 3'b001,
                CDP_OP_DTR    = 3'b010;
 
-    reg cdp_req, cdp_cmd_wr, cdp_cmd_rd;
+    reg cdp_req, cdp_update, cdp_cmd_wr, cdp_cmd_rd;
     reg [2:0] cdp_cmd_op;
     reg [31:0] cdp_cmd_data;
 
@@ -130,21 +130,26 @@ module CoreDbgPort #(
         if (trst == 1) begin
             cdpacc_reg <= 'h0;
             cdp_req    <= 0;
+            cdp_update <= 0;
         end else if (state_test_logic_reset) begin
             cdpacc_reg <= 'h0;
             cdp_req    <= 0;
+            cdp_update <= 0;
         end else if (insn_cdpacc_select & state_shift_dr) begin
             //$display("%t CDPACC shift-in %b", $time, {tdi, cdpacc_reg[WIDTH-1:1]});
             cdpacc_reg <= {tdi, cdpacc_reg[WIDTH-1:1]};
             cdp_req    <= 0;
+            cdp_update <= 0;
         end else if (insn_cdpacc_select & state_capture_dr) begin
             //$display("%t captured CDPACC=%h", $time, cdpacc_capture_dr());
             cdpacc_reg <= cdpacc_capture_dr();
             cdp_req    <= 0;
+            cdp_update <= 0;
         end else if (insn_cdpacc_select & state_update_dr) begin
             // **Update-DR** operation fulfills the read or write request that is
             // formed by the values that were shifted into the scan chain.
 
+            cdp_update   <=  1;
             cdpacc_reg   <=  cdpacc_reg;
             cdp_req      <=  (cdpacc_reg[3:1] == CDP_OP_DTR);
             cdp_cmd_wr   <=  cdpacc_reg[0];
@@ -155,7 +160,8 @@ module CoreDbgPort #(
             $display("%t CDP Update-DR wr=%b op=%b data=%h", $time,
                 cdpacc_reg[0], cdpacc_reg[3:1], cdpacc_reg[35:4]);
         end else begin
-            cdp_req <= 0;
+            cdp_req    <= 0;
+            cdp_update <= 0;
         end
     end
 
@@ -189,7 +195,7 @@ module CoreDbgPort #(
 
     always @(posedge tck)
     begin
-        if (cdp_cmd_wr) begin
+        if (cdp_update) begin
             case (cdp_cmd_op)
                 CDP_OP_SELECT: cdp_dr_select <= cdp_cmd_data;
                 CDP_OP_TADDR:  cdp_dr_taddr  <= cdp_cmd_data;
@@ -197,9 +203,9 @@ module CoreDbgPort #(
                 default: begin end
             endcase
             case (cdp_cmd_op)
-                CDP_OP_SELECT: $display("CDP select core %d", cdp_cmd_data);
-                CDP_OP_TADDR:  $display("CDP select addr %h", cdp_cmd_data);
-                CDP_OP_DTR:    $display("CDP write DTR %h", cdp_cmd_data);
+                CDP_OP_SELECT: $display("%t CDP select core %d", $time, cdp_cmd_data);
+                CDP_OP_TADDR:  $display("%t CDP select addr %h", $time, cdp_cmd_data);
+                CDP_OP_DTR:    $display("%t CDP write DTR %h", $time, cdp_cmd_data);
             endcase
         end
     end
