@@ -4,6 +4,7 @@
 // Compile-Time log2 function.
 //
 `define CLOG2(x) \
+    (x <=   1) ? 0 : \
     (x <=   2) ? 1 : \
     (x <=   4) ? 2 : \
     (x <=   8) ? 3 : \

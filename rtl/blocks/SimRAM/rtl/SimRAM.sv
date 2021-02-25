@@ -1,28 +1,33 @@
+`include "clog2.svh"
+
 /* Verilog simulation RAM model.
  *
- * Author: Igor Lesik 2013-2020
+ * Author: Igor Lesik 2013-2021
  *
  */
 module SimRAM #(
     parameter  DATA_SIZE  = 1, // 1-byte, 2-16bits, 4-32bits word
     localparam DATA_WIDTH = 8 * DATA_SIZE,
+    localparam ADDR_START = `CLOG2(DATA_SIZE),
     parameter  ADDR_WIDTH = 8,
     parameter  MEM_SIZE   = 2**ADDR_WIDTH
 )(
-    input  wire                  clk,
-    input  wire                  rd_en,
-    input  wire [ADDR_WIDTH-1:0] rd_addr,
-    input  wire                  wr_en,
-    input  wire [ADDR_WIDTH-1:0] wr_addr,
-    input  wire [DATA_WIDTH-1:0] wr_data,
-    output reg  [DATA_WIDTH-1:0] rd_data
+    input  wire                           clk,
+    input  wire                           rd_en,
+    input  wire [ADDR_WIDTH-1:ADDR_START] rd_addr,
+    input  wire                           wr_en,
+    input  wire [ADDR_WIDTH-1:ADDR_START] wr_addr,
+    input  wire [DATA_WIDTH-1:0]          wr_data,
+    output reg  [DATA_WIDTH-1:0]          rd_data
 );
 
-    reg [DATA_WIDTH-1:0] ram [MEM_SIZE];
+    // `objcopy -O verilog` uses byte address `@addr` regardless
+    // of data width; let's treat memory as array of bytes, but
+    // access by RAM bank size `DATA_SIZE`.
+    reg [8-1:0] ram [MEM_SIZE];
 
     localparam VLOG_HEX_FORMAT = 0;
     localparam VLOG_BIN_FORMAT = 1;
-    //TODO localparam SREC_FORMAT = 2;
 
     // Load memory contents from a file.
     //
@@ -38,6 +43,17 @@ module SimRAM #(
     endfunction
 
 
+    function [DATA_WIDTH-1:0] read_bank(int addr);
+        if (DATA_SIZE == 1)
+            read_bank = ram[addr];
+        else if (DATA_SIZE == 2)
+            read_bank = {ram[addr+1],ram[addr]};
+        else if (DATA_SIZE == 4)
+            read_bank = {ram[addr+3],ram[addr+2],ram[addr+1],ram[addr]};
+
+        //$display("Read bank addr=%h data=%h size=%d", addr, read_bank, DATA_SIZE);
+    endfunction
+
     always @ (posedge clk)
     begin
         if (wr_en) begin
@@ -45,8 +61,8 @@ module SimRAM #(
         end
 
         if (rd_en) begin
-            //$display("ROM[%h]=%h", integer'(addr)+i, rom[integer'(addr)+i]);
-            rd_data <= ram[integer'(rd_addr)];
+            //$display("ROM[%h]=%h", /*integer'(rd_addr)*/{rd_addr,2'b00}, rd_data/*ram[integer'(rd_addr)]*/);
+            rd_data <= read_bank(integer'(rd_addr) << ADDR_START);
             if (wr_en && rd_addr == wr_addr) begin
                 assert(0);//FIXME
             end
