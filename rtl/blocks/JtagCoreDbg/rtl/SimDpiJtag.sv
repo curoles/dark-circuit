@@ -65,7 +65,7 @@ module SimDpiJtag #(
         if (enable) begin
             tcp_port = TCP_PORT;
             void'($value$plusargs("jtag_dpi_tcp_port=%d", tcp_port));
-            $display("JTAG Remote Bitbang TCP port=%d, use +jtag_dpi_tcp_port=N to set.", tcp_port);
+            $display("JTAG Remote Bitbang TCP port=%0d, use +jtag_dpi_tcp_port=N to set.", tcp_port);
             dpi_jtag_create(tcp_port);
         end
 	end

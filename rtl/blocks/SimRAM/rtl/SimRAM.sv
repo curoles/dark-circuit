@@ -18,7 +18,9 @@ module SimRAM #(
     input  wire                           wr_en,
     input  wire [ADDR_WIDTH-1:ADDR_START] wr_addr,
     input  wire [DATA_WIDTH-1:0]          wr_data,
-    output reg  [DATA_WIDTH-1:0]          rd_data
+    output reg  [DATA_WIDTH-1:0]          rd_data,
+    output reg                            rd_valid,
+    input  wire [ADDR_WIDTH-1:ADDR_START] rd_addr_out
 );
 
     // `objcopy -O verilog` uses byte address `@addr` regardless
@@ -67,6 +69,8 @@ module SimRAM #(
                 assert(0);//FIXME
             end
         end
+
+        rd_valid <= rd_en;
     end
 
 endmodule: SimRAM
