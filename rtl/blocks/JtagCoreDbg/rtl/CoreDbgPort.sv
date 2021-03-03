@@ -200,7 +200,9 @@ module CoreDbgPort #(
                 CDP_OP_SELECT: cdp_dr_select <= cdp_cmd_data;
                 CDP_OP_TADDR:  cdp_dr_taddr  <= cdp_cmd_data;
                 CDP_OP_DTR:    cdp_dr_dtr    <= cdp_cmd_data;
-                default: begin end
+                default: begin
+                    $error("Illegal CDP cmd");
+                end
             endcase
             case (cdp_cmd_op)
                 CDP_OP_SELECT: $display("%t CDP select core %d", $time, cdp_cmd_data);
