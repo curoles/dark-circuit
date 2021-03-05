@@ -1,10 +1,8 @@
-/**@file
- * @brief     Multiplexer 
- * @author    Igor Lesik
- * @copyright Igor Lesik 2014
+/* 8 inputs Multiplexer 
+ * Author:    Igor Lesik 2014
+ * Copyright: Igor Lesik 2014
  *
  */
-
 module Mux8 #(
     parameter WIDTH = 1
 )(
@@ -19,12 +17,11 @@ module Mux8 #(
     input  wire [2:0]        sel,
     output wire [WIDTH-1:0]  out
 );
-    //TODO test, could be wrong order
     wire [WIDTH-1:0] out14, out58;
 
-    Mux2 m2_#(.WIDTH(WIDTH))(out14, out58, sel[2], out);
+    Mux2#(.WIDTH(WIDTH)) _m2(out14, out58, sel[2], out);
 
-    Mux4 m41_#(.WIDTH(WIDTH))(in1, in2, in3, in4, sel[1:0], out14);
-    Mux4 m42_#(.WIDTH(WIDTH))(in5, in6, in7, in8, sel[1:0], out58);
+    Mux4#(.WIDTH(WIDTH)) _m41(in1, in2, in3, in4, sel[1:0], out14);
+    Mux4#(.WIDTH(WIDTH)) _m42(in5, in6, in7, in8, sel[1:0], out58);
 
 endmodule

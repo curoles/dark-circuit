@@ -18,15 +18,15 @@ module GatedClk (
     output wire gclk
 );
 
-wire enable_in = enable | scan_enable;
-
-reg enable_latch;
-always @(clk or enable_in)
-begin
-    if (~clk)
-        enable_latch <= enable_in;
-end
-
-assign  gclk = clk & enable_latch;
+    wire enable_in = enable | scan_enable;
+    
+    reg enable_latch;
+    always @(clk or enable_in)
+    begin
+        if (clk)
+            enable_latch <= enable_in;
+    end
+    
+    assign gclk = clk | ~enable_latch;
 
 endmodule: GatedClk

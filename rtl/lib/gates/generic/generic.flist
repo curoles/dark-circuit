@@ -4,5 +4,6 @@ Mux2.sv
 MUX2.sv
 Mux4.sv
 MUX4.sv
+Mux8.sv
 Dff.sv
 AOI22.sv

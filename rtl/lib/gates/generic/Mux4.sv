@@ -14,9 +14,9 @@ module Mux4 #(
     output wire [WIDTH-1:0]  out
 );
 
-assign out = (sel == 0) ? in1 :
-             (sel == 1) ? in2 :
-             (sel == 2) ? in3 : in4;
+assign out = (sel == 3) ? in1 :
+             (sel == 2) ? in2 :
+             (sel == 1) ? in3 : in4;
 /*
  assign Z =    (~S1 & ~S0 & I0)
               | (~S1 &  S0 & I1)
