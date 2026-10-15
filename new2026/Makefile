@@ -35,4 +35,4 @@ build: $(CONFIGURED)
 	cmake --build $(BUILD_DIR) --parallel
 
 test: build
-	ctest --test-dir $(BUILD_DIR) --output-on-failure
+	ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc)

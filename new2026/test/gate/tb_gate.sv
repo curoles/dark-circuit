@@ -8,6 +8,7 @@ module TbGate;
     reg  [W-1:0] a;
     reg  [W-1:0] b;
     reg  [W-1:0] c;
+    reg  [W-1:0] d;
     reg          sel;
     wire [W-1:0] inv;
     wire [W-1:0] buff;
@@ -22,6 +23,11 @@ module TbGate;
     wire [W-1:0] xor2;
     wire [W-1:0] xnor2;
     wire [W-1:0] xor3;
+    wire [W-1:0] aoi21;
+    wire [W-1:0] aoi22;
+    wire [W-1:0] aoi31;
+    wire [W-1:0] oai21;
+    wire [W-1:0] oai22;
     wire [W-1:0] mux2;
     integer i;
 
@@ -38,11 +44,16 @@ module TbGate;
     Xor2  #(W) u_xor2 (.in1(a), .in2(b), .out(xor2));
     Xnor2 #(W) u_xnor2(.in1(a), .in2(b), .out(xnor2));
     Xor3  #(W) u_xor3 (.in1(a), .in2(b), .in3(c), .out(xor3));
+    Aoi21 #(W) u_aoi21(.in1(a), .in2(b), .in3(c), .out(aoi21));
+    Aoi22 #(W) u_aoi22(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi22));
+    Aoi31 #(W) u_aoi31(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi31));
+    Oai21 #(W) u_oai21(.in1(a), .in2(b), .in3(c), .out(oai21));
+    Oai22 #(W) u_oai22(.in1(a), .in2(b), .in3(c), .in4(d), .out(oai22));
     Mux2  #(W) u_mux2 (.in1(a), .in2(b), .sel(sel), .out(mux2));
 
     initial begin
-        for (i = 0; i < 2**(3*W+1); i = i + 1) begin
-            {sel, c, b, a} = i;
+        for (i = 0; i < 2**(4*W+1); i = i + 1) begin
+            {sel, d, c, b, a} = i;
             #1;
             if (inv   !== ~a)            $fatal(1, "Inv: a=%b got=%b", a, inv);
             if (buff  !== a)             $fatal(1, "Buf: a=%b got=%b", a, buff);
@@ -57,6 +68,16 @@ module TbGate;
             if (xor2  !== (a ^ b))       $fatal(1, "Xor2: a=%b b=%b got=%b", a, b, xor2);
             if (xnor2 !== ~(a ^ b))      $fatal(1, "Xnor2: a=%b b=%b got=%b", a, b, xnor2);
             if (xor3  !== (a ^ b ^ c))   $fatal(1, "Xor3: a=%b b=%b c=%b got=%b", a, b, c, xor3);
+            if (aoi21 !== ~((a & b) | c))
+                $fatal(1, "Aoi21: a=%b b=%b c=%b got=%b", a, b, c, aoi21);
+            if (aoi22 !== ~((a & b) | (c & d)))
+                $fatal(1, "Aoi22: a=%b b=%b c=%b d=%b got=%b", a, b, c, d, aoi22);
+            if (aoi31 !== ~((a & b & c) | d))
+                $fatal(1, "Aoi31: a=%b b=%b c=%b d=%b got=%b", a, b, c, d, aoi31);
+            if (oai21 !== ~((a | b) & c))
+                $fatal(1, "Oai21: a=%b b=%b c=%b got=%b", a, b, c, oai21);
+            if (oai22 !== ~((a | b) & (c | d)))
+                $fatal(1, "Oai22: a=%b b=%b c=%b d=%b got=%b", a, b, c, d, oai22);
             if (mux2  !== (sel ? a : b)) $fatal(1, "Mux2: a=%b b=%b sel=%b got=%b", a, b, sel, mux2);
         end
         $display("PASS");
