@@ -1,5 +1,6 @@
 /* Inverter.
  *
+ * Built bit by bit from cell INV.
  */
 module Inv #(
     parameter WIDTH = 1
@@ -8,6 +9,11 @@ module Inv #(
     output wire [WIDTH-1:0] out  // out is inverted in
 );
 
-    // TOD instead of assign out = ~in; use generate for-loop and INV cell
+    genvar i;
+    generate
+    for (i = 0; i < WIDTH; i = i + 1) begin: g_bit
+        INV u_inv(.I(in[i]), .ZN(out[i]));
+    end
+    endgenerate
 
 endmodule
