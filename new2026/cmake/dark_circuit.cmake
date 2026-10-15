@@ -99,3 +99,4 @@ macro(dc_parse_test_args NAME)
 endmacro()
 
 include(${CMAKE_CURRENT_LIST_DIR}/icarus.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/verilator.cmake)

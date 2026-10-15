@@ -16,7 +16,8 @@ module AndReduce #(
     if (WIDTH == 1) begin: g_wire
         assign out = in[0];
     end else begin: g_tree
-        wire [2*WIDTH-2:0] node;
+        // split_var: Verilator treats bits separately, no false loop through node.
+        wire [2*WIDTH-2:0] node /*verilator split_var*/;
         assign node[2*WIDTH-2:WIDTH-1] = in;
         for (k = 0; k < WIDTH-1; k = k + 1) begin: g_node
             AN2 u_an2(.A1(node[2*k+1]), .A2(node[2*k+2]), .Z(node[k]));

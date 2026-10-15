@@ -4,6 +4,8 @@
  * otherwise always_ff is used.
  */
 `ifdef DARK_CIRCUIT_BUILTIN_UDP
+// BLKSEQ warnings at UDP table rows come from how Verilator translates UDP.
+/* verilator lint_off BLKSEQ */
 primitive UDP_DFQ (Q, D, CP);
     output Q;
     reg    Q;
@@ -17,6 +19,7 @@ primitive UDP_DFQ (Q, D, CP);
         *  ?     : ? : -;
     endtable
 endprimitive
+/* verilator lint_on BLKSEQ */
 `endif
 
 module DFQ (

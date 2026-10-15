@@ -129,7 +129,7 @@ module TbGate;
 
     initial begin
         for (i = 0; i < 2**(4*W+3); i = i + 1) begin
-            {sel3, d, c, b, a} = i;
+            {sel3, d, c, b, a} = i[4*W+2:0];
             #1;
             case (sel3)
                 0: mux8_exp = a;

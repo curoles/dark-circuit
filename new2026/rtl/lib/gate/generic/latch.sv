@@ -25,10 +25,16 @@ module Latch #(
 );
 
 
+// Nonblocking assignment as in the standard and Cummings paper above;
+// Lint of Verilator asks for blocking assignment in latches.
+/* verilator lint_off COMBDLY */
+/* verilator lint_off NOLATCH */
 always_latch
 begin
     if (enable)
         out[WIDTH-1:0] <= in[WIDTH-1:0];
 end
+/* verilator lint_on NOLATCH */
+/* verilator lint_on COMBDLY */
 
 endmodule

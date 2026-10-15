@@ -90,10 +90,16 @@ Testbenches in `test/gate/` check every gate and stop at the first mismatch:
 Each testbench runs with `gate_generic.flist` and with `gate_cell.flist` over every cell flavor,
 so every cell is covered through its gate.
 
+Every test runs with Icarus and Verilator, except cell flavor `cmos`:
+it models transistors and only 4-state Icarus shows its short circuits (x) and
+floating outputs (z). Verilator is 2-state, so `tb_gate_seq.sv` skips its x checks
+with `` `ifndef VERILATOR ``.
+
 ## Requirements
 
 - CMake 3.20 or newer
 - Icarus Verilog (`iverilog`, `vvp`) to run simulation tests
+- Verilator 5.0 or newer to run simulation tests with Verilator
 
 ## Build and test
 
@@ -146,9 +152,12 @@ Use of every simulator is controlled by cmake variable `DARK_CIRCUIT_USE_<SIMULA
 | `ON`   | require it, cmake fails if not found  |
 | `OFF`  | do not use it                         |
 
-| Simulator      | Variable                  | Test name suffix and label |
-|----------------|---------------------------|----------------------------|
-| Icarus Verilog | `DARK_CIRCUIT_USE_ICARUS` | `.icarus`                  |
+| Simulator      | Variable                     | Test name suffix and label |
+|----------------|------------------------------|----------------------------|
+| Icarus Verilog | `DARK_CIRCUIT_USE_ICARUS`    | `.icarus`                  |
+| Verilator      | `DARK_CIRCUIT_USE_VERILATOR` | `.verilator`               |
+
+Verilator older than 5.0 is treated as not found (or as an error with `ON`).
 
 ## Running selected tests
 
