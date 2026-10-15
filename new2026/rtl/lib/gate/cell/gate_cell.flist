@@ -34,6 +34,7 @@ cmp_eq.sv
 cmp_ne.sv
 half_adder.sv
 full_adder.sv
+full_adder_maj3.sv
 maj3.sv
 benc.sv
 bml.sv

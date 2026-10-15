@@ -40,6 +40,8 @@ module TbGate;
     wire [W-1:0] ha_co;
     wire [W-1:0] fa_sum;
     wire [W-1:0] fa_co;
+    wire [W-1:0] fam_sum;
+    wire [W-1:0] fam_co;
     wire [W-1:0] maj3;
     wire [W-1:0] benc_s;
     wire [W-1:0] benc_a;
@@ -103,6 +105,7 @@ module TbGate;
     Mux4  #(W) u_mux4 (.in0(a), .in1(b), .in2(c), .in3(d), .sel(sel2), .out(mux4));
     HalfAdder #(W) u_half_adder(.in1(a), .in2(b), .sum(ha_sum), .co(ha_co));
     FullAdder #(W) u_full_adder(.in1(a), .in2(b), .ci(c), .sum(fa_sum), .co(fa_co));
+    FullAdderMaj3 #(W) u_full_adder_maj3(.in1(a), .in2(b), .ci(c), .sum(fam_sum), .co(fam_co));
     Maj3  #(W) u_maj3 (.in1(a), .in2(b), .in3(c), .out(maj3));
     Benc  #(W) u_benc (.M0(a), .M1(b), .M2(c), .S(benc_s), .A(benc_a), .X2(benc_x2));
     Bml   #(W) u_bml  (.X2(a), .A(b), .S(c), .M0(d), .M1(a_rot), .PP(bml_pp));
@@ -182,6 +185,8 @@ module TbGate;
                 $fatal(1, "HalfAdder: a=%b b=%b got sum=%b co=%b", a, b, ha_sum, ha_co);
             if (fa_sum !== (a ^ b ^ c) || fa_co !== ((a & b) | (c & (a | b))))
                 $fatal(1, "FullAdder: a=%b b=%b ci=%b got sum=%b co=%b", a, b, c, fa_sum, fa_co);
+            if (fam_sum !== (a ^ b ^ c) || fam_co !== ((a & b) | (c & (a | b))))
+                $fatal(1, "FullAdderMaj3: a=%b b=%b ci=%b got sum=%b co=%b", a, b, c, fam_sum, fam_co);
             if (maj3 !== ((a & b) | (a & c) | (b & c)))
                 $fatal(1, "Maj3: a=%b b=%b c=%b got=%b", a, b, c, maj3);
             if (benc_s  !== ~(c & ~(b & a)) ||

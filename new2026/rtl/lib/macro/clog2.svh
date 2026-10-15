@@ -22,6 +22,12 @@
     (x <= 512) ? 9 : \
     -1
 
+`else
+
+// Any use of `CLOG2 fails to compile, undeclared identifier says what to do.
+// Undefined macro is not enough: Icarus only warns and drops the macro name.
+`define CLOG2(x) CLOG2_macro_is_disabled_use_builtin_clog2
+
 `endif // DARK_CIRCUIT_CLOG2_MACRO
 
 `endif

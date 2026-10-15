@@ -13,8 +13,10 @@ rtl/lib/
     generic/     behavioral
     cell/        built from cells, or from other gates of gate/cell
   macro/         include files kept for old code; use $clog2, not `CLOG2
+  sim/           clock and reset generators for testbenches: SimClkGen, SimRstGen
 cmake/           cmake helpers, one file per simulator
-test/gate/       testbenches
+test/gate/       testbenches of gates
+test/sim/        testbench of clock and reset generators
 ```
 
 Every directory has its flist, for example `cell/cmos/cell_cmos.flist`
@@ -79,7 +81,7 @@ then modules that the design does not use are not elaborated.
 | XOR            | Xor2, Xnor2, Xor3                         |
 | complex        | Aoi21, Aoi22, Aoi31, Oai21, Oai22, Ind2, Ind3, Iind3 |
 | multiplexer    | Mux2, Mux2i, Mux3, Mux4, Mux8, Mux1hot2, Mux1hot3 |
-| arithmetic     | HalfAdder, FullAdder, Maj3, Benc, Bml     |
+| arithmetic     | HalfAdder, FullAdder, FullAdderMaj3, Maj3, Benc, Bml |
 | reduction      | AndReduce, OrReduce, NorReduce, Parity, CmpEq, CmpNe |
 | sequential     | Dff, DffAsyncRst, DffAsyncRstEn, DffSyncRst, DffSyncRstEn, Latch |
 
