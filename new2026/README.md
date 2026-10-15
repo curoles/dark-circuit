@@ -1,5 +1,95 @@
 # DARKCIRCUIT
 
+## Library layout
+
+```
+rtl/lib/
+  cell/          1-bit cells with TSMC-style names and pins: INV, ND2, MUX2, DFQ, ...
+    generic/     behavioral
+    cmos/        pmos/nmos transistors, bigger cells are made of smaller cells
+    builtin/     Verilog primitives (not, nand, ...), optional UDP for flops and latch
+    tsmc/        wrappers around TSMC library cells: INV -> INVD1, ND2 -> ND2D1, ...
+  gate/          WIDTH-parameterized gates: Inv, Nand2, Mux2, Dff, ...
+    generic/     behavioral
+    cell/        built from cells, or from other gates of gate/cell
+cmake/           cmake helpers, one file per simulator
+test/gate/       testbenches
+```
+
+Every directory has its flist, for example `cell/cmos/cell_cmos.flist`
+or `gate/cell/gate_cell.flist`. File names in a flist are relative to the flist directory
+(as Verilator `-F` expects). Icarus resolves file names of its command file `-f`
+from the current directory, so the cmake helpers read flists and pass full paths.
+
+### Cell, gate and flavor
+
+A **cell** is 1-bit, its module name is the TSMC cell name without drive strength
+(`ND2` for TSMC `ND2D1`) and its pins are TSMC pin names (`A1`, `A2`, `ZN`).
+
+A **gate** has parameter `WIDTH`, its module name is CamelCase (`Nand2`)
+and its ports are `in1`, `in2`, `out`, ...
+
+Cell directories `generic`, `cmos`, `builtin` and `tsmc` are **flavors**:
+every flavor has the same cells with the same pins, only implementation differs.
+Use gates in a design, then choose implementation by flists:
+
+| Implementation             | Flists                                       |
+|----------------------------|----------------------------------------------|
+| behavioral gates           | `gate_generic.flist`                         |
+| gates made of cells        | `gate_cell.flist` and one `cell_<flavor>.flist` |
+
+Always give simulator the top module (`iverilog -s`, `verilator --top-module`),
+then modules that the design does not use are not elaborated.
+
+### Defines
+
+| Define                     | Effect                                                         |
+|----------------------------|----------------------------------------------------------------|
+| `DARK_CIRCUIT_FAKE_TSMC`   | flavor `tsmc` uses fake TSMC cells defined in the same files, to work without TSMC library |
+| `DARK_CIRCUIT_BUILTIN_UDP` | flavor `builtin` makes DFQ, DFCNQ and LHQ with Verilog UDP instead of always_ff and always_latch |
+
+### Naming
+
+| What                | Rule                                   | Example                          |
+|---------------------|----------------------------------------|----------------------------------|
+| cell module         | TSMC name without drive strength       | `AOI22`                          |
+| gate module         | CamelCase                              | `Aoi22`, `CmpEq`, `DffAsyncRst`  |
+| file                | module name in lower case, snake_case  | `aoi22.sv`, `cmp_eq.sv`, `dff_async_rst.sv` |
+| instance            | `u_` and name                          | `u_aoi22`, `u_mux4_0`            |
+| multiplexer inputs  | zero-based, `sel` = k selects `in<k>`  | `Mux4`: `in0`..`in3`, `sel[1:0]` |
+
+### Cells
+
+| Group          | Cells                                     |
+|----------------|-------------------------------------------|
+| basic          | INV, BUF, ND2, ND3, NR2, NR3, AN2, AN3, OR2, OR3 |
+| XOR            | XOR2, XNR2, XOR3                          |
+| complex        | AOI21, AOI22, AOI31, OAI21, OAI22         |
+| inverted input | IND2, IND3, IIND3                         |
+| multiplexer    | MUX2, MUX2N, MUX3, MUX4                   |
+| arithmetic     | HA1, FA1, MAJ3, BENC, BML                 |
+| sequential     | DFQ, DFCNQ (asynchronous clear), LHQ (latch) |
+
+### Gates
+
+| Group          | Gates                                     |
+|----------------|-------------------------------------------|
+| basic          | Inv, Buf, Nand2, Nand3, Nor2, Nor3, And2, And3, Or2, Or3 |
+| XOR            | Xor2, Xnor2, Xor3                         |
+| complex        | Aoi21, Aoi22, Aoi31, Oai21, Oai22, Ind2, Ind3, Iind3 |
+| multiplexer    | Mux2, Mux2i, Mux3, Mux4, Mux8, Mux1hot2, Mux1hot3 |
+| arithmetic     | HalfAdder, FullAdder, Maj3, Benc, Bml     |
+| reduction      | AndReduce, OrReduce, NorReduce, Parity, CmpEq, CmpNe |
+| sequential     | Dff, DffAsyncRst, DffAsyncRstEn, DffSyncRst, DffSyncRstEn, Latch |
+
+### Tests
+
+Testbenches in `test/gate/` check every gate and stop at the first mismatch:
+`tb_gate.sv` applies all input combinations to combinational gates,
+`tb_gate_seq.sv` clocks, resets and enables sequential gates.
+Each testbench runs with `gate_generic.flist` and with `gate_cell.flist` over every cell flavor,
+so every cell is covered through its gate.
+
 ## Requirements
 
 - CMake 3.20 or newer
