@@ -28,10 +28,10 @@ module BML (
     assign M0_n = ~M0;
     assign M1_n = ~M1;
 
-    AOI22 aoi22_0 (.A1(A_n), .A2(M1), .B1(S_n), .B2(M1_n), .ZN(m1_sel_n));
+    AOI22 u_aoi22_0 (.A1(A_n), .A2(M1), .B1(S_n), .B2(M1_n), .ZN(m1_sel_n));
 
-    AOI22 aoi22_1 (.A1(A_n), .A2(M0), .B1(S_n), .B2(M0_n), .ZN(m0_sel_n));
+    AOI22 u_aoi22_1 (.A1(A_n), .A2(M0), .B1(S_n), .B2(M0_n), .ZN(m0_sel_n));
 
-    AOI22 aoi22_2 (.A1(X2_n), .A2(m1_sel_n), .B1(X2), .B2(m0_sel_n), .ZN(PP));
+    AOI22 u_aoi22_2 (.A1(X2_n), .A2(m1_sel_n), .B1(X2), .B2(m0_sel_n), .ZN(PP));
 
 endmodule
