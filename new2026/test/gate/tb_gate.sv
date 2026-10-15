@@ -9,7 +9,8 @@ module TbGate;
     reg  [W-1:0] b;
     reg  [W-1:0] c;
     reg  [W-1:0] d;
-    reg  [1:0]   sel2;
+    reg  [2:0]   sel3;
+    wire [1:0]   sel2;
     wire [W-1:0] inv;
     wire [W-1:0] buff;
     wire [W-1:0] nand2;
@@ -44,7 +45,23 @@ module TbGate;
     wire [W-1:0] benc_a;
     wire [W-1:0] benc_x2;
     wire [W-1:0] bml_pp;
+    wire [W-1:0] mux8;
+    reg  [W-1:0] mux8_exp;
+    wire [W-1:0] mux1hot2;
+    wire [W-1:0] mux1hot3;
+    wire         and_r1, and_r3, and_r12;
+    wire         or_r1, or_r3, or_r12;
+    wire         nor_r1, nor_r3, nor_r12;
+    wire         par_r1, par_r3, par_r12;
+    wire         cmp_eq;
+    wire         cmp_ne;
     integer i;
+
+    assign sel2 = sel3[1:0];
+
+    // Reductions are tested with widths 1, W and 4*W.
+    wire [4*W-1:0] dcba;
+    assign dcba = {d, c, b, a};
 
     // Bml needs 5 inputs: its M1 is input a rotated by one bit,
     // so every bit still sees 5 independent input bits.
@@ -89,11 +106,41 @@ module TbGate;
     Maj3  #(W) u_maj3 (.in1(a), .in2(b), .in3(c), .out(maj3));
     Benc  #(W) u_benc (.M0(a), .M1(b), .M2(c), .S(benc_s), .A(benc_a), .X2(benc_x2));
     Bml   #(W) u_bml  (.X2(a), .A(b), .S(c), .M0(d), .M1(a_rot), .PP(bml_pp));
+    Mux8  #(W) u_mux8 (.in0(a), .in1(b), .in2(c), .in3(d), .in4(~a), .in5(~b), .in6(~c), .in7(~d),
+                       .sel(sel3), .out(mux8));
+    Mux1hot2 #(W) u_mux1hot2(.in0(a), .in1(b), .sel(sel3[1:0]), .out(mux1hot2));
+    Mux1hot3 #(W) u_mux1hot3(.in0(a), .in1(b), .in2(c), .sel(sel3), .out(mux1hot3));
+
+    AndReduce #(1)   u_and_reduce_1 (.in(a[0]), .out(and_r1));
+    AndReduce #(W)   u_and_reduce_w (.in(a),    .out(and_r3));
+    AndReduce #(4*W) u_and_reduce_4w(.in(dcba), .out(and_r12));
+    OrReduce  #(1)   u_or_reduce_1  (.in(a[0]), .out(or_r1));
+    OrReduce  #(W)   u_or_reduce_w  (.in(a),    .out(or_r3));
+    OrReduce  #(4*W) u_or_reduce_4w (.in(dcba), .out(or_r12));
+    NorReduce #(1)   u_nor_reduce_1 (.in(a[0]), .out(nor_r1));
+    NorReduce #(W)   u_nor_reduce_w (.in(a),    .out(nor_r3));
+    NorReduce #(4*W) u_nor_reduce_4w(.in(dcba), .out(nor_r12));
+    Parity    #(1)   u_parity_1     (.in(a[0]), .parity(par_r1));
+    Parity    #(W)   u_parity_w     (.in(a),    .parity(par_r3));
+    Parity    #(4*W) u_parity_4w    (.in(dcba), .parity(par_r12));
+
+    CmpEq #(W) u_cmp_eq(.in1(a), .in2(b), .eq(cmp_eq));
+    CmpNe #(W) u_cmp_ne(.in1(a), .in2(b), .ne(cmp_ne));
 
     initial begin
-        for (i = 0; i < 2**(4*W+2); i = i + 1) begin
-            {sel2, d, c, b, a} = i;
+        for (i = 0; i < 2**(4*W+3); i = i + 1) begin
+            {sel3, d, c, b, a} = i;
             #1;
+            case (sel3)
+                0: mux8_exp = a;
+                1: mux8_exp = b;
+                2: mux8_exp = c;
+                3: mux8_exp = d;
+                4: mux8_exp = ~a;
+                5: mux8_exp = ~b;
+                6: mux8_exp = ~c;
+                default: mux8_exp = ~d;
+            endcase
             if (inv   !== ~a)            $fatal(1, "Inv: a=%b got=%b", a, inv);
             if (buff  !== a)             $fatal(1, "Buf: a=%b got=%b", a, buff);
             if (nand2 !== ~(a & b))      $fatal(1, "Nand2: a=%b b=%b got=%b", a, b, nand2);
@@ -143,6 +190,22 @@ module TbGate;
                 $fatal(1, "Benc: M0=%b M1=%b M2=%b got S=%b A=%b X2=%b", a, b, c, benc_s, benc_a, benc_x2);
             if (bml_pp !== bml_exp)
                 $fatal(1, "Bml: X2=%b A=%b S=%b M0=%b M1=%b got=%b", a, b, c, d, a_rot, bml_pp);
+            if (mux8 !== mux8_exp)
+                $fatal(1, "Mux8: a=%b b=%b c=%b d=%b sel=%b got=%b exp=%b", a, b, c, d, sel3, mux8, mux8_exp);
+            if (mux1hot2 !== (({W{sel3[0]}} & a) | ({W{sel3[1]}} & b)))
+                $fatal(1, "Mux1hot2: in0=%b in1=%b sel=%b got=%b", a, b, sel3[1:0], mux1hot2);
+            if (mux1hot3 !== (({W{sel3[0]}} & a) | ({W{sel3[1]}} & b) | ({W{sel3[2]}} & c)))
+                $fatal(1, "Mux1hot3: in0=%b in1=%b in2=%b sel=%b got=%b", a, b, c, sel3, mux1hot3);
+            if (and_r1 !== a[0] || and_r3 !== &a || and_r12 !== &dcba)
+                $fatal(1, "AndReduce: in=%b got w1=%b w3=%b w12=%b", dcba, and_r1, and_r3, and_r12);
+            if (or_r1 !== a[0] || or_r3 !== |a || or_r12 !== |dcba)
+                $fatal(1, "OrReduce: in=%b got w1=%b w3=%b w12=%b", dcba, or_r1, or_r3, or_r12);
+            if (nor_r1 !== ~a[0] || nor_r3 !== ~|a || nor_r12 !== ~|dcba)
+                $fatal(1, "NorReduce: in=%b got w1=%b w3=%b w12=%b", dcba, nor_r1, nor_r3, nor_r12);
+            if (par_r1 !== a[0] || par_r3 !== ^a || par_r12 !== ^dcba)
+                $fatal(1, "Parity: in=%b got w1=%b w3=%b w12=%b", dcba, par_r1, par_r3, par_r12);
+            if (cmp_eq !== (a == b) || cmp_ne !== (a != b))
+                $fatal(1, "CmpEq/CmpNe: a=%b b=%b got eq=%b ne=%b", a, b, cmp_eq, cmp_ne);
         end
         $display("PASS");
         $finish;

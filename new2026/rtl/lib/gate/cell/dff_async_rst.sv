@@ -28,3 +28,24 @@ module DffAsyncRst #(
     endgenerate
 
 endmodule
+
+/* D type Flip Flop with asynchronous reset and Enable.
+ *
+ * Mux2 selects in (en=1) or out (en=0) in front of DffAsyncRst.
+ */
+module DffAsyncRstEn #(
+    parameter WIDTH = 1,
+    parameter [WIDTH-1:0] RST_VAL = {WIDTH{1'b0}}
+)(
+    input  wire             clk,
+    input  wire             rst_n,
+    input  wire             en,
+    input  wire [WIDTH-1:0] in,
+    output wire [WIDTH-1:0] out
+);
+    wire [WIDTH-1:0] next;
+
+    Mux2 #(WIDTH) u_mux2(.in0(out), .in1(in), .sel(en), .out(next));
+    DffAsyncRst #(.WIDTH(WIDTH), .RST_VAL(RST_VAL)) u_dff(.clk(clk), .rst_n(rst_n), .in(next), .out(out));
+
+endmodule

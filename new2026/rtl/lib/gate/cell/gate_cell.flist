@@ -15,6 +15,9 @@ mux2.sv
 mux2i.sv
 mux3.sv
 mux4.sv
+mux8.sv
+mux1hot2.sv
+mux1hot3.sv
 aoi21.sv
 aoi22.sv
 aoi31.sv
@@ -23,6 +26,12 @@ oai22.sv
 ind2.sv
 ind3.sv
 iind3.sv
+and_reduce.sv
+or_reduce.sv
+nor_reduce.sv
+parity.sv
+cmp_eq.sv
+cmp_ne.sv
 half_adder.sv
 full_adder.sv
 maj3.sv
@@ -30,4 +39,5 @@ benc.sv
 bml.sv
 dff.sv
 dff_async_rst.sv
+dff_sync_rst.sv
 latch.sv
