@@ -12,6 +12,7 @@ rtl/lib/
   gate/          WIDTH-parameterized gates: Inv, Nand2, Mux2, Dff, ...
     generic/     behavioral
     cell/        built from cells, or from other gates of gate/cell
+  macro/         include files kept for old code; use $clog2, not `CLOG2
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches
 ```
