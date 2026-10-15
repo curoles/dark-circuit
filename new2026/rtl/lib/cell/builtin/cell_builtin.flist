@@ -1,5 +1,14 @@
 inv.sv
+buf.sv
 nd2.sv
+nd3.sv
 nr2.sv
+nr3.sv
 an2.sv
+an3.sv
+or2.sv
+or3.sv
+xor2.sv
+xnr2.sv
+xor3.sv
 mux2.sv

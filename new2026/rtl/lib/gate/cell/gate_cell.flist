@@ -1,7 +1,16 @@
 inv.sv
+buf.sv
 nand2.sv
+nand3.sv
 nor2.sv
+nor3.sv
 and2.sv
+and3.sv
+or2.sv
+or3.sv
+xor2.sv
+xnor2.sv
+xor3.sv
 mux2.sv
 aoi22.sv
 benc.sv

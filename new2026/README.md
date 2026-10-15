@@ -12,8 +12,11 @@
 | Target       | What it does                              |
 |--------------|-------------------------------------------|
 | `make cmake` | configure build directory                 |
-| `make build` | configure and build                       |
-| `make test`  | configure, build and run all tests        |
+| `make build` | configure if needed and build             |
+| `make test`  | configure if needed, build and run all tests |
+
+Configure is needed the first time and when `CMAKE_ARGS` are given;
+after that cmake re-runs itself when `CMakeLists.txt` or flists change.
 
 Build directory is outside of the source tree, by default it is directory `build`
 next to the repository directory: for repository `~/prj/dark-circuit/dark-circuit`
