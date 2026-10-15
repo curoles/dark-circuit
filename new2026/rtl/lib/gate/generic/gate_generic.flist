@@ -32,7 +32,11 @@ mux4.sv
 mux8.sv
 mux1hot2.sv
 mux1hot3.sv
+half_adder.sv
+full_adder.sv
+maj3.sv
 benc.sv
+bml.sv
 dff.sv
 dff_async_rst.sv
 dff_sync_rst.sv

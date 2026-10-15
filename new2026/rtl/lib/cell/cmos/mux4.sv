@@ -1,0 +1,19 @@
+/* CMOS 4:1 Multiplexer, TSMC-style cell MUX4.
+ *
+ * Three MUX2 cells: S0 selects within pairs, then S1 selects the pair.
+ */
+module MUX4 (
+    input  wire I0,
+    input  wire I1,
+    input  wire I2,
+    input  wire I3,
+    input  wire S0,
+    input  wire S1,
+    output wire Z
+);
+    wire mux01, mux23;
+    MUX2 u_mux2_01 (.I0(I0), .I1(I1), .S(S0), .Z(mux01));
+    MUX2 u_mux2_23 (.I0(I2), .I1(I3), .S(S0), .Z(mux23));
+    MUX2 u_mux2_out(.I0(mux01), .I1(mux23), .S(S1), .Z(Z));
+
+endmodule

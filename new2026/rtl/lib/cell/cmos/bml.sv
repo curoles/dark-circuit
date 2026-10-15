@@ -1,0 +1,37 @@
+/* CMOS Booth Multiplexer cell, TSMC-style cell BML.
+ *
+ * Takes in two bits of the multiplicand at a time and generates the partial product
+ * using other inputs that come in from the booth encoder cell BENC.
+ *
+ */
+module BML (
+    input  wire X2,
+    input  wire A,
+    input  wire S,
+    input  wire M0,
+    input  wire M1,
+    output wire PP
+);
+
+    wire m1_sel_n;
+    wire m0_sel_n;
+
+    wire X2_n;
+    wire A_n;
+    wire S_n;
+    wire M0_n;
+    wire M1_n;
+
+    INV u_inv_x2(.I(X2), .ZN(X2_n));
+    INV u_inv_a (.I(A),  .ZN(A_n));
+    INV u_inv_s (.I(S),  .ZN(S_n));
+    INV u_inv_m0(.I(M0), .ZN(M0_n));
+    INV u_inv_m1(.I(M1), .ZN(M1_n));
+
+    AOI22 u_aoi22_0 (.A1(A_n), .A2(M1), .B1(S_n), .B2(M1_n), .ZN(m1_sel_n));
+
+    AOI22 u_aoi22_1 (.A1(A_n), .A2(M0), .B1(S_n), .B2(M0_n), .ZN(m0_sel_n));
+
+    AOI22 u_aoi22_2 (.A1(X2_n), .A2(m1_sel_n), .B1(X2), .B2(m0_sel_n), .ZN(PP));
+
+endmodule

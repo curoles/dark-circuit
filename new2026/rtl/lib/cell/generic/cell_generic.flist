@@ -12,6 +12,9 @@ xor2.sv
 xnr2.sv
 xor3.sv
 mux2.sv
+mux2n.sv
+mux3.sv
+mux4.sv
 aoi21.sv
 aoi22.sv
 aoi31.sv
@@ -20,5 +23,8 @@ oai22.sv
 ind2.sv
 ind3.sv
 iind3.sv
+ha1.sv
+fa1.sv
+maj3.sv
 benc.sv
 bml.sv

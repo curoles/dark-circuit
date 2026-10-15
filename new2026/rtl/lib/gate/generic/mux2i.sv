@@ -1,11 +1,11 @@
-/* Inverting 2:1 Multiplexer made with OAI22, out = ~(sel ? in2 : in1).
+/* Inverting 2:1 Multiplexer made with OAI22, out = ~(sel ? in1 : in0).
  *
  * <pre>
- *  in1 ----------+--\
+ *  in0 ----------+--\
  *                )OR +----+
  *        +-------+--/|    |
  *        |           |NAND|o----- out
- *  in2 ----------+--\|    |
+ *  in1 ----------+--\|    |
  *        |       )OR +----+
  * sel  --+-NOT---+--/
  * </pre>
@@ -13,8 +13,8 @@
 module Mux2i #(
     parameter WIDTH = 1
 )(
-    input  wire [WIDTH-1:0] in1,  // inverted to out when sel is 0
-    input  wire [WIDTH-1:0] in2,  // inverted to out when sel is 1
+    input  wire [WIDTH-1:0] in0,  // inverted to out when sel is 0
+    input  wire [WIDTH-1:0] in1,  // inverted to out when sel is 1
     input  wire             sel,
     output wire [WIDTH-1:0] out
 );
@@ -24,6 +24,6 @@ module Mux2i #(
     assign sels = {WIDTH{sel}};
     assign nsels = {WIDTH{~sel}};
 
-    Oai22 #(WIDTH) u_oai22(.in1(in1), .in2(sels), .in3(in2), .in4(nsels), .out(out));
+    Oai22 #(WIDTH) u_oai22(.in1(in0), .in2(sels), .in3(in1), .in4(nsels), .out(out));
 
 endmodule

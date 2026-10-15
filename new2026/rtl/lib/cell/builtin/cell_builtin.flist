@@ -20,3 +20,11 @@ ind2.sv
 ind3.sv
 iind3.sv
 mux2.sv
+mux2n.sv
+mux3.sv
+mux4.sv
+ha1.sv
+fa1.sv
+maj3.sv
+benc.sv
+bml.sv
