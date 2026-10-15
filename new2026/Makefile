@@ -4,6 +4,7 @@
 #   make cmake   - configure build directory
 #   make build   - configure if needed and build
 #   make test    - configure if needed, build and run all tests
+#   make test_parts - configure if needed, build and run tests of parts
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
 # Directory of this Makefile, it has top CMakeLists.txt.
@@ -23,7 +24,9 @@ CONFIGURE := cmake -S $(SOURCE_DIR) -B $(BUILD_DIR) $(CMAKE_ARGS)
 # after that cmake re-runs itself when CMakeLists.txt or flists change.
 CONFIGURED := $(if $(CMAKE_ARGS),cmake,$(BUILD_DIR)/CMakeCache.txt)
 
-.PHONY: cmake build test
+CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc)
+
+.PHONY: cmake build test test_parts
 
 cmake:
 	$(CONFIGURE)
@@ -35,4 +38,8 @@ build: $(CONFIGURED)
 	cmake --build $(BUILD_DIR) --parallel
 
 test: build
-	ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc)
+	$(CTEST)
+
+# Tests of parts have label part.
+test_parts: build
+	$(CTEST) -L part

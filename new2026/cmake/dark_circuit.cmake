@@ -98,5 +98,72 @@ macro(dc_parse_test_args NAME)
     endforeach()
 endmacro()
 
+# dc_test_labels(<out-var>)
+#
+# Return labels of a test added in current directory under test/:
+# first directory (gate, sim, part, ...) and, if different, the last directory.
+# For example test/part/carry_save_adder gives labels part and carry_save_adder.
+function(dc_test_labels OUT)
+    file(RELATIVE_PATH rel ${PROJECT_SOURCE_DIR}/test ${CMAKE_CURRENT_SOURCE_DIR})
+    string(REPLACE "/" ";" dirs "${rel}")
+    set(labels)
+    if(dirs)
+        list(GET dirs 0 first)
+        list(GET dirs -1 last)
+        list(APPEND labels ${first})
+        if(NOT last STREQUAL first)
+            list(APPEND labels ${last})
+        endif()
+    endif()
+    set(${OUT} ${labels} PARENT_SCOPE)
+endfunction()
+
 include(${CMAKE_CURRENT_LIST_DIR}/icarus.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/verilator.cmake)
+
+# Main simulator runs tests that need only one simulator, like tests of parts.
+# Cache variable DARK_CIRCUIT_MAIN_SIMULATOR selects it:
+#   AUTO      - first used simulator of verilator, icarus (default)
+#   verilator - Verilator, fail if it is not used
+#   icarus    - Icarus Verilog, fail if it is not used
+set(DARK_CIRCUIT_MAIN_SIMULATOR AUTO CACHE STRING
+    "Simulator for tests that run on one simulator: AUTO, verilator or icarus")
+set_property(CACHE DARK_CIRCUIT_MAIN_SIMULATOR PROPERTY STRINGS AUTO verilator icarus)
+
+set(DARK_CIRCUIT_MAINSIM)
+string(TOLOWER "${DARK_CIRCUIT_MAIN_SIMULATOR}" main_simulator)
+if(main_simulator STREQUAL "auto")
+    foreach(simulator IN ITEMS verilator icarus)
+        string(TOUPPER ${simulator} SIMULATOR)
+        if(DARK_CIRCUIT_${SIMULATOR})
+            set(DARK_CIRCUIT_MAINSIM ${simulator})
+            break()
+        endif()
+    endforeach()
+elseif(main_simulator MATCHES "^(verilator|icarus)$")
+    string(TOUPPER ${main_simulator} SIMULATOR)
+    if(NOT DARK_CIRCUIT_${SIMULATOR})
+        message(FATAL_ERROR "DARK_CIRCUIT_MAIN_SIMULATOR=${DARK_CIRCUIT_MAIN_SIMULATOR}, but ${SIMULATOR} is not used")
+    endif()
+    set(DARK_CIRCUIT_MAINSIM ${main_simulator})
+else()
+    message(FATAL_ERROR "DARK_CIRCUIT_MAIN_SIMULATOR=${DARK_CIRCUIT_MAIN_SIMULATOR}, expected AUTO, verilator or icarus")
+endif()
+
+if(DARK_CIRCUIT_MAINSIM)
+    message(STATUS "MAIN SIMULATOR: ${DARK_CIRCUIT_MAINSIM}")
+else()
+    message(STATUS "MAIN SIMULATOR: none, tests on main simulator are disabled")
+endif()
+
+# dc_add_mainsim_test(<name> TOP <module> TB <tb.sv>
+#                     [FLISTS <flist>...] [DEFINES <macro>...])
+#
+# Add test that runs on the main simulator only,
+# it calls dc_add_<simulator>_test() of the main simulator.
+# Does nothing if there is no main simulator.
+function(dc_add_mainsim_test NAME)
+    if(DARK_CIRCUIT_MAINSIM)
+        cmake_language(CALL dc_add_${DARK_CIRCUIT_MAINSIM}_test ${NAME} ${ARGN})
+    endif()
+endfunction()

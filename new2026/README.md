@@ -12,10 +12,12 @@ rtl/lib/
   gate/          WIDTH-parameterized gates: Inv, Nand2, Mux2, Dff, ...
     generic/     behavioral
     cell/        built from cells, or from other gates of gate/cell
+  part/          parts made of gates: CarrySaveAdder, ...
   macro/         include files kept for old code; use $clog2, not `CLOG2
   sim/           clock and reset generators for testbenches: SimClkGen, SimRstGen
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
+test/part/<part>/ testbench of a part
 test/sim/        testbench of clock and reset generators
 ```
 
@@ -93,10 +95,13 @@ Testbenches in `test/gate/` check every gate and stop at the first mismatch:
 Each testbench runs with `gate_generic.flist` and with `gate_cell.flist` over every cell flavor,
 so every cell is covered through its gate.
 
-Every test runs with Icarus and Verilator, except cell flavor `cmos`:
+Every test of gates runs with Icarus and Verilator, except cell flavor `cmos`:
 it models transistors and only 4-state Icarus shows its short circuits (x) and
 floating outputs (z). Verilator is 2-state, so `tb_gate_seq.sv` skips its x checks
 with `` `ifndef VERILATOR ``.
+
+A **part** uses gates only, never cells. Tests of parts use `gate_generic.flist`
+and run on the main simulator only, see [Simulators](#simulators).
 
 ## Requirements
 
@@ -106,13 +111,14 @@ with `` `ifndef VERILATOR ``.
 
 ## Build and test
 
-`Makefile` wraps `cmake` and `ctest`, it has 3 targets:
+`Makefile` wraps `cmake` and `ctest`, it has 4 targets:
 
-| Target       | What it does                              |
-|--------------|-------------------------------------------|
-| `make cmake` | configure build directory                 |
-| `make build` | configure if needed and build             |
-| `make test`  | configure if needed, build and run all tests |
+| Target            | What it does                              |
+|-------------------|-------------------------------------------|
+| `make cmake`      | configure build directory                 |
+| `make build`      | configure if needed and build             |
+| `make test`       | configure if needed, build and run all tests |
+| `make test_parts` | configure if needed, build and run tests of parts |
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.
@@ -162,6 +168,19 @@ Use of every simulator is controlled by cmake variable `DARK_CIRCUIT_USE_<SIMULA
 
 Verilator older than 5.0 is treated as not found (or as an error with `ON`).
 
+Tests that need only one simulator, like tests of parts, run on the **main simulator**,
+cmake variable `DARK_CIRCUIT_MAIN_SIMULATOR` selects it:
+
+| Value       | Meaning                                              |
+|-------------|------------------------------------------------------|
+| `AUTO`      | first used of Verilator, Icarus (default)            |
+| `verilator` | Verilator, cmake fails if it is not used             |
+| `icarus`    | Icarus Verilog, cmake fails if it is not used        |
+
+```sh
+make test_parts CMAKE_ARGS="-D DARK_CIRCUIT_MAIN_SIMULATOR=icarus"
+```
+
 ## Running selected tests
 
 After `make build`, call `ctest` directly, `<build-dir>` is the build directory:
@@ -172,3 +191,7 @@ ctest --test-dir <build-dir> -R gate_cell_cmos     # tests with name matching re
 ctest --test-dir <build-dir> -L icarus             # tests with label icarus
 ctest --test-dir <build-dir> --output-on-failure   # show output of failed tests
 ```
+
+Every test has labels: its simulator (`icarus`, `verilator`), the first directory
+under `test/` (`gate`, `sim`, `part`) and, for tests deeper in `test/`,
+its own directory (`carry_save_adder`).

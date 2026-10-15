@@ -25,7 +25,7 @@ endif()
 #                       [FLISTS <flist>...] [DEFINES <macro>...])
 #
 # Build testbench <tb.sv> and files from <flist>s with Verilator --binary --timing
-# and add CTest test <name>.verilator with label verilator.
+# and add CTest test <name>.verilator with label verilator and labels of dc_test_labels().
 # Testbench fails the test with $fatal, then the simulation exit code is not 0.
 # Does nothing if Verilator is not used.
 function(dc_add_verilator_test NAME)
@@ -53,5 +53,7 @@ function(dc_add_verilator_test NAME)
     )
     add_custom_target(${test} ALL DEPENDS ${exe})
     add_test(NAME ${test} COMMAND ${exe})
-    set_tests_properties(${test} PROPERTIES LABELS verilator)
+    dc_test_labels(labels)
+    set(test_labels verilator ${labels})
+    set_tests_properties(${test} PROPERTIES LABELS "${test_labels}")
 endfunction()
