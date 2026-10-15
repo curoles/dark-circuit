@@ -3,7 +3,7 @@
  * Stops at the first mismatch with $fatal.
  */
 module TbGate;
-    localparam W = 4;
+    localparam W = 3;
 
     reg  [W-1:0] a;
     reg  [W-1:0] b;
@@ -28,6 +28,9 @@ module TbGate;
     wire [W-1:0] aoi31;
     wire [W-1:0] oai21;
     wire [W-1:0] oai22;
+    wire [W-1:0] ind2;
+    wire [W-1:0] ind3;
+    wire [W-1:0] iind3;
     wire [W-1:0] mux2;
     integer i;
 
@@ -49,6 +52,9 @@ module TbGate;
     Aoi31 #(W) u_aoi31(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi31));
     Oai21 #(W) u_oai21(.in1(a), .in2(b), .in3(c), .out(oai21));
     Oai22 #(W) u_oai22(.in1(a), .in2(b), .in3(c), .in4(d), .out(oai22));
+    Ind2  #(W) u_ind2 (.in1(a), .in2(b), .out(ind2));
+    Ind3  #(W) u_ind3 (.in1(a), .in2(b), .in3(c), .out(ind3));
+    Iind3 #(W) u_iind3(.in1(a), .in2(b), .in3(c), .out(iind3));
     Mux2  #(W) u_mux2 (.in1(a), .in2(b), .sel(sel), .out(mux2));
 
     initial begin
@@ -78,6 +84,12 @@ module TbGate;
                 $fatal(1, "Oai21: a=%b b=%b c=%b got=%b", a, b, c, oai21);
             if (oai22 !== ~((a | b) & (c | d)))
                 $fatal(1, "Oai22: a=%b b=%b c=%b d=%b got=%b", a, b, c, d, oai22);
+            if (ind2  !== ~(~a & b))
+                $fatal(1, "Ind2: a=%b b=%b got=%b", a, b, ind2);
+            if (ind3  !== ~(~a & b & c))
+                $fatal(1, "Ind3: a=%b b=%b c=%b got=%b", a, b, c, ind3);
+            if (iind3 !== ~(~a & ~b & c))
+                $fatal(1, "Iind3: a=%b b=%b c=%b got=%b", a, b, c, iind3);
             if (mux2  !== (sel ? a : b)) $fatal(1, "Mux2: a=%b b=%b sel=%b got=%b", a, b, sel, mux2);
         end
         $display("PASS");
