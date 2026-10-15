@@ -35,6 +35,7 @@ mux1hot3.sv
 half_adder.sv
 full_adder.sv
 full_adder_maj3.sv
+full_adder_aoi.sv
 maj3.sv
 benc.sv
 bml.sv

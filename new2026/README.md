@@ -81,7 +81,7 @@ then modules that the design does not use are not elaborated.
 | XOR            | Xor2, Xnor2, Xor3                         |
 | complex        | Aoi21, Aoi22, Aoi31, Oai21, Oai22, Ind2, Ind3, Iind3 |
 | multiplexer    | Mux2, Mux2i, Mux3, Mux4, Mux8, Mux1hot2, Mux1hot3 |
-| arithmetic     | HalfAdder, FullAdder, FullAdderMaj3, Maj3, Benc, Bml |
+| arithmetic     | HalfAdder, FullAdder, FullAdderMaj3, FullAdderAoi, Maj3, Benc, Bml |
 | reduction      | AndReduce, OrReduce, NorReduce, Parity, CmpEq, CmpNe |
 | sequential     | Dff, DffAsyncRst, DffAsyncRstEn, DffSyncRst, DffSyncRstEn, Latch |
 
