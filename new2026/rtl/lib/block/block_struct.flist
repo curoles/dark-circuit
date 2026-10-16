@@ -3,3 +3,4 @@
 -F priority_encoder/struct/priority_encoder.flist
 -F shift_reg/struct/shift_reg.flist
 -F sram_1r1w/struct/sram_1r1w.flist
+-F reg_file_sram/struct/reg_file_sram.flist

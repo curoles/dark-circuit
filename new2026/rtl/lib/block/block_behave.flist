@@ -3,3 +3,4 @@
 -F priority_encoder/behave/priority_encoder.flist
 -F shift_reg/behave/shift_reg.flist
 -F sram_1r1w/behave/sram_1r1w.flist
+-F reg_file_sram/struct/reg_file_sram.flist
