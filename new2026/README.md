@@ -13,7 +13,7 @@ rtl/lib/
     generic/     behavioral
     cell/        built from cells, or from other gates of gate/cell
   part/          parts made of gates: CarrySaveAdder, RippleCarryAdder, GatedClk, LimDff
-  block/         blocks: Counter, Decoder, Sram1R1W, ...
+  block/         blocks: Counter, Decoder, PriorityEncoder, Sram1R1W, ...
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of parts and gates
   macro/         include files kept for old code; use $clog2, not `CLOG2
