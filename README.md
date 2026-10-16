@@ -137,14 +137,17 @@ on the main simulator, so both versions must behave the same.
 
 ## Build and test
 
-`Makefile` wraps `cmake` and `ctest`, it has 7 targets:
+`Makefile` wraps `cmake` and `ctest`, it has 9 targets:
 
 - `make help`: explain targets and variables, also plain `make`
 - `make cmake`: configure build directory
 - `make build`: configure if needed and build
 - `make test`: configure if needed, build and run all tests
+- `make test_gates`: configure if needed, build and run tests of gates
 - `make test_parts`: configure if needed, build and run tests of parts
 - `make test_blocks`: configure if needed, build and run tests of blocks
+- `make run R=<regex> L=<regex>`: configure if needed, build and run tests
+  with name matching `R` and/or label matching `L`, for example `make run R=fifo`
 - `make list`: configure if needed and list tests, name and labels of every test
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;

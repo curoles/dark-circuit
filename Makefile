@@ -5,8 +5,10 @@
 #   make cmake   - configure build directory
 #   make build   - configure if needed and build
 #   make test    - configure if needed, build and run all tests
+#   make test_gates - configure if needed, build and run tests of gates
 #   make test_parts - configure if needed, build and run tests of parts
 #   make test_blocks - configure if needed, build and run tests of blocks
+#   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
@@ -28,12 +30,13 @@ CONFIGURE := cmake -S $(SOURCE_DIR) -B $(BUILD_DIR) $(CMAKE_ARGS)
 # after that cmake re-runs itself when CMakeLists.txt or flists change.
 CONFIGURED := $(if $(CMAKE_ARGS),cmake,$(BUILD_DIR)/CMakeCache.txt)
 
-CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc)
+# V=1 adds ctest -V: show output of every test, not only of failed tests.
+CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc) $(if $(V),-V)
 
 # Plain `make` without a target shows help.
 .DEFAULT_GOAL := help
 
-.PHONY: cmake build test test_parts test_blocks list help
+.PHONY: cmake build test test_gates test_parts test_blocks run list help
 
 cmake:
 	$(CONFIGURE)
@@ -47,6 +50,10 @@ build: $(CONFIGURED)
 test: build
 	$(CTEST)
 
+# Tests of gates have label gate; -L is a regex, ^gate$$ does not match label gated_clk.
+test_gates: build
+	$(CTEST) -L '^gate$$'
+
 # Tests of parts have label part.
 test_parts: build
 	$(CTEST) -L part
@@ -54,6 +61,12 @@ test_parts: build
 # Tests of blocks have label block.
 test_blocks: build
 	$(CTEST) -L block
+
+# Run selected tests: R=<regex> selects by test name (ctest -R),
+# L=<regex> by label (ctest -L), both together select tests that match both.
+run: build
+	$(if $(R)$(L),,$(error make run needs R=<name regex> or L=<label regex>, see make list))
+	$(CTEST) $(if $(R),-R '$(R)') $(if $(L),-L '$(L)')
 
 # List tests: name and labels, one test per line.
 # ctest -N -V prints line "Labels: ..." before line "Test #<n>: <name>", awk joins them.
@@ -73,17 +86,26 @@ Targets:
   make cmake        configure build directory (always runs cmake)
   make build        configure if needed and build simulations and RISC-V programs
   make test         configure if needed, build and run all tests
+  make test_gates   configure if needed, build and run tests of gates (label gate)
   make test_parts   configure if needed, build and run tests of parts (label part)
   make test_blocks  configure if needed, build and run tests of blocks (label block)
+  make run          configure if needed, build and run tests selected by R and L
   make list         configure if needed and list tests: name and labels of every test
 
 Variables:
   BUILD_DIR=<dir>      build directory, now $(BUILD_DIR)
   CMAKE_ARGS="<args>"  options for cmake, configure runs again when they are given
+  R=<regex>            make run: tests with name matching regex (ctest -R)
+  L=<regex>            make run: tests with label matching regex (ctest -L)
+  V=1                  make test*, run: show output of every test (ctest -V),
+                       not only of failed tests
 
 Examples:
   make test
   make list | grep qemu
+  make run R=fifo
+  make run L=block R=struct
+  make run R=qemu V=1
   make test BUILD_DIR=/tmp/dc-build
   make test CMAKE_ARGS="-D DARK_CIRCUIT_MAIN_SIMULATOR=icarus"
 
