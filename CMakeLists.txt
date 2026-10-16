@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 # @brief cmake script to build and test DARKCIRCUIT library.
 #
 # Build outside of the source tree:
-#   cmake -S new2026 -B build2026
-#   cmake --build build2026
-#   ctest --test-dir build2026
+#   cmake -S . -B ../build
+#   cmake --build ../build
+#   ctest --test-dir ../build
 
 project(DARKCIRCUIT NONE)
 

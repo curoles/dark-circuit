@@ -10,7 +10,8 @@
 
 # Directory of this Makefile, it has top CMakeLists.txt.
 SOURCE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-# Repository root; when this directory becomes the root, use ROOT := $(SOURCE_DIR).
+# Repository root, the same as SOURCE_DIR now; when the library is in a subdirectory
+# of the repository (for example to try new code), use ROOT := $(abspath $(SOURCE_DIR)/..).
 ROOT       := $(abspath $(SOURCE_DIR))
 
 BUILD_DIR  ?= $(abspath $(ROOT)/../build)
