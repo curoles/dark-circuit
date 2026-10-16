@@ -145,6 +145,7 @@ endfunction()
 include(${CMAKE_CURRENT_LIST_DIR}/icarus.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/verilator.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/riscv.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/qemu.cmake)
 
 # Main simulator runs tests that need only one simulator, like tests of parts.
 # Cache variable DARK_CIRCUIT_MAIN_SIMULATOR selects it:

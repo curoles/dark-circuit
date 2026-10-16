@@ -130,6 +130,8 @@ on the main simulator, so both versions must behave the same.
 - Verilator 5.0 or newer to run simulation tests with Verilator
 - RISC-V GNU toolchain (optional) to build RISC-V programs for tests,
   on Ubuntu: `sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf`
+- QEMU (optional) to run RISC-V programs on `qemu-system-riscv32`,
+  on Ubuntu: `sudo apt install qemu-system-misc`
 
 ## Build and test
 
@@ -208,6 +210,8 @@ into Verilog hex files for `SimRAM` and `SimROM` `load()`. Cmake variables:
 - `DARK_CIRCUIT_RISCV_PREFIX`: prefix of the toolchain programs,
   default `riscv64-unknown-elf-`; other toolchains use for example
   `riscv32-unknown-elf-` or `riscv-none-elf-`
+- `DARK_CIRCUIT_USE_QEMU`: `AUTO`, `ON` or `OFF`; with QEMU, programs also run on
+  `qemu-system-riscv32` with semihosting as a reference, tests have suffix and label `.qemu`
 
 ```sh
 make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
