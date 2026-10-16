@@ -1,1 +1,2 @@
 -F counter/behave/counter.flist
+-F decoder/behave/decoder.flist
