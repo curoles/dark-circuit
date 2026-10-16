@@ -17,12 +17,12 @@ rtl/lib/
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of parts and gates
   macro/         include files kept for old code; use $clog2, not `CLOG2
-  sim/           clock and reset generators for testbenches: SimClkGen, SimRstGen
+  sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/ testbench of a part
 test/block/<block>/ testbench of a block
-test/sim/        testbench of clock and reset generators
+test/sim/        testbenches of simulation models
 ```
 
 Every directory has its flist, for example `cell/cmos/cell_cmos.flist`
