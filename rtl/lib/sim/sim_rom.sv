@@ -48,6 +48,7 @@ module SimROM #(
         .clk(clk),
         .rd_en(1'b1), .rd_addr(addr),
         .wr_en(1'b0), .wr_addr({(ADDR_WIDTH-ADDR_START){1'b0}}), .wr_data({DATA_WIDTH{1'b0}}),
+        .wr_strb({DATA_SIZE{1'b0}}),
         .rd_data(data), .rd_valid(rd_valid));
 
     // Formats of load(), for callers: u_sim_rom.load(file, u_sim_rom.VLOG_HEX_FORMAT).

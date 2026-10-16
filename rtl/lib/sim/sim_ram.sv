@@ -7,7 +7,9 @@
  * little-endian. Address ports are word addresses: bits ADDR_WIDTH-1..ADDR_START
  * of byte address, connect them as addr[ADDR_WIDTH-1:ADDR_START].
  *
- * Write: on rising edge, wr_en=1 writes wr_data into word at wr_addr.
+ * Write: on rising edge, wr_en=1 writes bytes of wr_data with wr_strb=1 into word
+ * at wr_addr: byte i of the word is wr_data[8*i +: 8] and it is written when
+ * wr_strb[i] is 1. Use all ones to write the whole word.
  * Read: on rising edge, rd_en=1 reads word at rd_addr into rd_data;
  * rd_valid is rd_en delayed by 1 cycle.
  * Read and write of the same word in the same cycle reads old data.
@@ -25,6 +27,7 @@ module SimRAM #(
     input  wire                           wr_en,
     input  wire [ADDR_WIDTH-1:ADDR_START] wr_addr,  // word address
     input  wire [DATA_WIDTH-1:0]          wr_data,
+    input  wire [DATA_SIZE-1:0]           wr_strb,  // byte i is written when wr_strb[i] is 1
     output reg  [DATA_WIDTH-1:0]          rd_data,
     output reg                            rd_valid
 );
@@ -67,7 +70,7 @@ module SimRAM #(
             // Byte i of the word, address width matches ram index.
             if (rd_en)
                 rd_data[8*i +: 8] <= ram[rd_base + i[ADDR_WIDTH-1:0]];
-            if (wr_en)
+            if (wr_en && wr_strb[i])
                 ram[wr_base + i[ADDR_WIDTH-1:0]] <= wr_data[8*i +: 8];
         end
         rd_valid <= rd_en;
