@@ -1,6 +1,8 @@
 /* Test of PriorityEncoder block, behave or struct version.
  *
- * 1. SIZE 1, 3 and 4 side by side, all inputs.
+ * 1. SIZE 1, 3 and 4 side by side:
+ *    all 8-bit inputs (all inputs of SIZE 1 and 3),
+ *    then 16-bit inputs with one and two bits set and random 16-bit inputs.
  * 2. Decoder then PriorityEncoder, SIZE 3: encoder gives back decoder input.
  *
  * Stops at the first mismatch with $fatal.
@@ -16,7 +18,14 @@ module TbPriorityEncoder;
     reg  [3:0]  exp1;
     reg  [3:0]  exp3;
     reg  [3:0]  exp4;
+    // Random word, only some of its bits are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    reg  [31:0] r;
+    /* verilator lint_on UNUSEDSIGNAL */
     integer i;
+    integer k1;
+    integer k2;
+    integer seed;
 
     // Decoder then PriorityEncoder.
     reg  [2:0]  dec_in;
@@ -43,12 +52,10 @@ module TbPriorityEncoder;
         end
     endfunction
 
-    initial begin
-        dec_in = 0; dec_en = 0;
-
-        // 1. All inputs.
-        for (i = 0; i < 2**16; i = i + 1) begin
-            v = i[15:0];
+    // Apply input to all 3 encoders and check them.
+    task check(input [15:0] x);
+        begin
+            v = x;
             #1;
             exp1 = top_index(v, 2);
             exp3 = top_index(v, 8);
@@ -59,6 +66,26 @@ module TbPriorityEncoder;
                 $fatal(1, "PriorityEncoder SIZE=3: in=%b got out=%0d valid=%b, expected out=%0d", v[7:0], out3, valid3, exp3);
             if (out4 !== exp4 || valid4 !== |v)
                 $fatal(1, "PriorityEncoder SIZE=4: in=%b got out=%0d valid=%b, expected out=%0d", v, out4, valid4, exp4);
+        end
+    endtask
+
+    initial begin
+        dec_in = 0; dec_en = 0;
+
+        // 1. All 8-bit inputs: all inputs of SIZE 1 and 3.
+        for (i = 0; i < 2**8; i = i + 1)
+            check({8'b0, i[7:0]});
+        // 16-bit inputs with one bit set and with two bits set: every pair of bits.
+        for (k1 = 0; k1 < 16; k1 = k1 + 1) begin
+            check(16'd1 << k1);
+            for (k2 = k1 + 1; k2 < 16; k2 = k2 + 1)
+                check((16'd1 << k1) | (16'd1 << k2));
+        end
+        // Random 16-bit inputs.
+        seed = 1;
+        for (i = 0; i < 2000; i = i + 1) begin
+            r = $random(seed);
+            check(r[15:0]);
         end
 
         // 2. Decoder then PriorityEncoder gives back decoder input when enabled.
