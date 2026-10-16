@@ -92,7 +92,9 @@ endfunction()
 # Parse arguments common to all dc_add_<simulator>_test() functions:
 #   TOP <module> TB <tb.sv> [FLISTS <flist>...] [DEFINES <macro>...]
 # into T_TOP, T_TB, T_FLISTS, T_DEFINES,
-# and T_SOURCES that lists testbench and all flist files.
+# and T_SOURCES that lists all flist files and then testbench:
+# testbench is last because it may use packages from flists,
+# and Icarus needs a package before its first use.
 macro(dc_parse_test_args NAME)
     cmake_parse_arguments(T "" "TOP;TB" "FLISTS;DEFINES" ${ARGN})
     if(NOT T_TOP OR NOT T_TB)
@@ -102,11 +104,12 @@ macro(dc_parse_test_args NAME)
         message(FATAL_ERROR "Test ${NAME}: unknown arguments: ${T_UNPARSED_ARGUMENTS}")
     endif()
     get_filename_component(T_TB ${T_TB} ABSOLUTE)
-    set(T_SOURCES ${T_TB})
+    set(T_SOURCES)
     foreach(_flist IN LISTS T_FLISTS)
         dc_read_flist(_files ${_flist})
         list(APPEND T_SOURCES ${_files})
     endforeach()
+    list(APPEND T_SOURCES ${T_TB})
 endmacro()
 
 # dc_test_labels(<out-var>)

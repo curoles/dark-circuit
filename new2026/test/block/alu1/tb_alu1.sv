@@ -24,6 +24,10 @@ module TbAlu1;
     reg  [64:0] exp4;
     /* verilator lint_on UNUSEDSIGNAL */
     reg  [64:0] exp64;
+    // Random word, only some of its bits are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    reg  [31:0] rnd;
+    /* verilator lint_on UNUSEDSIGNAL */
     integer i;
     integer seed;
 
@@ -86,10 +90,11 @@ module TbAlu1;
                        cmd4, a4, b4, co4, out4, exp4[64], exp4[3:0]);
         end
 
-        // WIDTH=64, random.
+        // WIDTH=64, random; few cycles, struct of 64 bits is slow in Icarus.
         seed = 1;
-        for (i = 0; i < 20000; i = i + 1) begin
-            cmd64 = $random(seed);
+        for (i = 0; i < 2000; i = i + 1) begin
+            rnd   = $random(seed);
+            cmd64 = rnd[3:0];
             a64   = operand($random(seed), $random(seed));
             b64   = operand($random(seed), $random(seed));
             #1;

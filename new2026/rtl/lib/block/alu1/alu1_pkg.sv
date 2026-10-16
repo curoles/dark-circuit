@@ -9,7 +9,10 @@
 package Alu1Pkg;
 
     localparam CMD_WIDTH   = 4;
+    // For users, for example a testbench that picks a random command.
+    /* verilator lint_off UNUSEDPARAM */
     localparam NR_COMMANDS = 8 + 4;
+    /* verilator lint_on UNUSEDPARAM */
 
     typedef enum bit [CMD_WIDTH-1:0] {
         OP_TRANSFER   = 0,   // in1
