@@ -1,2 +1,3 @@
 -F counter/behave/counter.flist
 -F decoder/behave/decoder.flist
+-F sram_1r1w/behave/sram_1r1w.flist
