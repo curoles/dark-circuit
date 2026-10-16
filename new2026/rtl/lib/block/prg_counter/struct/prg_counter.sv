@@ -1,4 +1,4 @@
-/* Program counter, made of parts and gates.
+/* Program counter, made of blocks and gates.
  *
  * Author: Igor Lesik 2020
  *
@@ -13,7 +13,7 @@
  * .jump_addr(rst ? rst_addr : branch_target); pc is rst_addr in the first cycle
  * after the last rising edge with rst=1.
  *
- * Adder with carry in 1 increments pc, Mux2 chooses pc or pc+1 by en,
+ * Incr increments pc, Mux2 chooses pc or pc+1 by en,
  * then Mux2 closer to Dff chooses jump_addr by jump, so jump wins.
  */
 module PrgCounter #(
@@ -35,9 +35,7 @@ module PrgCounter #(
     wire         co;
     /* verilator lint_on UNUSEDSIGNAL */
 
-    //TODO switch to Incr
-    RippleCarryAdder #(.WIDTH(W)) u_ripple_carry_adder(
-        .in1(pc), .in2({W{1'b0}}), .ci(1'b1), .co(co), .sum(pc_inc));
+    Incr #(.WIDTH(W)) u_incr(.in(pc), .out(pc_inc), .co(co));
 
     Mux2 #(W) u_mux2_en  (.in0(pc),    .in1(pc_inc),    .sel(en),   .out(pc_en));
     Mux2 #(W) u_mux2_jump(.in0(pc_en), .in1(jump_addr), .sel(jump), .out(pc_next));
