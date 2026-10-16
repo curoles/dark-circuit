@@ -1,3 +1,4 @@
 sim_clk_gen.sv
 sim_rst_gen.sv
 sim_ram.sv
+sim_rom.sv

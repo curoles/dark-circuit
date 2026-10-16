@@ -17,7 +17,7 @@ rtl/lib/
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of parts and gates
   macro/         include files kept for old code; use $clog2, not `CLOG2
-  sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM
+  sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/ testbench of a part
