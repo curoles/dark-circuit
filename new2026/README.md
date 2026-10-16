@@ -13,11 +13,15 @@ rtl/lib/
     generic/     behavioral
     cell/        built from cells, or from other gates of gate/cell
   part/          parts made of gates: CarrySaveAdder, RippleCarryAdder, GatedClk, LimDff
+  block/         blocks: Counter, ...
+    <block>/behave/  behavioral version, fast to simulate
+    <block>/struct/  version made of parts and gates
   macro/         include files kept for old code; use $clog2, not `CLOG2
   sim/           clock and reset generators for testbenches: SimClkGen, SimRstGen
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/ testbench of a part
+test/block/<block>/ testbench of a block
 test/sim/        testbench of clock and reset generators
 ```
 
@@ -25,6 +29,22 @@ Every directory has its flist, for example `cell/cmos/cell_cmos.flist`
 or `gate/cell/gate_cell.flist`. File names in a flist are relative to the flist directory
 (as Verilator `-F` expects). Icarus resolves file names of its command file `-f`
 from the current directory, so the cmake helpers read flists and pass full paths.
+A flist line `-F <file>` includes another flist, also relative to the flist directory.
+
+### Blocks
+
+A block can have two versions with the same module name and ports:
+`behave/` (behavioral, fast to simulate) and `struct/` (made of parts and gates).
+Every version has its flist, for example `block/counter/struct/counter.flist`.
+Aggregate flists include one version of every block:
+
+| Flist               | Version of every block                                  |
+|---------------------|---------------------------------------------------------|
+| `block_behave.flist` | `behave/`, or `struct/` if the block has only that one |
+| `block_struct.flist` | `struct/`, or `behave/` if the block has only that one |
+
+To mix versions, make your own flist with `-F` lines of the chosen block versions.
+The struct version also needs `part.flist` and gate flists.
 
 ### Cell, gate and flavor
 
@@ -103,6 +123,10 @@ with `` `ifndef VERILATOR ``.
 A **part** uses gates only, never cells. Tests of parts use `gate_generic.flist`
 and run on the main simulator only, see [Simulators](#simulators).
 
+A **block** struct version uses parts and gates, never cells. Tests of blocks run
+the same testbench with `block_behave.flist` and with `block_struct.flist`
+on the main simulator, so both versions must behave the same.
+
 ## Requirements
 
 - CMake 3.20 or newer
@@ -111,14 +135,15 @@ and run on the main simulator only, see [Simulators](#simulators).
 
 ## Build and test
 
-`Makefile` wraps `cmake` and `ctest`, it has 4 targets:
+`Makefile` wraps `cmake` and `ctest`, it has 5 targets:
 
-| Target            | What it does                              |
-|-------------------|-------------------------------------------|
-| `make cmake`      | configure build directory                 |
-| `make build`      | configure if needed and build             |
-| `make test`       | configure if needed, build and run all tests |
-| `make test_parts` | configure if needed, build and run tests of parts |
+| Target             | What it does                              |
+|--------------------|-------------------------------------------|
+| `make cmake`       | configure build directory                 |
+| `make build`       | configure if needed and build             |
+| `make test`        | configure if needed, build and run all tests |
+| `make test_parts`  | configure if needed, build and run tests of parts |
+| `make test_blocks` | configure if needed, build and run tests of blocks |
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.
@@ -193,5 +218,5 @@ ctest --test-dir <build-dir> --output-on-failure   # show output of failed tests
 ```
 
 Every test has labels: its simulator (`icarus`, `verilator`), the first directory
-under `test/` (`gate`, `sim`, `part`) and, for tests deeper in `test/`,
+under `test/` (`gate`, `sim`, `part`, `block`) and, for tests deeper in `test/`,
 its own directory (`carry_save_adder`).

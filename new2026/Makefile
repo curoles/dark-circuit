@@ -5,6 +5,7 @@
 #   make build   - configure if needed and build
 #   make test    - configure if needed, build and run all tests
 #   make test_parts - configure if needed, build and run tests of parts
+#   make test_blocks - configure if needed, build and run tests of blocks
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
 # Directory of this Makefile, it has top CMakeLists.txt.
@@ -26,7 +27,7 @@ CONFIGURED := $(if $(CMAKE_ARGS),cmake,$(BUILD_DIR)/CMakeCache.txt)
 
 CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc)
 
-.PHONY: cmake build test test_parts
+.PHONY: cmake build test test_parts test_blocks
 
 cmake:
 	$(CONFIGURE)
@@ -43,3 +44,7 @@ test: build
 # Tests of parts have label part.
 test_parts: build
 	$(CTEST) -L part
+
+# Tests of blocks have label block.
+test_blocks: build
+	$(CTEST) -L block

@@ -59,6 +59,8 @@ endfunction()
 #
 # Return absolute paths of the files listed in <flist>,
 # file names in flist are relative to the flist directory.
+# Line "-F <file>" includes nested flist <file>, relative to the flist directory
+# like Verilator option -F does.
 function(dc_read_flist OUT FLIST)
     get_filename_component(FLIST ${FLIST} ABSOLUTE)
     get_filename_component(dir ${FLIST} DIRECTORY)
@@ -69,7 +71,16 @@ function(dc_read_flist OUT FLIST)
         if(line STREQUAL "" OR line MATCHES "^(#|//)")
             continue()
         endif()
-        list(APPEND files ${dir}/${line})
+        if(line MATCHES "^-F[ \t]+(.+)$")
+            set(nested_flist ${CMAKE_MATCH_1})
+            if(NOT IS_ABSOLUTE ${nested_flist})
+                set(nested_flist ${dir}/${nested_flist})
+            endif()
+            dc_read_flist(nested_files ${nested_flist})
+            list(APPEND files ${nested_files})
+        else()
+            list(APPEND files ${dir}/${line})
+        endif()
     endforeach()
     # Re-run cmake when flist changes.
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FLIST})
