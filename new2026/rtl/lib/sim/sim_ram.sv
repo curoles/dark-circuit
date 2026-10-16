@@ -64,10 +64,11 @@ module SimRAM #(
 
     always_ff @(posedge clk) begin
         for (int i = 0; i < DATA_SIZE; i = i + 1) begin
+            // Byte i of the word, address width matches ram index.
             if (rd_en)
-                rd_data[8*i +: 8] <= ram[rd_base + i];
+                rd_data[8*i +: 8] <= ram[rd_base + i[ADDR_WIDTH-1:0]];
             if (wr_en)
-                ram[wr_base + i] <= wr_data[8*i +: 8];
+                ram[wr_base + i[ADDR_WIDTH-1:0]] <= wr_data[8*i +: 8];
         end
         rd_valid <= rd_en;
     end
