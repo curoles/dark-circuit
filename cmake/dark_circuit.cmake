@@ -16,6 +16,9 @@ set(DARK_CIRCUIT_RTL_LIB ${PROJECT_SOURCE_DIR}/rtl/lib)
 # Define cache variable DARK_CIRCUIT_USE_<NAME> (AUTO, ON or OFF),
 # find every <program> into <PROGRAM>_BIN and
 # set DARK_CIRCUIT_<NAME> to TRUE if the tool is used.
+# <program> can be <VAR>=<program>, then it is found into <VAR>_BIN:
+# riscv64-unknown-elf-gcc gives RISCV64-UNKNOWN-ELF-GCC_BIN,
+# RISCV_GCC=riscv64-unknown-elf-gcc gives RISCV_GCC_BIN.
 function(dc_use_tool NAME)
     set(use DARK_CIRCUIT_USE_${NAME})
     set(${use} AUTO CACHE STRING "Use ${NAME}: AUTO (if found), ON (required) or OFF")
@@ -35,7 +38,12 @@ function(dc_use_tool NAME)
     set(found)
     set(missing)
     foreach(program IN LISTS ARGN)
-        string(TOUPPER ${program} var)
+        if(program MATCHES "^([A-Za-z0-9_]+)=(.+)$")
+            set(var ${CMAKE_MATCH_1})
+            set(program ${CMAKE_MATCH_2})
+        else()
+            string(TOUPPER ${program} var)
+        endif()
         find_program(${var}_BIN ${program})
         if(${var}_BIN)
             list(APPEND found ${${var}_BIN})
@@ -90,13 +98,15 @@ endfunction()
 # dc_parse_test_args(<name> <args>...)
 #
 # Parse arguments common to all dc_add_<simulator>_test() functions:
-#   TOP <module> TB <tb.sv> [FLISTS <flist>...] [DEFINES <macro>...]
-# into T_TOP, T_TB, T_FLISTS, T_DEFINES,
+#   TOP <module> TB <tb.sv> [FLISTS <flist>...] [DEFINES <macro>...] [ARGS <arg>...]
+# into T_TOP, T_TB, T_FLISTS, T_DEFINES, T_ARGS,
 # and T_SOURCES that lists all flist files and then testbench:
 # testbench is last because it may use packages from flists,
 # and Icarus needs a package before its first use.
+# ARGS are given to the simulation when the test runs, for example +hex=<file>
+# that testbench reads with $value$plusargs.
 macro(dc_parse_test_args NAME)
-    cmake_parse_arguments(T "" "TOP;TB" "FLISTS;DEFINES" ${ARGN})
+    cmake_parse_arguments(T "" "TOP;TB" "FLISTS;DEFINES;ARGS" ${ARGN})
     if(NOT T_TOP OR NOT T_TB)
         message(FATAL_ERROR "Test ${NAME}: TOP and TB are required")
     endif()
@@ -134,6 +144,7 @@ endfunction()
 
 include(${CMAKE_CURRENT_LIST_DIR}/icarus.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/verilator.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/riscv.cmake)
 
 # Main simulator runs tests that need only one simulator, like tests of parts.
 # Cache variable DARK_CIRCUIT_MAIN_SIMULATOR selects it:
@@ -171,7 +182,7 @@ else()
 endif()
 
 # dc_add_mainsim_test(<name> TOP <module> TB <tb.sv>
-#                     [FLISTS <flist>...] [DEFINES <macro>...])
+#                     [FLISTS <flist>...] [DEFINES <macro>...] [ARGS <arg>...])
 #
 # Add test that runs on the main simulator only,
 # it calls dc_add_<simulator>_test() of the main simulator.

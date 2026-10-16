@@ -128,6 +128,8 @@ on the main simulator, so both versions must behave the same.
 - CMake 3.20 or newer
 - Icarus Verilog (`iverilog`, `vvp`) to run simulation tests
 - Verilator 5.0 or newer to run simulation tests with Verilator
+- RISC-V GNU toolchain (optional) to build RISC-V programs for tests,
+  on Ubuntu: `sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf`
 
 ## Build and test
 
@@ -195,6 +197,24 @@ cmake variable `DARK_CIRCUIT_MAIN_SIMULATOR` selects it:
 ```sh
 make test_parts CMAKE_ARGS="-D DARK_CIRCUIT_MAIN_SIMULATOR=icarus"
 ```
+
+## RISC-V programs
+
+Tests that run RISC-V programs build them with the RISC-V GNU toolchain
+into Verilog hex files for `SimRAM` and `SimROM` `load()`. Cmake variables:
+
+- `DARK_CIRCUIT_USE_RISCV`: `AUTO`, `ON` or `OFF` like for simulators;
+  without the toolchain these tests are disabled
+- `DARK_CIRCUIT_RISCV_PREFIX`: prefix of the toolchain programs,
+  default `riscv64-unknown-elf-`; other toolchains use for example
+  `riscv32-unknown-elf-` or `riscv-none-elf-`
+
+```sh
+make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
+```
+
+Every program `<name>` gives `<name>.elf`, `<name>.hex` and `<name>.dis`
+(disassembly) in the build directory of its test.
 
 ## Running selected tests
 

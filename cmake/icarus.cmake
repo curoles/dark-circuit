@@ -6,10 +6,11 @@
 dc_use_tool(ICARUS iverilog vvp)
 
 # dc_add_icarus_test(<name> TOP <module> TB <tb.sv>
-#                    [FLISTS <flist>...] [DEFINES <macro>...])
+#                    [FLISTS <flist>...] [DEFINES <macro>...] [ARGS <arg>...])
 #
 # Compile testbench <tb.sv> and files from <flist>s with Icarus Verilog
 # and add CTest test <name>.icarus with label icarus and labels of dc_test_labels().
+# The test runs vvp with ARGS.
 # Testbench fails the test with $fatal, then vvp exit code is 1.
 # Does nothing if Icarus is not used.
 function(dc_add_icarus_test NAME)
@@ -33,7 +34,7 @@ function(dc_add_icarus_test NAME)
         VERBATIM
     )
     add_custom_target(${test} ALL DEPENDS ${vvp})
-    add_test(NAME ${test} COMMAND ${VVP_BIN} -n ${vvp})
+    add_test(NAME ${test} COMMAND ${VVP_BIN} -n ${vvp} ${T_ARGS})
     dc_test_labels(labels)
     set(test_labels icarus ${labels})
     set_tests_properties(${test} PROPERTIES LABELS "${test_labels}")

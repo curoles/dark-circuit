@@ -22,10 +22,11 @@ if(DARK_CIRCUIT_VERILATOR)
 endif()
 
 # dc_add_verilator_test(<name> TOP <module> TB <tb.sv>
-#                       [FLISTS <flist>...] [DEFINES <macro>...])
+#                       [FLISTS <flist>...] [DEFINES <macro>...] [ARGS <arg>...])
 #
 # Build testbench <tb.sv> and files from <flist>s with Verilator --binary --timing
 # and add CTest test <name>.verilator with label verilator and labels of dc_test_labels().
+# The test runs the simulation with ARGS.
 # Testbench fails the test with $fatal, then the simulation exit code is not 0.
 # Does nothing if Verilator is not used.
 function(dc_add_verilator_test NAME)
@@ -52,7 +53,7 @@ function(dc_add_verilator_test NAME)
         VERBATIM
     )
     add_custom_target(${test} ALL DEPENDS ${exe})
-    add_test(NAME ${test} COMMAND ${exe})
+    add_test(NAME ${test} COMMAND ${exe} ${T_ARGS})
     dc_test_labels(labels)
     set(test_labels verilator ${labels})
     set_tests_properties(${test} PROPERTIES LABELS "${test_labels}")
