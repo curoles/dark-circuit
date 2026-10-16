@@ -18,6 +18,8 @@ rtl/lib/
                  Alu1, AddCmp, ...
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of blocks, parts and gates
+    jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
+                     not in aggregate flists, not tested yet
   macro/         include files kept for old code; use $clog2, not `CLOG2
   sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM
 cmake/           cmake helpers, one file per simulator

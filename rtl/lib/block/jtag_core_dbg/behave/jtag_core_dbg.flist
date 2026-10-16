@@ -1,0 +1,9 @@
+jtag_tap_fsm.sv
+jtag_tap_insn_reg.sv
+jtag_tap_dregs.sv
+jtag_tap.sv
+core_dbg_port.sv
+core_dbg_apb.sv
+dbg_apb_bus.sv
+dbg_acc_port.sv
+jtag2_memi_sync.sv
