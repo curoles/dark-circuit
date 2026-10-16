@@ -238,6 +238,12 @@ ctest --test-dir <build-dir> -L icarus             # tests with label icarus
 ctest --test-dir <build-dir> --output-on-failure   # show output of failed tests
 ```
 
-Every test has labels: its simulator (`icarus`, `verilator`), the first directory
-under `test/` (`gate`, `sim`, `part`, `block`) and, for tests deeper in `test/`,
-its own directory (`carry_save_adder`).
+Every test has labels:
+
+- its tool: `icarus`, `verilator` or `qemu`
+- the first directory under `test/`: `gate`, `sim`, `part`, `block` or `sw`
+- for tests deeper in `test/`, its own directory: `carry_save_adder`, `semihosting`, ...
+
+`make list` shows name and labels of every test. `make run L=<regex>` and
+`ctest -L <regex>` select tests by label; the label is a regex, `gate` also matches
+`gated_clk`, use `'^gate$'` for the exact label.

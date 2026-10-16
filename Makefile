@@ -56,11 +56,11 @@ test_gates: build
 
 # Tests of parts have label part.
 test_parts: build
-	$(CTEST) -L part
+	$(CTEST) -L '^part$$'
 
 # Tests of blocks have label block.
 test_blocks: build
-	$(CTEST) -L block
+	$(CTEST) -L '^block$$'
 
 # Run selected tests: R=<regex> selects by test name (ctest -R),
 # L=<regex> by label (ctest -L), both together select tests that match both.
@@ -96,7 +96,8 @@ Variables:
   BUILD_DIR=<dir>      build directory, now $(BUILD_DIR)
   CMAKE_ARGS="<args>"  options for cmake, configure runs again when they are given
   R=<regex>            make run: tests with name matching regex (ctest -R)
-  L=<regex>            make run: tests with label matching regex (ctest -L)
+  L=<regex>            make run: tests with label matching regex (ctest -L);
+                       L=gate also matches label gated_clk, L='^gate$$' does not
   V=1                  make test*, run: show output of every test (ctest -V),
                        not only of failed tests
 
