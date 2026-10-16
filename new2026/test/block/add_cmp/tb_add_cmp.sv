@@ -63,7 +63,7 @@ module TbAddCmp;
             a50 = ra[W-1:0];
             b50 = rb[W-1:0];
             sum50 = a50 + b50;
-            k = rk[7:0] % W;
+            k = int'(rk[7:0]) % W;
             case (rk[9:8])
                 2'd0:    c50 = sum50;                         // equal
                 2'd1:    c50 = sum50 ^ ({{(W-1){1'b0}}, 1'b1} << k);  // one bit flipped
