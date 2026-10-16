@@ -5,3 +5,4 @@
 -F sram_1r1w/behave/sram_1r1w.flist
 -F reg_file_sram/struct/reg_file_sram.flist
 -F reg_file/behave/reg_file.flist
+-F barrel_shifter/behave/barrel_shifter.flist
