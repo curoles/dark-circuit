@@ -11,7 +11,7 @@
 # Directory of this Makefile, it has top CMakeLists.txt.
 SOURCE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 # Repository root; when this directory becomes the root, use ROOT := $(SOURCE_DIR).
-ROOT       := $(abspath $(SOURCE_DIR)/..)
+ROOT       := $(abspath $(SOURCE_DIR))
 
 BUILD_DIR  ?= $(abspath $(ROOT)/../build)
 CMAKE_ARGS ?=
