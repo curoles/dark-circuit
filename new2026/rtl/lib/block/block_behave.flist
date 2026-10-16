@@ -6,3 +6,4 @@
 -F reg_file_sram/struct/reg_file_sram.flist
 -F reg_file/behave/reg_file.flist
 -F barrel_shifter/behave/barrel_shifter.flist
+-F prg_counter/behave/prg_counter.flist
