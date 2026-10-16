@@ -35,6 +35,11 @@ function(dc_add_qemu_test NAME)
         set(Q_TIMEOUT 10)
     endif()
 
+    # The test runs cmake as a script interpreter: CMAKE_COMMAND is the path of the
+    # cmake program configuring this build, -D sets variables for the script and
+    # -P runs qemu_run.cmake, which starts QEMU and checks its exit code and output
+    # (CTest alone checks either exit code or output, not both).
+    # CMAKE_CURRENT_FUNCTION_LIST_DIR is the directory of this file, cmake/.
     set(test ${NAME}.qemu)
     add_test(NAME ${test}
         COMMAND ${CMAKE_COMMAND}

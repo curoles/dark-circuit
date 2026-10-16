@@ -27,6 +27,8 @@ test/gate/       testbenches of gates
 test/part/<part>/   testbench of a part
 test/block/<block>/ testbench of a block
 test/sim/        testbenches of simulation models
+sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/
+test/sw/         tests of software, run on QEMU
 old2020/         old 2020 code, kept for reference
 ```
 
@@ -135,13 +137,15 @@ on the main simulator, so both versions must behave the same.
 
 ## Build and test
 
-`Makefile` wraps `cmake` and `ctest`, it has 5 targets:
+`Makefile` wraps `cmake` and `ctest`, it has 7 targets:
 
+- `make help`: explain targets and variables, also plain `make`
 - `make cmake`: configure build directory
 - `make build`: configure if needed and build
 - `make test`: configure if needed, build and run all tests
 - `make test_parts`: configure if needed, build and run tests of parts
 - `make test_blocks`: configure if needed, build and run tests of blocks
+- `make list`: configure if needed and list tests, name and labels of every test
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.
