@@ -53,10 +53,10 @@
 
 static size_t semihost_strlen(const char *s)
 {
-        size_t len = 0;
-        while (s[len] != '\0')
-                len++;
-        return len;
+    size_t len = 0;
+    while (s[len] != '\0')
+        len++;
+    return len;
 }
 
 // https://github.com/riscv-non-isa/riscv-c-api-doc/blob/master/riscv-c-api.md
@@ -86,24 +86,24 @@ static size_t semihost_strlen(const char *s)
  */
 long __attribute__((aligned(16))) semihost_exec(enum SemihostInstr instr, void *args)
 {
-        register unsigned long a0 __asm__ ("a0") = instr;
-        register void *a1 __asm__ ("a1") = args; // argument pack
-        register long ret __asm__ ("a0");
+    register unsigned long a0 __asm__ ("a0") = instr;
+    register void *a1 __asm__ ("a1") = args; // argument pack
+    register long ret __asm__ ("a0");
 
-        __asm__ volatile (
-            ".balign 16\n"             // Align in case the function is inlined
-                ".option push\n"
-                ".option norvc\n"          // Force non-compressed RISC-V instructions
-                "slli zero, zero, 0x1f\n"  // Entry NOP
-                "ebreak\n"                 // Break to debugger
-                "srai zero, zero, 0x7\n"   // NOP encoding the semihosting call number 7
-                ".option pop\n"
-                : "=r" (ret) : "r" (a0), "r" (a1) : "memory");
+    __asm__ volatile (
+        ".balign 16\n"             // Align in case the function is inlined
+        ".option push\n"
+        ".option norvc\n"          // Force non-compressed RISC-V instructions
+        "slli zero, zero, 0x1f\n"  // Entry NOP
+        "ebreak\n"                 // Break to debugger
+        "srai zero, zero, 0x7\n"   // NOP encoding the semihosting call number 7
+        ".option pop\n"
+        : "=r" (ret) : "r" (a0), "r" (a1) : "memory");
 
-        // The "memory" clobber prevents the compiler from removing the asm block,
-        // and prevents reordering loads or stores across.
+    // The "memory" clobber prevents the compiler from removing the asm block,
+    // and prevents reordering loads or stores across.
 
-        return ret;
+    return ret;
 }
 
 /**
@@ -113,9 +113,9 @@ long __attribute__((aligned(16))) semihost_exec(enum SemihostInstr instr, void *
  */
 char semihost_poll_in(void)
 {
-        field_t args = 0;
+    field_t args = 0;
 
-        return (char)semihost_exec(SEMIHOST_READC, &args);
+    return (char)semihost_exec(SEMIHOST_READC, &args);
 }
 
 /**
@@ -125,7 +125,7 @@ char semihost_poll_in(void)
  */
 void semihost_poll_out(char c)
 {
-        (void)semihost_exec(SEMIHOST_WRITEC, &c);
+    (void)semihost_exec(SEMIHOST_WRITEC, &c);
 }
 
 // For some printf implementation.
@@ -135,9 +135,9 @@ __attribute__((weak)) void putchar_(char c)
 }
 
 struct __attribute__((__packed__)) semihost_open_args {
-        field_t path;
-        field_t mode;
-        field_t path_len;
+    field_t path;
+    field_t mode;
+    field_t path_len;
 };
 
 /**
@@ -152,13 +152,13 @@ struct __attribute__((__packed__)) semihost_open_args {
  */
 long semihost_open(const char *path, long mode)
 {
-        struct semihost_open_args args = {
-                .path = (field_t)path,
-                .mode = (field_t)mode,
-                .path_len = (field_t)semihost_strlen(path)
-        };
+    struct semihost_open_args args = {
+        .path = (field_t)path,
+        .mode = (field_t)mode,
+        .path_len = (field_t)semihost_strlen(path)
+    };
 
-        return semihost_exec(SEMIHOST_OPEN, &args);
+    return semihost_exec(SEMIHOST_OPEN, &args);
 }
 
 /**
@@ -171,9 +171,9 @@ long semihost_open(const char *path, long mode)
  */
 long semihost_close(long fd)
 {
-        field_t args = (field_t)fd;
+    field_t args = (field_t)fd;
 
-        return semihost_exec(SEMIHOST_CLOSE, &args);
+    return semihost_exec(SEMIHOST_CLOSE, &args);
 }
 /**
  * @brief Query the size of a file
@@ -185,9 +185,9 @@ long semihost_close(long fd)
  */
 long semihost_flen(long fd)
 {
-        field_t args = (field_t)fd;
+    field_t args = (field_t)fd;
 
-        return semihost_exec(SEMIHOST_FLEN, &args);
+    return semihost_exec(SEMIHOST_FLEN, &args);
 }
 /**
  * @brief Seeks to an absolute position in a file.
@@ -200,15 +200,15 @@ long semihost_flen(long fd)
  */
 long semihost_seek(long fd, long offset)
 {
-        field_t args[2] = { (field_t)fd, (field_t)offset };
+    field_t args[2] = { (field_t)fd, (field_t)offset };
 
-        return semihost_exec(SEMIHOST_SEEK, args);
+    return semihost_exec(SEMIHOST_SEEK, args);
 }
 
 struct __attribute__((packed)) semihost_read_args {
-        field_t fd;
-        field_t buf;
-        field_t len;
+    field_t fd;
+    field_t buf;
+    field_t len;
 };
 
 /**
@@ -223,27 +223,27 @@ struct __attribute__((packed)) semihost_read_args {
  */
 long semihost_read(long fd, void *buf, long len)
 {
-        struct semihost_read_args args = {
-                .fd = (field_t)fd,
-                .buf = (field_t)buf,
-                .len = (field_t)len
-        };
+    struct semihost_read_args args = {
+        .fd = (field_t)fd,
+        .buf = (field_t)buf,
+        .len = (field_t)len
+    };
 
-        long ret = semihost_exec(SEMIHOST_READ, &args);
+    long ret = semihost_exec(SEMIHOST_READ, &args);
 
-        if (ret == len) { // EOF condition
-                ret = -5; // -EIO
-        }
-        else if (ret == 0) { // All bytes read
-                ret = len;
-        }
-        return ret;
+    if (ret == len) { // EOF condition
+        ret = -5; // -EIO
+    }
+    else if (ret == 0) { // All bytes read
+        ret = len;
+    }
+    return ret;
 }
 
 struct __attribute__((__packed__)) semihost_write_args {
-        field_t fd;
-        field_t buf;
-        field_t len;
+    field_t fd;
+    field_t buf;
+    field_t len;
 };
 
 /**
@@ -258,13 +258,13 @@ struct __attribute__((__packed__)) semihost_write_args {
  */
 long semihost_write(long fd, const void *buf, long len)
 {
-        struct semihost_write_args args = {
-                .fd  = (field_t)fd,
-                .buf = (field_t)buf,
-                .len = (field_t)len
-        };
+    struct semihost_write_args args = {
+        .fd  = (field_t)fd,
+        .buf = (field_t)buf,
+        .len = (field_t)len
+    };
 
-        return semihost_exec(SEMIHOST_WRITE, &args);
+    return semihost_exec(SEMIHOST_WRITE, &args);
 }
 
 /** @brief Write null terminated string to stdout/stderr.
@@ -306,8 +306,8 @@ __attribute__((weak)) _Noreturn void semihost_exit(int status)
 }
 
 struct __attribute__((__packed__)) semihost_get_cmdline_args {
-        field_t buf; ///< a pointer to a buffer of at least the size specified in word two
-        field_t len; ///< the length of the buffer in bytes
+    field_t buf; ///< a pointer to a buffer of at least the size specified in word two
+    field_t len; ///< the length of the buffer in bytes
 };
 
 /**
@@ -324,7 +324,7 @@ long semihost_get_cmdline(char* buf, long len)
         .len = (field_t)len // QEMU adjust this field to output string len
     };
 
-        return semihost_exec(SEMIHOST_GET_CMDLINE, &args);
+    return semihost_exec(SEMIHOST_GET_CMDLINE, &args);
 }
 
 #ifdef RISCV_SEMIHOSTING_OVERRIDES_ENABLE
