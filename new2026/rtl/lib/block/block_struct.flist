@@ -7,3 +7,4 @@
 -F reg_file/struct/reg_file.flist
 -F barrel_shifter/struct/barrel_shifter.flist
 -F prg_counter/struct/prg_counter.flist
+-F fifo/struct/fifo.flist
