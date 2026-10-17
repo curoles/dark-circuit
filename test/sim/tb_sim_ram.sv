@@ -3,8 +3,10 @@
  * 1. 4-byte words: write words, read them back, rd_valid follows rd_en.
  * 2. 4-byte words: read and write of the same word in one cycle reads old data.
  * 3. 1-byte words: write bytes, read them back.
- * 4. load() of hex file with bytes 11 22 .. 88 gives little-endian words.
- * 5. 4-byte words: byte strobes write only enabled bytes.
+ * 4. load() of hex file with bytes 11 22 .. 88 gives little-endian words,
+ *    peek() reads the loaded bytes directly.
+ * 5. 4-byte words: byte strobes write only enabled bytes,
+ *    peek() reads bytes of the last written word in little-endian order.
  *
  * Inputs change on falling edge, outputs are checked after rising edge.
  * Stops at the first mismatch with $fatal.
@@ -110,12 +112,21 @@ module TbSimRam;
         cycle4(400, 1, 4'd0, 0, 4'd0, 32'h0, 4'b1111);
         cycle4(401, 1, 4'd1, 0, 4'd0, 32'h0, 4'b1111);
 
+        // 4b. peek() reads the loaded bytes directly.
+        for (i = 0; i < 8; i = i + 1)
+            if (u_sim_ram_4.peek(i[AW-1:0]) !== 8'h11 * (i[7:0] + 8'd1))
+                $fatal(1, "SimRAM: peek(%0d) got %h, expected %h", i, u_sim_ram_4.peek(i[AW-1:0]), 8'h11 * (i[7:0] + 8'd1));
+
         // 5. Byte strobes: every pattern writes only its bytes, 0000 writes nothing.
         for (i = 0; i < 16; i = i + 1) begin
             cycle4(500 + 3*i, 0, 0, 1, 4'd7, 32'h11223344, 4'b1111);  // known word
             cycle4(501 + 3*i, 0, 0, 1, 4'd7, 32'hAABBCCDD, i[3:0]);   // partial write
             cycle4(502 + 3*i, 1, 4'd7, 0, 0, 0, 4'b0000);             // read back
         end
+        // 5b. peek() of word 7 (byte addresses 28..31): bytes in little-endian order.
+        for (b = 0; b < 4; b = b + 1)
+            if (u_sim_ram_4.peek(6'd28 + b[AW-1:0]) !== model4[7][8*b +: 8])
+                $fatal(1, "SimRAM: peek(%0d) got %h, expected %h", 28 + b, u_sim_ram_4.peek(6'd28 + b[AW-1:0]), model4[7][8*b +: 8]);
 
         $display("PASS");
         $finish;

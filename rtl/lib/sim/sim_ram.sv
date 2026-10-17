@@ -13,6 +13,7 @@
  * Read: on rising edge, rd_en=1 reads word at rd_addr into rd_data;
  * rd_valid is rd_en delayed by 1 cycle.
  * Read and write of the same word in the same cycle reads old data.
+ * Use peek() to read a byte directly, without clock.
  */
 module SimRAM #(
     parameter  DATA_SIZE  = 1,                  // bytes in word: 1, 2, 4, 8, ...
@@ -51,6 +52,13 @@ module SimRAM #(
             return 0;
 
         return 1;
+    endfunction
+
+    // Read byte at byte_addr directly, without clock and ports:
+    // for testbenches and simulation models (debugger, semihosting).
+    // Does not change the memory and does not disturb rd_data.
+    function logic [7:0] peek(input logic [ADDR_WIDTH-1:0] byte_addr);
+        return ram[byte_addr];
     endfunction
 
     // Byte address of the first byte of the word.

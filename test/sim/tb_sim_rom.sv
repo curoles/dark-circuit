@@ -5,6 +5,7 @@
  * 2. load() of binary file with bytes 11 22 33 44 at byte address 4.
  * 3. load() with unknown format returns 0.
  * 4. data gets word at new addr 1 clock later.
+ * 5. peek() of the 4-byte ROM reads the loaded bytes 11 22 .. 88 directly.
  *
  * Stops at the first mismatch with $fatal.
  */
@@ -42,6 +43,10 @@ module TbSimRom;
         if (u_sim_rom_bin.load("sim_rom_load.bin", 1) != 1) $fatal(1, "SimROM bin: load() of binary file returned 0");
         // 3. Unknown format.
         if (u_sim_rom_4.load("sim_rom_load.hex", 2) != 0)   $fatal(1, "SimROM 4: load() with unknown format returned 1");
+        // 5. peek() reads the loaded bytes directly.
+        for (i = 0; i < 8; i = i + 1)
+            if (u_sim_rom_4.peek(i[AW-1:0]) !== 8'h11 * (i[7:0] + 8'd1))
+                $fatal(1, "SimROM 4: peek(%0d) got %h, expected %h", i, u_sim_rom_4.peek(i[AW-1:0]), 8'h11 * (i[7:0] + 8'd1));
 
         // 4-byte words are little-endian.
         @(negedge clk); addr4 = 2'd0;
