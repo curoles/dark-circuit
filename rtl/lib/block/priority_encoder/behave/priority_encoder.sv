@@ -17,16 +17,16 @@ module PriorityEncoder #(
     output wire [SIZE-1:0]  out,   // index of the highest bit set in in, 0 if none
     output wire             valid  // 1 if any bit of in is set
 );
-    reg [SIZE-1:0] index;
-
-    always_comb begin
-        index = {SIZE{1'b0}};
+    // Index of the highest bit set in v, 0 if none. A function, not always_comb:
+    // Icarus warns about the constant select k[SIZE-1:0] in always_* processes.
+    function automatic [SIZE-1:0] highest(input [WIDTH-1:0] v);
+        highest = {SIZE{1'b0}};
         for (int k = 0; k < WIDTH; k = k + 1)
-            if (in[k])
-                index = k[SIZE-1:0];  // later, higher bit wins
-    end
+            if (v[k])
+                highest = k[SIZE-1:0];  // later, higher bit wins
+    endfunction
 
-    assign out   = index;
+    assign out   = highest(in);
     assign valid = |in;
 
 endmodule

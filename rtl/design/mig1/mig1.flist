@@ -3,5 +3,6 @@ mig1_pkg.sv
 mig1_fetch.sv
 mig1_control.sv
 mig1_decode.sv
+mig1_regs.sv
 mig1_core.sv
 mig1_cpu.sv
