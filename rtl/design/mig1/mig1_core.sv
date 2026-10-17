@@ -8,7 +8,7 @@
  * TODO: the core; for now the ports only, the core does nothing.
  */
 module Mig1Core import Mig1Pkg::*; #(
-    parameter RST_ADDR = DEFAULT_RST_ADDR  // PC after reset, byte address
+    parameter RST_ADDR = MIG1_RST_ADDR     // PC after reset, byte address
 )(
     input  wire       clk,
     input  wire       rst_n,               // synchronous reset, active low

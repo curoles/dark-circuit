@@ -1,2 +1,3 @@
 mig1_pkg.sv
 mig1_core.sv
+mig1_cpu.sv

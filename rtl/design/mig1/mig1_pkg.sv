@@ -10,16 +10,19 @@
  */
 package Mig1Pkg;
 
-    localparam WIDTH            = 32;                 // register and data width (RISC-V XLEN)
-    localparam INSN_WIDTH       = 32;                 // instruction width, 32 also for RV64
-    localparam STRB_WIDTH       = WIDTH / 8;          // bytes in data word
-    localparam REG_ADDR_WIDTH   = 5;                  // 32 registers x0..x31
-    localparam IADDR_START      = 2;                  // instructions are 4-byte aligned (1 with C extension)
-    localparam DADDR_START      = $clog2(STRB_WIDTH); // data words are STRB_WIDTH-byte aligned
-    localparam DEFAULT_RST_ADDR = 32'h0000_0000;      // default PC after reset, byte address
+    // ISA facts.
+    localparam WIDTH          = 32;                 // register and data width (RISC-V XLEN)
+    localparam INSN_WIDTH     = 32;                 // instruction width, 32 also for RV64
+    localparam STRB_WIDTH     = WIDTH / 8;          // bytes in data word
+    localparam REG_ADDR_WIDTH = 5;                  // 32 registers x0..x31
+    localparam IADDR_START    = 2;                  // instructions are 4-byte aligned (1 with C extension)
+    localparam DADDR_START    = $clog2(STRB_WIDTH); // data words are STRB_WIDTH-byte aligned
+
+    // Configuration of Mig1, defaults of module parameters RST_ADDR and MEM_ADDR_WIDTH.
+    localparam MIG1_RST_ADDR       = 32'h0000_0000; // PC after reset, byte address
     // Used by Mig1Cpu, not by Mig1Core alone.
     /* verilator lint_off UNUSEDPARAM */
-    localparam MEM_ADDR_WIDTH   = 16;                 // Mig1Cpu: 64 KiB ROM and 64 KiB RAM
+    localparam MIG1_MEM_ADDR_WIDTH = 16;            // Mig1Cpu: 64 KiB ROM and 64 KiB RAM
     /* verilator lint_on UNUSEDPARAM */
 
     typedef logic [WIDTH-1:0]           word_t;      // register value, data word

@@ -22,11 +22,13 @@ rtl/lib/
                      not in aggregate flists, not tested yet
   macro/         include files kept for old code; use $clog2, not `CLOG2
   sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM
+rtl/design/mig1/ Mig1 RISC-V RV32I CPU, in progress
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/   testbench of a part
 test/block/<block>/ testbench of a block
 test/sim/        testbenches of simulation models
+test/design/mig1/ tests of Mig1
 sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/
 test/sw/         tests of software, run on QEMU
 old2020/         old 2020 code, kept for reference

@@ -9,7 +9,8 @@
 #   OFF  - do not use it
 # Example: cmake -S <source-dir> -B <build-dir> -D DARK_CIRCUIT_USE_ICARUS=OFF
 
-set(DARK_CIRCUIT_RTL_LIB ${PROJECT_SOURCE_DIR}/rtl/lib)
+set(DARK_CIRCUIT_RTL_LIB    ${PROJECT_SOURCE_DIR}/rtl/lib)
+set(DARK_CIRCUIT_RTL_DESIGN ${PROJECT_SOURCE_DIR}/rtl/design)
 
 # dc_use_tool(<NAME> <program>...)
 #
