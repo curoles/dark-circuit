@@ -1,0 +1,13 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Configuration of Mig1 for programs, also usable in assembly (.S).
+ */
+#pragma once
+
+/* PC after reset. */
+#define MIG1_RST_ADDR {{ rst_addr | c_hex }}u
+
+/* imem and dmem: 1 << MIG1_MEM_ADDR_WIDTH = MIG1_MEM_SIZE bytes each. */
+#define MIG1_MEM_ADDR_WIDTH {{ mem_addr_width }}
+#define MIG1_MEM_SIZE {{ 2 ** mem_addr_width }}u

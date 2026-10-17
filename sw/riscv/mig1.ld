@@ -1,22 +1,24 @@
-/* Linker script of programs for Mig1 RISC-V CPU (Mig1Cpu).
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * Generated from rtl/design/mig1/cfg/mig1_config.yaml and mig1.ld.j2 by tools/config_gen.py
+ *
+ * Linker script of programs for Mig1 RISC-V CPU (Mig1Cpu).
  *
  * Mig1Cpu loads the same image into instruction ROM and data RAM, both at
  * address 0: code is fetched from ROM, loads and stores go to RAM, so .rodata
  * and .data are read from RAM. Code written to RAM at run time can not run.
- * Reset address is 0, so .text.start (_start of crt0.S) is first.
- * LENGTH is 1 << Mig1Pkg::MEM_ADDR_WIDTH, change both together.
+ * Code starts at the reset address, with .text.start (_start of crt0.S) first.
  */
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
 MEMORY
 {
-    RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 64K
+    RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 65536
 }
 
 SECTIONS
 {
-    .text : {
+    .text 0x00000000 : {
         KEEP(*(.text.start))
         *(.text .text.*)
     } > RAM

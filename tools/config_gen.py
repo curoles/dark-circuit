@@ -60,7 +60,7 @@ def main():
     stale = []
     for item in generate:
         template, output = item["template"], item["output"]
-        note = f"GENERATED from {config_name} and {template} by tools/config_gen.py, do not edit"
+        note = f"Generated from {config_name} and {template} by tools/config_gen.py"
         text = env.get_template(template).render(config, generated_note=note)
         path = os.path.join(args.root, output)
         old = None

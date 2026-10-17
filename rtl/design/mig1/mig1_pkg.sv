@@ -18,11 +18,12 @@ package Mig1Pkg;
     localparam IADDR_START    = 2;                  // instructions are 4-byte aligned (1 with C extension)
     localparam DADDR_START    = $clog2(STRB_WIDTH); // data words are STRB_WIDTH-byte aligned
 
-    // Configuration of Mig1, defaults of module parameters RST_ADDR and MEM_ADDR_WIDTH.
-    localparam MIG1_RST_ADDR       = 32'h0000_0000; // PC after reset, byte address
+    // Configuration of Mig1 from cfg/mig1_config.yaml (Mig1ConfigPkg),
+    // defaults of module parameters RST_ADDR and MEM_ADDR_WIDTH.
+    localparam MIG1_RST_ADDR       = Mig1ConfigPkg::RST_ADDR;        // PC after reset, byte address
     // Used by Mig1Cpu, not by Mig1Core alone.
     /* verilator lint_off UNUSEDPARAM */
-    localparam MIG1_MEM_ADDR_WIDTH = 16;            // Mig1Cpu: 64 KiB ROM and 64 KiB RAM
+    localparam MIG1_MEM_ADDR_WIDTH = Mig1ConfigPkg::MEM_ADDR_WIDTH;  // Mig1Cpu: imem and dmem size
     /* verilator lint_on UNUSEDPARAM */
 
     typedef logic [WIDTH-1:0]           word_t;      // register value, data word

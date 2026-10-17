@@ -1,0 +1,9 @@
+# Mig1 configuration. After a change run: make config
+rst_addr:       0x00000000   # PC after reset, byte address
+mem_addr_width: 16           # imem and dmem: 1 << 16 = 64 KiB each
+
+# Generated files: template in this directory -> output relative to repository root.
+generate:
+  - { template: mig1_config_pkg.sv.j2, output: rtl/design/mig1/mig1_config_pkg.sv }
+  - { template: mig1.ld.j2,            output: sw/riscv/mig1.ld }
+  - { template: mig1_config.h.j2,      output: sw/riscv/mig1_config.h }
