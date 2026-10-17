@@ -6,6 +6,7 @@
  * 3. load() with unknown format returns 0.
  * 4. data gets word at new addr 1 clock later.
  * 5. peek() of the 4-byte ROM reads the loaded bytes 11 22 .. 88 directly.
+ * 6. en=0: data holds although addr changes; en=1: new word 1 clock later.
  *
  * Stops at the first mismatch with $fatal.
  */
@@ -13,6 +14,7 @@ module TbSimRom;
     localparam AW = 4;  // 16 bytes
 
     wire          clk;
+    reg           en;
     reg  [AW-1:2] addr4;
     wire [31:0]   data4;
     reg  [AW-1:0] addr1;
@@ -24,12 +26,12 @@ module TbSimRom;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk(clk));
 
-    SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_sim_rom_4  (.clk(clk), .addr(addr4),  .data(data4));
-    SimROM #(.DATA_SIZE(1), .ADDR_WIDTH(AW)) u_sim_rom_1  (.clk(clk), .addr(addr1),  .data(data1));
-    SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_sim_rom_bin(.clk(clk), .addr(addr4b), .data(data4b));
+    SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_sim_rom_4  (.clk(clk), .en(en), .addr(addr4),  .data(data4));
+    SimROM #(.DATA_SIZE(1), .ADDR_WIDTH(AW)) u_sim_rom_1  (.clk(clk), .en(en), .addr(addr1),  .data(data1));
+    SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_sim_rom_bin(.clk(clk), .en(en), .addr(addr4b), .data(data4b));
 
     initial begin
-        addr4 = 0; addr1 = 0; addr4b = 0;
+        en = 1; addr4 = 0; addr1 = 0; addr4b = 0;
 
         // 1., 2. Files are written here and loaded.
         fd = $fopen("sim_rom_load.hex", "w");
@@ -70,6 +72,17 @@ module TbSimRom;
         @(negedge clk); addr4b = 2'd1;
         @(posedge clk); #1;
         if (data4b !== 32'h44332211) $fatal(1, "SimROM bin: word 1 got %h, expected 44332211", data4b);
+
+        // 6. en=0: data holds although addr changes; en=1: new word 1 clock later.
+        @(negedge clk); en = 1; addr4 = 2'd0;
+        @(posedge clk); #1;
+        if (data4 !== 32'h44332211) $fatal(1, "SimROM 4: word 0 got %h, expected 44332211", data4);
+        @(negedge clk); en = 0; addr4 = 2'd1;
+        @(posedge clk); #1;
+        if (data4 !== 32'h44332211) $fatal(1, "SimROM 4: en=0, data changed to %h", data4);
+        @(negedge clk); en = 1;
+        @(posedge clk); #1;
+        if (data4 !== 32'h88776655) $fatal(1, "SimROM 4: en=1, word 1 got %h, expected 88776655", data4);
 
         $display("PASS");
         $finish;
