@@ -20,6 +20,8 @@ rtl/lib/
     <block>/struct/  version made of blocks, parts and gates
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
                      not in aggregate flists, not tested yet
+  riscv/         RISC-V instruction encodings, generated from riscv-opcodes
+                 by tools/riscv_opcodes.sh
   macro/         include files kept for old code; use $clog2, not `CLOG2
   sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM
 rtl/design/mig1/ Mig1 RISC-V RV32I CPU, in progress
