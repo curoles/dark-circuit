@@ -141,7 +141,7 @@ on the main simulator, so both versions must behave the same.
 
 ## Build and test
 
-`Makefile` wraps `cmake` and `ctest`, it has 9 targets:
+`Makefile` wraps `cmake` and `ctest`, it has 10 targets:
 
 - `make help`: explain targets and variables, also plain `make`
 - `make cmake`: configure build directory
@@ -153,6 +153,8 @@ on the main simulator, so both versions must behave the same.
 - `make run R=<regex> L=<regex>`: configure if needed, build and run tests
   with name matching `R` and/or label matching `L`, for example `make run R=fifo`
 - `make list`: configure if needed and list tests, name and labels of every test
+- `make config`: generate files from design configurations,
+  see [Design configuration](#design-configuration)
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.
@@ -231,6 +233,17 @@ make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
 Every program `<name>` gives `<name>.elf`, `<name>.hex` and `<name>.dis`
 (disassembly) in the build directory of its test.
 
+## Design configuration
+
+A design has its configuration in `rtl/design/<design>/cfg/`: `<design>_config.yaml`
+with values (memory size, reset address, ...) and Jinja2 templates of the files
+that need them. `tools/config_gen.py` makes the files, they are committed:
+
+- edit the YAML (or a template), run `make config`, commit the YAML and the changed files
+- generated files start with `THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!`
+- test `<design>.config` (label `config`) fails when a generated file is out of date
+- `DARK_CIRCUIT_USE_PYTHON`: `AUTO`, `ON` or `OFF`, like for simulators
+
 ## Running selected tests
 
 After `make build`, call `ctest` directly, `<build-dir>` is the build directory:
@@ -244,7 +257,7 @@ ctest --test-dir <build-dir> --output-on-failure   # show output of failed tests
 
 Every test has labels:
 
-- its tool: `icarus`, `verilator` or `qemu`
+- its tool: `icarus`, `verilator`, `qemu` or `config`
 - the first directory under `test/`: `gate`, `sim`, `part`, `block` or `sw`
 - for tests deeper in `test/`, its own directory: `carry_save_adder`, `semihosting`, ...
 
