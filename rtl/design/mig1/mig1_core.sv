@@ -6,10 +6,11 @@
  * the debug port reads and writes registers, and resume continues after EBREAK.
  *
  * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
- * Mig1Control (run, halt); more parts come with decode, registers, ALU,
+ * Mig1Control (run, halt), Mig1Decode, Mig1Regs, Mig1Alu; more parts come with
  * branches and loads/stores. Pipeline: IF fetches, EX executes the instruction
  * that arrives from imem; parts do not depend on that, so they fit a 5-stage pipeline too.
- * TODO: for now instructions are not executed, they only retire; the core halts at EBREAK.
+ * TODO: only OP, OP-IMM, LUI and AUIPC execute; other instructions retire without
+ * effect, the core halts at EBREAK.
  */
 module Mig1Core import Mig1Pkg::*; #(
     parameter RST_ADDR = MIG1_RST_ADDR     // PC after reset, byte address
@@ -45,21 +46,45 @@ module Mig1Core import Mig1Pkg::*; #(
         .clk(clk), .rst_n(rst_n), .ex(ex), .ex_insn(ex_insn),
         .fetch_ctrl(fetch_ctrl), .halt(halt), .halt_pc(halt_pc));
 
-    // Every instruction in EX retires without doing anything yet, no register is written.
+    decoded_t dec;              // instruction in EX taken apart
+    word_t    rs1_data;
+    word_t    rs2_data;
+    word_t    alu_result;
+    logic     rd_write;         // instruction in EX writes rd in this cycle
+    word_t    dbg_reg_rdata;
+
+    Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(dec));
+
+    Mig1Regs u_mig1_regs(
+        .clk(clk), .halt(halt),
+        .rs1(dec.rs1), .rs2(dec.rs2), .rs1_data(rs1_data), .rs2_data(rs2_data),
+        .rd_we(rd_write), .rd(dec.rd), .rd_data(alu_result),
+        .dbg_reg_addr(dbg_req.reg_addr), .dbg_reg_wr(dbg_req.reg_wr),
+        .dbg_reg_wdata(dbg_req.reg_wdata), .dbg_reg_rdata(dbg_reg_rdata));
+
+    Mig1Alu u_mig1_alu(
+        .dec(dec), .pc(ex.pc), .rs1_data(rs1_data), .rs2_data(rs2_data), .result(alu_result));
+
+    // Kinds executed so far write rd with the ALU result. JAL, JALR and loads write rd
+    // too (dec.rd_we), they come with branches and loads/stores.
+    assign rd_write = ex.valid && (dec.kind == KIND_OP  || dec.kind == KIND_OP_IMM ||
+                                   dec.kind == KIND_LUI || dec.kind == KIND_AUIPC);
+
+    // Retire: rd and rd_data are 0 when no register is written, also for writes to x0 (as RVFI).
     assign retire.valid   = ex.valid;
     assign retire.pc      = ex.pc;
     assign retire.insn    = ex_insn;
-    assign retire.rd      = '0;
-    assign retire.rd_data = '0;
+    assign retire.rd      = (rd_write && dec.rd != '0) ? dec.rd : '0;
+    assign retire.rd_data = (rd_write && dec.rd != '0) ? alu_result : '0;
 
     assign dbg_rsp.halt_pc   = halt_pc;
-    assign dbg_rsp.reg_rdata = '0;
+    assign dbg_rsp.reg_rdata = dbg_reg_rdata;
 
-    // TODO: data memory (loads and stores), illegal (decode), debug register access.
+    // TODO: data memory (loads and stores), illegal (decode), resume.
     assign dmem_req = '0;
     assign illegal  = 1'b0;
     /* verilator lint_off UNUSEDSIGNAL */
-    wire stub_unused = &{1'b0, dmem_rsp, dbg_req};
+    wire stub_unused = &{1'b0, dmem_rsp, dbg_req.resume};
     /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

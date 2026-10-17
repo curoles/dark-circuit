@@ -30,6 +30,9 @@ This file has the rules that are not in README.md.
   keep enum values as bits and compare them with the enum names, slice integers.
 - Icarus 11 warns "constant selects in always_* processes are not currently supported"
   for `s.field` or `v[3:0]` inside `always_comb`; select with `assign` into a signal first.
+- Icarus 11 does not find a name imported from a package inside an instance port
+  expression, `.left_right(funct3 == F3_SLL)`: it silently makes an implicit wire.
+  Compute the value with `assign` into a signal and connect the signal.
 - A variable with an initializer in a static function is initialized once at time 0;
   Icarus silently returns wrong values, Verilator refuses. Hence `automatic` everywhere.
 - Only `$fatal` makes `vvp` exit with an error; `$error` does not fail a test.

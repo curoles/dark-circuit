@@ -3,9 +3,40 @@
  *
  * Assign an instruction to insn_fmt_t.word and read the fields of a format,
  * for example f.b.imm_12; immediate bits keep the spec names (imm_10_5 is imm[10:5]).
+ * F3_* are the funct3 values that select the operation inside an opcode.
  * Encodings of instructions are in RiscvInstrPkg (generated from riscv-opcodes).
  */
 package RiscvPkg;
+
+    // funct3 by opcode, RV32I. Not every user needs every group.
+    /* verilator lint_off UNUSEDPARAM */
+
+    // OP and OP-IMM; alt (insn[30]) selects SUB and SRA/SRAI.
+    localparam logic [2:0] F3_ADD_SUB = 3'b000;
+    localparam logic [2:0] F3_SLL     = 3'b001;
+    localparam logic [2:0] F3_SLT     = 3'b010;
+    localparam logic [2:0] F3_SLTU    = 3'b011;
+    localparam logic [2:0] F3_XOR     = 3'b100;
+    localparam logic [2:0] F3_SRL_SRA = 3'b101;
+    localparam logic [2:0] F3_OR      = 3'b110;
+    localparam logic [2:0] F3_AND     = 3'b111;
+
+    // BRANCH.
+    localparam logic [2:0] F3_BEQ     = 3'b000;
+    localparam logic [2:0] F3_BNE     = 3'b001;
+    localparam logic [2:0] F3_BLT     = 3'b100;
+    localparam logic [2:0] F3_BGE     = 3'b101;
+    localparam logic [2:0] F3_BLTU    = 3'b110;
+    localparam logic [2:0] F3_BGEU    = 3'b111;
+
+    // LOAD and STORE: access width; U loads zero-extend.
+    localparam logic [2:0] F3_B       = 3'b000;
+    localparam logic [2:0] F3_H       = 3'b001;
+    localparam logic [2:0] F3_W       = 3'b010;
+    localparam logic [2:0] F3_BU      = 3'b100;
+    localparam logic [2:0] F3_HU      = 3'b101;
+
+    /* verilator lint_on UNUSEDPARAM */
 
     typedef struct packed {     // R-type: OP
         logic [6:0] funct7;
