@@ -10,6 +10,7 @@
 #   make test_blocks - configure if needed, build and run tests of blocks
 #   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
+#   make config  - generate files from design configurations
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
 # Directory of this Makefile, it has top CMakeLists.txt.
@@ -33,10 +34,13 @@ CONFIGURED := $(if $(CMAKE_ARGS),cmake,$(BUILD_DIR)/CMakeCache.txt)
 # V=1 adds ctest -V: show output of every test, not only of failed tests.
 CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc) $(if $(V),-V)
 
+# Design configurations: every rtl/design/<design>/cfg/<design>_config.yaml.
+CONFIGS := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_config.yaml)
+
 # Plain `make` without a target shows help.
 .DEFAULT_GOAL := help
 
-.PHONY: cmake build test test_gates test_parts test_blocks run list help
+.PHONY: cmake build test test_gates test_parts test_blocks run list config help
 
 cmake:
 	$(CONFIGURE)
@@ -76,6 +80,12 @@ list: $(CONFIGURED)
 	    /^ *Test +#[0-9]+:/ { printf "%-40s %s\n", $$NF, labels; labels = "" } \
 	    /^Total Tests:/     { print }'
 
+# Generate files from design configurations, run after a change in cfg/.
+config:
+	@for cfg in $(CONFIGS); do \
+	    python3 $(SOURCE_DIR)/tools/config_gen.py --root $(SOURCE_DIR) $$cfg || exit 1; \
+	done
+
 # Help text: define ... endef is a multiline variable (like a shell here-document <<EOF),
 # export puts it into the environment of the recipe, echo "$$HELP" keeps its lines.
 define HELP
@@ -91,6 +101,7 @@ Targets:
   make test_blocks  configure if needed, build and run tests of blocks (label block)
   make run          configure if needed, build and run tests selected by R and L
   make list         configure if needed and list tests: name and labels of every test
+  make config       generate files from design configurations: rtl/design/*/cfg/*_config.yaml
 
 Variables:
   BUILD_DIR=<dir>      build directory, now $(BUILD_DIR)

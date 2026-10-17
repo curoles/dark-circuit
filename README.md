@@ -136,6 +136,8 @@ on the main simulator, so both versions must behave the same.
   on Ubuntu: `sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf`
 - QEMU (optional) to run RISC-V programs on `qemu-system-riscv32`,
   on Ubuntu: `sudo apt install qemu-system-misc`
+- Python 3 with `python3-yaml` and `python3-jinja2` (optional) for `make config`
+  and the checks of design configurations
 
 ## Build and test
 
