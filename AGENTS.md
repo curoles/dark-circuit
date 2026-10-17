@@ -25,6 +25,11 @@ This file has the rules that are not in README.md.
 - Icarus 11 and typedef'd vectors: a port of a vector typedef (`insn_t`) does not
   elaborate; write the range, `input logic [INSN_WIDTH-1:0] insn`. Structs are fine.
 - Icarus 11: one declaration per line, `wire a = x, b = y;` is rejected.
+- Icarus 11 does not support `inside`; use `case` or `==`.
+- Icarus 11 does not support casts to an enum (`kind_t'(x)`) or to a width (`AW'(x)`);
+  keep enum values as bits and compare them with the enum names, slice integers.
+- Icarus 11 warns "constant selects in always_* processes are not currently supported"
+  for `s.field` or `v[3:0]` inside `always_comb`; select with `assign` into a signal first.
 - A variable with an initializer in a static function is initialized once at time 0;
   Icarus silently returns wrong values, Verilator refuses. Hence `automatic` everywhere.
 - Only `$fatal` makes `vvp` exit with an error; `$error` does not fail a test.

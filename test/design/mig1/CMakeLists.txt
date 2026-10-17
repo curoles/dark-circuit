@@ -20,6 +20,14 @@ if(DARK_CIRCUIT_RISCV)
                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_mem.hex)
     endforeach()
 
+    # Decode: unit test of Mig1Decode with cases encoded by the assembler.
+    dc_add_riscv_program(design_mig1_decode SOURCES decode.S LINK_FLAGS -T ${SW}/mig1.ld)
+    foreach(sim IN ITEMS icarus verilator)
+        cmake_language(CALL dc_add_${sim}_test design_mig1_decode TOP TbMig1Decode TB tb_mig1_decode.sv
+                       FLISTS ${FLISTS}
+                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_decode.hex)
+    endforeach()
+
     # Fetch: straight-line program, every instruction retires, halt at EBREAK.
     dc_add_riscv_program(design_mig1_fetch SOURCES fetch.S LINK_FLAGS -T ${SW}/mig1.ld)
     foreach(sim IN ITEMS icarus verilator)
