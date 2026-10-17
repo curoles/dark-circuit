@@ -42,6 +42,7 @@ if(DARK_CIRCUIT_RISCV)
         cmake_language(CALL dc_add_${sim}_test design_mig1_fetch TOP TbMig1 TB tb_mig1.sv
                        FLISTS ${FLISTS}
                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_fetch.hex
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_fetch.${sim}.trace
                             +expect_sequential +expect_retired=5 +expect_halt_pc=10)
     endforeach()
 
@@ -51,6 +52,7 @@ if(DARK_CIRCUIT_RISCV)
         cmake_language(CALL dc_add_${sim}_test design_mig1_alu_prog TOP TbMig1 TB tb_mig1.sv
                        FLISTS ${FLISTS}
                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_alu_prog.hex
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_alu_prog.${sim}.trace
                             +expect_sequential +expect_regs)
     endforeach()
 endif()

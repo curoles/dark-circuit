@@ -14,8 +14,8 @@
  * - with +expect_regs: the shadow registers have the values of the table that the
  *   program puts right after the halting EBREAK: number of entries n, then n pairs of
  *   words register, value; a register in the table that was never written fails.
- * Other plusargs: +trace prints every retired instruction and its register write,
- * +max_cycles=<n> (default 100000).
+ * Other plusargs: +trace=<file> writes every retired instruction and its register
+ * write into <file>, +trace alone prints them; +max_cycles=<n> (default 100000).
  * Stops at the first failure with $fatal.
  */
 module TbMig1;
@@ -32,7 +32,8 @@ module TbMig1;
     wire [WIDTH-1:0] halt_pc;       // byte address
 
     string           hex;
-    reg              trace;
+    string           trace_file;
+    integer          trace_fd;      // 0: no trace
     reg              expect_sequential;
     integer          max_cycles;
     integer          expect_retired; // -1: not checked
@@ -101,10 +102,10 @@ module TbMig1;
                 $fatal(1, "Mig1: pc %h after %h, expected %h", retire_pc, prev_pc, prev_pc + 4);
             if (retire.insn !== imem_word(retire_pc[AW-1:0]))
                 $fatal(1, "Mig1: insn %h at pc %h, imem has %h", retire.insn, retire_pc, imem_word(retire_pc[AW-1:0]));
-            if (trace && retire.rd != 0)
-                $display("%8d pc=%h insn=%h x%0d <= %h", cycle, retire_pc, retire.insn, retire.rd, retire.rd_data);
-            else if (trace)
-                $display("%8d pc=%h insn=%h", cycle, retire_pc, retire.insn);
+            if (trace_fd != 0 && retire.rd != 0)
+                $fdisplay(trace_fd, "%8d pc=%h insn=%h x%0d <= %h", cycle, retire_pc, retire.insn, retire.rd, retire.rd_data);
+            else if (trace_fd != 0)
+                $fdisplay(trace_fd, "%8d pc=%h insn=%h", cycle, retire_pc, retire.insn);
             if (retire.rd != 0) begin
                 shadow[retire.rd]  <= retire.rd_data;
                 written[retire.rd] <= 1'b1;
@@ -120,12 +121,22 @@ module TbMig1;
         cycle   = 0;
         prev_pc = 0;
         written = 0;
-        trace             = $test$plusargs("trace");
         expect_sequential = $test$plusargs("expect_sequential");
         expect_regs       = $test$plusargs("expect_regs");
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
         check_halt_pc = $value$plusargs("expect_halt_pc=%h", expect_halt_pc);
+
+        // +trace=<file> writes the trace into <file>, +trace alone prints it.
+        if ($value$plusargs("trace=%s", trace_file)) begin
+            trace_fd = $fopen(trace_file, "w");
+            if (trace_fd == 0)
+                $fatal(1, "Mig1: can not open trace file %s", trace_file);
+            $display("Mig1: trace in %s", trace_file);
+        end else if ($test$plusargs("trace"))
+            trace_fd = 32'h8000_0001;   // stdout
+        else
+            trace_fd = 0;
 
         if (!$value$plusargs("hex=%s", hex))
             $fatal(1, "Mig1: plusarg +hex=<file> is missing");
@@ -151,6 +162,8 @@ module TbMig1;
         if (expect_regs)
             check_regs();
         $display("PASS: %0d instructions retired in %0d cycles, halted at %h", retired, cycle, halt_pc);
+        if (trace_file.len() != 0)
+            $fclose(trace_fd);
         $finish;
     end
 endmodule
