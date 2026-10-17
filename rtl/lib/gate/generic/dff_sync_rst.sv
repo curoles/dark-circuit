@@ -1,4 +1,4 @@
-/* D type Flip Flop with Synchronous Reset.
+/* D type Flip Flop with Synchronous Reset to RST_VAL.
  *
  * Author: Igor Lesik
  *
@@ -6,7 +6,8 @@
  *
  */
 module DffSyncRst #(
-    parameter WIDTH = 1
+    parameter WIDTH = 1,
+    parameter [WIDTH-1:0] RST_VAL = {WIDTH{1'b0}}
 )(
     input  wire             clk,
     input  wire             rst_n,
@@ -16,14 +17,14 @@ module DffSyncRst #(
 
     always @(posedge clk)
         if (!rst_n)
-            out[WIDTH-1:0] <= {WIDTH{1'b0}};
+            out[WIDTH-1:0] <= RST_VAL;
         else
             out[WIDTH-1:0] <= in[WIDTH-1:0];
 
 endmodule
 
 
-/* D type Flip Flop with Synchronous Reset and Enable.
+/* D type Flip Flop with Synchronous Reset to RST_VAL and Enable.
  *
  * Author: Igor Lesik
  *
@@ -31,7 +32,8 @@ endmodule
  *
  */
 module DffSyncRstEn #(
-    parameter WIDTH = 1
+    parameter WIDTH = 1,
+    parameter [WIDTH-1:0] RST_VAL = {WIDTH{1'b0}}
 )(
     input  wire             clk,
     input  wire             rst_n,
@@ -43,6 +45,7 @@ module DffSyncRstEn #(
 `ifdef DARKC_FAST_DFF_SYNC_RST_EN
     // WARNING just an idea, need to test
     // WARNING: if en=X then rst_n does not reset FF (in simulation).
+    // WARNING: resets to 0, ignores RST_VAL.
     wire [WIDTH-1:0] fin;
     Nand2#(WIDTH) u_mux(
         .in1( ~(out & {WIDTH{rst_n & ~en}}) ),
@@ -53,7 +56,7 @@ module DffSyncRstEn #(
 `else
     always @(posedge clk)
         if (!rst_n)
-            out[WIDTH-1:0] <= {WIDTH{1'b0}};
+            out[WIDTH-1:0] <= RST_VAL;
         else if (en)
             out[WIDTH-1:0] <= in[WIDTH-1:0];
         else

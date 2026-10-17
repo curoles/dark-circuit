@@ -11,3 +11,4 @@
 -F incr/behave/incr.flist
 -F alu1/behave/alu1.flist
 -F add_cmp/behave/add_cmp.flist
+-F lfsr/behave/lfsr.flist

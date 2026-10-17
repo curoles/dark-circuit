@@ -1,39 +1,33 @@
-module LinFeedbShiftReg #(
-    parameter WIDTH = 8  // Configurable width template (e.g., 4, 8, 16, 32)
+/* Linear feedback shift register (LFSR), Galois form, behavioral.
+ *
+ * Author: Igor Lesik
+ *
+ * q steps through all 2^WIDTH - 1 nonzero values before it repeats (maximal period):
+ * on every rising edge q shifts right and, when the bit shifted out is 1, the tap mask
+ * of LfsrPkg is XORed in. Supported WIDTH: 4, 8, 12, 16, 32; any other width stops
+ * the simulation. rst_n=0 on rising edge sets q to all ones: the zero state would
+ * lock the LFSR.
+ */
+module Lfsr import LfsrPkg::*; #(
+    parameter WIDTH = 8
 )(
-    input  wire               clk,    // System clock
-    input  wire               rst_n,  // Reset (Active Low)
-    output reg  [WIDTH-1:0]   q       // Configurable width random output
+    input  wire             clk,
+    input  wire             rst_n,  // synchronous reset, active low
+    output reg  [WIDTH-1:0] q
 );
+    localparam [31:0]      TAPS     = lfsr_taps(WIDTH);
+    localparam [WIDTH-1:0] TAP_MASK = TAPS[WIDTH-1:0];
 
-    // Pure function to look up the correct Galois tap mask for a given width.
-    // These masks ensure a maximal period cycle of (2^WIDTH - 1) states.
-    function [31:0] get_taps(input integer w);
-        case (w)
-            4  : get_taps = 4'hC;          // x^4 + x^3 + 1
-            8  : get_taps = 8'hB8;         // x^8 + x^6 + x^5 + x^4 + 1
-            12 : get_taps = 12'hE01;       // x^12 + x^11 + x^10 + x^4 + 1
-            16 : get_taps = 16'hB400;      // x^16 + x^15 + x^13 + x^11 + 1
-            32 : get_taps = 32'h80000057;  // x^32 + x^22 + x^2 + x^1 + 1
-            default: get_taps = 8'hB8;     // Default fallback
-        endcase
-    endfunction
+    initial
+        if (TAPS == 0)
+            $fatal(1, "Lfsr: WIDTH=%0d is not supported, see LfsrPkg", WIDTH);
 
-    // Apply the function at compile-time to generate a constant tap mask
-    localparam [WIDTH-1:0] TAP_MASK = get_taps(WIDTH);
-
-    always @(posedge clk /* ASYNC or negedge rst_n*/) begin
-        if (!rst_n) begin
-            // Seed the register with 1s. Prevents lockup state of all 0s.
-            q <= {WIDTH{1'b1}}; 
-        end else begin
-            // Galois shift-right logic
-            if (q[0]) begin
-                q <= (q >> 1) ^ TAP_MASK;
-            end else begin
-                q <= (q >> 1);
-            end
-        end
-    end
+    always_ff @(posedge clk)
+        if (!rst_n)
+            q <= {WIDTH{1'b1}};
+        else if (q[0])
+            q <= (q >> 1) ^ TAP_MASK;
+        else
+            q <= q >> 1;
 
 endmodule

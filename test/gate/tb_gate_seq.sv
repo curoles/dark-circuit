@@ -26,7 +26,7 @@ module TbGateSeq;
     DffAsyncRst #(.WIDTH(W), .RST_VAL(RST_VAL)) u_rst  (.clk(clk), .rst_n(rst_n), .in(d), .out(rst_q));
     Latch       #(.WIDTH(W))                   u_latch(.in(d), .enable(en), .out(latch_q));
 
-    DffSyncRst    #(.WIDTH(W))                   u_srst   (.clk(clk), .rst_n(srst_n), .in(d), .out(srst_q));
+    DffSyncRst    #(.WIDTH(W), .RST_VAL(RST_VAL)) u_srst   (.clk(clk), .rst_n(srst_n), .in(d), .out(srst_q));
     DffSyncRstEn  #(.WIDTH(W))                   u_srst_en(.clk(clk), .rst_n(srst_n), .en(en2), .in(d), .out(srst_en_q));
     DffAsyncRstEn #(.WIDTH(W), .RST_VAL(RST_VAL)) u_rst_en (.clk(clk), .rst_n(rst_n), .en(en2), .in(d), .out(rst_en_q));
 
@@ -110,11 +110,11 @@ module TbGateSeq;
         #2 srst_n = 0; #1;
         if (srst_q !== 3'b011 || srst_en_q !== 3'b011)
             $fatal(1, "DffSyncRst/En: srst_n=0 without clock got %b/%b, expected 011", srst_q, srst_en_q);
-        // ... and resets on rising edge.
+        // ... and resets on rising edge: DffSyncRst to RST_VAL, DffSyncRstEn to default 0.
         #2 clk = 1;
         #1;
-        if (srst_q !== 0 || srst_en_q !== 0)
-            $fatal(1, "DffSyncRst/En: srst_n=0 at clock edge got %b/%b, expected 000", srst_q, srst_en_q);
+        if (srst_q !== RST_VAL || srst_en_q !== 0)
+            $fatal(1, "DffSyncRst/En: srst_n=0 at clock edge got %b/%b, expected %b/000", srst_q, srst_en_q, RST_VAL);
         #4 clk = 0;
 
         // Flops with enable hold while en2 is 0.
