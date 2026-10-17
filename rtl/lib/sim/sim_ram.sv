@@ -43,7 +43,7 @@ module SimRAM #(
     // @0
     // 11
     // 22
-    function int load(string filename, int format);
+    function automatic int load(string filename, int format);
         if (format == VLOG_HEX_FORMAT)
             $readmemh(filename, ram);
         else if (format == VLOG_BIN_FORMAT)
@@ -57,7 +57,7 @@ module SimRAM #(
     // Read byte at byte_addr directly, without clock and ports:
     // for testbenches and simulation models (debugger, semihosting).
     // Does not change the memory and does not disturb rd_data.
-    function logic [7:0] peek(input logic [ADDR_WIDTH-1:0] byte_addr);
+    function automatic logic [7:0] peek(input logic [ADDR_WIDTH-1:0] byte_addr);
         return ram[byte_addr];
     endfunction
 

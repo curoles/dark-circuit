@@ -53,9 +53,7 @@ module Mig1Cpu import Mig1Pkg::*; #(
         .rd_data(dmem_rsp.rd_data), .rd_valid(dmem_rd_valid));
 
     // Load hex image into imem and dmem, returns 1 when both are loaded.
-    // Results are assigned in statements: an initializer in a declaration of
-    // a variable in a static function runs only once, not on every call.
-    function int load(string hex);
+    function automatic int load(string hex);
         int ok_imem;
         int ok_dmem;
         ok_imem = u_imem.load(hex, u_imem.VLOG_HEX_FORMAT);

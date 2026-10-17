@@ -60,12 +60,12 @@ module SimROM #(
     /* verilator lint_on UNUSEDPARAM */
 
     // Load memory contents from file, returns 0 if format is unknown.
-    function int load(string filename, int format);
+    function automatic int load(string filename, int format);
         return u_sim_ram.load(filename, format);
     endfunction
 
     // Read byte at byte_addr directly, see SimRAM peek().
-    function logic [7:0] peek(input logic [ADDR_WIDTH-1:0] byte_addr);
+    function automatic logic [7:0] peek(input logic [ADDR_WIDTH-1:0] byte_addr);
         return u_sim_ram.peek(byte_addr);
     endfunction
 
