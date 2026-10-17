@@ -22,13 +22,14 @@ package Mig1Pkg;
     localparam IADDR_START    = 2;                  // instructions are 4-byte aligned (1 with C extension)
     localparam DADDR_START    = $clog2(STRB_WIDTH); // data words are STRB_WIDTH-byte aligned
 
+    // Constants below are for all modules and testbenches; a design with one
+    // module as top, like a unit test, uses only some of them.
+    /* verilator lint_off UNUSEDPARAM */
+
     // Configuration of Mig1 from cfg/mig1_config.yaml (Mig1ConfigPkg),
     // defaults of module parameters RST_ADDR and MEM_ADDR_WIDTH.
     localparam MIG1_RST_ADDR       = Mig1ConfigPkg::RST_ADDR;        // PC after reset, byte address
-    // Used by Mig1Cpu, not by Mig1Core alone.
-    /* verilator lint_off UNUSEDPARAM */
     localparam MIG1_MEM_ADDR_WIDTH = Mig1ConfigPkg::MEM_ADDR_WIDTH;  // Mig1Cpu: imem and dmem size
-    /* verilator lint_on UNUSEDPARAM */
 
     typedef logic [WIDTH-1:0]           word_t;      // register value, data word
     typedef logic [INSN_WIDTH-1:0]      insn_t;      // instruction
@@ -39,6 +40,8 @@ package Mig1Pkg;
 
     // Instructions with fixed encoding.
     localparam insn_t INSN_EBREAK = 32'h0010_0073;
+
+    /* verilator lint_on UNUSEDPARAM */
 
     // Instruction fetch: rsp.data is the word at req.addr 1 clock after req.en=1.
     typedef struct packed {
@@ -97,5 +100,36 @@ package Mig1Pkg;
     typedef struct packed {
         logic   run;      // 1: request the next instruction, 0: hold
     } fetch_ctrl_t;
+
+    // Kind of instruction, from exact match with the RISC-V encodings.
+    typedef enum logic [3:0] {
+        KIND_ILLEGAL,   // any word that is not an RV32I instruction
+        KIND_LUI,
+        KIND_AUIPC,
+        KIND_JAL,
+        KIND_JALR,
+        KIND_BRANCH,    // BEQ, BNE, BLT, BGE, BLTU, BGEU
+        KIND_LOAD,      // LB, LH, LW, LBU, LHU
+        KIND_STORE,     // SB, SH, SW
+        KIND_OP_IMM,    // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+        KIND_OP,        // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+        KIND_FENCE,
+        KIND_ECALL,
+        KIND_EBREAK
+    } kind_t;
+
+    // Decode -> units: the instruction taken apart.
+    typedef struct packed {
+        kind_t      kind;
+        reg_addr_t  rd;
+        reg_addr_t  rs1;
+        reg_addr_t  rs2;
+        logic       rd_we;     // writes rd (writes to x0 are dropped by the register file)
+        logic       uses_rs1;  // reads rs1, for hazard detection in a 5-stage pipeline
+        logic       uses_rs2;
+        logic [2:0] funct3;    // operation within the kind: ALU op, branch compare, load/store size
+        logic       alt;       // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
+        word_t      imm;       // immediate of the instruction format, sign-extended
+    } decoded_t;
 
 endpackage

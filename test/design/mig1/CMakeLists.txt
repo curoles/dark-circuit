@@ -2,8 +2,10 @@ set(LIB  ${DARK_CIRCUIT_RTL_LIB})
 set(MIG1 ${DARK_CIRCUIT_RTL_DESIGN}/mig1)
 set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
-# Mig1 uses blocks of the library, behave versions are fast to simulate.
-set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${MIG1}/mig1.flist)
+# Mig1 uses blocks of the library (behave versions are fast to simulate)
+# and RISC-V formats and encodings.
+set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/riscv/riscv.flist
+           ${MIG1}/mig1.flist)
 
 # Files generated from cfg/mig1_config.yaml are up to date.
 dc_add_config_check(design_mig1 CONFIG ${MIG1}/cfg/mig1_config.yaml)
