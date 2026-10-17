@@ -5,7 +5,11 @@
  * illegal instruction; illegal=1 tells that it can not continue. While halted,
  * the debug port reads and writes registers, and resume continues after EBREAK.
  *
- * TODO: the core; for now the ports only, the core does nothing.
+ * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
+ * Mig1Control (run, halt); more parts come with decode, registers, ALU,
+ * branches and loads/stores. Pipeline: IF fetches, EX executes the instruction
+ * that arrives from imem; parts do not depend on that, so they fit a 5-stage pipeline too.
+ * TODO: for now instructions are not executed, they only retire; the core halts at EBREAK.
  */
 module Mig1Core import Mig1Pkg::*; #(
     parameter RST_ADDR = MIG1_RST_ADDR     // PC after reset, byte address
@@ -27,18 +31,35 @@ module Mig1Core import Mig1Pkg::*; #(
     output dbg_rsp_t  dbg_rsp
 );
 
-    // TODO: remove with the core, inputs and RST_ADDR are not used by the stub.
-    /* verilator lint_off UNUSEDSIGNAL */
-    /* verilator lint_off UNUSEDPARAM */
-    wire stub_unused = &{1'b0, clk, rst_n, imem_rsp, dmem_rsp, dbg_req, RST_ADDR};
-    /* verilator lint_on UNUSEDPARAM */
-    /* verilator lint_on UNUSEDSIGNAL */
+    fetch_ctrl_t fetch_ctrl;
+    fetch_t      ex;        // instruction in EX: arrives from imem in this cycle
+    insn_t       ex_insn;
+    iaddr_t      halt_pc;
 
-    assign imem_req = '0;
+    assign ex_insn = imem_rsp.data;
+
+    Mig1Fetch #(.RST_ADDR(RST_ADDR)) u_mig1_fetch(
+        .clk(clk), .rst_n(rst_n), .ctrl(fetch_ctrl), .imem_req(imem_req), .fetch(ex));
+
+    Mig1Control u_mig1_control(
+        .clk(clk), .rst_n(rst_n), .ex(ex), .ex_insn(ex_insn),
+        .fetch_ctrl(fetch_ctrl), .halt(halt), .halt_pc(halt_pc));
+
+    // Every instruction in EX retires without doing anything yet, no register is written.
+    assign retire.valid   = ex.valid;
+    assign retire.pc      = ex.pc;
+    assign retire.insn    = ex_insn;
+    assign retire.rd      = '0;
+    assign retire.rd_data = '0;
+
+    assign dbg_rsp.halt_pc   = halt_pc;
+    assign dbg_rsp.reg_rdata = '0;
+
+    // TODO: data memory (loads and stores), illegal (decode), debug register access.
     assign dmem_req = '0;
-    assign halt     = 1'b0;
     assign illegal  = 1'b0;
-    assign retire   = '0;
-    assign dbg_rsp  = '0;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire stub_unused = &{1'b0, dmem_rsp, dbg_req};
+    /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

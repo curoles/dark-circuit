@@ -2,9 +2,13 @@
  *
  * Port groups of Mig1Core are packed structs, one struct per direction:
  * <group>_req_t goes from the requester, <group>_rsp_t comes back.
- * Modules import this package in their header, `module X import Mig1Pkg::*; #(`:
- * Icarus 11 crashes (assert in elab_type.cc) when the structs are used only as
- * Mig1Pkg::<type> and no module imports the package.
+ * Two rules because of Icarus 11 bugs:
+ * - modules import this package in their header, `module X import Mig1Pkg::*; #(`:
+ *   Icarus crashes (assert in elab_type.cc) when the structs are used only as
+ *   Mig1Pkg::<type> and no module imports the package;
+ * - a port of a vector type (word_t, insn_t, iaddr_t, ...) is written with its range,
+ *   `input logic [INSN_WIDTH-1:0] insn`: Icarus can not bind the range of the typedef
+ *   in a port ("Unable to bind parameter"); structs and internal signals may use them.
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
  * register values are byte addresses like software sees them.
  */
@@ -32,6 +36,9 @@ package Mig1Pkg;
     typedef logic [WIDTH-1:DADDR_START] daddr_t;     // data address, word address
     typedef logic [STRB_WIDTH-1:0]      strb_t;      // byte enables of data word
     typedef logic [REG_ADDR_WIDTH-1:0]  reg_addr_t;  // register number
+
+    // Instructions with fixed encoding.
+    localparam insn_t INSN_EBREAK = 32'h0010_0073;
 
     // Instruction fetch: rsp.data is the word at req.addr 1 clock after req.en=1.
     typedef struct packed {
@@ -78,5 +85,17 @@ package Mig1Pkg;
         iaddr_t    halt_pc;   // address of the instruction that stopped the core
         word_t     reg_rdata; // value of register reg_addr, combinational
     } dbg_rsp_t;
+
+    // Fetch -> next stage: the instruction that arrives from imem in this cycle
+    // (EX in the 2-stage pipeline, ID in a 5-stage one).
+    typedef struct packed {
+        logic   valid;
+        iaddr_t pc;
+    } fetch_t;
+
+    // Control -> Fetch.
+    typedef struct packed {
+        logic   run;      // 1: request the next instruction, 0: hold
+    } fetch_ctrl_t;
 
 endpackage
