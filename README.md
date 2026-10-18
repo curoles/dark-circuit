@@ -31,6 +31,7 @@ test/part/<part>/   testbench of a part
 test/block/<block>/ testbench of a block
 test/sim/        testbenches of simulation models
 test/design/mig1/ tests of Mig1
+test/third_party/ tests of other projects, copied by scripts in tools/: riscv-tests
 sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/
 test/sw/         tests of software, run on QEMU
 old2020/         old 2020 code, kept for reference
@@ -254,6 +255,14 @@ of the test, for example `design_mig1_alu_prog.verilator.trace`:
 The test prints the path of its trace file, `make run` shows it with `V=1`.
 The file is complete also when the test fails. Plusargs of `TbMig1`
 (`+trace`, `+expect_regs`, ...) are explained at the top of `tb_mig1.sv`.
+
+Mig1 also runs the rv32ui suite of [riscv-tests](https://github.com/riscv-software-src/riscv-tests):
+self-checking tests, one per instruction, written by the RISC-V community, so
+the expected values do not come from this project. `tools/riscv_tests.sh` copies them
+at a pinned commit into `test/third_party/riscv-tests/` (BSD license there; run the
+script again only to move to a newer commit or add suites). `test/design/mig1/riscv_test.h`
+is their Mig1 environment: the result is in `a0` at EBREAK. Run them with
+`make run L=rv32ui`; tests have labels `riscv-tests` and `rv32ui`.
 
 ## Design configuration
 

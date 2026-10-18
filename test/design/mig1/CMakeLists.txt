@@ -42,13 +42,14 @@ if(DARK_CIRCUIT_RISCV)
                        FLISTS ${FLISTS})
     endforeach()
 
-    # mig1_program_test(<name> SOURCES <file>... [FLAGS <flag>...] [ARGS <arg>...])
+    # mig1_program_test(<name> SOURCES <file>... [FLAGS <flag>...] [ARGS <arg>...]
+    #                   [LABELS <label>...])
     #
     # Build RISC-V program design_mig1_<name> and add tests design_mig1_<name>.<sim>
     # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex> and
-    # +trace=<test>.<sim>.trace in the build directory.
+    # +trace=<test>.<sim>.trace in the build directory; LABELS are added to the tests.
     function(mig1_program_test NAME)
-        cmake_parse_arguments(P "" "" "SOURCES;FLAGS;ARGS" ${ARGN})
+        cmake_parse_arguments(P "" "" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
         set(prog design_mig1_${NAME})
         dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} FLAGS ${P_FLAGS}
                              LINK_FLAGS -T ${SW}/mig1.ld)
@@ -56,7 +57,8 @@ if(DARK_CIRCUIT_RISCV)
             cmake_language(CALL dc_add_${sim}_run ${prog} BUILD design_mig1_sim
                            ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
                                 +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
-                                ${P_ARGS})
+                                ${P_ARGS}
+                           LABELS ${P_LABELS})
         endforeach()
     endfunction()
 
@@ -92,4 +94,18 @@ if(DARK_CIRCUIT_RISCV)
     mig1_program_test(resume SOURCES resume.S
                       ARGS +resumes=2 +expect_sequential +expect_retired=6
                            +expect_halt_pc=14 +expect_regs)
+
+    # riscv-tests rv32ui: one self-checking test per instruction, labels riscv-tests and
+    # rv32ui; riscv_test.h of this directory is their environment.
+    # Not run: fence_i (writes code into memory; Mig1 fetches from a separate
+    # instruction memory), ma_data (misaligned loads and stores; Mig1 stops on them).
+    set(RISCV_TESTS ${PROJECT_SOURCE_DIR}/test/third_party/riscv-tests/isa)
+    foreach(test IN ITEMS simple add addi and andi auipc beq bge bgeu blt bltu bne jal jalr
+                          lb lbu lh lhu lw ld_st lui or ori sb sh sw st_ld sll slli slt slti
+                          sltiu sltu sra srai srl srli sub xor xori)
+        mig1_program_test(rv32ui_${test} SOURCES ${RISCV_TESTS}/rv32ui/${test}.S
+                          FLAGS -I${CMAKE_CURRENT_SOURCE_DIR} -I${RISCV_TESTS}/macros/scalar
+                          ARGS +riscv_test
+                          LABELS riscv-tests rv32ui)
+    endforeach()
 endif()

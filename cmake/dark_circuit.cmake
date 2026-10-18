@@ -128,10 +128,11 @@ endmacro()
 # dc_parse_run_args(<test> <args>...)
 #
 # Parse arguments of dc_add_<simulator>_run() functions:
-#   BUILD <name> [ARGS <arg>...]
-# into R_BUILD (simulation of dc_add_<simulator>_build()) and R_ARGS.
+#   BUILD <name> [ARGS <arg>...] [LABELS <label>...]
+# into R_BUILD (simulation of dc_add_<simulator>_build()), R_ARGS and R_LABELS
+# (labels added to those of the simulator and of dc_test_labels()).
 macro(dc_parse_run_args TEST)
-    cmake_parse_arguments(R "" "BUILD" "ARGS" ${ARGN})
+    cmake_parse_arguments(R "" "BUILD" "ARGS;LABELS" ${ARGN})
     if(NOT R_BUILD)
         message(FATAL_ERROR "Test ${TEST}: BUILD is required")
     endif()

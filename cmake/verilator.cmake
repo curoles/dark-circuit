@@ -56,9 +56,9 @@ function(dc_add_verilator_build NAME)
     set_target_properties(${sim} PROPERTIES DC_RUN_COMMAND "${exe}")
 endfunction()
 
-# dc_add_verilator_run(<test> BUILD <name> [ARGS <arg>...])
+# dc_add_verilator_run(<test> BUILD <name> [ARGS <arg>...] [LABELS <label>...])
 #
-# Add CTest test <test>.verilator with label verilator and labels of dc_test_labels():
+# Add CTest test <test>.verilator with label verilator, labels of dc_test_labels() and LABELS:
 # it runs simulation <name>.verilator of dc_add_verilator_build() with ARGS.
 # Testbench fails the test with $fatal, then the simulation exit code is not 0.
 # Does nothing if Verilator is not used.
@@ -72,7 +72,7 @@ function(dc_add_verilator_run TEST)
     set(test ${TEST}.verilator)
     add_test(NAME ${test} COMMAND ${command} ${R_ARGS})
     dc_test_labels(labels)
-    set(test_labels verilator ${labels})
+    set(test_labels verilator ${labels} ${R_LABELS})
     set_tests_properties(${test} PROPERTIES LABELS "${test_labels}")
 endfunction()
 
