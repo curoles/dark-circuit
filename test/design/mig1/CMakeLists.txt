@@ -66,13 +66,30 @@ if(DARK_CIRCUIT_RISCV)
                             +expect_regs)
     endforeach()
 
-    # Jump to a misaligned target: halt with illegal=1, rd not written.
-    dc_add_riscv_program(design_mig1_misaligned SOURCES misaligned.S LINK_FLAGS -T ${SW}/mig1.ld)
+    # Loads and stores: every size and offset, sign extension, strobes.
+    dc_add_riscv_program(design_mig1_load_store SOURCES load_store.S LINK_FLAGS -T ${SW}/mig1.ld)
     foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_misaligned TOP TbMig1 TB tb_mig1.sv
+        cmake_language(CALL dc_add_${sim}_test design_mig1_load_store TOP TbMig1 TB tb_mig1.sv
                        FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_misaligned.hex
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_misaligned.${sim}.trace
-                            +expect_illegal +expect_halt_pc=c +expect_regs)
+                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_load_store.hex
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_load_store.${sim}.trace
+                            +expect_sequential +expect_regs)
+    endforeach()
+
+    # Misaligned jump target, load and store address: halt with illegal=1 at the
+    # instruction, rd and memory not written. One build of misaligned.S per case (-DCASE_<case>).
+    foreach(case IN ITEMS jalr lw sh)
+        string(TOUPPER ${case} case_macro)
+        set(prog design_mig1_misaligned_${case})
+        dc_add_riscv_program(${prog} SOURCES misaligned.S FLAGS -DCASE_${case_macro}
+                             LINK_FLAGS -T ${SW}/mig1.ld)
+        foreach(sim IN ITEMS icarus verilator)
+            cmake_language(CALL dc_add_${sim}_test ${prog} TOP TbMig1 TB tb_mig1.sv
+                           FLISTS ${FLISTS}
+                           ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
+                                +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
+                                +expect_illegal +expect_halt_pc=c +expect_regs
+                                +expect_mem_unchanged)
+        endforeach()
     endforeach()
 endif()

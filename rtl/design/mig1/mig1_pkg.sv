@@ -98,7 +98,8 @@ package Mig1Pkg;
 
     // Control -> Fetch.
     typedef struct packed {
-        logic   run;      // 1: request the next instruction, 0: hold
+        logic   run;      // 1: request the next instruction, 0: stop (fetch.valid drops)
+        logic   stall;    // 1: keep pc, imem output and fetch: the instruction in EX stays
         logic   redirect; // 1: next request is at target; the request of this cycle is dropped
         iaddr_t target;
     } fetch_ctrl_t;
@@ -109,6 +110,12 @@ package Mig1Pkg;
         iaddr_t target;     // word address of the target
         logic   misaligned; // target byte address is not 4-byte aligned; with taken=1 a fault
     } branch_t;
+
+    // Lsu -> Control.
+    typedef struct packed {
+        logic   stall;      // instruction in EX needs one more cycle (load waits for data)
+        logic   misaligned; // load or store address not aligned to its size: a fault
+    } lsu_t;
 
     // Kind of instruction, from exact match with the RISC-V encodings.
     typedef enum logic [3:0] {
@@ -127,6 +134,13 @@ package Mig1Pkg;
         KIND_EBREAK
     } kind_t;
 
+    // Source of the value written to rd.
+    typedef enum logic [1:0] {
+        RD_ALU,         // Mig1Alu result: OP, OP-IMM, LUI, AUIPC
+        RD_LINK,        // pc + 4: JAL, JALR
+        RD_LOAD         // loaded data
+    } rd_src_t;
+
     // Decode -> units: the instruction taken apart.
     typedef struct packed {
         kind_t      kind;
@@ -134,6 +148,7 @@ package Mig1Pkg;
         reg_addr_t  rs1;
         reg_addr_t  rs2;
         logic       rd_we;     // writes rd (writes to x0 are dropped by the register file)
+        rd_src_t    rd_src;    // value written to rd
         logic       uses_rs1;  // reads rs1, for hazard detection in a 5-stage pipeline
         logic       uses_rs2;
         logic [2:0] funct3;    // operation within the kind: ALU op, branch compare, load/store size

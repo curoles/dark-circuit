@@ -3,7 +3,8 @@
  * decode.S lists instructions encoded by the assembler, each with its expected
  * decode (see decode.S). For every case the instruction goes to Mig1Decode and the
  * fields that mean something for its kind are compared: kind always; for legal
- * instructions rd_we, uses_rs1 and uses_rs2, then rd when rd_we, rs1 when uses_rs1,
+ * instructions rd_we, uses_rs1 and uses_rs2, then rd and rd_src when rd_we (rd_src
+ * expected from the kind: LINK for JAL, JALR, LOAD for loads, else ALU), rs1 when uses_rs1,
  * rs2 when uses_rs2, funct3 when the kind has it, alt for OP and OP-IMM shifts,
  * imm when the kind has an immediate. At the end every kind must have had a case.
  * Loads +hex=<file> into a SimROM and reads it with peek().
@@ -64,6 +65,15 @@ module TbMig1Decode;
         endcase
     endfunction
 
+    // Source of rd expected for a kind that writes rd, as a value of rd_src_t.
+    function automatic logic [1:0] rd_src_of(input logic [3:0] kind);
+        case (kind)
+            KIND_JAL, KIND_JALR: return RD_LINK;
+            KIND_LOAD:           return RD_LOAD;
+            default:             return RD_ALU;
+        endcase
+    endfunction
+
     // Compare one field of case cn with instruction w.
     task automatic check(input integer cn, input [31:0] w, input string field, input [31:0] got, input [31:0] exp);
         if (got !== exp)
@@ -91,6 +101,7 @@ module TbMig1Decode;
                 check(c, insn, "uses_rs1", {31'b0, dec.uses_rs1}, e[2]);
                 check(c, insn, "uses_rs2", {31'b0, dec.uses_rs2}, e[3]);
                 if (e[1][0]) check(c, insn, "rd",  {27'b0, dec.rd},  e[4]);
+                if (e[1][0]) check(c, insn, "rd_src", {30'b0, dec.rd_src}, {30'b0, rd_src_of(exp_kind)});
                 if (e[2][0]) check(c, insn, "rs1", {27'b0, dec.rs1}, e[5]);
                 if (e[3][0]) check(c, insn, "rs2", {27'b0, dec.rs2}, e[6]);
                 if (has_funct3(exp_kind))

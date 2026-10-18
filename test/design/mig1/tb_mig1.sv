@@ -15,7 +15,9 @@
  * - with +expect_regs: the shadow registers have the values of the table that the
  *   program puts right after the halting instruction (EBREAK, or the instruction
  *   that made illegal=1): number of entries n, then n pairs of
- *   words register, value; a register in the table that was never written fails.
+ *   words register, value; a register in the table that was never written fails,
+ * - with +expect_mem_unchanged: dmem equals imem byte for byte; Mig1Cpu loads the
+ *   same image into both, so this shows that nothing was stored.
  * Other plusargs: +trace=<file> writes every retired instruction and its register
  * write into <file>, +trace alone prints them; +max_cycles=<n> (default 100000).
  * Stops at the first failure with $fatal.
@@ -43,6 +45,7 @@ module TbMig1;
     reg              check_halt_pc;
     reg [WIDTH-1:0]  expect_halt_pc;
     reg              expect_regs;
+    reg              expect_mem_unchanged;
     reg [WIDTH-1:0]  shadow [32];   // registers written by retired instructions
     reg [31:0]       written;       // bit r: shadow[r] was written
     integer          cycle;
@@ -63,6 +66,18 @@ module TbMig1;
         for (int b = 0; b < 4; b++)
             imem_word[8*b +: 8] = u_mig1_cpu.u_imem.peek(a + b[AW-1:0]);
     endfunction
+
+    // +expect_mem_unchanged: every byte of dmem equals the byte of imem.
+    task automatic check_mem_unchanged;
+        logic [7:0] i;
+        logic [7:0] d;
+        for (int a = 0; a < (1 << AW); a++) begin
+            i = u_mig1_cpu.u_imem.peek(a[AW-1:0]);
+            d = u_mig1_cpu.u_dmem.peek(a[AW-1:0]);
+            if (d !== i)
+                $fatal(1, "Mig1: dmem byte at %h is %h, image has %h", a[AW-1:0], d, i);
+        end
+    endtask
 
     // +expect_regs: compare the shadow registers with the table after the halting
     // instruction at halt_pc.
@@ -127,6 +142,7 @@ module TbMig1;
         written = 0;
         expect_sequential = $test$plusargs("expect_sequential");
         expect_regs       = $test$plusargs("expect_regs");
+        expect_mem_unchanged = $test$plusargs("expect_mem_unchanged");
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
         expect_illegal    = $test$plusargs("expect_illegal");
@@ -168,6 +184,8 @@ module TbMig1;
             $fatal(1, "Mig1: halted at %h, expected %h", halt_pc, expect_halt_pc);
         if (expect_regs)
             check_regs();
+        if (expect_mem_unchanged)
+            check_mem_unchanged();
         $display("PASS: %0d instructions retired in %0d cycles, halted at %h", retired, cycle, halt_pc);
         if (trace_file.len() != 0)
             $fclose(trace_fd);

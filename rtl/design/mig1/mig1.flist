@@ -6,5 +6,6 @@ mig1_decode.sv
 mig1_regs.sv
 mig1_alu.sv
 mig1_branch.sv
+mig1_lsu.sv
 mig1_core.sv
 mig1_cpu.sv

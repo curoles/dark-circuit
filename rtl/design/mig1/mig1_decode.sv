@@ -69,20 +69,23 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
         dec.funct3 = funct3;
         dec.alt    = alt;
 
-        // Per kind: register written and read, format of the immediate.
+        // Per kind: register written and read, source of rd, format of the immediate.
         // Default: nothing written or read, I-type immediate.
         dec.rd_we    = 1'b0;
+        dec.rd_src   = RD_ALU;
         dec.uses_rs1 = 1'b0;
         dec.uses_rs2 = 1'b0;
         dec.imm      = imm_i;         // JALR, LOAD, OP_IMM (shifts: imm[4:0] is shamt)
         case (kind)
-            KIND_LUI, KIND_AUIPC:              begin dec.rd_we = 1'b1;                          dec.imm = imm_u; end
-            KIND_JAL:                          begin dec.rd_we = 1'b1;                          dec.imm = imm_j; end
-            KIND_JALR, KIND_LOAD, KIND_OP_IMM: begin dec.rd_we = 1'b1; dec.uses_rs1 = 1'b1;                      end
-            KIND_OP:                           begin dec.rd_we = 1'b1; dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1; end
-            KIND_BRANCH:                       begin dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1;  dec.imm = imm_b; end
-            KIND_STORE:                        begin dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1;  dec.imm = imm_s; end
-            default:                           ;  // FENCE, ECALL, EBREAK, ILLEGAL
+            KIND_LUI, KIND_AUIPC: begin dec.rd_we = 1'b1;                                                                 dec.imm = imm_u; end
+            KIND_JAL:             begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK;                                           dec.imm = imm_j; end
+            KIND_JALR:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK; dec.uses_rs1 = 1'b1;                                       end
+            KIND_LOAD:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LOAD; dec.uses_rs1 = 1'b1;                                       end
+            KIND_OP_IMM:          begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1;                                       end
+            KIND_OP:              begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1;                  end
+            KIND_BRANCH:          begin                                         dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1; dec.imm = imm_b; end
+            KIND_STORE:           begin                                         dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1; dec.imm = imm_s; end
+            default:              ;  // FENCE, ECALL, EBREAK, ILLEGAL
         endcase
     end
 
