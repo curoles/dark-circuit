@@ -12,3 +12,4 @@
 -F alu1/struct/alu1.flist
 -F add_cmp/struct/add_cmp.flist
 -F lfsr/struct/lfsr.flist
+-F stochastic_bitstream_gen/struct/stochastic_bitstream_gen.flist

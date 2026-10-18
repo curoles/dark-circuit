@@ -118,6 +118,7 @@ Examples:
   make run R=fifo
   make run L=block R=struct
   make run R=qemu V=1
+  make run R=design_mig1_alu_prog V=1   output of Mig1 tests: path of their trace file
   make test BUILD_DIR=/tmp/dc-build
   make test CMAKE_ARGS="-D DARK_CIRCUIT_MAIN_SIMULATOR=icarus"
 

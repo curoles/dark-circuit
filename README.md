@@ -15,7 +15,7 @@ rtl/lib/
   part/          parts made of gates: CarrySaveAdder, RippleCarryAdder, GatedClk, LimDff
   block/         blocks: Counter, Decoder, PriorityEncoder, ShiftReg, Sram1R1W,
                  RegFile, RegFileSram, BarrelShifter, PrgCounter, Fifo, Incr,
-                 Alu1, AddCmp, Lfsr, ...
+                 Alu1, AddCmp, Lfsr, StochasticBitstreamGen, ...
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of blocks, parts and gates
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
@@ -234,6 +234,21 @@ make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
 
 Every program `<name>` gives `<name>.elf`, `<name>.hex` and `<name>.dis`
 (disassembly) in the build directory of its test.
+
+## Mig1 tests
+
+Tests of Mig1 programs (testbench `TbMig1`, `test/design/mig1/tb_mig1.sv`) write a
+trace of retired instructions into `<test>.<simulator>.trace` in the build directory
+of the test, for example `design_mig1_alu_prog.verilator.trace`:
+
+```
+      27 pc=00000068 insn=00000cb3 x25 <= 00000000
+      28 pc=0000006c insn=00100073
+```
+
+The test prints the path of its trace file, `make run` shows it with `V=1`.
+The file is complete also when the test fails. Plusargs of `TbMig1`
+(`+trace`, `+expect_regs`, ...) are explained at the top of `tb_mig1.sv`.
 
 ## Design configuration
 

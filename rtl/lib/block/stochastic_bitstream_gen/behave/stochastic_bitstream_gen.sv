@@ -1,64 +1,35 @@
-// MODULE: Stochastic Bitstream Generator with Configurable LFSR
-// 
-// FUNCTION: 
-//   Converts a standard binary integer input into a 1-bit stochastic stream. 
-//   The percentage density of 1s appearing on the output wire over time is perfectly 
-//   proportional to the magnitude of the binary input value.
-//
-// NON-STANDARD PARADIGM:
-//   This block is the fundamental building block of Stochastic Computing architectures.
-//   By converting binary data into time-encoded bit probabilities, complex arithmetic 
-//   like multiplication can be executed later using a single logic gate (e.g., an AND gate).
-// =======================================================================================
-
+/* Stochastic bitstream generator: binary_in -> 1-bit stream with density of ones
+ * binary_in / (2^WIDTH - 1), behavioral.
+ *
+ * Author: Igor Lesik
+ *
+ * Stochastic computing encodes a number as the probability of 1 in a bitstream;
+ * then, for example, AND of two independent streams is the product of their values.
+ * Every clock stream_out = binary_in >= r, r is the Lfsr value. Lfsr visits each of
+ * 1..2^WIDTH-1 once per period, so over any 2^WIDTH - 1 consecutive clocks stream_out
+ * is 1 exactly binary_in times: 0 gives no ones, all ones gives only ones.
+ * stream_out is registered, 0 during reset.
+ * Streams that are combined must be uncorrelated: generators with the same WIDTH and
+ * SEED give the same stream, and AND of them is the minimum, not the product.
+ * Supported WIDTH: as Lfsr, 4, 8, 12, 16, 32.
+ */
 module StochasticBitstreamGen #(
-    parameter WIDTH = 8  // Configurable template bit-width (e.g., 4, 8, 16, 32)
+    parameter             WIDTH = 8,
+    parameter [WIDTH-1:0] SEED  = {WIDTH{1'b1}}  // Lfsr value after reset, not 0
 )(
-    input  wire               clk,        // System Clock
-    input  wire               rst_n,      // Reset (Active Low)
-    input  wire [WIDTH-1:0]   binary_in,  // Static binary value to convert (0 to 2^WIDTH - 1)
-    output reg                stream_out  // 1-bit Probabilistic / Stochastic stream output
+    input  wire             clk,
+    input  wire             rst_n,       // synchronous reset, active low
+    input  wire [WIDTH-1:0] binary_in,
+    output reg              stream_out
 );
+    wire [WIDTH-1:0] r;   // Lfsr: uniform over 1..2^WIDTH-1
 
-    // Internal wire to carry the pseudo-random uniform threshold from the LFSR
-    wire [WIDTH-1:0] lfsr_rand;
+    Lfsr #(.WIDTH(WIDTH), .SEED(SEED)) u_lfsr(.clk(clk), .rst_n(rst_n), .q(r));
 
-
-    // ===================================================================================
-    // STEP 1: DIGITAL COMPARATOR LOGIC
-    // 
-    // MATHEMATICAL PRINCIPLE:
-    //   The LFSR acts as a uniform noise source, visiting every number between 1 and 2^WIDTH-1
-    //   exactly once per full cycle. By comparing our target binary input to this moving
-    //   uniform value, the comparator will output a '1' exactly 'binary_in - 1' times.
-    //
-    //   Example for WIDTH=8, binary_in = 128 (Midpoint of the spectrum):
-    //   The condition (128 > lfsr_rand) will evaluate to True 127 times out of 255 states.
-    //   Measured Output Probability = 127 / 255 = 49.8% (representing roughly 0.5)
-    // ===================================================================================
-    always @(posedge clk) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk)
+        if (!rst_n)
             stream_out <= 1'b0;
-        end else begin
-            // If the target binary value is greater than the current random number,
-            // fire a 1. Otherwise, fire a 0. This creates the temporal probability stream.
-            stream_out <= (binary_in > lfsr_rand);
-        end
-    end
-
-
-    // ===================================================================================
-    // STEP 2: GALOIS LFSR INSTANTIATION
-    // 
-    //   This module implements a Maximal-Period Linear Feedback Shift Register.
-    //   It uses a compile-time function to automatically pick the correct hardware 
-    //   polynomial logic based on whatever WIDTH parameter you pass to the template.
-    // ===================================================================================
-    Lfsr #(.WIDTH(WIDTH)) u_lfsr (
-        .clk   (clk),
-        .rst_n (rst_n),
-        .q     (lfsr_rand)
-    );
+        else
+            stream_out <= binary_in >= r;
 
 endmodule
-
