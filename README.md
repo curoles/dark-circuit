@@ -20,7 +20,7 @@ rtl/lib/
     <block>/struct/  version made of blocks, parts and gates
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
                      not in aggregate flists, not tested yet
-  numeric/       number formats, built on blocks: int32/mul Int32Mul (signed, unsigned);
+  numeric/       number formats, built on blocks: int32/mul Int32Mul, int32/div Int32Div;
                  <format>/<op>/<kind>/{behave,struct}, aggregate flists like block/
   riscv/         RISC-V instruction encodings and CSR addresses, generated from riscv-opcodes
                  by tools/riscv_opcodes.sh
