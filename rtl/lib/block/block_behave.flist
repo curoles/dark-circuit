@@ -13,3 +13,4 @@
 -F add_cmp/behave/add_cmp.flist
 -F lfsr/behave/lfsr.flist
 -F stochastic_bitstream_gen/behave/stochastic_bitstream_gen.flist
+-F csa_multiplier/behave/csa_multiplier.flist

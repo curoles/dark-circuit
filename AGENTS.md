@@ -49,6 +49,8 @@ This file has the rules that are not in README.md.
   the top module (`-s`, `--top-module`).
 - X and Z checks inside `` `ifndef VERILATOR ``: Verilator is 2-state.
 - Small or fast tests run on Icarus and Verilator; slow suites on the main simulator.
+- A test that is slow on event-driven Icarus (big struct versions) checks many cases
+  under `` `ifdef VERILATOR `` and a few otherwise; exhaustive small widths on both.
 - Block tests run the same testbench with `block_behave.flist` and `block_struct.flist`.
 
 ## Adding things

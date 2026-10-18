@@ -15,7 +15,7 @@ rtl/lib/
   part/          parts made of gates: CarrySaveAdder, RippleCarryAdder, GatedClk, LimDff
   block/         blocks: Counter, Decoder, PriorityEncoder, ShiftReg, Sram1R1W,
                  RegFile, RegFileSram, BarrelShifter, PrgCounter, Fifo, Incr,
-                 Alu1, AddCmp, Lfsr, StochasticBitstreamGen, ...
+                 Alu1, AddCmp, Lfsr, StochasticBitstreamGen, CsaMultiplier, ...
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of blocks, parts and gates
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
