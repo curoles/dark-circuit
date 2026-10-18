@@ -2,7 +2,8 @@
 
 Mig1 is a small RISC-V CPU: RV32I base integer instructions, Zicsr (CSR instructions)
 and Zicntr (counters), machine-mode traps; no interrupts yet.
-It passes riscv-tests rv32ui (40 of 42 tests; fence_i and ma_data do not apply, see Testing).
+It passes riscv-tests rv32ui (40 of 42 tests) and rv32mi (14 of 16 tests) with their standard
+environment; the other tests need features Mig1 does not have, see Testing.
 
 - 2-stage pipeline: IF (fetch) | EX (everything else).
 - Harvard: instruction memory and data memory, both with 1 clock read latency
@@ -184,14 +185,16 @@ the trace to `<test>.<simulator>.trace`.
 | `csr` | CSR instructions on mscratch, read-only CSRs, counters |
 | `trap` | mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap |
 | `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: a handler checks mcause, mepc, mtval; nothing written |
-| `rv32ui_*` (labels `riscv-tests`, `rv32ui`) | riscv-tests, environment `test/design/mig1/riscv_test.h` |
+| `rv32ui_*`, `rv32mi_*` (labels `riscv-tests`, `rv32ui`, `rv32mi`) | riscv-tests with their standard environment `env/p`; end with a store to `tohost` |
 
 Not run from rv32ui: fence_i (writes code into memory, Mig1 fetches from a separate
-instruction memory) and ma_data (misaligned loads and stores, Mig1 stops on them).
+instruction memory) and ma_data (misaligned loads and stores, Mig1 traps on them).
+Not run from rv32mi: breakpoint (needs the trigger CSRs of Sdtrig) and pmpaddr (needs
+PMP); both are optional extensions Mig1 does not have.
 
 All run on Icarus (4-state: X in retire fails) and Verilator. TbMig1 is built once per
 simulator; its plusargs (`+expect_regs`, `+resumes`, `+riscv_test`, ...) are explained
-at the top of `tb_mig1.sv`. Run: `make run R=mig1`, `make run L=rv32ui`; `V=1` shows
+at the top of `tb_mig1.sv`. Run: `make run R=mig1`, `make run L=riscv-tests`; `V=1` shows
 the paths of trace files.
 
 ## Known limits
@@ -201,6 +204,5 @@ the paths of trace files.
 
 ## Next
 
-riscv-tests rv32mi (machine-mode tests) with the standard riscv-tests environment,
-interrupts (timer), 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
+Interrupts (timer), 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
 on the RVFI trace.

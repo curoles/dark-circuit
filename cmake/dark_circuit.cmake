@@ -143,16 +143,14 @@ endmacro()
 
 # dc_run_command(<out-var> <command>...)
 #
-# Command of a test that runs <command>: <command> itself, or with R_OUTPUT of
-# dc_parse_run_args() cmake -P run_check.cmake, which also checks that the output
-# matches R_OUTPUT (CTest alone checks either exit code or output).
+# Command of a test that runs simulation <command>: cmake -P run_check.cmake, which
+# checks the exit code (0), that the output has a line starting with PASS (every
+# testbench prints it at the end; a simulator can exit with 0 without simulating,
+# like vvp after a load error), and that it matches R_OUTPUT of dc_parse_run_args()
+# if given. CTest alone checks either exit code or output.
 function(dc_run_command OUT)
-    if(R_OUTPUT STREQUAL "")
-        set(${OUT} ${ARGN} PARENT_SCOPE)
-    else()
-        set(${OUT} ${CMAKE_COMMAND} -D OUTPUT=${R_OUTPUT}
-                   -P ${PROJECT_SOURCE_DIR}/cmake/run_check.cmake -- ${ARGN} PARENT_SCOPE)
-    endif()
+    set(${OUT} ${CMAKE_COMMAND} -D "OUTPUT=${R_OUTPUT}" -D "REQUIRED=(^|\n)PASS"
+               -P ${PROJECT_SOURCE_DIR}/cmake/run_check.cmake -- ${ARGN} PARENT_SCOPE)
 endfunction()
 
 # dc_test_labels(<out-var>)

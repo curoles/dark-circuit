@@ -46,8 +46,9 @@ if(DARK_CIRCUIT_RISCV)
     #                   [LABELS <label>...] [OUTPUT <regex>])
     #
     # Build RISC-V program design_mig1_<name> and add tests design_mig1_<name>.<sim>
-    # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex> and
-    # +trace=<test>.<sim>.trace in the build directory; LABELS are added to the tests;
+    # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex>,
+    # +symbols=<program symbols> and +trace=<test>.<sim>.trace in the build directory;
+    # LABELS are added to the tests;
     # with OUTPUT the output (semihosting console) must match <regex>.
     function(mig1_program_test NAME)
         cmake_parse_arguments(P "" "OUTPUT" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
@@ -57,6 +58,7 @@ if(DARK_CIRCUIT_RISCV)
         foreach(sim IN ITEMS icarus verilator)
             cmake_language(CALL dc_add_${sim}_run ${prog} BUILD design_mig1_sim
                            ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
+                                +symbols=${CMAKE_CURRENT_BINARY_DIR}/${prog}.sym
                                 +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
                                 ${P_ARGS}
                            LABELS ${P_LABELS} OUTPUT ${P_OUTPUT})
@@ -112,17 +114,29 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_exit=3
                       OUTPUT "semihost_write0 works[\r\n]+OK")
 
-    # riscv-tests rv32ui: one self-checking test per instruction, labels riscv-tests and
-    # rv32ui; riscv_test.h of this directory is their environment.
-    # Not run: fence_i (writes code into memory; Mig1 fetches from a separate
-    # instruction memory), ma_data (misaligned loads and stores; Mig1 stops on them).
-    set(RISCV_TESTS ${PROJECT_SOURCE_DIR}/test/third_party/riscv-tests/isa)
+    # riscv-tests with their standard environment env/p (test/third_party/riscv-tests):
+    # self-checking, each test ends with a store to tohost. Labels riscv-tests and the suite.
+    set(RISCV_TESTS ${PROJECT_SOURCE_DIR}/test/third_party/riscv-tests)
+    set(RISCV_TESTS_FLAGS -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
+    set(RISCV_TESTS_ARGS +riscv_test +no_debugger)
+
+    # rv32ui: one test per instruction. Not run: fence_i (writes code into memory; Mig1
+    # fetches from a separate instruction memory), ma_data (misaligned loads and stores;
+    # Mig1 traps on them).
     foreach(test IN ITEMS simple add addi and andi auipc beq bge bgeu blt bltu bne jal jalr
                           lb lbu lh lhu lw ld_st lui or ori sb sh sw st_ld sll slli slt slti
                           sltiu sltu sra srai srl srli sub xor xori)
-        mig1_program_test(rv32ui_${test} SOURCES ${RISCV_TESTS}/rv32ui/${test}.S
-                          FLAGS -I${CMAKE_CURRENT_SOURCE_DIR} -I${RISCV_TESTS}/macros/scalar
-                          ARGS +riscv_test
+        mig1_program_test(rv32ui_${test} SOURCES ${RISCV_TESTS}/isa/rv32ui/${test}.S
+                          FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
                           LABELS riscv-tests rv32ui)
+    endforeach()
+
+    # rv32mi: machine mode, CSRs, traps. Not run: breakpoint (needs the trigger CSRs of
+    # Sdtrig), pmpaddr (needs PMP); both are optional and Mig1 does not have them.
+    foreach(test IN ITEMS csr illegal instret_overflow lh-misaligned lw-misaligned ma_addr
+                          ma_fetch mcsr sbreak scall sh-misaligned shamt sw-misaligned zicntr)
+        mig1_program_test(rv32mi_${test} SOURCES ${RISCV_TESTS}/isa/rv32mi/${test}.S
+                          FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
+                          LABELS riscv-tests rv32mi)
     endforeach()
 endif()

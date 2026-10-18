@@ -1,10 +1,11 @@
 # @brief Run a command, check its exit code and output.
 #
-# cmake [-D EXIT_CODE=<n>] [-D OUTPUT=<regex>] [-D TIMEOUT=<seconds>]
+# cmake [-D EXIT_CODE=<n>] [-D OUTPUT=<regex>] [-D REQUIRED=<regex>] [-D TIMEOUT=<seconds>]
 #       -P run_check.cmake -- <command> [<arg>...]
 # Fails (cmake exit code not 0) when the command exit code is not EXIT_CODE (default 0),
-# its output (stdout and stderr) does not match OUTPUT (if not empty), or it runs
-# longer than TIMEOUT (if given). CTest alone checks either exit code or output.
+# its output (stdout and stderr) does not match OUTPUT or REQUIRED (each if not empty),
+# or it runs longer than TIMEOUT (if given). CTest alone checks either exit code or output.
+# OUTPUT is what a test expects, REQUIRED what every test of a kind must print.
 # The command comes after `--`: arguments of cmake after -P <script> go to the script.
 
 set(command)
@@ -41,4 +42,7 @@ if(NOT result STREQUAL "${EXIT_CODE}")
 endif()
 if(NOT OUTPUT STREQUAL "" AND NOT output MATCHES "${OUTPUT}")
     message(FATAL_ERROR "output does not match: ${OUTPUT}")
+endif()
+if(NOT REQUIRED STREQUAL "" AND NOT output MATCHES "${REQUIRED}")
+    message(FATAL_ERROR "output does not match: ${REQUIRED}")
 endif()

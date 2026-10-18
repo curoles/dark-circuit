@@ -1,6 +1,6 @@
 # @brief RISC-V programs for tests.
 #
-# Programs are built with the RISC-V GNU toolchain (gcc, objcopy, objdump)
+# Programs are built with the RISC-V GNU toolchain (gcc, objcopy, objdump, nm)
 # into Verilog hex files that SimRAM and SimROM load().
 # Use of the toolchain is controlled by cache variable DARK_CIRCUIT_USE_RISCV
 # (AUTO, ON or OFF), names of its programs start with DARK_CIRCUIT_RISCV_PREFIX.
@@ -13,12 +13,14 @@ if(NOT DARK_CIRCUIT_RISCV_PREFIX STREQUAL "${DC_RISCV_PREFIX_FOUND}")
     unset(RISCV_GCC_BIN CACHE)
     unset(RISCV_OBJCOPY_BIN CACHE)
     unset(RISCV_OBJDUMP_BIN CACHE)
+    unset(RISCV_NM_BIN CACHE)
     set(DC_RISCV_PREFIX_FOUND ${DARK_CIRCUIT_RISCV_PREFIX} CACHE INTERNAL "Prefix of found RISC-V programs")
 endif()
 
 dc_use_tool(RISCV RISCV_GCC=${DARK_CIRCUIT_RISCV_PREFIX}gcc
                   RISCV_OBJCOPY=${DARK_CIRCUIT_RISCV_PREFIX}objcopy
-                  RISCV_OBJDUMP=${DARK_CIRCUIT_RISCV_PREFIX}objdump)
+                  RISCV_OBJDUMP=${DARK_CIRCUIT_RISCV_PREFIX}objdump
+                  RISCV_NM=${DARK_CIRCUIT_RISCV_PREFIX}nm)
 
 # dc_add_riscv_program(<name> SOURCES <file>...
 #                      [ARCH <march>] [ABI <mabi>]
@@ -26,7 +28,8 @@ dc_use_tool(RISCV RISCV_GCC=${DARK_CIRCUIT_RISCV_PREFIX}gcc
 #
 # Build bare-metal program <name>.elf from SOURCES in the current build directory,
 # then <name>.hex (objcopy -O verilog: byte addresses and bytes, the format of
-# SimRAM load()) and <name>.dis (objdump -d) to read the code.
+# SimRAM load()), <name>.dis (objdump -d) to read the code and <name>.sym (nm: address,
+# type and name of every symbol, for testbenches that need an address).
 #   ARCH       -march, default rv32i
 #   ABI        -mabi, default ilp32
 #   LINK_FLAGS link options, default -Wl,-Ttext=0 (code at address 0);
@@ -99,10 +102,11 @@ function(dc_add_riscv_program NAME)
     endforeach()
 
     add_custom_command(
-        OUTPUT ${base}.elf ${base}.hex ${base}.dis
+        OUTPUT ${base}.elf ${base}.hex ${base}.dis ${base}.sym
         COMMAND ${RISCV_GCC_BIN} ${arch} -nostdlib -nostartfiles ${P_LINK_FLAGS} -o ${base}.elf ${objs}
         COMMAND ${RISCV_OBJCOPY_BIN} -O verilog ${base}.elf ${base}.hex
         COMMAND ${RISCV_OBJDUMP_BIN} -d ${base}.elf > ${base}.dis
+        COMMAND ${RISCV_NM_BIN} ${base}.elf > ${base}.sym
         DEPENDS ${objs} ${link_deps}
         COMMENT "RISC-V: linking ${NAME}.elf, making ${NAME}.hex"
         VERBATIM

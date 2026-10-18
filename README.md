@@ -238,8 +238,8 @@ into Verilog hex files for `SimRAM` and `SimROM` `load()`. Cmake variables:
 make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
 ```
 
-Every program `<name>` gives `<name>.elf`, `<name>.hex` and `<name>.dis`
-(disassembly) in the build directory of its test.
+Every program `<name>` gives `<name>.elf`, `<name>.hex`, `<name>.dis` (disassembly)
+and `<name>.sym` (symbol table) in the build directory of its test.
 
 ## Mig1 tests
 
@@ -256,13 +256,14 @@ The test prints the path of its trace file, `make run` shows it with `V=1`.
 The file is complete also when the test fails. Plusargs of `TbMig1`
 (`+trace`, `+expect_regs`, ...) are explained at the top of `tb_mig1.sv`.
 
-Mig1 also runs the rv32ui suite of [riscv-tests](https://github.com/riscv-software-src/riscv-tests):
-self-checking tests, one per instruction, written by the RISC-V community, so
-the expected values do not come from this project. `tools/riscv_tests.sh` copies them
-at a pinned commit into `test/third_party/riscv-tests/` (BSD license there; run the
-script again only to move to a newer commit or add suites). `test/design/mig1/riscv_test.h`
-is their Mig1 environment: the result is in `a0` at EBREAK. Run them with
-`make run L=rv32ui`; tests have labels `riscv-tests` and `rv32ui`.
+Mig1 also runs the rv32ui (instructions) and rv32mi (machine mode: CSRs, traps) suites of
+[riscv-tests](https://github.com/riscv-software-src/riscv-tests): self-checking tests
+written by the RISC-V community, so the expected values do not come from this project.
+`tools/riscv_tests.sh` copies them and their standard environment `env/p` at a pinned
+commit into `test/third_party/riscv-tests/` (BSD licenses there; run the script again only
+to move to a newer commit or add suites). A test ends with a store to the word `tohost`,
+which TbMig1 finds in the symbol table of the program. Run them with `make run L=rv32ui`,
+`make run L=rv32mi` or `make run L=riscv-tests`.
 
 ## Design configuration
 

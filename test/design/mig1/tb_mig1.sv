@@ -26,8 +26,14 @@
  *   words register, value; a register in the table that was never written fails,
  * - with +expect_mem_unchanged: dmem equals imem byte for byte; Mig1Cpu loads the
  *   same image into both, so this shows that nothing was stored,
- * - with +riscv_test: a0, read through the debug port, is 0: a riscv-tests test
- *   passed; else a0 is (case << 1) | 1 of the failed case, see riscv_test.h.
+ * - with +riscv_test: the program is a riscv-tests test with its standard environment
+ *   (env/p). It ends with a store to the word tohost, address from +symbols=<file> (nm
+ *   output of the program): 1 is pass, (case << 1) | 1 is case `case` failed. The run
+ *   ends at that store, the core does not halt (the environment loops). Traps are
+ *   allowed: the environment probes CSRs Mig1 does not have, and an unexpected trap
+ *   makes the test fail through tohost. An MRET must retire before the store: the
+ *   environment enters the test body with MRET, and before that it reports a pass
+ *   on its own when its XLEN check (a BLTZ) goes the wrong way, as on a broken core.
  * With +resumes=<n> the testbench is a debugger at the first n halts after EBREAK:
  * it reads a0 (x10) through the debug port (must equal the shadow), writes
  * a0 + 0x100, and resumes the core; the halt after that ends the run. The shadow registers
@@ -39,6 +45,7 @@
  * SYS_WRITEC and SYS_WRITE0 print to stdout; SYS_EXIT and SYS_EXIT_EXTENDED end the
  * run with an exit status. With +expect_exit=<n> the program must end with status n,
  * without it a semihosting exit must have status 0. Other operations fail.
+ * +no_debugger: dbg_req.ebreak_halt=0 for the whole run, EBREAK traps.
  * Other plusargs: +trace=<file> writes every retired instruction, register write,
  * debug action and semihosting call into <file>, +trace alone prints them;
  * +max_cycles=<n> (default 100000).
@@ -75,6 +82,13 @@ module TbMig1;
     reg              expect_regs;
     reg              expect_mem_unchanged;
     reg              riscv_test;
+    reg              no_debugger;
+    string           symbols_file;   // +symbols: nm output of the program
+    reg [WIDTH-1:0]  tohost;         // address of tohost, with +riscv_test
+    reg              tohost_written;
+    reg              mret_retired;   // an MRET retired (riscv-tests: the test body started)
+    reg              tohost_in_body; // tohost was written after an MRET
+    reg [WIDTH-1:0]  tohost_value;
     reg [WIDTH-1:0]  shadow [32];   // registers written by retired instructions
     reg [31:0]       written;       // bit r: shadow[r] was written
     integer          cycle;
@@ -109,14 +123,27 @@ module TbMig1;
             imem_word[8*b +: 8] = u_mig1_cpu.u_imem.peek(a + b[AW-1:0]);
     endfunction
 
-    // +riscv_test: result of a riscv-tests test in a0, read through the debug port.
-    task automatic check_riscv_test;
-        logic [WIDTH-1:0] a0;
-        dbg_req.reg_addr = 10;
-        #1;
-        a0 = dbg_rsp.reg_rdata;
-        if (a0 !== '0)
-            $fatal(1, "Mig1: riscv-tests: case %0d failed (a0=%h)", a0 >> 1, a0);
+    // Address of symbol `name` in file, the nm output of the program: lines of
+    // address, type and name; lines without an address (undefined symbols) are skipped.
+    // Text is in reg vectors, not strings: Icarus reads lines only into regs ($fgets).
+    task automatic find_symbol(input string file, input [8*64-1:0] name, output logic found,
+                               output logic [WIDTH-1:0] addr);
+        integer         fd;
+        reg [8*256-1:0] line;
+        // The type column is read only to get to the name.
+        /* verilator lint_off UNUSEDSIGNAL */
+        reg [8*64-1:0]  sym_type;
+        /* verilator lint_on UNUSEDSIGNAL */
+        reg [8*64-1:0]  sym_name;
+        found = 0;
+        addr  = '0;
+        fd = $fopen(file, "r");
+        if (fd == 0)
+            $fatal(1, "Mig1: can not open symbol file %s", file);
+        while (!found && $fgets(line, fd) != 0)
+            if ($sscanf(line, "%h %s %s", addr, sym_type, sym_name) == 3 && sym_name == name)
+                found = 1;
+        $fclose(fd);
     endtask
 
     // +expect_mem_unchanged: every byte of dmem equals the byte of imem.
@@ -356,8 +383,15 @@ module TbMig1;
             if (retire.mem_rmask != 0 && !dmem_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata))
                 $fatal(1, "Mig1: load at pc %h from %h mask %b got %h, dmem has %h", retire_pc, retire.mem_addr,
                        retire.mem_rmask, retire.mem_rdata, dmem_word(retire.mem_addr));
-            if (retire.trap && !expect_trap)
+            if (retire.trap && !expect_trap && !riscv_test)
                 $fatal(1, "Mig1: trap at pc %h", retire_pc);
+            if (retire.insn == MRET && !retire.trap)
+                mret_retired <= 1'b1;
+            if (riscv_test && retire.mem_wmask != 0 && retire.mem_addr == tohost && !tohost_written) begin
+                tohost_written <= 1'b1;
+                tohost_value   <= retire.mem_wdata;
+                tohost_in_body <= mret_retired;
+            end
             if (retire.trap) begin
                 traps <= traps + 1;
                 if (retire.insn == INSN_EBREAK)
@@ -417,11 +451,17 @@ module TbMig1;
         expect_regs       = $test$plusargs("expect_regs");
         expect_mem_unchanged = $test$plusargs("expect_mem_unchanged");
         riscv_test        = $test$plusargs("riscv_test");
+        no_debugger       = $test$plusargs("no_debugger");
+        tohost_written    = 0;
+        mret_retired      = 0;
+        tohost_in_body    = 0;
+        tohost_value      = 0;
+        tohost            = '0;
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
         expect_trap        = $test$plusargs("expect_trap");
         first_ebreak_traps = $test$plusargs("first_ebreak_traps");
-        dbg_req.ebreak_halt = !first_ebreak_traps;
+        dbg_req.ebreak_halt = !first_ebreak_traps && !no_debugger;
         check_halt_pc = $value$plusargs("expect_halt_pc=%h", expect_halt_pc);
 
         // +trace=<file> writes the trace into <file>, +trace alone prints it.
@@ -439,26 +479,38 @@ module TbMig1;
             $fatal(1, "Mig1: plusarg +hex=<file> is missing");
         if (u_mig1_cpu.load(hex) != 1)
             $fatal(1, "Mig1: load() of %s returned 0", hex);
+        if (riscv_test) begin
+            logic found;
+            if (!$value$plusargs("symbols=%s", symbols_file))
+                $fatal(1, "Mig1: +riscv_test needs +symbols=<file>");
+            find_symbol(symbols_file, "tohost", found, tohost);
+            if (!found)
+                $fatal(1, "Mig1: no symbol tohost in %s", symbols_file);
+        end
 
         @(posedge rst_n);
         done = 0;
         while (!done) begin
-            while (!halt) begin
+            while (!halt && !tohost_written) begin
                 @(posedge clk); #1;
                 cycle = cycle + 1;
                 if (cycle > max_cycles)
                     $fatal(1, "Mig1: no halt after %0d cycles, %0d instructions retired", max_cycles, retired);
-                if (ebreak_trapped)
+                if (ebreak_trapped && !no_debugger)
                     dbg_req.ebreak_halt = 1'b1;
             end
-            halted = 1;
-            if (semihost_call()) begin
+            if (tohost_written)
+                done = 1;       // riscv-tests: the environment loops, the core runs on
+            else if (semihost_call()) begin
+                halted = 1;
                 semihost();
                 done   = exited;
                 halted = exited;
-            end else if (resumes == 0)
-                done = 1;
-            else begin
+            end else if (resumes == 0) begin
+                halted = 1;
+                done   = 1;
+            end else begin
+                halted = 1;
                 debug_and_resume();
                 resumes = resumes - 1;
                 halted  = 0;
@@ -472,9 +524,11 @@ module TbMig1;
         if (exited && exit_status != (check_exit ? expect_exit : 0))
             $fatal(1, "Mig1: semihosting exit %0d, expected %0d", exit_status, check_exit ? expect_exit : 0);
 
-        repeat (5) @(posedge clk);  // nothing may retire after halt
-        if (!halt)
-            $fatal(1, "Mig1: core runs again after the halt at %h", halt_pc);
+        if (!tohost_written) begin
+            repeat (5) @(posedge clk);  // nothing may retire after halt
+            if (!halt)
+                $fatal(1, "Mig1: core runs again after the halt at %h", halt_pc);
+        end
         if (expect_retired >= 0 && retired != expect_retired)
             $fatal(1, "Mig1: %0d instructions retired, expected %0d", retired, expect_retired);
         if (check_halt_pc && halt_pc !== expect_halt_pc)
@@ -483,9 +537,16 @@ module TbMig1;
             check_regs();
         if (expect_mem_unchanged)
             check_mem_unchanged();
-        if (riscv_test)
-            check_riscv_test();
-        $display("PASS: %0d instructions retired in %0d cycles, halted at %h", retired, cycle, halt_pc);
+        if (riscv_test && !tohost_written)
+            $fatal(1, "Mig1: riscv-tests: no store to tohost (%h), halted at %h", tohost, halt_pc);
+        if (riscv_test && !tohost_in_body)
+            $fatal(1, "Mig1: riscv-tests: tohost=%h before the test body (no MRET of the environment)", tohost_value);
+        if (riscv_test && tohost_value != 1)
+            $fatal(1, "Mig1: riscv-tests: case %0d failed (tohost=%h)", tohost_value >> 1, tohost_value);
+        if (tohost_written)
+            $display("PASS: %0d instructions retired in %0d cycles, tohost=%h", retired, cycle, tohost_value);
+        else
+            $display("PASS: %0d instructions retired in %0d cycles, halted at %h", retired, cycle, halt_pc);
         if (trace_file.len() != 0)
             $fclose(trace_fd);
         $finish;
