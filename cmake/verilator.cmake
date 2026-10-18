@@ -21,15 +21,14 @@ if(DARK_CIRCUIT_VERILATOR)
     endif()
 endif()
 
-# dc_add_verilator_test(<name> TOP <module> TB <tb.sv>
-#                       [FLISTS <flist>...] [DEFINES <macro>...] [ARGS <arg>...])
+# dc_add_verilator_build(<name> TOP <module> TB <tb.sv>
+#                        [FLISTS <flist>...] [DEFINES <macro>...])
 #
 # Build testbench <tb.sv> and files from <flist>s with Verilator --binary --timing
-# and add CTest test <name>.verilator with label verilator and labels of dc_test_labels().
-# The test runs the simulation with ARGS.
-# Testbench fails the test with $fatal, then the simulation exit code is not 0.
+# into simulation <name>.verilator (target and executable). Tests that run it are
+# added with dc_add_verilator_run(), so one build serves many tests.
 # Does nothing if Verilator is not used.
-function(dc_add_verilator_test NAME)
+function(dc_add_verilator_build NAME)
     if(NOT DARK_CIRCUIT_VERILATOR)
         return()
     endif()
@@ -40,21 +39,50 @@ function(dc_add_verilator_test NAME)
         list(APPEND defines -D${define})
     endforeach()
 
-    set(test ${NAME}.verilator)
-    set(dir ${CMAKE_CURRENT_BINARY_DIR}/${test}.dir)
-    set(exe ${dir}/${test})
+    set(sim ${NAME}.verilator)
+    set(dir ${CMAKE_CURRENT_BINARY_DIR}/${sim}.dir)
+    set(exe ${dir}/${sim})
     # -Wno-DECLFILENAME: file names are lower case, cell module names are upper case.
     add_custom_command(
         OUTPUT ${exe}
         COMMAND ${VERILATOR_BIN} --binary --timing -Wall -Wno-DECLFILENAME
-                ${defines} --top-module ${T_TOP} -Mdir ${dir} -o ${test} ${T_SOURCES}
+                ${defines} --top-module ${T_TOP} -Mdir ${dir} -o ${sim} ${T_SOURCES}
         DEPENDS ${T_SOURCES}
-        COMMENT "Verilator: building ${test}"
+        COMMENT "Verilator: building ${sim}"
         VERBATIM
     )
-    add_custom_target(${test} ALL DEPENDS ${exe})
-    add_test(NAME ${test} COMMAND ${exe} ${T_ARGS})
+    add_custom_target(${sim} ALL DEPENDS ${exe})
+    # Command of the tests, a property of the target: tests of any directory can run it.
+    set_target_properties(${sim} PROPERTIES DC_RUN_COMMAND "${exe}")
+endfunction()
+
+# dc_add_verilator_run(<test> BUILD <name> [ARGS <arg>...])
+#
+# Add CTest test <test>.verilator with label verilator and labels of dc_test_labels():
+# it runs simulation <name>.verilator of dc_add_verilator_build() with ARGS.
+# Testbench fails the test with $fatal, then the simulation exit code is not 0.
+# Does nothing if Verilator is not used.
+function(dc_add_verilator_run TEST)
+    if(NOT DARK_CIRCUIT_VERILATOR)
+        return()
+    endif()
+    dc_parse_run_args(${TEST} ${ARGN})
+
+    get_target_property(command ${R_BUILD}.verilator DC_RUN_COMMAND)
+    set(test ${TEST}.verilator)
+    add_test(NAME ${test} COMMAND ${command} ${R_ARGS})
     dc_test_labels(labels)
     set(test_labels verilator ${labels})
     set_tests_properties(${test} PROPERTIES LABELS "${test_labels}")
+endfunction()
+
+# dc_add_verilator_test(<name> TOP <module> TB <tb.sv>
+#                       [FLISTS <flist>...] [DEFINES <macro>...] [ARGS <arg>...])
+#
+# Build simulation <name>.verilator and add test <name>.verilator that runs it with
+# ARGS: dc_add_verilator_build() and dc_add_verilator_run() for a testbench with one test.
+function(dc_add_verilator_test NAME)
+    dc_parse_test_args(${NAME} ${ARGN})
+    dc_add_verilator_build(${NAME} TOP ${T_TOP} TB ${T_TB} FLISTS ${T_FLISTS} DEFINES ${T_DEFINES})
+    dc_add_verilator_run(${NAME} BUILD ${NAME} ARGS ${T_ARGS})
 endfunction()

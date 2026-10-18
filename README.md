@@ -204,6 +204,11 @@ Values of these variables:
 
 Verilator older than 5.0 is treated as not found (or as an error with `ON`).
 
+A test is added with `dc_add_<simulator>_test()`, which builds the testbench and
+runs it once. A testbench that runs many tests, like `TbMig1` with one RISC-V
+program per test, is built once with `dc_add_<simulator>_build()`, and every test
+runs that build with `dc_add_<simulator>_run()`, see `test/design/mig1/CMakeLists.txt`.
+
 Tests that need only one simulator, like tests of parts, run on the **main simulator**,
 cmake variable `DARK_CIRCUIT_MAIN_SIMULATOR` selects it:
 

@@ -1,7 +1,9 @@
 # @brief Helpers to build and run DARKCIRCUIT SystemVerilog tests.
 #
-# Every simulator has its own cmake/<simulator>.cmake with function
-# dc_add_<simulator>_test(), all such functions take the same arguments.
+# Every simulator has its own cmake/<simulator>.cmake with functions
+# dc_add_<simulator>_build() (build a testbench), dc_add_<simulator>_run() (add a test
+# that runs a build) and dc_add_<simulator>_test() (both, for a testbench with one test);
+# functions of all simulators take the same arguments.
 #
 # Use of a simulator is controlled by cache variable DARK_CIRCUIT_USE_<SIMULATOR>:
 #   AUTO - use it if found (default)
@@ -121,6 +123,21 @@ macro(dc_parse_test_args NAME)
         list(APPEND T_SOURCES ${_files})
     endforeach()
     list(APPEND T_SOURCES ${T_TB})
+endmacro()
+
+# dc_parse_run_args(<test> <args>...)
+#
+# Parse arguments of dc_add_<simulator>_run() functions:
+#   BUILD <name> [ARGS <arg>...]
+# into R_BUILD (simulation of dc_add_<simulator>_build()) and R_ARGS.
+macro(dc_parse_run_args TEST)
+    cmake_parse_arguments(R "" "BUILD" "ARGS" ${ARGN})
+    if(NOT R_BUILD)
+        message(FATAL_ERROR "Test ${TEST}: BUILD is required")
+    endif()
+    if(R_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "Test ${TEST}: unknown arguments: ${R_UNPARSED_ARGUMENTS}")
+    endif()
 endmacro()
 
 # dc_test_labels(<out-var>)

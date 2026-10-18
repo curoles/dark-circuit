@@ -36,87 +36,60 @@ if(DARK_CIRCUIT_RISCV)
                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_decode.hex)
     endforeach()
 
-    # Fetch: straight-line program, every instruction retires, halt at EBREAK.
-    dc_add_riscv_program(design_mig1_fetch SOURCES fetch.S LINK_FLAGS -T ${SW}/mig1.ld)
+    # Programs run on TbMig1, built once per simulator.
     foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_fetch TOP TbMig1 TB tb_mig1.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_fetch.hex
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_fetch.${sim}.trace
-                            +expect_sequential +expect_retired=5 +expect_halt_pc=10)
+        cmake_language(CALL dc_add_${sim}_build design_mig1_sim TOP TbMig1 TB tb_mig1.sv
+                       FLISTS ${FLISTS})
     endforeach()
+
+    # mig1_program_test(<name> SOURCES <file>... [FLAGS <flag>...] [ARGS <arg>...])
+    #
+    # Build RISC-V program design_mig1_<name> and add tests design_mig1_<name>.<sim>
+    # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex> and
+    # +trace=<test>.<sim>.trace in the build directory.
+    function(mig1_program_test NAME)
+        cmake_parse_arguments(P "" "" "SOURCES;FLAGS;ARGS" ${ARGN})
+        set(prog design_mig1_${NAME})
+        dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} FLAGS ${P_FLAGS}
+                             LINK_FLAGS -T ${SW}/mig1.ld)
+        foreach(sim IN ITEMS icarus verilator)
+            cmake_language(CALL dc_add_${sim}_run ${prog} BUILD design_mig1_sim
+                           ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
+                                +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
+                                ${P_ARGS})
+        endforeach()
+    endfunction()
+
+    # Fetch: straight-line program, every instruction retires, halt at EBREAK.
+    mig1_program_test(fetch SOURCES fetch.S
+                      ARGS +expect_sequential +expect_retired=5 +expect_halt_pc=10)
 
     # ALU program: OP, OP-IMM, LUI, AUIPC execute, registers checked at halt.
-    dc_add_riscv_program(design_mig1_alu_prog SOURCES alu.S LINK_FLAGS -T ${SW}/mig1.ld)
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_alu_prog TOP TbMig1 TB tb_mig1.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_alu_prog.hex
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_alu_prog.${sim}.trace
-                            +expect_sequential +expect_regs)
-    endforeach()
+    mig1_program_test(alu_prog SOURCES alu.S ARGS +expect_sequential +expect_regs)
 
     # Branches and jumps: every branch type taken and not taken, JAL, JALR.
-    dc_add_riscv_program(design_mig1_branch SOURCES branch.S LINK_FLAGS -T ${SW}/mig1.ld)
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_branch TOP TbMig1 TB tb_mig1.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_branch.hex
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_branch.${sim}.trace
-                            +expect_regs)
-    endforeach()
+    mig1_program_test(branch SOURCES branch.S ARGS +expect_regs)
 
     # Loads and stores: every size and offset, sign extension, strobes.
-    dc_add_riscv_program(design_mig1_load_store SOURCES load_store.S LINK_FLAGS -T ${SW}/mig1.ld)
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_load_store TOP TbMig1 TB tb_mig1.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_load_store.hex
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_load_store.${sim}.trace
-                            +expect_sequential +expect_regs)
-    endforeach()
+    mig1_program_test(load_store SOURCES load_store.S ARGS +expect_sequential +expect_regs)
 
-    # Misaligned jump target, load and store address: halt with illegal=1 at the
-    # instruction, rd and memory not written. One build of misaligned.S per case (-DCASE_<case>).
+    # Faults stop the core at 0xc with illegal=1, rd and memory not written; one build
+    # of the program per case (-DCASE_<case>):
+    # misaligned jump target, load and store address; ECALL and illegal words.
+    set(FAULT_ARGS +expect_illegal +expect_halt_pc=c +expect_regs +expect_mem_unchanged)
     foreach(case IN ITEMS jalr lw sh)
         string(TOUPPER ${case} case_macro)
-        set(prog design_mig1_misaligned_${case})
-        dc_add_riscv_program(${prog} SOURCES misaligned.S FLAGS -DCASE_${case_macro}
-                             LINK_FLAGS -T ${SW}/mig1.ld)
-        foreach(sim IN ITEMS icarus verilator)
-            cmake_language(CALL dc_add_${sim}_test ${prog} TOP TbMig1 TB tb_mig1.sv
-                           FLISTS ${FLISTS}
-                           ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
-                                +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
-                                +expect_illegal +expect_halt_pc=c +expect_regs
-                                +expect_mem_unchanged)
-        endforeach()
+        mig1_program_test(misaligned_${case} SOURCES misaligned.S FLAGS -DCASE_${case_macro}
+                          ARGS ${FAULT_ARGS})
     endforeach()
-    # ECALL and illegal words stop the core: illegal=1, nothing written.
-    # One build of illegal.S per case (-DCASE_<case>).
     foreach(case IN ITEMS ecall zero ones)
         string(TOUPPER ${case} case_macro)
-        set(prog design_mig1_illegal_${case})
-        dc_add_riscv_program(${prog} SOURCES illegal.S FLAGS -DCASE_${case_macro}
-                             LINK_FLAGS -T ${SW}/mig1.ld)
-        foreach(sim IN ITEMS icarus verilator)
-            cmake_language(CALL dc_add_${sim}_test ${prog} TOP TbMig1 TB tb_mig1.sv
-                           FLISTS ${FLISTS}
-                           ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
-                                +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
-                                +expect_illegal +expect_halt_pc=c +expect_regs
-                                +expect_mem_unchanged)
-        endforeach()
+        mig1_program_test(illegal_${case} SOURCES illegal.S FLAGS -DCASE_${case_macro}
+                          ARGS ${FAULT_ARGS})
     endforeach()
 
     # Debug port and resume: the testbench changes a0 at two EBREAKs and resumes.
-    dc_add_riscv_program(design_mig1_resume SOURCES resume.S LINK_FLAGS -T ${SW}/mig1.ld)
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_resume TOP TbMig1 TB tb_mig1.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_resume.hex
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_resume.${sim}.trace
-                            +resumes=2 +expect_sequential +expect_retired=6
-                            +expect_halt_pc=14 +expect_regs)
-    endforeach()
+    mig1_program_test(resume SOURCES resume.S
+                      ARGS +resumes=2 +expect_sequential +expect_retired=6
+                           +expect_halt_pc=14 +expect_regs)
 endif()
