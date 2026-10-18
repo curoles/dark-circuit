@@ -14,3 +14,4 @@
 -F lfsr/behave/lfsr.flist
 -F stochastic_bitstream_gen/behave/stochastic_bitstream_gen.flist
 -F csa_multiplier/behave/csa_multiplier.flist
+-F divider/behave/divider.flist
