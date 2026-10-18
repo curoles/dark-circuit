@@ -29,7 +29,7 @@ module Mig1Core import Mig1Pkg::*; #(
     output wire       illegal,             // stopped by ECALL, illegal instruction,
                                            // jump to address not divisible by 4
                                            // or misaligned load/store
-    output retire_t   retire,
+    output retire_t   retire,              // RVFI trace, see Mig1Pkg
 
     input  dbg_req_t  dbg_req,
     output dbg_rsp_t  dbg_rsp
@@ -45,13 +45,16 @@ module Mig1Core import Mig1Pkg::*; #(
     branch_t     ex_branch;
     word_t       ex_link;           // pc + 4 for JAL, JALR
     lsu_t        ex_lsu;
+    lsu_mem_t    ex_lsu_mem;        // memory access, for retire
     word_t       ex_load_data;
     logic        ex_done;           // instruction in EX completes: writes rd, retires
+    logic        ex_trap;           // instruction in EX faults: retires as a trap
     logic        ex_rd_write;       // instruction in EX writes rd in this cycle
     rd_src_t     ex_rd_src;
     word_t       ex_rd_data;
     iaddr_t      halt_pc;
     word_t       dbg_reg_rdata;
+    logic [63:0] retire_order;      // number of instructions retired so far
 
     assign ex_insn = imem_rsp.data;
 
@@ -59,9 +62,9 @@ module Mig1Core import Mig1Pkg::*; #(
         .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(ex_fetch));
 
     Mig1Control u_mig1_control(
-        .clk(clk), .rst_n(rst_n), .ex(ex_fetch), .ex_dec(ex_dec), .branch(ex_branch),
-        .lsu(ex_lsu), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .ex_done(ex_done),
-        .halt(halt), .illegal(illegal), .halt_pc(halt_pc));
+        .clk, .rst_n, .ex(ex_fetch), .ex_dec, .branch(ex_branch), .lsu(ex_lsu),
+        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .ex_done, .ex_trap, .halt, .illegal,
+        .halt_pc);
 
     Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(ex_dec));
 
@@ -81,9 +84,9 @@ module Mig1Core import Mig1Pkg::*; #(
         .branch(ex_branch), .link(ex_link));
 
     Mig1Lsu u_mig1_lsu(
-        .clk(clk), .rst_n(rst_n), .valid(ex_fetch.valid), .dec(ex_dec),
-        .addr(ex_alu_result), .rs2_data(ex_rs2_data),
-        .dmem_req(dmem_req), .dmem_rsp(dmem_rsp), .lsu(ex_lsu), .load_data(ex_load_data));
+        .clk, .rst_n, .valid(ex_fetch.valid), .dec(ex_dec), .addr(ex_alu_result),
+        .rs2_data(ex_rs2_data), .dmem_req, .dmem_rsp, .lsu(ex_lsu), .load_data(ex_load_data),
+        .mem(ex_lsu_mem));
 
     // Write back: decode tells whether rd is written and where its value comes from.
     // ex_rd_src with assign: Icarus does not support selects of ex_dec in always_comb.
@@ -97,12 +100,28 @@ module Mig1Core import Mig1Pkg::*; #(
             default: ex_rd_data = ex_alu_result;
         endcase
 
-    // Retire: rd and rd_data are 0 when no register is written, also for writes to x0 (as RVFI).
-    assign retire.valid   = ex_done;
-    assign retire.pc      = ex_fetch.pc;
-    assign retire.insn    = ex_insn;
-    assign retire.rd      = (ex_rd_write && ex_dec.rd != '0) ? ex_dec.rd : '0;
-    assign retire.rd_data = (ex_rd_write && ex_dec.rd != '0) ? ex_rd_data : '0;
+    // Retire, RVFI: an instruction that completes or traps; fields it does not use are 0.
+    always_ff @(posedge clk)
+        if (!rst_n)            retire_order <= '0;
+        else if (retire.valid) retire_order <= retire_order + 1'b1;
+
+    assign retire.valid     = ex_done || ex_trap;
+    assign retire.order     = retire_order;
+    assign retire.insn      = ex_insn;
+    assign retire.trap      = ex_trap;
+    assign retire.pc_rdata  = {ex_fetch.pc, {IADDR_START{1'b0}}};
+    assign retire.pc_wdata  = ex_branch.taken ? {ex_branch.target, {IADDR_START{1'b0}}} : ex_link;
+    assign retire.rs1_addr  = ex_dec.uses_rs1 ? ex_dec.rs1 : '0;
+    assign retire.rs1_rdata = ex_dec.uses_rs1 ? ex_rs1_data : '0;
+    assign retire.rs2_addr  = ex_dec.uses_rs2 ? ex_dec.rs2 : '0;
+    assign retire.rs2_rdata = ex_dec.uses_rs2 ? ex_rs2_data : '0;
+    assign retire.rd_addr   = (ex_rd_write && ex_dec.rd != '0) ? ex_dec.rd : '0;
+    assign retire.rd_wdata  = (ex_rd_write && ex_dec.rd != '0) ? ex_rd_data : '0;
+    assign retire.mem_addr  = ex_lsu_mem.addr;
+    assign retire.mem_rmask = ex_lsu_mem.rmask;
+    assign retire.mem_wmask = ex_lsu_mem.wmask;
+    assign retire.mem_rdata = ex_lsu_mem.rdata;
+    assign retire.mem_wdata = ex_lsu_mem.wdata;
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;

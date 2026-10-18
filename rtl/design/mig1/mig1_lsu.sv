@@ -9,6 +9,7 @@
  * same; flop `second` tells which cycle it is.
  * lsu.misaligned=1 when addr is not aligned to the access size (LW, SW: 4 bytes;
  * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete.
+ * mem describes the access for the retire trace (RVFI): bytes read or written.
  */
 module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
     input  wire              clk,
@@ -23,7 +24,8 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
     output dmem_req_t        dmem_req,
     input  dmem_rsp_t        dmem_rsp,
     output lsu_t             lsu,
-    output logic [WIDTH-1:0] load_data   // valid in the second cycle of a load
+    output logic [WIDTH-1:0] load_data,  // valid in the second cycle of a load
+    output lsu_mem_t         mem         // access for the retire trace
 );
     // Fields and bit selects with assign: Icarus warns about selects in always_comb.
     kind_t                  kind;
@@ -45,7 +47,7 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
     logic  misaligned;
     logic  second;      // load is in its second cycle
     word_t wr_data;
-    strb_t wr_strb;
+    strb_t strb;        // bytes of the access: size of funct3 at offset
     strb_t strb_b;      // strobes of a byte at offset 0
     strb_t strb_h;      // strobes of a halfword at offset 0
     assign strb_b = {{(STRB_WIDTH - 1){1'b0}}, 1'b1};
@@ -69,19 +71,27 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
         if (!rst_n) second <= 1'b0;
         else        second <= lsu.stall;
 
+    // Bytes of the access; loads and stores have the same funct3 sizes (B, H, W).
+    always_comb
+        case (funct3)
+            F3_B, F3_BU: strb = strb_b << offset;
+            F3_H, F3_HU: strb = strb_h << offset;
+            default:     strb = '1;
+        endcase
+
     // Store: bytes of rs2 repeated over the word, strobes select the bytes at offset.
     always_comb
         case (funct3)
-            F3_B:    begin wr_data = {STRB_WIDTH{rs2_b}};       wr_strb = strb_b << offset; end
-            F3_H:    begin wr_data = {(STRB_WIDTH / 2){rs2_h}}; wr_strb = strb_h << offset; end
-            default: begin wr_data = rs2_data;                  wr_strb = '1;               end
+            F3_B:    wr_data = {STRB_WIDTH{rs2_b}};
+            F3_H:    wr_data = {(STRB_WIDTH / 2){rs2_h}};
+            default: wr_data = rs2_data;
         endcase
 
     assign dmem_req.rd_en   = lsu.stall;            // first cycle of a load
     assign dmem_req.wr_en   = store && !misaligned;
     assign dmem_req.addr    = addr[WIDTH-1:DADDR_START];
     assign dmem_req.wr_data = wr_data;
-    assign dmem_req.wr_strb = wr_strb;
+    assign dmem_req.wr_strb = strb;
 
     // Load: the word shifted so the bytes at offset are at bit 0, then extended.
     word_t       shifted;
@@ -103,5 +113,12 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
             F3_HU:   load_data = {{(WIDTH - 16){1'b0}},          shifted_h};
             default: load_data = shifted;               // LW
         endcase
+
+    // Access for the retire trace, 0 for other instructions and misaligned addresses.
+    assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
+    assign mem.rmask = (load && !misaligned) ? strb : '0;
+    assign mem.wmask = dmem_req.wr_en ? strb : '0;
+    assign mem.rdata = (load && !misaligned) ? dmem_rsp.rd_data : '0;
+    assign mem.wdata = dmem_req.wr_en ? wr_data : '0;
 
 endmodule

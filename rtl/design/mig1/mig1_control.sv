@@ -13,6 +13,7 @@
  * in the same cycle is dropped (one bubble). lsu.stall keeps the instruction in EX
  * for another cycle (load waiting for data): fetch holds, the instruction completes later.
  * ex_done=1: the instruction in EX completes, it writes rd and retires.
+ * ex_trap=1: the instruction in EX faults; it retires as a trap (RVFI), without writes.
  */
 module Mig1Control import Mig1Pkg::*; (
     input  wire                        clk,
@@ -27,6 +28,7 @@ module Mig1Control import Mig1Pkg::*; (
     input  wire                        resume,     // debug: continue after EBREAK
     output fetch_ctrl_t                fetch_ctrl,
     output wire                        ex_done,
+    output wire                        ex_trap,
     output wire                        halt,
     output logic                       illegal,
     output logic [WIDTH-1:IADDR_START] halt_pc     // iaddr_t
@@ -55,6 +57,7 @@ module Mig1Control import Mig1Pkg::*; (
         if (stop) halt_pc <= ex.pc;
 
     assign ex_done             = ex.valid && !fault && !lsu.stall;
+    assign ex_trap             = fault;
     assign fetch_ctrl.run      = rst_n && running && !stop;
     assign fetch_ctrl.stall    = lsu.stall;
     assign fetch_ctrl.redirect = ex.valid && branch.taken && !branch.misaligned;

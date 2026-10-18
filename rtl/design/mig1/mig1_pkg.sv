@@ -67,13 +67,29 @@ package Mig1Pkg;
         word_t  rd_data;
     } dmem_rsp_t;
 
-    // Retire: valid=1 for one cycle when an instruction has finished.
+    // Retire: one entry per retired instruction, RVFI (riscv-formal) fields and names.
+    // Unlike other ports, addresses are byte addresses, as in RVFI. A register or
+    // memory field that the instruction does not use is 0. Memory is RVFI "aligned
+    // memory": mem_addr is word aligned, masks select the bytes of mem_rdata/mem_wdata.
+    // RVFI fields that are constant for Mig1 are not here: intr=0, mode=3 (M), ixl=1.
     typedef struct packed {
-        logic      valid;
-        iaddr_t    pc;        // address of the instruction
-        insn_t     insn;      // the instruction
-        reg_addr_t rd;        // register written, 0 when none
-        word_t     rd_data;   // value written to rd
+        logic        valid;      // an instruction retires: it completes, or traps
+        logic [63:0] order;      // index of the retired instruction: 0, 1, 2, ...
+        insn_t       insn;
+        logic        trap;       // the instruction faulted: no register or memory write
+        word_t       pc_rdata;   // address of the instruction
+        word_t       pc_wdata;   // address of the next instruction
+        reg_addr_t   rs1_addr;   // registers read, 0 when not read
+        word_t       rs1_rdata;
+        reg_addr_t   rs2_addr;
+        word_t       rs2_rdata;
+        reg_addr_t   rd_addr;    // register written, 0 when none (also for x0)
+        word_t       rd_wdata;
+        word_t       mem_addr;   // load or store: word address as byte address
+        strb_t       mem_rmask;  // bytes read
+        strb_t       mem_wmask;  // bytes written
+        word_t       mem_rdata;  // word read
+        word_t       mem_wdata;  // word written, bytes of mem_wmask
     } retire_t;
 
     // Debug, used while the core is halted.
@@ -116,6 +132,15 @@ package Mig1Pkg;
         logic   stall;      // instruction in EX needs one more cycle (load waits for data)
         logic   misaligned; // load or store address not aligned to its size: a fault
     } lsu_t;
+
+    // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none.
+    typedef struct packed {
+        word_t  addr;       // word address as byte address
+        strb_t  rmask;
+        strb_t  wmask;
+        word_t  rdata;      // valid in the second cycle of a load
+        word_t  wdata;
+    } lsu_mem_t;
 
     // Kind of instruction, from exact match with the RISC-V encodings.
     typedef enum logic [3:0] {

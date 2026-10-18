@@ -8,7 +8,7 @@ It passes riscv-tests rv32ui (40 of 42 tests; fence_i and ma_data do not apply, 
   (like SRAM and FPGA block RAM). Mig1Cpu loads the same program image into both.
 - Stops (halt) on EBREAK; a debugger resumes it. Stops for good (illegal) on faults.
 - Runs C programs with semihosting (print, exit code): the same binary code as on QEMU.
-- Retire trace of every completed instruction (RVFI-lite), for testbenches.
+- Retire trace of every retired instruction in RVFI form (riscv-formal), for testbenches.
 
 RTL is in this directory, configuration in `cfg/`, tests in `test/design/mig1/`.
 
@@ -113,10 +113,24 @@ Link programs with `sw/riscv/mig1.ld` (with `sw/riscv/qemu_virt.ld` for QEMU).
 
 ## Retire trace
 
-`retire_t` has one entry per completed instruction: `valid`, `pc`, `insn`, and `rd`,
-`rd_data` of the register write (both 0 when nothing is written, also for writes to x0,
-as RVFI). Faulting and dropped instructions do not retire. TbMig1 checks the trace
-and writes it to `<test>.<simulator>.trace`.
+`retire` (`retire_t` in Mig1Pkg) has one entry per retired instruction, with the fields
+and names of RVFI, the interface of riscv-formal; fields an instruction does not use
+are 0. Unlike the other ports, its addresses are byte addresses, as in RVFI.
+
+| Field | Meaning |
+|---|---|
+| `valid`, `order` | an instruction retires; its index 0, 1, 2, ... |
+| `insn`, `trap` | the instruction; 1 when it faulted (it writes nothing, the core halts) |
+| `pc_rdata`, `pc_wdata` | its address and the address of the next instruction |
+| `rs1_addr`, `rs1_rdata`, `rs2_addr`, `rs2_rdata` | registers read and their values |
+| `rd_addr`, `rd_wdata` | register written and the value (0 for none and for x0) |
+| `mem_addr`, `mem_rmask`, `mem_wmask`, `mem_rdata`, `mem_wdata` | load/store: word address, bytes read/written, data words ("aligned memory" of RVFI) |
+
+Not in the struct, constant for Mig1: `intr`=0, `mode`=3 (machine), `ixl`=1 (32-bit).
+TbMig1 checks every entry against the program and its own copy of the registers:
+instruction words, control flow (`pc_wdata` of one is `pc_rdata` of the next), registers
+read, the address and bytes of loads and stores, memory after stores, traps; and writes
+the trace to `<test>.<simulator>.trace`.
 
 ## Configuration
 
@@ -146,9 +160,8 @@ the paths of trace files.
 
 - Reset does not block a store or a register write of the instruction in EX in that cycle.
 - A load of memory outside the program image is X on Icarus (test fails) and 0 on Verilator.
-- No memory accesses in the retire trace yet.
 
 ## Next
 
-rv32ui exit through semihosting (then the same binaries run on QEMU), Zicsr + Zicntr,
-5-stage pipeline, M extension; full RVFI, then Spike cosim (lockstep) and riscv-formal.
+Zicsr + Zicntr, 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
+on the RVFI trace.
