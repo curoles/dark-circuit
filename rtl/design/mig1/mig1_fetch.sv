@@ -6,7 +6,7 @@
  * ctrl.run=1 and holds with ctrl.run=0. ctrl.redirect=1 loads ctrl.target (taken
  * branch or jump) and drops the request of this cycle: its instruction comes with
  * fetch.valid=0. ctrl.stall=1 keeps everything: pc, the imem output (SimROM and SRAM
- * hold data while en=0) and fetch, so the instruction in EX stays for another cycle.
+ * hold data while en=0) and fetch, so the instruction in ID stays for another cycle.
  */
 module Mig1Fetch import Mig1Pkg::*; #(
     parameter RST_ADDR = MIG1_RST_ADDR    // PC after reset, byte address

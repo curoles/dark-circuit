@@ -9,11 +9,13 @@
  *
  * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
  * Mig1Control (run, stall, redirect, traps, halt), Mig1Decode, Mig1Regs, Mig1Alu,
- * Mig1Branch, Mig1Lsu (dmem requests), Mig1Csr, Mig1MulDiv. Pipeline: IF fetches, EX executes the
- * instruction that arrives from imem; parts do not depend on that, so they fit
- * a 5-stage pipeline too. Signals of a stage have its prefix: if_, ex_.
- * A taken branch or jump, a trap and MRET cost one bubble: the instruction fetched
- * after it is dropped.
+ * Mig1Branch, Mig1Lsu (dmem requests), Mig1Csr, Mig1MulDiv, Mig1Pipe (pipeline registers).
+ * Pipeline IF | ID | EX: IF fetches; ID decodes the instruction that arrives from imem
+ * and reads its registers; EX executes, writes rd and retires. Signals of a stage have
+ * its prefix: if_, id_, ex_.
+ * A taken branch or jump, a trap and MRET cost two bubbles: the instructions in ID and
+ * IF are dropped. An instruction that reads the rd of the instruction before it waits
+ * one cycle in ID (interlock, no forwarding).
  * A load stays 2 cycles in EX (it waits for dmem data), a division 34 cycles.
  */
 module Mig1Core import Mig1Pkg::*; #(
@@ -35,7 +37,15 @@ module Mig1Core import Mig1Pkg::*; #(
 );
 
     fetch_ctrl_t if_ctrl;           // Control -> Fetch
-    fetch_t      ex_fetch;          // instruction in EX: valid, pc; arrives from imem
+    pipe_ctrl_t  pipe_ctrl;         // Control -> Pipe
+    fetch_t      id_fetch;          // instruction in ID: valid, pc; arrives from imem
+    insn_t       id_insn;
+    decoded_t    id_dec;            // instruction in ID taken apart
+    word_t       id_rs1_data;
+    word_t       id_rs2_data;
+    id_ex_t      id_ex_d;
+    id_ex_t      id_ex_q;
+    fetch_t      ex_fetch;          // instruction in EX: valid, pc
     insn_t       ex_insn;
     decoded_t    ex_dec;            // instruction in EX taken apart
     word_t       ex_rs1_data;
@@ -60,26 +70,45 @@ module Mig1Core import Mig1Pkg::*; #(
     word_t       dbg_reg_rdata;
     logic [63:0] retire_order;      // number of instructions retired so far
 
-    assign ex_insn = imem_rsp.data;
-
+    // IF
     Mig1Fetch #(.RST_ADDR(RST_ADDR)) u_mig1_fetch(
-        .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(ex_fetch));
+        .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(id_fetch));
 
     Mig1Control u_mig1_control(
-        .clk, .rst_n, .ex(ex_fetch), .ex_insn, .ex_dec, .ex_addr(ex_alu_result),
-        .branch(ex_branch), .lsu(ex_lsu), .csr_illegal(ex_csr_illegal),
-        .muldiv_stall(ex_muldiv_stall), .csr(ex_csr), .ebreak_halt(dbg_req.ebreak_halt),
-        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
-        .ex_done, .ex_trap, .halt, .halt_pc);
+        .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex(ex_fetch), .ex_insn, .ex_dec,
+        .ex_addr(ex_alu_result), .branch(ex_branch), .lsu(ex_lsu),
+        .csr_illegal(ex_csr_illegal), .muldiv_stall(ex_muldiv_stall), .csr(ex_csr),
+        .ebreak_halt(dbg_req.ebreak_halt), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
+        .pipe_ctrl, .ex_done, .ex_trap, .halt, .halt_pc);
 
-    Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(ex_dec));
+    // ID
+    assign id_insn = imem_rsp.data;
+
+    Mig1Decode u_mig1_decode(.insn(id_insn), .dec(id_dec));
 
     Mig1Regs u_mig1_regs(
         .clk(clk), .halt(halt),
-        .rs1(ex_dec.rs1), .rs2(ex_dec.rs2), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
+        .rs1(id_dec.rs1), .rs2(id_dec.rs2), .rs1_data(id_rs1_data), .rs2_data(id_rs2_data),
         .rd_we(ex_rd_write), .rd(ex_dec.rd), .rd_data(ex_rd_data),
         .dbg_reg_addr(dbg_req.reg_addr), .dbg_reg_wr(dbg_req.reg_wr),
         .dbg_reg_wdata(dbg_req.reg_wdata), .dbg_reg_rdata(dbg_reg_rdata));
+
+    assign id_ex_d.valid    = id_fetch.valid;
+    assign id_ex_d.pc       = id_fetch.pc;
+    assign id_ex_d.insn     = id_insn;
+    assign id_ex_d.dec      = id_dec;
+    assign id_ex_d.rs1_data = id_rs1_data;
+    assign id_ex_d.rs2_data = id_rs2_data;
+
+    Mig1Pipe u_mig1_pipe(.clk, .rst_n, .ctrl(pipe_ctrl), .id_ex_d, .id_ex_q);
+
+    // EX
+    assign ex_fetch.valid = id_ex_q.valid;
+    assign ex_fetch.pc    = id_ex_q.pc;
+    assign ex_insn        = id_ex_q.insn;
+    assign ex_dec         = id_ex_q.dec;
+    assign ex_rs1_data    = id_ex_q.rs1_data;
+    assign ex_rs2_data    = id_ex_q.rs2_data;
 
     Mig1Alu u_mig1_alu(
         .dec(ex_dec), .pc(ex_fetch.pc), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),

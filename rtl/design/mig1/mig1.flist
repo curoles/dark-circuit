@@ -9,5 +9,6 @@ mig1_branch.sv
 mig1_lsu.sv
 mig1_csr.sv
 mig1_muldiv.sv
+mig1_pipe.sv
 mig1_core.sv
 mig1_cpu.sv

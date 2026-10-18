@@ -107,7 +107,7 @@ package Mig1Pkg;
     } dbg_rsp_t;
 
     // Fetch -> next stage: the instruction that arrives from imem in this cycle
-    // (EX in the 2-stage pipeline, ID in a 5-stage one).
+    // (ID).
     typedef struct packed {
         logic   valid;
         iaddr_t pc;
@@ -194,11 +194,27 @@ package Mig1Pkg;
         reg_addr_t  rs2;
         logic       rd_we;     // writes rd (writes to x0 are dropped by the register file)
         rd_src_t    rd_src;    // value written to rd
-        logic       uses_rs1;  // reads rs1, for hazard detection in a 5-stage pipeline
+        logic       uses_rs1;  // reads rs1, for the interlock (Mig1Control)
         logic       uses_rs2;
         logic [2:0] funct3;    // operation within the kind: ALU op, branch compare, load/store size
         logic       alt;       // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
         word_t      imm;       // immediate of the instruction format, sign-extended
     } decoded_t;
+
+    // ID -> EX: the instruction taken apart with its register values (Mig1Pipe).
+    typedef struct packed {
+        logic       valid;
+        iaddr_t     pc;
+        insn_t      insn;
+        decoded_t   dec;
+        word_t      rs1_data;   // read in ID; no older instruction writes rs1 (interlock)
+        word_t      rs2_data;
+    } id_ex_t;
+
+    // Control -> Pipe, per boundary: keep the instruction (stall) or put a bubble (flush).
+    typedef struct packed {
+        logic       ex_stall;   // EX keeps its instruction (load, division)
+        logic       ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
+    } pipe_ctrl_t;
 
 endpackage

@@ -45,7 +45,8 @@ CONFIGURE := cmake -S $(SOURCE_DIR) -B $(BUILD_DIR) $(TREE_ARGS) $(CMAKE_ARGS)
 CONFIGURED := $(if $(CMAKE_ARGS),cmake,$(BUILD_DIR)/CMakeCache.txt)
 
 # V=1 adds ctest -V: show output of every test, not only of failed tests.
-CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure -j $(shell nproc) $(if $(V),-V)
+# --no-tests=error: a selection without tests fails (like test_blocks in a design tree).
+CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure --no-tests=error -j $(shell nproc) $(if $(V),-V)
 
 # Design configurations: every rtl/design/<design>/cfg/<design>_config.yaml.
 CONFIGS := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_config.yaml)
