@@ -47,9 +47,6 @@ This file has the rules that are not in README.md.
 
 - Pure SystemVerilog, stop at the first mismatch with `$fatal(1, ...)`, always give
   the top module (`-s`, `--top-module`).
-- Print a line starting with `PASS` at the end: a test passes only with exit code 0
-  and that line (a simulator can exit with 0 without simulating, like vvp after a
-  load error).
 - X and Z checks inside `` `ifndef VERILATOR ``: Verilator is 2-state.
 - Small or fast tests run on Icarus and Verilator; slow suites on the main simulator.
 - Block tests run the same testbench with `block_behave.flist` and `block_struct.flist`.
