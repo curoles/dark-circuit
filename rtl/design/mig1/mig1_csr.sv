@@ -10,7 +10,7 @@
  * (address bits 11:10 are 3, as the spec says): nothing is written, the instruction
  * must not complete.
  * CSRs: mcycle and minstret (64-bit; also read as cycle and instret; time is cycle,
- * Mig1 has no real-time clock), mscratch, misa (RV32I, writes are ignored), mvendorid,
+ * Mig1 has no real-time clock), mscratch, misa (RV32IM, writes are ignored), mvendorid,
  * marchid, mimpid, mhartid (0). mcycle counts every clock after reset, minstret every
  * completed instruction (not traps); a CSR write wins over the count of its cycle.
  * Traps: mstatus (MIE, MPIE; MPP reads 3, machine mode only; other bits 0), mstatush (0),
@@ -35,7 +35,7 @@ module Mig1Csr import Mig1Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     output wire              illegal,    // CSR does not exist, or write to a read-only CSR
     output csr_t             csr         // mtvec and mepc, for traps and MRET
 );
-    localparam word_t MISA = 32'h4000_0100;    // MXL=1: 32-bit; extension I
+    localparam word_t MISA = 32'h4000_1100;    // MXL=1: 32-bit; extensions I, M
 
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;

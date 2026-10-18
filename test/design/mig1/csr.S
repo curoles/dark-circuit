@@ -67,7 +67,7 @@ expect:
     EXPECT_REG 8,  21
     EXPECT_REG 9,  21 | 10
     EXPECT_REG 10, (21 | 10) & ~3
-    EXPECT_REG 11, 0x40000100       # misa: MXL=1 (32-bit), extension I
+    EXPECT_REG 11, 0x40001100       # misa: MXL=1 (32-bit), extensions I and M
     EXPECT_REG 12, 0
     EXPECT_REG 13, 0
     EXPECT_REG 16, 4

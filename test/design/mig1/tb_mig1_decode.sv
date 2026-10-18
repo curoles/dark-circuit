@@ -55,7 +55,7 @@ module TbMig1Decode;
     function automatic logic has_funct3(input logic [4:0] kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP, KIND_FENCE,
-            KIND_CSR:                                                                      return 1'b1;
+            KIND_CSR, KIND_MULDIV:                                                         return 1'b1;
             default:                                                                       return 1'b0;
         endcase
     endfunction
@@ -69,11 +69,12 @@ module TbMig1Decode;
     endfunction
 
     // Source of rd expected for a kind that writes rd, as a value of rd_src_t.
-    function automatic logic [1:0] rd_src_of(input logic [4:0] kind);
+    function automatic logic [2:0] rd_src_of(input logic [4:0] kind);
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
             KIND_LOAD:           return RD_LOAD;
             KIND_CSR:            return RD_CSR;
+            KIND_MULDIV:         return RD_MULDIV;
             default:             return RD_ALU;
         endcase
     endfunction
@@ -105,7 +106,7 @@ module TbMig1Decode;
                 check(c, insn, "uses_rs1", {31'b0, dec.uses_rs1}, e[2]);
                 check(c, insn, "uses_rs2", {31'b0, dec.uses_rs2}, e[3]);
                 if (e[1][0]) check(c, insn, "rd",  {27'b0, dec.rd},  e[4]);
-                if (e[1][0]) check(c, insn, "rd_src", {30'b0, dec.rd_src}, {30'b0, rd_src_of(exp_kind)});
+                if (e[1][0]) check(c, insn, "rd_src", {29'b0, dec.rd_src}, {29'b0, rd_src_of(exp_kind)});
                 if (e[2][0]) check(c, insn, "rs1", {27'b0, dec.rs1}, e[5]);
                 if (e[3][0]) check(c, insn, "rs2", {27'b0, dec.rs2}, e[6]);
                 if (has_funct3(exp_kind))
@@ -118,7 +119,7 @@ module TbMig1Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        for (k = 0; k <= KIND_WFI; k = k + 1)
+        for (k = 0; k <= KIND_MULDIV; k = k + 1)
             if (!tested[k])
                 $fatal(1, "Mig1Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);

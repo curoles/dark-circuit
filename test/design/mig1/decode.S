@@ -40,6 +40,7 @@
     .equ K_CSR,     13
     .equ K_MRET,    14
     .equ K_WFI,     15
+    .equ K_MULDIV,  16
 
 /* Expected decode after the instruction. */
     .macro EXPECT kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
@@ -90,6 +91,11 @@
     .macro JALR_ rd, rs1, imm
     jalr x\rd, \imm(x\rs1)
     EXPECT K_JALR, 1, 1, 0, \rd, \rs1, 0, 0, 0, \imm
+    .endm
+
+    .macro MULDIV op, funct3, rd, rs1, rs2          /* mul mulh mulhsu mulhu div divu rem remu */
+    \op x\rd, x\rs1, x\rs2
+    EXPECT K_MULDIV, 1, 1, 1, \rd, \rs1, \rs2, \funct3, 0, 0
     .endm
 
     .macro CSR op, funct3, rd, rs1, csr             /* csrrw csrrs csrrc: imm is the CSR address */
@@ -182,6 +188,16 @@ cases:
     JALR_  5,  31, -2048
     JALR_  1,  1,  2047
 
+    /*     op      funct3 rd  rs1 rs2 */
+    MULDIV mul,    0,     1,  2,  3
+    MULDIV mulh,   1,     31, 30, 29
+    MULDIV mulhsu, 2,     0,  31, 1
+    MULDIV mulhu,  3,     5,  0,  31
+    MULDIV div,    4,     7,  8,  9
+    MULDIV divu,   5,     10, 11, 0
+    MULDIV rem,    6,     12, 13, 14
+    MULDIV remu,   7,     15, 16, 17
+
     /*     op      funct3 rd  rs1 csr: addresses with bit 11 set must not be sign-extended */
     CSR    csrrw,  1,     1,  2,  0x340
     CSR    csrrs,  2,     31, 0,  0xc00
@@ -200,7 +216,7 @@ cases:
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
     ILLEGAL 0xffffffff      /* all ones: defined to be illegal */
-    ILLEGAL 0x02000033      /* mul x0, x0, x0: M extension */
+    ILLEGAL 0xfe000033      /* OP with funct7 = 0x7f: neither OP nor M */
     ILLEGAL 0x0000100f      /* fence.i: Zifencei extension */
     ILLEGAL 0x00200073      /* like ecall and ebreak, but imm=2 */
     ILLEGAL 0x0000000b      /* custom-0 opcode */

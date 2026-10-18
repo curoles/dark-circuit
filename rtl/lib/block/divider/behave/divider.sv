@@ -4,8 +4,9 @@
  * Author: Igor Lesik
  *
  * start=1 while busy=0 takes dividend and divisor on the rising edge; then busy=1 for
- * WIDTH clocks, and done=1 for one clock in the last of them: quotient and remainder
- * are valid from then on and stay until the next start. start while busy is ignored.
+ * WIDTH clocks, and done=1 for one clock in the last of them (its last step): after
+ * that clock, with busy=0 again, quotient and remainder are valid and stay until the
+ * next start. start while busy is ignored.
  * Every clock shifts the next dividend bit into the partial remainder and subtracts
  * the divisor if it fits (quotient bit 1). Dividing by 0 gives quotient all ones and
  * remainder = dividend: the divisor always fits. rst_n=0 stops a division.

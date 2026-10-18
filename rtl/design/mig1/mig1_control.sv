@@ -15,8 +15,8 @@
  * more is fetched, nothing is in flight; resume=1 runs again from halt_pc + 4, where
  * the PC already is (it did not advance in the cycle of EBREAK).
  * A redirect (taken jump or branch, trap, MRET) drops the instruction fetched in the
- * same cycle (one bubble). lsu.stall keeps the instruction in EX for another cycle
- * (load waiting for data): fetch holds, the instruction completes later.
+ * same cycle (one bubble). lsu.stall (load waiting for data) and muldiv_stall (division
+ * not done) keep the instruction in EX: fetch holds, the instruction completes later.
  * ex_done=1: the instruction in EX completes, it writes rd and retires.
  */
 module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
@@ -32,6 +32,7 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     input  branch_t                    branch,      // next pc of the instruction in EX
     input  lsu_t                       lsu,         // stall and fault of loads and stores
     input  wire                        csr_illegal, // CSR instruction can not be done
+    input  wire                        muldiv_stall, // division of the instruction in EX not done
     input  csr_t                       csr,         // mtvec, mepc
     input  wire                        ebreak_halt, // debug: EBREAK halts instead of trapping
     input  wire                        resume,      // debug: continue after EBREAK
@@ -50,6 +51,7 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     iaddr_t target;
     logic   lsu_misaligned;
     logic   lsu_stall;
+    logic   ex_stall;       // the instruction in EX stays for another cycle
     iaddr_t mtvec;
     iaddr_t mepc;
     assign valid             = ex.valid;
@@ -60,6 +62,7 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     assign target            = branch.target;
     assign lsu_misaligned    = lsu.misaligned;
     assign lsu_stall         = lsu.stall;
+    assign ex_stall          = lsu_stall || muldiv_stall;
     assign mtvec             = csr.mtvec;
     assign mepc              = csr.mepc;
 
@@ -110,9 +113,9 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     always_ff @(posedge clk)
         if (stop) halt_pc <= ex.pc;
 
-    assign ex_done             = ex.valid && !trap && !lsu_stall;
+    assign ex_done             = ex.valid && !trap && !ex_stall;
     assign fetch_ctrl.run      = rst_n && running && !stop;
-    assign fetch_ctrl.stall    = lsu_stall;
+    assign fetch_ctrl.stall    = ex_stall;
     assign fetch_ctrl.redirect = trap || mret || (ex.valid && taken);
     assign fetch_ctrl.target   = trap ? mtvec : mret ? mepc : target;
     assign halt                = !running;

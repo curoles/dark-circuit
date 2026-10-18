@@ -46,6 +46,16 @@ package RiscvPkg;
     localparam logic [2:0] F3_CSRRSI  = 3'b110;
     localparam logic [2:0] F3_CSRRCI  = 3'b111;
 
+    // OP with funct7 = 1, M extension: multiply and divide.
+    localparam logic [2:0] F3_MUL     = 3'b000;
+    localparam logic [2:0] F3_MULH    = 3'b001;
+    localparam logic [2:0] F3_MULHSU  = 3'b010;
+    localparam logic [2:0] F3_MULHU   = 3'b011;
+    localparam logic [2:0] F3_DIV     = 3'b100;
+    localparam logic [2:0] F3_DIVU    = 3'b101;
+    localparam logic [2:0] F3_REM     = 3'b110;
+    localparam logic [2:0] F3_REMU    = 3'b111;
+
     // Exception codes of mcause (interrupt bit 0), privileged spec; names as in riscv-opcodes.
     localparam logic [4:0] CAUSE_MISALIGNED_FETCH    = 5'd0;
     localparam logic [4:0] CAUSE_FETCH_ACCESS        = 5'd1;

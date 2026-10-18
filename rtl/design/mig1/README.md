@@ -1,9 +1,9 @@
 # Mig1: RV32I RISC-V CPU
 
-Mig1 is a small RISC-V CPU: RV32I base integer instructions, Zicsr (CSR instructions)
-and Zicntr (counters), machine-mode traps; no interrupts yet.
-It passes riscv-tests rv32ui (40 of 42 tests) and rv32mi (14 of 16 tests) with their standard
-environment; the other tests need features Mig1 does not have, see Testing.
+Mig1 is a small RISC-V CPU: RV32IM (base integer instructions, multiply and divide),
+Zicsr (CSR instructions) and Zicntr (counters), machine-mode traps; no interrupts yet.
+It passes riscv-tests rv32ui (40 of 42 tests), rv32um (8 of 8) and rv32mi (14 of 16) with
+their standard environment; the other tests need features Mig1 does not have, see Testing.
 
 - 2-stage pipeline: IF (fetch) | EX (everything else).
 - Harvard: instruction memory and data memory, both with 1 clock read latency
@@ -21,7 +21,7 @@ RTL is in this directory, configuration in `cfg/`, tests in `test/design/mig1/`.
 |------|------|
 | `mig1_pkg.sv` | Mig1Pkg: widths, port and boundary structs, kind_t, decoded_t |
 | `mig1_config_pkg.sv` | Mig1ConfigPkg, generated from `cfg/mig1_config.yaml` |
-| `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv`, `mig1_csr.sv` | the parts |
+| `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv`, `mig1_csr.sv`, `mig1_muldiv.sv` | the parts |
 | `mig1_core.sv` | Mig1Core: connects the parts, synthesizable, memories are outside |
 | `mig1_cpu.sv` | Mig1Cpu: Mig1Core with SimROM (imem) and SimRAM (dmem), for simulation |
 | `mig1.flist` | files in compile order |
@@ -38,9 +38,11 @@ EX  imem_rsp -> ex_insn -> Mig1Decode -> ex_dec
     address, rs2      -> Mig1Lsu    -> dmem_req; 1 clock later dmem_rsp -> load data
                                        lsu (stall, misaligned)
     ex_dec, rs1       -> Mig1Csr    -> old CSR value; CSR write when the instruction completes
-    rd value = ALU result | link | load data | CSR value, chosen by ex_dec.rd_src;
+    rs1, rs2          -> Mig1MulDiv -> product (1 cycle) or quotient/remainder (34 cycles,
+                                       muldiv stall)
+    rd value = ALU result | link | load data | CSR value | M result, chosen by ex_dec.rd_src;
                Mig1Regs writes it when ex_done=1
-    ex_dec, branch, lsu, CSR fault -> Mig1Control -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
+    ex_dec, branch, lsu, CSR fault, muldiv stall -> Mig1Control -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
                                        -> ex_done, ex_trap (to Mig1Csr), halt, halt_pc
 ```
 
@@ -58,6 +60,7 @@ is, so the same parts fit a 5-stage pipeline.
 | Mig1Branch  | EX    | taken, target, misaligned target; link = pc + 4 for JAL, JALR |
 | Mig1Lsu     | EX    | dmem requests, store strobes, load data extension, misaligned address, load stall |
 | Mig1Csr     | EX    | CSRs, counters, trap CSRs; CSR instructions read the old value and write the new one |
+| Mig1MulDiv  | EX    | M extension: Int32Mul (combinational), Int32Div (32 clocks, stalls), RISC-V results of divide by 0 and overflow |
 
 Boundary structs are in Mig1Pkg, named by their producer: `fetch_t`, `fetch_ctrl_t`,
 `decoded_t`, `branch_t`, `lsu_t`; memory and debug ports are `<group>_req_t`/`_rsp_t`.
@@ -73,6 +76,8 @@ Every instruction takes one cycle in EX, plus:
 | taken branch, JAL, JALR | 1 | the instruction fetched after it is dropped (one bubble) |
 | load | 1 | data comes 1 clock after the read request; the load waits in EX |
 | store | 0 | written in its cycle in EX |
+| multiply | 0 | Int32Mul is combinational |
+| divide, remainder | 33 | Int32Div takes 32 clocks; start, 32 steps, then the result |
 
 Measured: branch.S retires 58 instructions in 78 cycles, load_store.S 43 in 64.
 
@@ -107,7 +112,7 @@ RiscvCsrPkg (generated from riscv-opcodes, like the encodings).
 | `mtvec` | read/write | trap handler address; direct mode only, bits 1:0 read 0 |
 | `mepc`, `mcause`, `mtval` | read/write | set by traps; `mepc` bits 1:0 read 0 |
 | `mie`, `mip` | read 0, writes ignored | no interrupts yet |
-| `misa` | read, writes ignored | `0x40000100`: RV32I |
+| `misa` | read, writes ignored | `0x40001100`: RV32IM |
 | `mvendorid`, `marchid`, `mimpid`, `mhartid` | read | 0 |
 
 A CSR write wins over the count of its cycle: the next read gives the written value.
@@ -183,9 +188,10 @@ the trace to `<test>.<simulator>.trace`.
 | `fetch`, `alu_prog`, `branch`, `load_store`, `resume` | programs on TbMig1, registers checked at the end |
 | `semihosting` | C program of `test/sw/riscv/semihosting` (also run on QEMU): output and exit code 3 |
 | `csr` | CSR instructions on mscratch, read-only CSRs, counters |
+| `muldiv` | M results used right away, division and branches, a division in a dropped slot, cycles and minstret of a division |
 | `trap` | mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap |
 | `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: a handler checks mcause, mepc, mtval; nothing written |
-| `rv32ui_*`, `rv32mi_*` (labels `riscv-tests`, `rv32ui`, `rv32mi`) | riscv-tests with their standard environment `env/p`; end with a store to `tohost` |
+| `rv32ui_*`, `rv32um_*`, `rv32mi_*` (labels `riscv-tests` and the suite) | riscv-tests with their standard environment `env/p`; end with a store to `tohost` |
 
 Not run from rv32ui: fence_i (writes code into memory, Mig1 fetches from a separate
 instruction memory) and ma_data (misaligned loads and stores, Mig1 traps on them).
@@ -204,5 +210,5 @@ the paths of trace files.
 
 ## Next
 
-Interrupts (timer), 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
+Structural versions of the M blocks, interrupts (timer), 5-stage pipeline; Spike cosim (lockstep) and riscv-formal
 on the RVFI trace.

@@ -4,7 +4,8 @@
  * Author: Igor Lesik
  *
  * Same handshake as Divider: start=1 while busy=0 takes the operands, busy=1 for 32
- * clocks, done=1 in the last; outputs are valid from done until the next start.
+ * clocks, done=1 in the last; outputs are valid after that clock (busy=0 again) until
+ * the next start.
  * signed_op=1: two's complement operands, the quotient is rounded toward zero, the
  * remainder has the sign of the dividend (dividend = quotient * divisor + remainder),
  * as in C and RISC-V. Divider works on magnitudes; the signs are taken at start and

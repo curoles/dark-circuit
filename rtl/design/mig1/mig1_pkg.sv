@@ -173,15 +173,17 @@ package Mig1Pkg;
         KIND_EBREAK,
         KIND_CSR,       // CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI
         KIND_MRET,
-        KIND_WFI
+        KIND_WFI,
+        KIND_MULDIV     // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
     } kind_t;
 
     // Source of the value written to rd.
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         RD_ALU,         // Mig1Alu result: OP, OP-IMM, LUI, AUIPC
         RD_LINK,        // pc + 4: JAL, JALR
         RD_LOAD,        // loaded data
-        RD_CSR          // old value of the CSR: CSR instructions
+        RD_CSR,         // old value of the CSR: CSR instructions
+        RD_MULDIV       // product or quotient/remainder: M instructions
     } rd_src_t;
 
     // Decode -> units: the instruction taken apart.

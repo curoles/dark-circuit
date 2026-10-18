@@ -4,8 +4,8 @@ set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
 # Mig1 uses blocks of the library (behave versions are fast to simulate)
 # and RISC-V formats and encodings.
-set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/riscv/riscv.flist
-           ${MIG1}/mig1.flist)
+set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
+           ${LIB}/riscv/riscv.flist ${MIG1}/mig1.flist)
 
 # Files generated from cfg/mig1_config.yaml are up to date.
 dc_add_config_check(design_mig1 CONFIG ${MIG1}/cfg/mig1_config.yaml)
@@ -29,7 +29,7 @@ if(DARK_CIRCUIT_RISCV)
     endforeach()
 
     # Decode: unit test of Mig1Decode with cases encoded by the assembler.
-    dc_add_riscv_program(design_mig1_decode SOURCES decode.S LINK_FLAGS -T ${SW}/mig1.ld)
+    dc_add_riscv_program(design_mig1_decode SOURCES decode.S ARCH rv32im LINK_FLAGS -T ${SW}/mig1.ld)
     foreach(sim IN ITEMS icarus verilator)
         cmake_language(CALL dc_add_${sim}_test design_mig1_decode TOP TbMig1Decode TB tb_mig1_decode.sv
                        FLISTS ${FLISTS}
@@ -42,18 +42,22 @@ if(DARK_CIRCUIT_RISCV)
                        FLISTS ${FLISTS})
     endforeach()
 
-    # mig1_program_test(<name> SOURCES <file>... [FLAGS <flag>...] [ARGS <arg>...]
-    #                   [LABELS <label>...] [OUTPUT <regex>])
+    # mig1_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...]
+    #                   [ARGS <arg>...] [LABELS <label>...] [OUTPUT <regex>])
     #
     # Build RISC-V program design_mig1_<name> and add tests design_mig1_<name>.<sim>
     # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex>,
     # +symbols=<program symbols> and +trace=<test>.<sim>.trace in the build directory;
+    # ARCH is -march of the program (default rv32i);
     # LABELS are added to the tests;
     # with OUTPUT the output (semihosting console) must match <regex>.
     function(mig1_program_test NAME)
-        cmake_parse_arguments(P "" "OUTPUT" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
+        cmake_parse_arguments(P "" "OUTPUT;ARCH" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
+        if(NOT P_ARCH)
+            set(P_ARCH rv32i)
+        endif()
         set(prog design_mig1_${NAME})
-        dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} FLAGS ${P_FLAGS}
+        dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} ARCH ${P_ARCH} FLAGS ${P_FLAGS}
                              LINK_FLAGS -T ${SW}/mig1.ld)
         foreach(sim IN ITEMS icarus verilator)
             cmake_language(CALL dc_add_${sim}_run ${prog} BUILD design_mig1_sim
@@ -102,6 +106,9 @@ if(DARK_CIRCUIT_RISCV)
     # CSRs and counters: Zicsr instructions on mscratch, read-only CSRs, Zicntr.
     mig1_program_test(csr SOURCES csr.S ARGS +expect_regs)
 
+    # M extension: results used right away, division and branches, cycle cost, minstret.
+    mig1_program_test(muldiv SOURCES muldiv.S ARCH rv32im ARGS +expect_regs)
+
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig1_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
 
@@ -139,6 +146,13 @@ if(DARK_CIRCUIT_RISCV)
             mig1_program_test(rv32mi_${test} SOURCES ${RISCV_TESTS}/isa/rv32mi/${test}.S
                               FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
                               LABELS riscv-tests rv32mi)
+        endforeach()
+
+        # rv32um: multiply and divide.
+        foreach(test IN ITEMS mul mulh mulhsu mulhu div divu rem remu)
+            mig1_program_test(rv32um_${test} SOURCES ${RISCV_TESTS}/isa/rv32um/${test}.S
+                              ARCH rv32im FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
+                              LABELS riscv-tests rv32um)
         endforeach()
     endif()
 endif()

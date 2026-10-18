@@ -30,6 +30,7 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
             ECALL:                                                  kind = KIND_ECALL;
             EBREAK:                                                 kind = KIND_EBREAK;
             CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind = KIND_CSR;
+            MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU:         kind = KIND_MULDIV;
             MRET:                                                   kind = KIND_MRET;
             WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
@@ -87,15 +88,16 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
         dec.uses_rs2 = 1'b0;
         dec.imm      = imm_i;         // JALR, LOAD, OP_IMM (shifts: imm[4:0] is shamt)
         case (kind)
-            KIND_LUI, KIND_AUIPC: begin dec.rd_we = 1'b1;                                                                    dec.imm = imm_u;   end
-            KIND_JAL:             begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK;                                              dec.imm = imm_j;   end
-            KIND_JALR:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK; dec.uses_rs1 = 1'b1;                                            end
-            KIND_LOAD:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LOAD; dec.uses_rs1 = 1'b1;                                            end
-            KIND_OP_IMM:          begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1;                                            end
-            KIND_OP:              begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1;                    end
-            KIND_BRANCH:          begin                                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_b;   end
-            KIND_STORE:           begin                                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_s;   end
-            KIND_CSR:             begin dec.rd_we = 1'b1; dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;                      dec.imm = imm_csr; end
+            KIND_LUI, KIND_AUIPC: begin dec.rd_we = 1'b1;                                                                      dec.imm = imm_u;   end
+            KIND_JAL:             begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK;                                                dec.imm = imm_j;   end
+            KIND_JALR:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK;   dec.uses_rs1 = 1'b1;                                            end
+            KIND_LOAD:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LOAD;   dec.uses_rs1 = 1'b1;                                            end
+            KIND_OP_IMM:          begin dec.rd_we = 1'b1;                         dec.uses_rs1 = 1'b1;                                            end
+            KIND_OP:              begin dec.rd_we = 1'b1;                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1;                    end
+            KIND_MULDIV:          begin dec.rd_we = 1'b1; dec.rd_src = RD_MULDIV; dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1;                    end
+            KIND_BRANCH:          begin                                           dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_b;   end
+            KIND_STORE:           begin                                           dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_s;   end
+            KIND_CSR:             begin dec.rd_we = 1'b1; dec.rd_src = RD_CSR;    dec.uses_rs1 = csr_reg;                      dec.imm = imm_csr; end
             default:              ;  // FENCE, ECALL, EBREAK, MRET, WFI, ILLEGAL
         endcase
     end

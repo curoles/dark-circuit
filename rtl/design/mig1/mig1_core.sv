@@ -9,12 +9,12 @@
  *
  * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
  * Mig1Control (run, stall, redirect, traps, halt), Mig1Decode, Mig1Regs, Mig1Alu,
- * Mig1Branch, Mig1Lsu (dmem requests), Mig1Csr. Pipeline: IF fetches, EX executes the
+ * Mig1Branch, Mig1Lsu (dmem requests), Mig1Csr, Mig1MulDiv. Pipeline: IF fetches, EX executes the
  * instruction that arrives from imem; parts do not depend on that, so they fit
  * a 5-stage pipeline too. Signals of a stage have its prefix: if_, ex_.
  * A taken branch or jump, a trap and MRET cost one bubble: the instruction fetched
  * after it is dropped.
- * A load stays 2 cycles in EX: it waits for dmem data.
+ * A load stays 2 cycles in EX (it waits for dmem data), a division 34 cycles.
  */
 module Mig1Core import Mig1Pkg::*; #(
     parameter RST_ADDR = MIG1_RST_ADDR     // PC after reset, byte address
@@ -48,6 +48,8 @@ module Mig1Core import Mig1Pkg::*; #(
     word_t       ex_load_data;
     word_t       ex_csr_rdata;      // old value of the CSR of a CSR instruction
     logic        ex_csr_illegal;
+    word_t       ex_muldiv_result;  // product, quotient or remainder of an M instruction
+    logic        ex_muldiv_stall;
     logic        ex_done;           // instruction in EX completes: writes rd, retires
     trap_t       ex_trap;           // instruction in EX faults: retires as a trap
     csr_t        ex_csr;            // mtvec, mepc
@@ -65,8 +67,9 @@ module Mig1Core import Mig1Pkg::*; #(
 
     Mig1Control u_mig1_control(
         .clk, .rst_n, .ex(ex_fetch), .ex_insn, .ex_dec, .ex_addr(ex_alu_result),
-        .branch(ex_branch), .lsu(ex_lsu), .csr_illegal(ex_csr_illegal), .csr(ex_csr),
-        .ebreak_halt(dbg_req.ebreak_halt), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
+        .branch(ex_branch), .lsu(ex_lsu), .csr_illegal(ex_csr_illegal),
+        .muldiv_stall(ex_muldiv_stall), .csr(ex_csr), .ebreak_halt(dbg_req.ebreak_halt),
+        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
         .ex_done, .ex_trap, .halt, .halt_pc);
 
     Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(ex_dec));
@@ -96,6 +99,10 @@ module Mig1Core import Mig1Pkg::*; #(
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .trap(ex_trap), .rdata(ex_csr_rdata),
         .illegal(ex_csr_illegal), .csr(ex_csr));
 
+    Mig1MulDiv u_mig1_muldiv(
+        .clk, .rst_n, .valid(ex_fetch.valid), .dec(ex_dec), .rs1_data(ex_rs1_data),
+        .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall), .result(ex_muldiv_result));
+
     // Write back: decode tells whether rd is written and where its value comes from.
     // ex_rd_src with assign: Icarus does not support selects of ex_dec in always_comb.
     assign ex_rd_write = ex_done && ex_dec.rd_we;
@@ -103,10 +110,11 @@ module Mig1Core import Mig1Pkg::*; #(
 
     always_comb
         case (ex_rd_src)
-            RD_LINK: ex_rd_data = ex_link;
-            RD_LOAD: ex_rd_data = ex_load_data;
-            RD_CSR:  ex_rd_data = ex_csr_rdata;
-            default: ex_rd_data = ex_alu_result;
+            RD_LINK:   ex_rd_data = ex_link;
+            RD_LOAD:   ex_rd_data = ex_load_data;
+            RD_CSR:    ex_rd_data = ex_csr_rdata;
+            RD_MULDIV: ex_rd_data = ex_muldiv_result;
+            default:   ex_rd_data = ex_alu_result;
         endcase
 
     // Retire, RVFI: an instruction that completes or traps; fields it does not use are 0.
