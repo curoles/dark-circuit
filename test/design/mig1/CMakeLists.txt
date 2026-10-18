@@ -92,4 +92,31 @@ if(DARK_CIRCUIT_RISCV)
                                 +expect_mem_unchanged)
         endforeach()
     endforeach()
+    # ECALL and illegal words stop the core: illegal=1, nothing written.
+    # One build of illegal.S per case (-DCASE_<case>).
+    foreach(case IN ITEMS ecall zero ones)
+        string(TOUPPER ${case} case_macro)
+        set(prog design_mig1_illegal_${case})
+        dc_add_riscv_program(${prog} SOURCES illegal.S FLAGS -DCASE_${case_macro}
+                             LINK_FLAGS -T ${SW}/mig1.ld)
+        foreach(sim IN ITEMS icarus verilator)
+            cmake_language(CALL dc_add_${sim}_test ${prog} TOP TbMig1 TB tb_mig1.sv
+                           FLISTS ${FLISTS}
+                           ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
+                                +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
+                                +expect_illegal +expect_halt_pc=c +expect_regs
+                                +expect_mem_unchanged)
+        endforeach()
+    endforeach()
+
+    # Debug port and resume: the testbench changes a0 at two EBREAKs and resumes.
+    dc_add_riscv_program(design_mig1_resume SOURCES resume.S LINK_FLAGS -T ${SW}/mig1.ld)
+    foreach(sim IN ITEMS icarus verilator)
+        cmake_language(CALL dc_add_${sim}_test design_mig1_resume TOP TbMig1 TB tb_mig1.sv
+                       FLISTS ${FLISTS}
+                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_resume.hex
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_resume.${sim}.trace
+                            +resumes=2 +expect_sequential +expect_retired=6
+                            +expect_halt_pc=14 +expect_regs)
+    endforeach()
 endif()

@@ -9,6 +9,10 @@ This file has the rules that are not in README.md.
 - Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`),
   instances `u_` and name (`u_aoi22`, `u_mux4_0`). Cells use TSMC names and pins.
 - Multiplexer inputs are zero-based: `sel` = k selects `in<k>`.
+- Port connections: `.name` when the signal has the port's name, `.port(signal)`
+  otherwise; mixing is fine: `u_x(.clk, .rst_n, .ctrl(if_ctrl))`. `.name` never
+  creates an implicit net, a missing signal is an error. No `.*`: it hides what is
+  connected. Old code is converted when it is touched anyway.
 - Every SystemVerilog function is `automatic`.
 - Struct versions of blocks use blocks, parts and gates only, never cells and never
   behavioral operators; behave versions are plain SV.

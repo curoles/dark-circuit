@@ -1,9 +1,10 @@
 /* Mig1 RISC-V RV32I core, synthesizable, memories are outside.
  *
  * Instruction fetch and data access have 1 clock read latency, like SimROM,
- * SimRAM, SRAM and FPGA block RAM. The core stops (halt=1) on EBREAK, ECALL or an
- * illegal instruction; illegal=1 tells that it can not continue. While halted,
- * the debug port reads and writes registers, and resume continues after EBREAK.
+ * SimRAM, SRAM and FPGA block RAM. The core stops (halt=1) on EBREAK, and on a fault
+ * (ECALL, illegal instruction, misaligned jump target or load/store address); then
+ * illegal=1 tells that it can not continue. While halted, the debug port reads and
+ * writes registers, and resume continues after EBREAK.
  *
  * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
  * Mig1Control (run, stall, redirect, halt), Mig1Decode, Mig1Regs, Mig1Alu,
@@ -12,7 +13,6 @@
  * a 5-stage pipeline too. Signals of a stage have its prefix: if_, ex_.
  * A taken branch or jump costs one bubble: the instruction fetched after it is dropped.
  * A load stays 2 cycles in EX: it waits for dmem data.
- * TODO: ECALL and illegal instructions retire without effect, the core halts at EBREAK.
  */
 module Mig1Core import Mig1Pkg::*; #(
     parameter RST_ADDR = MIG1_RST_ADDR     // PC after reset, byte address
@@ -59,9 +59,9 @@ module Mig1Core import Mig1Pkg::*; #(
         .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(ex_fetch));
 
     Mig1Control u_mig1_control(
-        .clk(clk), .rst_n(rst_n), .ex(ex_fetch), .ex_insn(ex_insn), .branch(ex_branch),
-        .lsu(ex_lsu), .fetch_ctrl(if_ctrl), .ex_done(ex_done), .halt(halt), .illegal(illegal),
-        .halt_pc(halt_pc));
+        .clk(clk), .rst_n(rst_n), .ex(ex_fetch), .ex_dec(ex_dec), .branch(ex_branch),
+        .lsu(ex_lsu), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .ex_done(ex_done),
+        .halt(halt), .illegal(illegal), .halt_pc(halt_pc));
 
     Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(ex_dec));
 
@@ -106,10 +106,5 @@ module Mig1Core import Mig1Pkg::*; #(
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;
-
-    // TODO: resume.
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire stub_unused = &{1'b0, dbg_req.resume};
-    /* verilator lint_on UNUSEDSIGNAL */
 
 endmodule

@@ -4,32 +4,29 @@
  * instruction memory (SimROM) and data memory (SimRAM): code is fetched from imem,
  * loads and stores go to dmem. Both have 1 << MEM_ADDR_WIDTH bytes; the core address
  * bits above them are ignored, so addresses wrap around.
- *
- * TODO: semihosting service on the debug port; for now dbg_req is idle.
+ * The debug port of the core is a port of Mig1Cpu: the testbench (or a semihosting
+ * service) reads and writes registers while halted and resumes the core.
  */
 module Mig1Cpu import Mig1Pkg::*; #(
     parameter MEM_ADDR_WIDTH = MIG1_MEM_ADDR_WIDTH  // memory size: 1 << MEM_ADDR_WIDTH bytes
 )(
-    input  wire     clk,
-    input  wire     rst_n,          // synchronous reset, active low
-    output wire     halt,           // core halted
-    output wire     illegal,        // core stopped by ECALL or illegal instruction
-    output retire_t retire          // for trace in testbench
+    input  wire      clk,
+    input  wire      rst_n,          // synchronous reset, active low
+    output wire      halt,           // core halted
+    output wire      illegal,        // core stopped by a fault, see Mig1Core
+    output retire_t  retire,         // for trace in testbench
+    input  dbg_req_t dbg_req,        // debug, used while halted
+    output dbg_rsp_t dbg_rsp
 );
     imem_rsp_t imem_rsp;
     dmem_rsp_t dmem_rsp;
-    dbg_req_t  dbg_req;
     // Not fully used: address bits above MEM_ADDR_WIDTH (memories wrap around),
-    // rd_valid of dmem (the core knows the read latency),
-    // debug response (no semihosting service yet).
+    // rd_valid of dmem (the core knows the read latency).
     /* verilator lint_off UNUSEDSIGNAL */
     imem_req_t imem_req;
     dmem_req_t dmem_req;
-    dbg_rsp_t  dbg_rsp;
     wire       dmem_rd_valid;
     /* verilator lint_on UNUSEDSIGNAL */
-
-    assign dbg_req = '0;
 
     Mig1Core u_mig1_core(
         .clk(clk), .rst_n(rst_n),

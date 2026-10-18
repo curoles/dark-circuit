@@ -2,8 +2,8 @@
  *
  * mem.S is linked with sw/riscv/mig1.ld: 5 instructions at 0x00..0x10 and data word
  * 0x12345678 in .rodata at 0x14. After load() of +hex=<file>, both memories must
- * hold these words, read with peek() as little-endian bytes. Then 20 cycles:
- * the core (still a stub) must not stop.
+ * hold these words, read with peek() as little-endian bytes. Running programs is
+ * tested by TbMig1.
  * Stops at the first mismatch with $fatal.
  */
 module TbMig1Mem;
@@ -14,11 +14,13 @@ module TbMig1Mem;
 
     wire       clk;
     wire       rst_n;
+    dbg_req_t  dbg_req;     // idle
+    // Not checked: this test only loads memories.
+    /* verilator lint_off UNUSEDSIGNAL */
     wire       halt;
     wire       illegal;
-    // Not checked yet, the core is a stub.
-    /* verilator lint_off UNUSEDSIGNAL */
     retire_t   retire;
+    dbg_rsp_t  dbg_rsp;
     /* verilator lint_on UNUSEDSIGNAL */
 
     reg [AW-1:0] addr [NR];
@@ -29,7 +31,10 @@ module TbMig1Mem;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk(clk));
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk(clk), .rst_n(rst_n));
 
-    Mig1Cpu u_mig1_cpu(.clk(clk), .rst_n(rst_n), .halt(halt), .illegal(illegal), .retire(retire));
+    assign dbg_req = '0;
+
+    Mig1Cpu u_mig1_cpu(.clk(clk), .rst_n(rst_n), .halt(halt), .illegal(illegal), .retire(retire),
+                       .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
 
     // Word at byte address a of instruction or data memory, little-endian.
     function automatic [31:0] imem_word(input [AW-1:0] a);
@@ -60,12 +65,6 @@ module TbMig1Mem;
                 $fatal(1, "Mig1 mem: imem word at %h got %h, expected %h", addr[i], imem_word(addr[i]), word[i]);
             if (dmem_word(addr[i]) !== word[i])
                 $fatal(1, "Mig1 mem: dmem word at %h got %h, expected %h", addr[i], dmem_word(addr[i]), word[i]);
-        end
-
-        repeat (20) begin
-            @(posedge clk); #1;
-            if (halt !== 1'b0 || illegal !== 1'b0)
-                $fatal(1, "Mig1 mem: core stopped, halt=%b illegal=%b", halt, illegal);
         end
 
         $display("PASS");
