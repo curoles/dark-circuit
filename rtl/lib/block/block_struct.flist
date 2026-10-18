@@ -14,4 +14,4 @@
 -F lfsr/struct/lfsr.flist
 -F stochastic_bitstream_gen/struct/stochastic_bitstream_gen.flist
 -F csa_multiplier/struct/csa_multiplier.flist
--F divider/behave/divider.flist
+-F divider/struct/divider.flist

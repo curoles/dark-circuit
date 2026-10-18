@@ -210,5 +210,5 @@ the paths of trace files.
 
 ## Next
 
-Structural versions of the M blocks, interrupts (timer), 5-stage pipeline; Spike cosim (lockstep) and riscv-formal
+Interrupts (timer), 5-stage pipeline; Spike cosim (lockstep) and riscv-formal
 on the RVFI trace.

@@ -1,7 +1,7 @@
 set(LIB ${DARK_CIRCUIT_RTL_LIB})
 
 # Same testbench for both versions, built with the aggregate flists; Int32Div uses the
-# Divider block (until their struct versions exist, the struct flists have behave ones).
+# Divider block, the struct version also parts and gates.
 dc_add_mainsim_test(numeric_int32_div_behave TOP TbInt32Div TB tb_int32_div.sv
                     FLISTS ${LIB}/sim/sim.flist
                            ${LIB}/block/block_behave.flist
