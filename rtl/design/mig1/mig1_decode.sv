@@ -30,6 +30,8 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
             ECALL:                                                  kind = KIND_ECALL;
             EBREAK:                                                 kind = KIND_EBREAK;
             CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind = KIND_CSR;
+            MRET:                                                   kind = KIND_MRET;
+            WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
         endcase
 
@@ -94,7 +96,7 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
             KIND_BRANCH:          begin                                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_b;   end
             KIND_STORE:           begin                                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_s;   end
             KIND_CSR:             begin dec.rd_we = 1'b1; dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;                      dec.imm = imm_csr; end
-            default:              ;  // FENCE, ECALL, EBREAK, ILLEGAL
+            default:              ;  // FENCE, ECALL, EBREAK, MRET, WFI, ILLEGAL
         endcase
     end
 

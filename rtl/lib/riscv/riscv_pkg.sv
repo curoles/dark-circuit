@@ -3,7 +3,8 @@
  *
  * Assign an instruction to insn_fmt_t.word and read the fields of a format,
  * for example f.b.imm_12; immediate bits keep the spec names (imm_10_5 is imm[10:5]).
- * F3_* are the funct3 values that select the operation inside an opcode.
+ * F3_* are the funct3 values that select the operation inside an opcode,
+ * CAUSE_* the exception codes of mcause (privileged spec).
  * Encodings of instructions are in RiscvInstrPkg, CSR addresses in RiscvCsrPkg
  * (both generated from riscv-opcodes).
  */
@@ -44,6 +45,19 @@ package RiscvPkg;
     localparam logic [2:0] F3_CSRRWI  = 3'b101;
     localparam logic [2:0] F3_CSRRSI  = 3'b110;
     localparam logic [2:0] F3_CSRRCI  = 3'b111;
+
+    // Exception codes of mcause (interrupt bit 0), privileged spec; names as in riscv-opcodes.
+    localparam logic [4:0] CAUSE_MISALIGNED_FETCH    = 5'd0;
+    localparam logic [4:0] CAUSE_FETCH_ACCESS        = 5'd1;
+    localparam logic [4:0] CAUSE_ILLEGAL_INSTRUCTION = 5'd2;
+    localparam logic [4:0] CAUSE_BREAKPOINT          = 5'd3;
+    localparam logic [4:0] CAUSE_MISALIGNED_LOAD     = 5'd4;
+    localparam logic [4:0] CAUSE_LOAD_ACCESS         = 5'd5;
+    localparam logic [4:0] CAUSE_MISALIGNED_STORE    = 5'd6;
+    localparam logic [4:0] CAUSE_STORE_ACCESS        = 5'd7;
+    localparam logic [4:0] CAUSE_USER_ECALL          = 5'd8;
+    localparam logic [4:0] CAUSE_SUPERVISOR_ECALL    = 5'd9;
+    localparam logic [4:0] CAUSE_MACHINE_ECALL       = 5'd11;
 
     /* verilator lint_on UNUSEDPARAM */
 

@@ -10,18 +10,19 @@
  *   address rs1_rdata + imm, size by funct3 (computed here from insn),
  * - load: bytes of mem_rdata under mem_rmask are the bytes of dmem,
  * - store: one clock later dmem has the bytes of mem_wdata under mem_wmask,
- * - trap only with +expect_illegal, as the last instruction, at halt_pc,
+ * - traps only with +expect_trap,
  * - nothing retires after halt,
  * - no X or Z in retire (Icarus only, Verilator is 2-state),
  * - with +expect_sequential: every pc is the previous pc + 4 (straight-line code).
  * Register writes of retire (rd_addr, rd_wdata) are kept in a shadow copy of the registers.
- * At the end: halt with illegal=0 passes, illegal=1 fails; with +expect_illegal it is
- * the other way around, and a resume must not restart the core (illegal=1 is final). And
+ * The testbench is the debugger: dbg_req.ebreak_halt=1, so EBREAK halts the core
+ * (with +first_ebreak_traps it is 0 until an EBREAK has trapped, then 1).
+ * At the end the core must be halted, and
+ * - with +expect_trap: at least one trap happened,
  * - with +expect_retired=<n>: n instructions retired,
  * - with +expect_halt_pc=<hex byte address without 0x>: the core halted there,
  * - with +expect_regs: the shadow registers have the values of the table that the
- *   program puts right after the halting instruction (EBREAK, or the instruction
- *   that made illegal=1): number of entries n, then n pairs of
+ *   program puts right after the halting EBREAK: number of entries n, then n pairs of
  *   words register, value; a register in the table that was never written fails,
  * - with +expect_mem_unchanged: dmem equals imem byte for byte; Mig1Cpu loads the
  *   same image into both, so this shows that nothing was stored,
@@ -53,7 +54,6 @@ module TbMig1;
     wire             clk;
     wire             rst_n;
     wire             halt;
-    wire             illegal;
     retire_t         retire;
     wire [WIDTH-1:0] retire_pc;     // byte address
     wire [WIDTH-1:0] halt_pc;       // byte address
@@ -66,7 +66,10 @@ module TbMig1;
     reg              expect_sequential;
     integer          max_cycles;
     integer          expect_retired; // -1: not checked
-    reg              expect_illegal;
+    reg              expect_trap;
+    reg              first_ebreak_traps;
+    reg              ebreak_trapped;  // an EBREAK has trapped
+    integer          traps;
     reg              check_halt_pc;
     reg [WIDTH-1:0]  expect_halt_pc;
     reg              expect_regs;
@@ -78,7 +81,6 @@ module TbMig1;
     integer          retired;
     reg [WIDTH-1:0]  prev_pc;
     reg [WIDTH-1:0]  prev_pc_wdata;  // next pc told by the previous retired instruction
-    reg              last_trap;      // the last retired instruction trapped
     reg              store_check;    // check dmem for the store retired one clock before
     reg [WIDTH-1:0]  store_addr;
     strb_t           store_mask;
@@ -96,8 +98,7 @@ module TbMig1;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk(clk));
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk(clk), .rst_n(rst_n));
 
-    Mig1Cpu u_mig1_cpu(.clk(clk), .rst_n(rst_n), .halt(halt), .illegal(illegal), .retire(retire),
-                       .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
+    Mig1Cpu u_mig1_cpu(.clk, .rst_n, .halt, .retire, .dbg_req, .dbg_rsp);
 
     assign retire_pc = retire.pc_rdata;
     assign halt_pc   = {dbg_rsp.halt_pc, {IADDR_START{1'b0}}};
@@ -355,8 +356,13 @@ module TbMig1;
             if (retire.mem_rmask != 0 && !dmem_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata))
                 $fatal(1, "Mig1: load at pc %h from %h mask %b got %h, dmem has %h", retire_pc, retire.mem_addr,
                        retire.mem_rmask, retire.mem_rdata, dmem_word(retire.mem_addr));
-            if (retire.trap && !expect_illegal)
+            if (retire.trap && !expect_trap)
                 $fatal(1, "Mig1: trap at pc %h", retire_pc);
+            if (retire.trap) begin
+                traps <= traps + 1;
+                if (retire.insn == INSN_EBREAK)
+                    ebreak_trapped <= 1'b1;
+            end
             if (trace_fd != 0) begin
                 $fwrite(trace_fd, "%8d pc=%h insn=%h", cycle, retire_pc, retire.insn);
                 if (retire.rd_addr != 0)
@@ -381,7 +387,6 @@ module TbMig1;
             end
             prev_pc       <= retire_pc;
             prev_pc_wdata <= retire.pc_wdata;
-            last_trap     <= retire.trap;
             retired       <= retired + 1;
         end
         if (halt && dbg_req.reg_wr && dbg_req.reg_addr != 0) begin
@@ -399,7 +404,8 @@ module TbMig1;
         cycle   = 0;
         prev_pc = 0;
         prev_pc_wdata = 0;
-        last_trap     = 0;
+        traps          = 0;
+        ebreak_trapped = 0;
         store_check   = 0;
         written = 0;
         dbg_req = '0;
@@ -413,7 +419,9 @@ module TbMig1;
         riscv_test        = $test$plusargs("riscv_test");
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
-        expect_illegal    = $test$plusargs("expect_illegal");
+        expect_trap        = $test$plusargs("expect_trap");
+        first_ebreak_traps = $test$plusargs("first_ebreak_traps");
+        dbg_req.ebreak_halt = !first_ebreak_traps;
         check_halt_pc = $value$plusargs("expect_halt_pc=%h", expect_halt_pc);
 
         // +trace=<file> writes the trace into <file>, +trace alone prints it.
@@ -435,18 +443,20 @@ module TbMig1;
         @(posedge rst_n);
         done = 0;
         while (!done) begin
-            while (!halt && !illegal) begin
+            while (!halt) begin
                 @(posedge clk); #1;
                 cycle = cycle + 1;
                 if (cycle > max_cycles)
                     $fatal(1, "Mig1: no halt after %0d cycles, %0d instructions retired", max_cycles, retired);
+                if (ebreak_trapped)
+                    dbg_req.ebreak_halt = 1'b1;
             end
             halted = 1;
-            if (!illegal && semihost_call()) begin
+            if (semihost_call()) begin
                 semihost();
                 done   = exited;
                 halted = exited;
-            end else if (illegal || resumes == 0)
+            end else if (resumes == 0)
                 done = 1;
             else begin
                 debug_and_resume();
@@ -454,16 +464,9 @@ module TbMig1;
                 halted  = 0;
             end
         end
-        if (illegal && !expect_illegal)
-            $fatal(1, "Mig1: illegal=1 at %h, last retired pc %h", halt_pc, prev_pc);
-        if (!illegal && expect_illegal)
-            $fatal(1, "Mig1: halted at %h with illegal=0, +expect_illegal", halt_pc);
         @(posedge clk); #1;         // the always block has seen the last retire
-        if (expect_illegal && (!last_trap || prev_pc !== halt_pc))
-            $fatal(1, "Mig1: illegal=1, but the last retired instruction (at %h) is not a trap at %h",
-                   prev_pc, halt_pc);
-        if (illegal)
-            resume_core(1'b0);     // must not restart the core, checked below
+        if (expect_trap && traps == 0)
+            $fatal(1, "Mig1: +expect_trap, but no instruction trapped");
         if (check_exit && !exited)
             $fatal(1, "Mig1: no semihosting exit, halted at %h", halt_pc);
         if (exited && exit_status != (check_exit ? expect_exit : 0))

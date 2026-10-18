@@ -1,17 +1,19 @@
 /* Mig1 RISC-V RV32I core, synthesizable, memories are outside.
  *
  * Instruction fetch and data access have 1 clock read latency, like SimROM,
- * SimRAM, SRAM and FPGA block RAM. The core stops (halt=1) on EBREAK, and on a fault
- * (ECALL, illegal instruction, misaligned jump target or load/store address); then
- * illegal=1 tells that it can not continue. While halted, the debug port reads and
- * writes registers, and resume continues after EBREAK.
+ * SimRAM, SRAM and FPGA block RAM. Faults (ECALL, illegal instruction, misaligned
+ * jump target or load/store address, ...) trap to mtvec in machine mode, MRET returns.
+ * EBREAK traps too, or halts the core (halt=1) when the debugger sets
+ * dbg_req.ebreak_halt; while halted, the debug port reads and writes registers, and
+ * resume continues after EBREAK.
  *
  * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
- * Mig1Control (run, stall, redirect, halt), Mig1Decode, Mig1Regs, Mig1Alu,
+ * Mig1Control (run, stall, redirect, traps, halt), Mig1Decode, Mig1Regs, Mig1Alu,
  * Mig1Branch, Mig1Lsu (dmem requests), Mig1Csr. Pipeline: IF fetches, EX executes the
  * instruction that arrives from imem; parts do not depend on that, so they fit
  * a 5-stage pipeline too. Signals of a stage have its prefix: if_, ex_.
- * A taken branch or jump costs one bubble: the instruction fetched after it is dropped.
+ * A taken branch or jump, a trap and MRET cost one bubble: the instruction fetched
+ * after it is dropped.
  * A load stays 2 cycles in EX: it waits for dmem data.
  */
 module Mig1Core import Mig1Pkg::*; #(
@@ -25,10 +27,7 @@ module Mig1Core import Mig1Pkg::*; #(
     output dmem_req_t dmem_req,
     input  dmem_rsp_t dmem_rsp,
 
-    output wire       halt,                // core stopped: EBREAK, ECALL or illegal
-    output wire       illegal,             // stopped by ECALL, illegal instruction,
-                                           // jump to address not divisible by 4
-                                           // or misaligned load/store
+    output wire       halt,                // core halted at EBREAK, see dbg_req.ebreak_halt
     output retire_t   retire,              // RVFI trace, see Mig1Pkg
 
     input  dbg_req_t  dbg_req,
@@ -50,7 +49,8 @@ module Mig1Core import Mig1Pkg::*; #(
     word_t       ex_csr_rdata;      // old value of the CSR of a CSR instruction
     logic        ex_csr_illegal;
     logic        ex_done;           // instruction in EX completes: writes rd, retires
-    logic        ex_trap;           // instruction in EX faults: retires as a trap
+    trap_t       ex_trap;           // instruction in EX faults: retires as a trap
+    csr_t        ex_csr;            // mtvec, mepc
     logic        ex_rd_write;       // instruction in EX writes rd in this cycle
     rd_src_t     ex_rd_src;
     word_t       ex_rd_data;
@@ -64,9 +64,10 @@ module Mig1Core import Mig1Pkg::*; #(
         .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(ex_fetch));
 
     Mig1Control u_mig1_control(
-        .clk, .rst_n, .ex(ex_fetch), .ex_dec, .branch(ex_branch), .lsu(ex_lsu),
-        .csr_illegal(ex_csr_illegal), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
-        .ex_done, .ex_trap, .halt, .illegal, .halt_pc);
+        .clk, .rst_n, .ex(ex_fetch), .ex_insn, .ex_dec, .ex_addr(ex_alu_result),
+        .branch(ex_branch), .lsu(ex_lsu), .csr_illegal(ex_csr_illegal), .csr(ex_csr),
+        .ebreak_halt(dbg_req.ebreak_halt), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
+        .ex_done, .ex_trap, .halt, .halt_pc);
 
     Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(ex_dec));
 
@@ -92,7 +93,8 @@ module Mig1Core import Mig1Pkg::*; #(
 
     Mig1Csr u_mig1_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
-        .rs1_data(ex_rs1_data), .rdata(ex_csr_rdata), .illegal(ex_csr_illegal));
+        .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .trap(ex_trap), .rdata(ex_csr_rdata),
+        .illegal(ex_csr_illegal), .csr(ex_csr));
 
     // Write back: decode tells whether rd is written and where its value comes from.
     // ex_rd_src with assign: Icarus does not support selects of ex_dec in always_comb.
@@ -112,12 +114,12 @@ module Mig1Core import Mig1Pkg::*; #(
         if (!rst_n)            retire_order <= '0;
         else if (retire.valid) retire_order <= retire_order + 1'b1;
 
-    assign retire.valid     = ex_done || ex_trap;
+    assign retire.valid     = ex_done || ex_trap.valid;
     assign retire.order     = retire_order;
     assign retire.insn      = ex_insn;
-    assign retire.trap      = ex_trap;
+    assign retire.trap      = ex_trap.valid;
     assign retire.pc_rdata  = {ex_fetch.pc, {IADDR_START{1'b0}}};
-    assign retire.pc_wdata  = ex_branch.taken ? {ex_branch.target, {IADDR_START{1'b0}}} : ex_link;
+    assign retire.pc_wdata  = if_ctrl.redirect ? {if_ctrl.target, {IADDR_START{1'b0}}} : ex_link;
     assign retire.rs1_addr  = ex_dec.uses_rs1 ? ex_dec.rs1 : '0;
     assign retire.rs1_rdata = ex_dec.uses_rs1 ? ex_rs1_data : '0;
     assign retire.rs2_addr  = ex_dec.uses_rs2 ? ex_dec.rs2 : '0;

@@ -1,13 +1,14 @@
 # Mig1: RV32I RISC-V CPU
 
 Mig1 is a small RISC-V CPU: RV32I base integer instructions, Zicsr (CSR instructions)
-and Zicntr (counters); no traps or interrupts yet.
+and Zicntr (counters), machine-mode traps; no interrupts yet.
 It passes riscv-tests rv32ui (40 of 42 tests; fence_i and ma_data do not apply, see Testing).
 
 - 2-stage pipeline: IF (fetch) | EX (everything else).
 - Harvard: instruction memory and data memory, both with 1 clock read latency
   (like SRAM and FPGA block RAM). Mig1Cpu loads the same program image into both.
-- Stops (halt) on EBREAK; a debugger resumes it. Stops for good (illegal) on faults.
+- Faults trap to mtvec (machine mode), MRET returns. With a debugger attached, EBREAK
+  halts the core and the debugger resumes it.
 - Runs C programs with semihosting (print, exit code): the same binary code as on QEMU.
 - Retire trace of every retired instruction in RVFI form (riscv-formal), for testbenches.
 
@@ -39,7 +40,7 @@ EX  imem_rsp -> ex_insn -> Mig1Decode -> ex_dec
     rd value = ALU result | link | load data | CSR value, chosen by ex_dec.rd_src;
                Mig1Regs writes it when ex_done=1
     ex_dec, branch, lsu, CSR fault -> Mig1Control -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
-                                       -> ex_done, halt, illegal, halt_pc
+                                       -> ex_done, ex_trap (to Mig1Csr), halt, halt_pc
 ```
 
 Mig1Core only connects parts; its signals have the prefix of their stage (`if_`, `ex_`).
@@ -49,13 +50,13 @@ is, so the same parts fit a 5-stage pipeline.
 | Part        | Stage | Does |
 |-------------|-------|------|
 | Mig1Fetch   | IF    | PC (PrgCounter), imem request; holds on stall, jumps on redirect and reset |
-| Mig1Control | -     | run, stall, redirect, halt, faults, resume; ex_done: the instruction completes |
+| Mig1Control | -     | run, stall, redirect, traps (cause, mtval), halt, resume; ex_done: the instruction completes |
 | Mig1Decode  | EX    | instruction -> decoded_t: kind, registers, funct3, alt, immediate, controls |
 | Mig1Regs    | EX    | x0..x31, 2 reads + 1 write; the debug port owns read port 0 and the write port while halted |
 | Mig1Alu     | EX    | rd value of OP, OP-IMM, LUI, AUIPC; address rs1 + imm of loads and stores |
 | Mig1Branch  | EX    | taken, target, misaligned target; link = pc + 4 for JAL, JALR |
 | Mig1Lsu     | EX    | dmem requests, store strobes, load data extension, misaligned address, load stall |
-| Mig1Csr     | EX    | CSRs and counters; CSR instructions read the old value and write the new one |
+| Mig1Csr     | EX    | CSRs, counters, trap CSRs; CSR instructions read the old value and write the new one |
 
 Boundary structs are in Mig1Pkg, named by their producer: `fetch_t`, `fetch_ctrl_t`,
 `decoded_t`, `branch_t`, `lsu_t`; memory and debug ports are `<group>_req_t`/`_rsp_t`.
@@ -101,26 +102,37 @@ RiscvCsrPkg (generated from riscv-opcodes, like the encodings).
 | `cycle`, `instret` (and `h`) | read | Zicntr: the same counters |
 | `time`, `timeh` | read | the cycle counter: Mig1 has no real-time clock |
 | `mscratch` | read/write | scratch word |
+| `mstatus` | MIE, MPIE read/write | MPP reads 3 (machine mode only), other bits 0; `mstatush` reads 0 |
+| `mtvec` | read/write | trap handler address; direct mode only, bits 1:0 read 0 |
+| `mepc`, `mcause`, `mtval` | read/write | set by traps; `mepc` bits 1:0 read 0 |
+| `mie`, `mip` | read 0, writes ignored | no interrupts yet |
 | `misa` | read, writes ignored | `0x40000100`: RV32I |
 | `mvendorid`, `marchid`, `mimpid`, `mhartid` | read | 0 |
 
 A CSR write wins over the count of its cycle: the next read gives the written value.
 A CSR instruction that reads instret sees the count before itself.
 
-## Halt, faults and debug
+## Traps, halt and debug
 
-| Instruction in EX | Completes (rd, memory, retire) | halt | illegal | resume |
-|---|---|---|---|---|
-| EBREAK | yes | 1 | 0 | continues at halt_pc + 4 |
-| ECALL, illegal encoding | no | 1 | 1 | no effect, final |
-| taken jump/branch to an address not divisible by 4 | no | 1 | 1 | no effect, final |
-| load/store with misaligned address | no | 1 | 1 | no effect, final |
-| CSR instruction on a CSR Mig1 does not have, or writing a read-only CSR | no | 1 | 1 | no effect, final |
+A fault of the instruction in EX is a trap (machine mode): the instruction writes
+nothing, retires with `trap=1` (minstret does not count it), and fetch continues at
+`mtvec`; `mepc` is its address, `mcause` and `mtval` tell why, `mstatus.MPIE` gets MIE
+and MIE gets 0. MRET returns to `mepc` (MIE gets MPIE, MPIE gets 1). WFI is a no-op.
 
-`halt_pc` is the address of the instruction that stopped the core; nothing is in flight
-then. While halted, the debug port (`dbg_req_t`, `dbg_rsp_t`) reads a register
-(combinational) and writes one per clock; `resume` for one clock restarts the core
-after an EBREAK. ECALL is a fault because Mig1 has no traps.
+| Fault | `mcause` | `mtval` |
+|---|---|---|
+| taken jump/branch to an address not divisible by 4 | 0 misaligned fetch | the target |
+| illegal encoding; CSR instruction on a CSR Mig1 does not have, or writing a read-only CSR | 2 illegal instruction | the instruction |
+| EBREAK when no debugger is attached (`ebreak_halt=0`) | 3 breakpoint | its address |
+| load / store with misaligned address | 4 / 6 misaligned load / store | the address |
+| ECALL | 11 environment call from M-mode | 0 |
+
+EBREAK halts the core instead when the debugger sets `dbg_req.ebreak_halt` (like
+`dcsr.ebreakm` of the debug spec): it completes, `halt=1`, `halt_pc` is its address,
+nothing is in flight. While halted, the debug port (`dbg_req_t`, `dbg_rsp_t`) reads a
+register (combinational) and writes one per clock; `resume` for one clock continues at
+`halt_pc + 4`. TbMig1 is attached as debugger (`ebreak_halt=1`), so programs end with
+EBREAK; semihosting uses that too.
 
 ## Semihosting
 
@@ -170,7 +182,8 @@ the trace to `<test>.<simulator>.trace`.
 | `fetch`, `alu_prog`, `branch`, `load_store`, `resume` | programs on TbMig1, registers checked at the end |
 | `semihosting` | C program of `test/sw/riscv/semihosting` (also run on QEMU): output and exit code 3 |
 | `csr` | CSR instructions on mscratch, read-only CSRs, counters |
-| `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: halt at the instruction, nothing written |
+| `trap` | mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap |
+| `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: a handler checks mcause, mepc, mtval; nothing written |
 | `rv32ui_*` (labels `riscv-tests`, `rv32ui`) | riscv-tests, environment `test/design/mig1/riscv_test.h` |
 
 Not run from rv32ui: fence_i (writes code into memory, Mig1 fetches from a separate
@@ -188,5 +201,6 @@ the paths of trace files.
 
 ## Next
 
-Machine-mode traps (mtvec, mepc, mcause, mtval, mstatus, MRET), 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
+riscv-tests rv32mi (machine-mode tests) with the standard riscv-tests environment,
+interrupts (timer), 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
 on the RVFI trace.

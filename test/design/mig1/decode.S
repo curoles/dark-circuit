@@ -38,6 +38,8 @@
     .equ K_ECALL,   11
     .equ K_EBREAK,  12
     .equ K_CSR,     13
+    .equ K_MRET,    14
+    .equ K_WFI,     15
 
 /* Expected decode after the instruction. */
     .macro EXPECT kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
@@ -100,7 +102,7 @@
     EXPECT K_CSR, 1, 0, 0, \rd, 0, 0, \funct3, 0, \csr
     .endm
 
-    .macro NOARG insn, kind                         /* fence ecall ebreak */
+    .macro NOARG insn, kind                         /* fence ecall ebreak mret wfi */
     \insn
     EXPECT \kind, 0, 0, 0, 0, 0, 0, 0, 0, 0
     .endm
@@ -193,6 +195,8 @@ cases:
     NOARG  fence,  K_FENCE
     NOARG  ecall,  K_ECALL
     NOARG  ebreak, K_EBREAK
+    NOARG  mret,   K_MRET
+    NOARG  wfi,    K_WFI
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
     ILLEGAL 0xffffffff      /* all ones: defined to be illegal */

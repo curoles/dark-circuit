@@ -18,7 +18,6 @@ module TbMig1Mem;
     // Not checked: this test only loads memories.
     /* verilator lint_off UNUSEDSIGNAL */
     wire       halt;
-    wire       illegal;
     retire_t   retire;
     dbg_rsp_t  dbg_rsp;
     /* verilator lint_on UNUSEDSIGNAL */
@@ -33,8 +32,7 @@ module TbMig1Mem;
 
     assign dbg_req = '0;
 
-    Mig1Cpu u_mig1_cpu(.clk(clk), .rst_n(rst_n), .halt(halt), .illegal(illegal), .retire(retire),
-                       .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
+    Mig1Cpu u_mig1_cpu(.clk, .rst_n, .halt, .retire, .dbg_req, .dbg_rsp);
 
     // Word at byte address a of instruction or data memory, little-endian.
     function automatic [31:0] imem_word(input [AW-1:0] a);

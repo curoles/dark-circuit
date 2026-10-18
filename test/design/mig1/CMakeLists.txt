@@ -76,11 +76,11 @@ if(DARK_CIRCUIT_RISCV)
     # Loads and stores: every size and offset, sign extension, strobes.
     mig1_program_test(load_store SOURCES load_store.S ARGS +expect_sequential +expect_regs)
 
-    # Faults stop the core at 0xc with illegal=1, rd and memory not written; one build
-    # of the program per case (-DCASE_<case>):
+    # Faults trap: a handler checks mcause, mepc and mtval; rd and memory are not
+    # written. One build of the program per case (-DCASE_<case>):
     # misaligned jump target, load and store address; ECALL, illegal words, CSR
     # instructions on a missing CSR or writing a read-only one.
-    set(FAULT_ARGS +expect_illegal +expect_halt_pc=c +expect_regs +expect_mem_unchanged)
+    set(FAULT_ARGS +expect_trap +expect_regs +expect_mem_unchanged)
     foreach(case IN ITEMS jalr lw sh)
         string(TOUPPER ${case} case_macro)
         mig1_program_test(misaligned_${case} SOURCES misaligned.S FLAGS -DCASE_${case_macro}
@@ -99,6 +99,9 @@ if(DARK_CIRCUIT_RISCV)
 
     # CSRs and counters: Zicsr instructions on mscratch, read-only CSRs, Zicntr.
     mig1_program_test(csr SOURCES csr.S ARGS +expect_regs)
+
+    # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
+    mig1_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig1 too; crt0.S and the semihosting library of sw/riscv.

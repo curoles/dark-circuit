@@ -1,69 +1,120 @@
-/* Mig1 control: when the core runs, where it fetches, and when it stops.
+/* Mig1 control: when the core runs, where it fetches, when it traps and when it stops.
  *
- * The core runs from reset until the instruction in EX stops it:
- * - EBREAK: it completes and the core halts (halt=1);
- * - a fault: ECALL, an illegal instruction, a taken jump or branch to a misaligned
- *   target, a load or store with a misaligned address, a CSR instruction on a CSR
- *   that does not exist or a write to a read-only CSR: halt=1 and illegal=1,
- *   the instruction does not complete (no register write, no memory write, no retire).
- * halt_pc is the address of the instruction that stopped the core; nothing more is
- * fetched, nothing is in flight. resume=1 while halted after EBREAK runs again from
- * halt_pc + 4: the PC already holds it, it did not advance in the cycle of EBREAK.
- * illegal=1 is final, resume does nothing then.
- * A taken jump or branch redirects fetch to its target; the instruction fetched
- * in the same cycle is dropped (one bubble). lsu.stall keeps the instruction in EX
- * for another cycle (load waiting for data): fetch holds, the instruction completes later.
+ * Traps (machine mode): when the instruction in EX faults, it does not complete (no
+ * register or memory write, minstret does not count it), it retires as a trap with
+ * ex_trap (cause and tval for mcause and mtval, see Mig1Csr) and fetch goes to mtvec.
+ * Faults: cause, tval:
+ * - taken jump or branch to an address not divisible by 4: misaligned fetch, the target;
+ * - illegal instruction, CSR instruction on a CSR that does not exist or writing a
+ *   read-only CSR: illegal instruction, the instruction;
+ * - EBREAK while ebreak_halt=0: breakpoint, its address;
+ * - load or store with a misaligned address: misaligned load or store, the address;
+ * - ECALL: machine ECALL, 0.
+ * MRET goes to mepc. EBREAK while ebreak_halt=1 (a debugger is attached; dcsr.ebreakm of
+ * the debug spec) completes and halts the core: halt=1, halt_pc is its address, nothing
+ * more is fetched, nothing is in flight; resume=1 runs again from halt_pc + 4, where
+ * the PC already is (it did not advance in the cycle of EBREAK).
+ * A redirect (taken jump or branch, trap, MRET) drops the instruction fetched in the
+ * same cycle (one bubble). lsu.stall keeps the instruction in EX for another cycle
+ * (load waiting for data): fetch holds, the instruction completes later.
  * ex_done=1: the instruction in EX completes, it writes rd and retires.
- * ex_trap=1: the instruction in EX faults; it retires as a trap (RVFI), without writes.
  */
-module Mig1Control import Mig1Pkg::*; (
+module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     input  wire                        clk,
-    input  wire                        rst_n,      // synchronous reset, active low
-    input  fetch_t                     ex,         // instruction in EX: valid and pc
+    input  wire                        rst_n,       // synchronous reset, active low
+    input  fetch_t                     ex,          // instruction in EX: valid and pc
+    input  logic [INSN_WIDTH-1:0]      ex_insn,     // insn_t, for mtval of illegal instructions
     // Only kind is used.
     /* verilator lint_off UNUSEDSIGNAL */
-    input  decoded_t                   ex_dec,     // instruction in EX taken apart
+    input  decoded_t                   ex_dec,      // instruction in EX taken apart
     /* verilator lint_on UNUSEDSIGNAL */
-    input  branch_t                    branch,     // next pc of the instruction in EX
-    input  lsu_t                       lsu,        // stall and fault of loads and stores
+    input  logic [WIDTH-1:0]           ex_addr,     // word_t: load/store address, for mtval
+    input  branch_t                    branch,      // next pc of the instruction in EX
+    input  lsu_t                       lsu,         // stall and fault of loads and stores
     input  wire                        csr_illegal, // CSR instruction can not be done
-    input  wire                        resume,     // debug: continue after EBREAK
+    input  csr_t                       csr,         // mtvec, mepc
+    input  wire                        ebreak_halt, // debug: EBREAK halts instead of trapping
+    input  wire                        resume,      // debug: continue after EBREAK
     output fetch_ctrl_t                fetch_ctrl,
     output wire                        ex_done,
-    output wire                        ex_trap,
+    output trap_t                      ex_trap,
     output wire                        halt,
-    output logic                       illegal,
-    output logic [WIDTH-1:IADDR_START] halt_pc     // iaddr_t
+    output logic [WIDTH-1:IADDR_START] halt_pc      // iaddr_t
 );
-    kind_t kind;
-    logic  running;  // 1 from reset until the core halts, again after resume
-    wire   fault;    // instruction in EX can not complete
-    wire   stop;     // instruction in EX is the last one
+    // Fields of the inputs, selected with assign: Icarus warns about selects in always_comb.
+    logic   valid;
+    iaddr_t pc;
+    kind_t  kind;
+    logic   taken;
+    logic   misaligned_target;
+    iaddr_t target;
+    logic   lsu_misaligned;
+    logic   lsu_stall;
+    iaddr_t mtvec;
+    iaddr_t mepc;
+    assign valid             = ex.valid;
+    assign pc                = ex.pc;
+    assign kind              = ex_dec.kind;
+    assign taken             = branch.taken;
+    assign misaligned_target = branch.misaligned;
+    assign target            = branch.target;
+    assign lsu_misaligned    = lsu.misaligned;
+    assign lsu_stall         = lsu.stall;
+    assign mtvec             = csr.mtvec;
+    assign mepc              = csr.mepc;
 
-    assign kind = ex_dec.kind;
+    logic       running;    // 1 from reset until EBREAK halts the core, again after resume
+    logic       stop;       // EBREAK in EX halts the core
+    logic       mret;       // MRET in EX
+    logic       trap;       // instruction in EX traps
+    logic [4:0] cause;
+    word_t      tval;
 
-    assign fault = ex.valid && ((branch.taken && branch.misaligned) || lsu.misaligned ||
-                                csr_illegal || kind == KIND_ECALL || kind == KIND_ILLEGAL);
-    assign stop  = (ex.valid && kind == KIND_EBREAK) || fault;
+    assign stop = ex.valid && kind == KIND_EBREAK && ebreak_halt;
+    assign mret = ex.valid && kind == KIND_MRET;
+
+    // Fault of the instruction in EX; at most one source applies to an instruction.
+    always_comb begin
+        trap  = valid;
+        cause = '0;
+        tval  = '0;
+        if (kind == KIND_ILLEGAL || csr_illegal) begin
+            cause = CAUSE_ILLEGAL_INSTRUCTION;
+            tval  = ex_insn;
+        end else if (kind == KIND_ECALL)
+            cause = CAUSE_MACHINE_ECALL;
+        else if (kind == KIND_EBREAK && !ebreak_halt) begin
+            cause = CAUSE_BREAKPOINT;
+            tval  = {pc, {IADDR_START{1'b0}}};
+        end else if (taken && misaligned_target) begin
+            // The target byte address: misaligned means bit 1 is set, bit 0 is always 0
+            // (JALR clears it, other offsets are even).
+            cause = CAUSE_MISALIGNED_FETCH;
+            tval  = {target, 2'b10};
+        end else if (lsu_misaligned) begin
+            cause = (kind == KIND_STORE) ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
+            tval  = ex_addr;
+        end else
+            trap  = 1'b0;
+    end
+
+    assign ex_trap.valid = trap;
+    assign ex_trap.cause = cause;
+    assign ex_trap.tval  = tval;
 
     always_ff @(posedge clk)
-        if (!rst_n)                          running <= 1'b1;
-        else if (stop)                       running <= 1'b0;
-        else if (halt && resume && !illegal) running <= 1'b1;
-
-    always_ff @(posedge clk)
-        if (!rst_n)     illegal <= 1'b0;
-        else if (fault) illegal <= 1'b1;
+        if (!rst_n)              running <= 1'b1;
+        else if (stop)           running <= 1'b0;
+        else if (halt && resume) running <= 1'b1;
 
     always_ff @(posedge clk)
         if (stop) halt_pc <= ex.pc;
 
-    assign ex_done             = ex.valid && !fault && !lsu.stall;
-    assign ex_trap             = fault;
+    assign ex_done             = ex.valid && !trap && !lsu_stall;
     assign fetch_ctrl.run      = rst_n && running && !stop;
-    assign fetch_ctrl.stall    = lsu.stall;
-    assign fetch_ctrl.redirect = ex.valid && branch.taken && !branch.misaligned;
-    assign fetch_ctrl.target   = branch.target;
+    assign fetch_ctrl.stall    = lsu_stall;
+    assign fetch_ctrl.redirect = trap || mret || (ex.valid && taken);
+    assign fetch_ctrl.target   = trap ? mtvec : mret ? mepc : target;
     assign halt                = !running;
 
 endmodule

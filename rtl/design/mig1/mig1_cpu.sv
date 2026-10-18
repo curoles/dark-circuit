@@ -12,8 +12,7 @@ module Mig1Cpu import Mig1Pkg::*; #(
 )(
     input  wire      clk,
     input  wire      rst_n,          // synchronous reset, active low
-    output wire      halt,           // core halted
-    output wire      illegal,        // core stopped by a fault, see Mig1Core
+    output wire      halt,           // core halted at EBREAK, see Mig1Core
     output retire_t  retire,         // for trace in testbench
     input  dbg_req_t dbg_req,        // debug, used while halted
     output dbg_rsp_t dbg_rsp
@@ -32,7 +31,7 @@ module Mig1Cpu import Mig1Pkg::*; #(
         .clk(clk), .rst_n(rst_n),
         .imem_req(imem_req), .imem_rsp(imem_rsp),
         .dmem_req(dmem_req), .dmem_rsp(dmem_rsp),
-        .halt(halt), .illegal(illegal), .retire(retire),
+        .halt(halt), .retire(retire),
         .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
 
     // Instruction memory, read only.

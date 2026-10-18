@@ -98,6 +98,7 @@ package Mig1Pkg;
         logic      reg_wr;    // 1: write reg_wdata into reg_addr on rising edge
         word_t     reg_wdata;
         logic      resume;    // 1 for one cycle: continue at halt_pc + 1 (next instruction)
+        logic      ebreak_halt; // 1: EBREAK halts (dcsr.ebreakm of the debug spec), 0: it traps
     } dbg_req_t;
 
     typedef struct packed {
@@ -133,6 +134,19 @@ package Mig1Pkg;
         logic   misaligned; // load or store address not aligned to its size: a fault
     } lsu_t;
 
+    // Control -> Csr: trap of the instruction in EX (machine mode).
+    typedef struct packed {
+        logic       valid;
+        logic [4:0] cause;      // exception code for mcause, RiscvPkg CAUSE_*
+        word_t      tval;       // value for mtval: address or instruction, 0 when none
+    } trap_t;
+
+    // Csr -> Control: where traps and MRET go.
+    typedef struct packed {
+        iaddr_t     mtvec;      // trap handler
+        iaddr_t     mepc;       // MRET target
+    } csr_t;
+
     // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none.
     typedef struct packed {
         word_t  addr;       // word address as byte address
@@ -143,7 +157,7 @@ package Mig1Pkg;
     } lsu_mem_t;
 
     // Kind of instruction, from exact match with the RISC-V encodings.
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         KIND_ILLEGAL,   // any word that is not an RV32I instruction
         KIND_LUI,
         KIND_AUIPC,
@@ -157,7 +171,9 @@ package Mig1Pkg;
         KIND_FENCE,
         KIND_ECALL,
         KIND_EBREAK,
-        KIND_CSR        // CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI
+        KIND_CSR,       // CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI
+        KIND_MRET,
+        KIND_WFI
     } kind_t;
 
     // Source of the value written to rd.

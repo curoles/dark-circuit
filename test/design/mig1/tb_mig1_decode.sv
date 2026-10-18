@@ -31,8 +31,8 @@ module TbMig1Decode;
     integer      k;
     integer      addr;
     logic [31:0] e [FIELDS];  // expected: kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
-    logic [3:0]  exp_kind;    // value of kind_t, compared with KIND_* (Icarus can not cast to enum)
-    logic [15:0] tested;      // tested[k]: kind k had a case
+    logic [4:0]  exp_kind;    // value of kind_t, compared with KIND_* (Icarus can not cast to enum)
+    logic [31:0] tested;      // tested[k]: kind k had a case
 
     SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_cases(
         .clk(1'b0), .en(1'b0), .addr({(AW-2){1'b0}}), .data(rom_data));
@@ -52,7 +52,7 @@ module TbMig1Decode;
     endfunction
 
     // Kinds that have funct3, and kinds that have an immediate.
-    function automatic logic has_funct3(input logic [3:0] kind);
+    function automatic logic has_funct3(input logic [4:0] kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP, KIND_FENCE,
             KIND_CSR:                                                                      return 1'b1;
@@ -60,7 +60,7 @@ module TbMig1Decode;
         endcase
     endfunction
 
-    function automatic logic has_imm(input logic [3:0] kind);
+    function automatic logic has_imm(input logic [4:0] kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM,
             KIND_CSR:                                                                                  return 1'b1;
@@ -69,7 +69,7 @@ module TbMig1Decode;
     endfunction
 
     // Source of rd expected for a kind that writes rd, as a value of rd_src_t.
-    function automatic logic [1:0] rd_src_of(input logic [3:0] kind);
+    function automatic logic [1:0] rd_src_of(input logic [4:0] kind);
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
             KIND_LOAD:           return RD_LOAD;
@@ -97,9 +97,9 @@ module TbMig1Decode;
             insn = word(addr);
             for (k = 0; k < FIELDS; k = k + 1)
                 e[k] = word(addr + 4 + 4 * k);
-            exp_kind = e[0][3:0];
+            exp_kind = e[0][4:0];
             #1;
-            check(c, insn, "kind", {28'b0, dec.kind}, e[0]);
+            check(c, insn, "kind", {27'b0, dec.kind}, e[0]);
             if (exp_kind != KIND_ILLEGAL) begin
                 check(c, insn, "rd_we",    {31'b0, dec.rd_we},    e[1]);
                 check(c, insn, "uses_rs1", {31'b0, dec.uses_rs1}, e[2]);
@@ -118,7 +118,7 @@ module TbMig1Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        for (k = 0; k <= KIND_CSR; k = k + 1)
+        for (k = 0; k <= KIND_WFI; k = k + 1)
             if (!tested[k])
                 $fatal(1, "Mig1Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
