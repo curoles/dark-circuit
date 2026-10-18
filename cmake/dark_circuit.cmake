@@ -11,6 +11,11 @@
 #   OFF  - do not use it
 # Example: cmake -S <source-dir> -B <build-dir> -D DARK_CIRCUIT_USE_ICARUS=OFF
 
+# What a build tree has (Makefile D=<tree> sets them): designs of test/design (ALL,
+# a list like mig1, or empty for none), and whether the tests of the library run.
+set(DARK_CIRCUIT_DESIGNS ALL CACHE STRING "Designs to build and test: ALL, a list (mig1), or empty")
+option(DARK_CIRCUIT_LIB_TESTS "Build and run the tests of the library (gates, parts, blocks, ...)" ON)
+
 set(DARK_CIRCUIT_RTL_LIB    ${PROJECT_SOURCE_DIR}/rtl/lib)
 set(DARK_CIRCUIT_RTL_DESIGN ${PROJECT_SOURCE_DIR}/rtl/design)
 

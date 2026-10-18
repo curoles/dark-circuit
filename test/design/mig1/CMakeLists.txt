@@ -123,6 +123,7 @@ if(DARK_CIRCUIT_RISCV)
 
     # riscv-tests with their standard environment env/p (source fetched by cmake/fetch.cmake):
     # self-checking, each test ends with a store to tohost. Labels riscv-tests and the suite.
+    dc_riscv_tests()
     if(DARK_CIRCUIT_RISCV_TESTS)
         set(RISCV_TESTS ${RISCV_TESTS_DIR})
         set(RISCV_TESTS_FLAGS -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)

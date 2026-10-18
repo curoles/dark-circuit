@@ -210,5 +210,5 @@ the paths of trace files.
 
 ## Next
 
-Interrupts (timer), 5-stage pipeline; Spike cosim (lockstep) and riscv-formal
-on the RVFI trace.
+Interrupts (timer), 5-stage pipeline; riscv-formal on the RVFI trace. Spike cosim
+(lockstep) starts with Mig2.

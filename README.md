@@ -164,9 +164,22 @@ on the main simulator, so both versions must behave the same.
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.
 
-Build directory is outside of the source tree, by default it is directory `build`
-next to the repository directory: for repository `~/prj/dark-circuit/dark-circuit`
-it is `~/prj/dark-circuit/build`.
+Build directory is outside of the source tree. There is one build tree per purpose,
+chosen with `D=<tree>`, each in its own directory `build/<tree>` next to the repository
+directory (for repository `~/prj/dark-circuit/dark-circuit`: `~/prj/dark-circuit/build/<tree>`):
+
+- `D=full` (default): the library and all designs, every test
+- `D=lib`: the library and its tests (gates, parts, blocks, numeric, sim, software)
+- `D=<design>`, for example `D=mig1`: that design and its tests, not the library tests
+
+```sh
+make test D=lib          # working on the library
+make test D=mig1         # working on Mig1
+make test                # everything, before a commit
+```
+
+The cmake variables behind it: `DARK_CIRCUIT_DESIGNS` (`ALL`, a list of designs in
+`test/design`, or empty) and `DARK_CIRCUIT_LIB_TESTS` (`ON`, `OFF`).
 
 Run all tests:
 
@@ -180,7 +193,7 @@ Run from any directory:
 make -C <path-to>/dark-circuit test
 ```
 
-Use other build directory:
+Use other build directory (D still chooses what is in it):
 
 ```sh
 make test BUILD_DIR=/tmp/dc-build

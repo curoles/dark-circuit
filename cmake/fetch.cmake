@@ -71,9 +71,15 @@ function(dc_fetch_source NAME)
     set(${NAME}_DIR ${${name}_SOURCE_DIR} PARENT_SCOPE)
 endfunction()
 
+# dc_riscv_tests()
+#
 # riscv-tests: self-checking RISC-V ISA tests (BSD license) and their standard
-# environment env/p, a submodule of riscv-tests (riscv-test-env, BSD license).
-dc_fetch_source(RISCV_TESTS
-    GIT_REPOSITORY https://github.com/riscv-software-src/riscv-tests.git
-    GIT_TAG        d7e86f701b929b5d801f8cda1a4871ab05f452bb
-    GIT_SUBMODULES env)
+# environment env/p, a submodule of riscv-tests (riscv-test-env, BSD license); for the
+# designs that run them, so build trees without them do not fetch. A macro: it sets
+# DARK_CIRCUIT_RISCV_TESTS and RISCV_TESTS_DIR in the directory that calls it.
+macro(dc_riscv_tests)
+    dc_fetch_source(RISCV_TESTS
+        GIT_REPOSITORY https://github.com/riscv-software-src/riscv-tests.git
+        GIT_TAG        d7e86f701b929b5d801f8cda1a4871ab05f452bb
+        GIT_SUBMODULES env)
+endmacro()

@@ -11,6 +11,7 @@
 #   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
 #   make config  - generate files from design configurations
+#   make test D=mig1 - the same in the build tree of one design (D=full, D=lib, D=<design>)
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
 # Directory of this Makefile, it has top CMakeLists.txt.
@@ -19,13 +20,25 @@ SOURCE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 # of the repository (for example to try new code), use ROOT := $(abspath $(SOURCE_DIR)/..).
 ROOT       := $(abspath $(SOURCE_DIR))
 
-BUILD_DIR  ?= $(abspath $(ROOT)/../build)
+# Build tree D: full (default) the library and all designs, lib the library only,
+# <design> one design of test/design without the tests of the library.
+# Each tree has its own build directory, ../build/<D>.
+D          ?= full
+ifeq ($(D),full)
+    TREE_ARGS := -D DARK_CIRCUIT_DESIGNS=ALL -D DARK_CIRCUIT_LIB_TESTS=ON
+else ifeq ($(D),lib)
+    TREE_ARGS := -D DARK_CIRCUIT_DESIGNS= -D DARK_CIRCUIT_LIB_TESTS=ON
+else
+    TREE_ARGS := -D DARK_CIRCUIT_DESIGNS=$(D) -D DARK_CIRCUIT_LIB_TESTS=OFF
+endif
+
+BUILD_DIR  ?= $(abspath $(ROOT)/../build/$(D))
 CMAKE_ARGS ?=
 
 # Do not print "Entering directory" for make called by cmake --build.
 MAKEFLAGS += --no-print-directory
 
-CONFIGURE := cmake -S $(SOURCE_DIR) -B $(BUILD_DIR) $(CMAKE_ARGS)
+CONFIGURE := cmake -S $(SOURCE_DIR) -B $(BUILD_DIR) $(TREE_ARGS) $(CMAKE_ARGS)
 
 # Configure only if needed: first time, or when CMAKE_ARGS are given;
 # after that cmake re-runs itself when CMakeLists.txt or flists change.
@@ -104,7 +117,9 @@ Targets:
   make config       generate files from design configurations: rtl/design/*/cfg/*_config.yaml
 
 Variables:
-  BUILD_DIR=<dir>      build directory, now $(BUILD_DIR)
+  D=<tree>             build tree: full (default) library and all designs, lib the library,
+                       <design> one design (like mig1) without library tests
+  BUILD_DIR=<dir>      build directory, now $(BUILD_DIR) (default ../build/<tree>)
   CMAKE_ARGS="<args>"  options for cmake, configure runs again when they are given
   R=<regex>            make run: tests with name matching regex (ctest -R)
   L=<regex>            make run: tests with label matching regex (ctest -L);
@@ -114,6 +129,8 @@ Variables:
 
 Examples:
   make test
+  make test D=lib
+  make run D=mig1 L=rv32ui
   make list | grep qemu
   make run R=fifo
   make run L=block R=struct
