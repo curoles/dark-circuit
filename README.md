@@ -24,7 +24,7 @@ rtl/lib/
                  by tools/riscv_opcodes.sh
   macro/         include files kept for old code; use $clog2, not `CLOG2
   sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM
-rtl/design/mig1/ Mig1 RISC-V RV32I CPU, in progress
+rtl/design/mig1/ Mig1 RISC-V RV32I CPU, in progress, see its README.md
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/   testbench of a part

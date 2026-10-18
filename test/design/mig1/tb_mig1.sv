@@ -24,8 +24,16 @@
  * it reads a0 (x10) through the debug port (must equal the shadow), writes
  * a0 + 0x100, and resumes the core; the halt after that ends the run. The shadow registers
  * follow debug writes too.
- * Other plusargs: +trace=<file> writes every retired instruction, register write and
- * debug action into <file>, +trace alone prints them; +max_cycles=<n> (default 100000).
+ * Semihosting: an EBREAK between slli x0,x0,0x1f and srai x0,x0,7 is a semihosting
+ * call (RISC-V semihosting spec). The testbench reads the operation (a0) and its
+ * argument (a1) through the debug port, argument blocks and strings from dmem with
+ * peek(), does it and resumes the core; these halts do not count for +resumes.
+ * SYS_WRITEC and SYS_WRITE0 print to stdout; SYS_EXIT and SYS_EXIT_EXTENDED end the
+ * run with an exit status. With +expect_exit=<n> the program must end with status n,
+ * without it a semihosting exit must have status 0. Other operations fail.
+ * Other plusargs: +trace=<file> writes every retired instruction, register write,
+ * debug action and semihosting call into <file>, +trace alone prints them;
+ * +max_cycles=<n> (default 100000).
  * Stops at the first failure with $fatal.
  */
 module TbMig1;
@@ -63,6 +71,10 @@ module TbMig1;
     reg              halted;
     integer          resumes;       // halts after EBREAK left to resume
     reg              done;
+    reg              check_exit;
+    integer          expect_exit;
+    reg              exited;        // the program ended with a semihosting exit
+    integer          exit_status;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk(clk));
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk(clk), .rst_n(rst_n));
@@ -128,6 +140,98 @@ module TbMig1;
         end
     endtask
 
+    // Value of register r, read through the debug port while halted.
+    task automatic dbg_read(input logic [REG_ADDR_WIDTH-1:0] r, output logic [WIDTH-1:0] value);
+        dbg_req.reg_addr = r;
+        #1;
+        value = dbg_rsp.reg_rdata;
+    endtask
+
+    // resume=1 for one clock; with must_run=1 the core must run after it.
+    task automatic resume_core(input logic must_run);
+        dbg_req.resume = 1'b1;
+        @(posedge clk); #1;
+        cycle = cycle + 1;
+        dbg_req.resume = 1'b0;
+        if (must_run && halt)
+            $fatal(1, "Mig1: resume at %h, the core is still halted", halt_pc);
+    endtask
+
+    // Byte and word (little-endian) of dmem at byte address a. Memories wrap around:
+    // only the AW low bits of an address are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic [7:0] dmem_byte(input [WIDTH-1:0] a);
+        return u_mig1_cpu.u_dmem.peek(a[AW-1:0]);
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
+    function automatic [31:0] dmem_word(input [WIDTH-1:0] a);
+        logic [WIDTH-1:0] ab;
+        for (int b = 0; b < 4; b++) begin
+            ab = a + b;
+            dmem_word[8*b +: 8] = dmem_byte(ab);
+        end
+    endfunction
+
+    // Semihosting call at halt_pc: EBREAK between the entry and the exit no-op.
+    localparam [31:0] SEMIHOST_ENTRY = 32'h01f01013;    // slli x0, x0, 0x1f
+    localparam [31:0] SEMIHOST_NOP   = 32'h40705013;    // srai x0, x0, 7
+    localparam [31:0] ADP_STOPPED_APPLICATION_EXIT = 32'h20026;
+
+    function automatic logic semihost_call;
+        // Only the AW low bits of the addresses are used, see dmem_byte.
+        /* verilator lint_off UNUSEDSIGNAL */
+        logic [WIDTH-1:0] prev_addr;   // address of the instruction before the EBREAK
+        logic [WIDTH-1:0] next_addr;   // and after it
+        /* verilator lint_on UNUSEDSIGNAL */
+        prev_addr = halt_pc - 4;
+        next_addr = halt_pc + 4;
+        return imem_word(halt_pc[AW-1:0]) === INSN_EBREAK &&
+               imem_word(prev_addr[AW-1:0]) === SEMIHOST_ENTRY &&
+               imem_word(next_addr[AW-1:0]) === SEMIHOST_NOP;
+    endfunction
+
+    // Do the semihosting call at halt_pc; resume the core unless it is an exit.
+    task automatic semihost;
+        logic [WIDTH-1:0] op;
+        logic [WIDTH-1:0] arg;
+        logic [WIDTH-1:0] a;
+        logic [WIDTH-1:0] reason;
+        dbg_read(10, op);
+        dbg_read(11, arg);
+        if (trace_fd != 0)
+            $fdisplay(trace_fd, "%8d semihost op %h arg %h", cycle, op, arg);
+        case (op)
+            32'h03:     // SYS_WRITEC: byte at arg
+                $write("%c", dmem_byte(arg));
+            32'h04: begin   // SYS_WRITE0: string at arg
+                a = arg;
+                while (dmem_byte(a) != 0) begin
+                    $write("%c", dmem_byte(a));
+                    a = a + 1;
+                end
+            end
+            32'h18: begin   // SYS_EXIT: on RV32 arg is the reason, no status
+                exited      = 1;
+                exit_status = (arg == ADP_STOPPED_APPLICATION_EXIT) ? 0 : 1;
+            end
+            32'h20: begin   // SYS_EXIT_EXTENDED: block {reason, status}
+                a = arg + 4;
+                reason      = dmem_word(arg);
+                exited      = 1;
+                exit_status = (reason == ADP_STOPPED_APPLICATION_EXIT) ? dmem_word(a) : 1;
+            end
+            default:
+                $fatal(1, "Mig1: semihosting operation %h at %h is not supported", op, halt_pc);
+        endcase
+        if (exited) begin
+            $display("Mig1: semihosting exit %0d", exit_status);
+            if (trace_fd != 0)
+                $fdisplay(trace_fd, "%8d semihost exit %0d", cycle, exit_status);
+        end else
+            resume_core(1'b1);
+    endtask
+
     // Debugger at a halt after EBREAK: read a0, write a0 + 0x100, resume. One clock
     // each for the write and the resume; the shadow follows the write in the always
     // block. Not a0 + 1: that is what the EBREAK in EX computes (rs1 + imm, rs1 is
@@ -136,9 +240,7 @@ module TbMig1;
         logic [WIDTH-1:0] a0;
         if (imem_word(halt_pc[AW-1:0]) !== INSN_EBREAK)
             $fatal(1, "Mig1: halted at %h, it is not EBREAK", halt_pc);
-        dbg_req.reg_addr = 10;
-        #1;
-        a0 = dbg_rsp.reg_rdata;
+        dbg_read(10, a0);
         if (written[10] && a0 !== shadow[10])
             $fatal(1, "Mig1: debug read of x10 gave %h, expected %h", a0, shadow[10]);
         dbg_req.reg_wdata = a0 + 32'h100;
@@ -146,10 +248,7 @@ module TbMig1;
         @(posedge clk); #1;
         cycle = cycle + 1;
         dbg_req.reg_wr    = 1'b0;
-        dbg_req.resume    = 1'b1;
-        @(posedge clk); #1;
-        cycle = cycle + 1;
-        dbg_req.resume    = 1'b0;
+        resume_core(1'b1);
     endtask
 
     // Checks of every retired instruction, values of the cycle before the rising edge;
@@ -196,6 +295,9 @@ module TbMig1;
         written = 0;
         dbg_req = '0;
         if (!$value$plusargs("resumes=%d", resumes)) resumes = 0;
+        check_exit  = $value$plusargs("expect_exit=%d", expect_exit);
+        exited      = 0;
+        exit_status = 0;
         expect_sequential = $test$plusargs("expect_sequential");
         expect_regs       = $test$plusargs("expect_regs");
         expect_mem_unchanged = $test$plusargs("expect_mem_unchanged");
@@ -231,7 +333,11 @@ module TbMig1;
                     $fatal(1, "Mig1: no halt after %0d cycles, %0d instructions retired", max_cycles, retired);
             end
             halted = 1;
-            if (illegal || resumes == 0)
+            if (!illegal && semihost_call()) begin
+                semihost();
+                done   = exited;
+                halted = exited;
+            end else if (illegal || resumes == 0)
                 done = 1;
             else begin
                 debug_and_resume();
@@ -243,11 +349,12 @@ module TbMig1;
             $fatal(1, "Mig1: illegal=1 at %h, last retired pc %h", halt_pc, prev_pc);
         if (!illegal && expect_illegal)
             $fatal(1, "Mig1: halted at %h with illegal=0, +expect_illegal", halt_pc);
-        if (illegal) begin
-            dbg_req.resume = 1'b1;
-            @(posedge clk); #1;
-            dbg_req.resume = 1'b0;
-        end
+        if (illegal)
+            resume_core(1'b0);     // must not restart the core, checked below
+        if (check_exit && !exited)
+            $fatal(1, "Mig1: no semihosting exit, halted at %h", halt_pc);
+        if (exited && exit_status != (check_exit ? expect_exit : 0))
+            $fatal(1, "Mig1: semihosting exit %0d, expected %0d", exit_status, check_exit ? expect_exit : 0);
 
         repeat (5) @(posedge clk);  // nothing may retire after halt
         if (!halt)

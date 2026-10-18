@@ -37,10 +37,12 @@ function(dc_add_icarus_build NAME)
     set_target_properties(${sim} PROPERTIES DC_RUN_COMMAND "${VVP_BIN};-n;${vvp}")
 endfunction()
 
-# dc_add_icarus_run(<test> BUILD <name> [ARGS <arg>...] [LABELS <label>...])
+# dc_add_icarus_run(<test> BUILD <name> [ARGS <arg>...] [LABELS <label>...]
+#           [OUTPUT <regex>])
 #
 # Add CTest test <test>.icarus with label icarus, labels of dc_test_labels() and LABELS:
-# it runs simulation <name>.icarus of dc_add_icarus_build() with ARGS.
+# it runs simulation <name>.icarus of dc_add_icarus_build() with ARGS;
+# with OUTPUT the test also fails when the output does not match <regex>.
 # Testbench fails the test with $fatal, then vvp exit code is 1.
 # Does nothing if Icarus is not used.
 function(dc_add_icarus_run TEST)
@@ -51,7 +53,8 @@ function(dc_add_icarus_run TEST)
 
     get_target_property(command ${R_BUILD}.icarus DC_RUN_COMMAND)
     set(test ${TEST}.icarus)
-    add_test(NAME ${test} COMMAND ${command} ${R_ARGS})
+    dc_run_command(test_command ${command} ${R_ARGS})
+    add_test(NAME ${test} COMMAND ${test_command})
     dc_test_labels(labels)
     set(test_labels icarus ${labels} ${R_LABELS})
     set_tests_properties(${test} PROPERTIES LABELS "${test_labels}")

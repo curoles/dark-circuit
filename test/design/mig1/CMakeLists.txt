@@ -43,13 +43,14 @@ if(DARK_CIRCUIT_RISCV)
     endforeach()
 
     # mig1_program_test(<name> SOURCES <file>... [FLAGS <flag>...] [ARGS <arg>...]
-    #                   [LABELS <label>...])
+    #                   [LABELS <label>...] [OUTPUT <regex>])
     #
     # Build RISC-V program design_mig1_<name> and add tests design_mig1_<name>.<sim>
     # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex> and
-    # +trace=<test>.<sim>.trace in the build directory; LABELS are added to the tests.
+    # +trace=<test>.<sim>.trace in the build directory; LABELS are added to the tests;
+    # with OUTPUT the output (semihosting console) must match <regex>.
     function(mig1_program_test NAME)
-        cmake_parse_arguments(P "" "" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
+        cmake_parse_arguments(P "" "OUTPUT" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
         set(prog design_mig1_${NAME})
         dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} FLAGS ${P_FLAGS}
                              LINK_FLAGS -T ${SW}/mig1.ld)
@@ -58,7 +59,7 @@ if(DARK_CIRCUIT_RISCV)
                            ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
                                 +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
                                 ${P_ARGS}
-                           LABELS ${P_LABELS})
+                           LABELS ${P_LABELS} OUTPUT ${P_OUTPUT})
         endforeach()
     endfunction()
 
@@ -94,6 +95,15 @@ if(DARK_CIRCUIT_RISCV)
     mig1_program_test(resume SOURCES resume.S
                       ARGS +resumes=2 +expect_sequential +expect_retired=6
                            +expect_halt_pc=14 +expect_regs)
+
+    # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
+    # with 3 on Mig1 too; crt0.S and the semihosting library of sw/riscv.
+    mig1_program_test(semihosting
+                      SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                              ${PROJECT_SOURCE_DIR}/test/sw/riscv/semihosting/test_semihosting.c
+                      FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW}/semihosting
+                      ARGS +expect_exit=3
+                      OUTPUT "semihost_write0 works[\r\n]+OK")
 
     # riscv-tests rv32ui: one self-checking test per instruction, labels riscv-tests and
     # rv32ui; riscv_test.h of this directory is their environment.

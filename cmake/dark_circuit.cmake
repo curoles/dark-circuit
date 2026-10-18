@@ -128,11 +128,11 @@ endmacro()
 # dc_parse_run_args(<test> <args>...)
 #
 # Parse arguments of dc_add_<simulator>_run() functions:
-#   BUILD <name> [ARGS <arg>...] [LABELS <label>...]
-# into R_BUILD (simulation of dc_add_<simulator>_build()), R_ARGS and R_LABELS
-# (labels added to those of the simulator and of dc_test_labels()).
+#   BUILD <name> [ARGS <arg>...] [LABELS <label>...] [OUTPUT <regex>]
+# into R_BUILD (simulation of dc_add_<simulator>_build()), R_ARGS, R_LABELS
+# (labels added to those of the simulator and of dc_test_labels()) and R_OUTPUT.
 macro(dc_parse_run_args TEST)
-    cmake_parse_arguments(R "" "BUILD" "ARGS;LABELS" ${ARGN})
+    cmake_parse_arguments(R "" "BUILD;OUTPUT" "ARGS;LABELS" ${ARGN})
     if(NOT R_BUILD)
         message(FATAL_ERROR "Test ${TEST}: BUILD is required")
     endif()
@@ -140,6 +140,20 @@ macro(dc_parse_run_args TEST)
         message(FATAL_ERROR "Test ${TEST}: unknown arguments: ${R_UNPARSED_ARGUMENTS}")
     endif()
 endmacro()
+
+# dc_run_command(<out-var> <command>...)
+#
+# Command of a test that runs <command>: <command> itself, or with R_OUTPUT of
+# dc_parse_run_args() cmake -P run_check.cmake, which also checks that the output
+# matches R_OUTPUT (CTest alone checks either exit code or output).
+function(dc_run_command OUT)
+    if(R_OUTPUT STREQUAL "")
+        set(${OUT} ${ARGN} PARENT_SCOPE)
+    else()
+        set(${OUT} ${CMAKE_COMMAND} -D OUTPUT=${R_OUTPUT}
+                   -P ${PROJECT_SOURCE_DIR}/cmake/run_check.cmake -- ${ARGN} PARENT_SCOPE)
+    endif()
+endfunction()
 
 # dc_test_labels(<out-var>)
 #

@@ -37,15 +37,16 @@ function(dc_add_qemu_test NAME)
 
     # The test runs cmake as a script interpreter: CMAKE_COMMAND is the path of the
     # cmake program configuring this build, -D sets variables for the script and
-    # -P runs qemu_run.cmake, which starts QEMU and checks its exit code and output
-    # (CTest alone checks either exit code or output, not both).
+    # -P runs run_check.cmake, which starts QEMU (the command after --) and checks
+    # its exit code and output (CTest alone checks either exit code or output).
     # CMAKE_CURRENT_FUNCTION_LIST_DIR is the directory of this file, cmake/.
     set(test ${NAME}.qemu)
     add_test(NAME ${test}
         COMMAND ${CMAKE_COMMAND}
-            -D QEMU=${QEMU_RISCV32_BIN} -D MACHINE=${Q_MACHINE} -D ELF=${Q_ELF}
             -D EXIT_CODE=${Q_EXIT_CODE} -D OUTPUT=${Q_OUTPUT} -D TIMEOUT=${Q_TIMEOUT}
-            -P ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/qemu_run.cmake)
+            -P ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/run_check.cmake --
+            ${QEMU_RISCV32_BIN} -M ${Q_MACHINE} -bios none -kernel ${Q_ELF} -nographic
+            -semihosting-config enable=on,target=native -monitor none -serial none)
     dc_test_labels(labels)
     set_tests_properties(${test} PROPERTIES LABELS "qemu;${labels}")
 endfunction()

@@ -6,6 +6,8 @@ This file has the rules that are not in README.md.
 ## Code style
 
 - Indent 4 spaces, no tabs, in all files (SV, C, assembly, CMake, Python).
+- `test/third_party/` is copied by scripts in `tools/` and never edited by hand;
+  the style rules of this file do not apply there.
 - Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`),
   instances `u_` and name (`u_aoi22`, `u_mux4_0`). Cells use TSMC names and pins.
 - Multiplexer inputs are zero-based: `sel` = k selects `in<k>`.
@@ -46,7 +48,7 @@ This file has the rules that are not in README.md.
 - Pure SystemVerilog, stop at the first mismatch with `$fatal(1, ...)`, always give
   the top module (`-s`, `--top-module`).
 - X and Z checks inside `` `ifndef VERILATOR ``: Verilator is 2-state.
-- Small tests run on Icarus and Verilator; big suites on the main simulator.
+- Small or fast tests run on Icarus and Verilator; slow suites on the main simulator.
 - Block tests run the same testbench with `block_behave.flist` and `block_struct.flist`.
 
 ## Adding things
@@ -54,6 +56,8 @@ This file has the rules that are not in README.md.
 - Block: `rtl/lib/block/<b>/{behave,struct}/` with `<b>.flist` each, a `-F` line in
   `block_behave.flist` and `block_struct.flist`, a test in `test/block/<b>/`,
   the block name in the README layout.
+- Design: every design has `rtl/design/<d>/README.md`: what it is, parts, timing,
+  limits, tests. Update it in the same change as the design.
 - Design configuration: edit `rtl/design/<d>/cfg/<d>_config.yaml` or a template,
   run `make config`, commit the YAML and the generated files.
 - RISC-V encodings: `tools/riscv_opcodes.sh` regenerates `rtl/lib/riscv/riscv_instr_pkg.sv`.
