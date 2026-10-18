@@ -8,7 +8,7 @@
  *
  * Mig1Core only connects its parts: Mig1Fetch (PC, imem requests),
  * Mig1Control (run, stall, redirect, halt), Mig1Decode, Mig1Regs, Mig1Alu,
- * Mig1Branch, Mig1Lsu (dmem requests). Pipeline: IF fetches, EX executes the
+ * Mig1Branch, Mig1Lsu (dmem requests), Mig1Csr. Pipeline: IF fetches, EX executes the
  * instruction that arrives from imem; parts do not depend on that, so they fit
  * a 5-stage pipeline too. Signals of a stage have its prefix: if_, ex_.
  * A taken branch or jump costs one bubble: the instruction fetched after it is dropped.
@@ -47,6 +47,8 @@ module Mig1Core import Mig1Pkg::*; #(
     lsu_t        ex_lsu;
     lsu_mem_t    ex_lsu_mem;        // memory access, for retire
     word_t       ex_load_data;
+    word_t       ex_csr_rdata;      // old value of the CSR of a CSR instruction
+    logic        ex_csr_illegal;
     logic        ex_done;           // instruction in EX completes: writes rd, retires
     logic        ex_trap;           // instruction in EX faults: retires as a trap
     logic        ex_rd_write;       // instruction in EX writes rd in this cycle
@@ -63,8 +65,8 @@ module Mig1Core import Mig1Pkg::*; #(
 
     Mig1Control u_mig1_control(
         .clk, .rst_n, .ex(ex_fetch), .ex_dec, .branch(ex_branch), .lsu(ex_lsu),
-        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .ex_done, .ex_trap, .halt, .illegal,
-        .halt_pc);
+        .csr_illegal(ex_csr_illegal), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
+        .ex_done, .ex_trap, .halt, .illegal, .halt_pc);
 
     Mig1Decode u_mig1_decode(.insn(ex_insn), .dec(ex_dec));
 
@@ -88,6 +90,10 @@ module Mig1Core import Mig1Pkg::*; #(
         .rs2_data(ex_rs2_data), .dmem_req, .dmem_rsp, .lsu(ex_lsu), .load_data(ex_load_data),
         .mem(ex_lsu_mem));
 
+    Mig1Csr u_mig1_csr(
+        .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
+        .rs1_data(ex_rs1_data), .rdata(ex_csr_rdata), .illegal(ex_csr_illegal));
+
     // Write back: decode tells whether rd is written and where its value comes from.
     // ex_rd_src with assign: Icarus does not support selects of ex_dec in always_comb.
     assign ex_rd_write = ex_done && ex_dec.rd_we;
@@ -97,6 +103,7 @@ module Mig1Core import Mig1Pkg::*; #(
         case (ex_rd_src)
             RD_LINK: ex_rd_data = ex_link;
             RD_LOAD: ex_rd_data = ex_load_data;
+            RD_CSR:  ex_rd_data = ex_csr_rdata;
             default: ex_rd_data = ex_alu_result;
         endcase
 

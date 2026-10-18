@@ -6,7 +6,8 @@
  * instructions rd_we, uses_rs1 and uses_rs2, then rd and rd_src when rd_we (rd_src
  * expected from the kind: LINK for JAL, JALR, LOAD for loads, else ALU), rs1 when uses_rs1,
  * rs2 when uses_rs2, funct3 when the kind has it, alt for OP and OP-IMM shifts,
- * imm when the kind has an immediate. At the end every kind must have had a case.
+ * imm when the kind has an immediate (the CSR address for CSR instructions).
+ * At the end every kind must have had a case.
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  */
@@ -53,14 +54,16 @@ module TbMig1Decode;
     // Kinds that have funct3, and kinds that have an immediate.
     function automatic logic has_funct3(input logic [3:0] kind);
         case (kind)
-            KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP, KIND_FENCE: return 1'b1;
+            KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP, KIND_FENCE,
+            KIND_CSR:                                                                      return 1'b1;
             default:                                                                       return 1'b0;
         endcase
     endfunction
 
     function automatic logic has_imm(input logic [3:0] kind);
         case (kind)
-            KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM: return 1'b1;
+            KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM,
+            KIND_CSR:                                                                                  return 1'b1;
             default:                                                                                   return 1'b0;
         endcase
     endfunction
@@ -70,6 +73,7 @@ module TbMig1Decode;
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
             KIND_LOAD:           return RD_LOAD;
+            KIND_CSR:            return RD_CSR;
             default:             return RD_ALU;
         endcase
     endfunction
@@ -114,7 +118,7 @@ module TbMig1Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        for (k = 0; k <= KIND_EBREAK; k = k + 1)
+        for (k = 0; k <= KIND_CSR; k = k + 1)
             if (!tested[k])
                 $fatal(1, "Mig1Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);

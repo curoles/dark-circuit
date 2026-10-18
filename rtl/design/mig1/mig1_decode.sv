@@ -29,6 +29,7 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
             FENCE:                                                  kind = KIND_FENCE;
             ECALL:                                                  kind = KIND_ECALL;
             EBREAK:                                                 kind = KIND_EBREAK;
+            CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind = KIND_CSR;
             default:                                                kind = KIND_ILLEGAL;
         endcase
 
@@ -47,6 +48,13 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
     assign imm_b = {{(WIDTH-13){f.b.imm_12}},       f.b.imm_12, f.b.imm_11, f.b.imm_10_5, f.b.imm_4_1, 1'b0};
     assign imm_u = {f.u.imm_31_12, 12'b0};
     assign imm_j = {{(WIDTH-21){f.j.imm_20}},       f.j.imm_20, f.j.imm_19_12, f.j.imm_11, f.j.imm_10_1, 1'b0};
+
+    // CSR instructions: the CSR address, not sign-extended (0xc00 is not negative);
+    // register forms read rs1, the I forms use the rs1 field as immediate.
+    word_t imm_csr;
+    logic  csr_reg;
+    assign imm_csr = {{(WIDTH-12){1'b0}}, f.i.imm_11_0};
+    assign csr_reg = f.i.funct3 == F3_CSRRW || f.i.funct3 == F3_CSRRS || f.i.funct3 == F3_CSRRC;
 
     // Fields at the same place in every format. Selected with assign, not in always_comb:
     // Icarus does not support constant selects there and warns.
@@ -77,14 +85,15 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
         dec.uses_rs2 = 1'b0;
         dec.imm      = imm_i;         // JALR, LOAD, OP_IMM (shifts: imm[4:0] is shamt)
         case (kind)
-            KIND_LUI, KIND_AUIPC: begin dec.rd_we = 1'b1;                                                                 dec.imm = imm_u; end
-            KIND_JAL:             begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK;                                           dec.imm = imm_j; end
-            KIND_JALR:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK; dec.uses_rs1 = 1'b1;                                       end
-            KIND_LOAD:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LOAD; dec.uses_rs1 = 1'b1;                                       end
-            KIND_OP_IMM:          begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1;                                       end
-            KIND_OP:              begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1;                  end
-            KIND_BRANCH:          begin                                         dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1; dec.imm = imm_b; end
-            KIND_STORE:           begin                                         dec.uses_rs1 = 1'b1; dec.uses_rs2 = 1'b1; dec.imm = imm_s; end
+            KIND_LUI, KIND_AUIPC: begin dec.rd_we = 1'b1;                                                                    dec.imm = imm_u;   end
+            KIND_JAL:             begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK;                                              dec.imm = imm_j;   end
+            KIND_JALR:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LINK; dec.uses_rs1 = 1'b1;                                            end
+            KIND_LOAD:            begin dec.rd_we = 1'b1; dec.rd_src = RD_LOAD; dec.uses_rs1 = 1'b1;                                            end
+            KIND_OP_IMM:          begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1;                                            end
+            KIND_OP:              begin dec.rd_we = 1'b1;                       dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1;                    end
+            KIND_BRANCH:          begin                                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_b;   end
+            KIND_STORE:           begin                                         dec.uses_rs1 = 1'b1;    dec.uses_rs2 = 1'b1; dec.imm = imm_s;   end
+            KIND_CSR:             begin dec.rd_we = 1'b1; dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;                      dec.imm = imm_csr; end
             default:              ;  // FENCE, ECALL, EBREAK, ILLEGAL
         endcase
     end

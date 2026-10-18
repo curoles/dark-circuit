@@ -37,6 +37,7 @@
     .equ K_FENCE,   10
     .equ K_ECALL,   11
     .equ K_EBREAK,  12
+    .equ K_CSR,     13
 
 /* Expected decode after the instruction. */
     .macro EXPECT kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
@@ -87,6 +88,16 @@
     .macro JALR_ rd, rs1, imm
     jalr x\rd, \imm(x\rs1)
     EXPECT K_JALR, 1, 1, 0, \rd, \rs1, 0, 0, 0, \imm
+    .endm
+
+    .macro CSR op, funct3, rd, rs1, csr             /* csrrw csrrs csrrc: imm is the CSR address */
+    \op x\rd, \csr, x\rs1
+    EXPECT K_CSR, 1, 1, 0, \rd, \rs1, 0, \funct3, 0, \csr
+    .endm
+
+    .macro CSRI op, funct3, rd, zimm, csr           /* csrrwi csrrsi csrrci: the rs1 field is zimm */
+    \op x\rd, \csr, \zimm
+    EXPECT K_CSR, 1, 0, 0, \rd, 0, 0, \funct3, 0, \csr
     .endm
 
     .macro NOARG insn, kind                         /* fence ecall ebreak */
@@ -168,6 +179,16 @@ cases:
     JALR_  0,  1,  0
     JALR_  5,  31, -2048
     JALR_  1,  1,  2047
+
+    /*     op      funct3 rd  rs1 csr: addresses with bit 11 set must not be sign-extended */
+    CSR    csrrw,  1,     1,  2,  0x340
+    CSR    csrrs,  2,     31, 0,  0xc00
+    CSR    csrrc,  3,     0,  31, 0xfff
+
+    /*     op      funct3 rd  zimm csr */
+    CSRI   csrrwi, 5,     5,  31,  0x800
+    CSRI   csrrsi, 6,     0,  0,   0xb02
+    CSRI   csrrci, 7,     17, 1,   0x7ff
 
     NOARG  fence,  K_FENCE
     NOARG  ecall,  K_ECALL

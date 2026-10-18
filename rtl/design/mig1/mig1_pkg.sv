@@ -156,14 +156,16 @@ package Mig1Pkg;
         KIND_OP,        // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
         KIND_FENCE,
         KIND_ECALL,
-        KIND_EBREAK
+        KIND_EBREAK,
+        KIND_CSR        // CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI
     } kind_t;
 
     // Source of the value written to rd.
     typedef enum logic [1:0] {
         RD_ALU,         // Mig1Alu result: OP, OP-IMM, LUI, AUIPC
         RD_LINK,        // pc + 4: JAL, JALR
-        RD_LOAD         // loaded data
+        RD_LOAD,        // loaded data
+        RD_CSR          // old value of the CSR: CSR instructions
     } rd_src_t;
 
     // Decode -> units: the instruction taken apart.

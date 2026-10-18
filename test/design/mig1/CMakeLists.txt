@@ -78,14 +78,15 @@ if(DARK_CIRCUIT_RISCV)
 
     # Faults stop the core at 0xc with illegal=1, rd and memory not written; one build
     # of the program per case (-DCASE_<case>):
-    # misaligned jump target, load and store address; ECALL and illegal words.
+    # misaligned jump target, load and store address; ECALL, illegal words, CSR
+    # instructions on a missing CSR or writing a read-only one.
     set(FAULT_ARGS +expect_illegal +expect_halt_pc=c +expect_regs +expect_mem_unchanged)
     foreach(case IN ITEMS jalr lw sh)
         string(TOUPPER ${case} case_macro)
         mig1_program_test(misaligned_${case} SOURCES misaligned.S FLAGS -DCASE_${case_macro}
                           ARGS ${FAULT_ARGS})
     endforeach()
-    foreach(case IN ITEMS ecall zero ones)
+    foreach(case IN ITEMS ecall zero ones csr_unknown csr_readonly)
         string(TOUPPER ${case} case_macro)
         mig1_program_test(illegal_${case} SOURCES illegal.S FLAGS -DCASE_${case_macro}
                           ARGS ${FAULT_ARGS})
@@ -95,6 +96,9 @@ if(DARK_CIRCUIT_RISCV)
     mig1_program_test(resume SOURCES resume.S
                       ARGS +resumes=2 +expect_sequential +expect_retired=6
                            +expect_halt_pc=14 +expect_regs)
+
+    # CSRs and counters: Zicsr instructions on mscratch, read-only CSRs, Zicntr.
+    mig1_program_test(csr SOURCES csr.S ARGS +expect_regs)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig1 too; crt0.S and the semihosting library of sw/riscv.

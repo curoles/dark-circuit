@@ -1,2 +1,3 @@
 riscv_pkg.sv
 riscv_instr_pkg.sv
+riscv_csr_pkg.sv

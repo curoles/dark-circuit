@@ -3,7 +3,8 @@
  * The core runs from reset until the instruction in EX stops it:
  * - EBREAK: it completes and the core halts (halt=1);
  * - a fault: ECALL, an illegal instruction, a taken jump or branch to a misaligned
- *   target, or a load or store with a misaligned address: halt=1 and illegal=1,
+ *   target, a load or store with a misaligned address, a CSR instruction on a CSR
+ *   that does not exist or a write to a read-only CSR: halt=1 and illegal=1,
  *   the instruction does not complete (no register write, no memory write, no retire).
  * halt_pc is the address of the instruction that stopped the core; nothing more is
  * fetched, nothing is in flight. resume=1 while halted after EBREAK runs again from
@@ -25,6 +26,7 @@ module Mig1Control import Mig1Pkg::*; (
     /* verilator lint_on UNUSEDSIGNAL */
     input  branch_t                    branch,     // next pc of the instruction in EX
     input  lsu_t                       lsu,        // stall and fault of loads and stores
+    input  wire                        csr_illegal, // CSR instruction can not be done
     input  wire                        resume,     // debug: continue after EBREAK
     output fetch_ctrl_t                fetch_ctrl,
     output wire                        ex_done,
@@ -41,7 +43,7 @@ module Mig1Control import Mig1Pkg::*; (
     assign kind = ex_dec.kind;
 
     assign fault = ex.valid && ((branch.taken && branch.misaligned) || lsu.misaligned ||
-                                kind == KIND_ECALL || kind == KIND_ILLEGAL);
+                                csr_illegal || kind == KIND_ECALL || kind == KIND_ILLEGAL);
     assign stop  = (ex.valid && kind == KIND_EBREAK) || fault;
 
     always_ff @(posedge clk)

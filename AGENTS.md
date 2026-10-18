@@ -60,7 +60,8 @@ This file has the rules that are not in README.md.
   limits, tests. Update it in the same change as the design.
 - Design configuration: edit `rtl/design/<d>/cfg/<d>_config.yaml` or a template,
   run `make config`, commit the YAML and the generated files.
-- RISC-V encodings: `tools/riscv_opcodes.sh` regenerates `rtl/lib/riscv/riscv_instr_pkg.sv`.
+- RISC-V encodings and CSR addresses: `tools/riscv_opcodes.sh` regenerates
+  `rtl/lib/riscv/riscv_instr_pkg.sv` and `riscv_csr_pkg.sv`.
 - Generated files start with "THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!":
   change their source instead, they are committed.
 

@@ -4,7 +4,8 @@
  * Assign an instruction to insn_fmt_t.word and read the fields of a format,
  * for example f.b.imm_12; immediate bits keep the spec names (imm_10_5 is imm[10:5]).
  * F3_* are the funct3 values that select the operation inside an opcode.
- * Encodings of instructions are in RiscvInstrPkg (generated from riscv-opcodes).
+ * Encodings of instructions are in RiscvInstrPkg, CSR addresses in RiscvCsrPkg
+ * (both generated from riscv-opcodes).
  */
 package RiscvPkg;
 
@@ -35,6 +36,14 @@ package RiscvPkg;
     localparam logic [2:0] F3_W       = 3'b010;
     localparam logic [2:0] F3_BU      = 3'b100;
     localparam logic [2:0] F3_HU      = 3'b101;
+
+    // SYSTEM, Zicsr: operation on a CSR; the I forms take a 5-bit immediate (the rs1 field).
+    localparam logic [2:0] F3_CSRRW   = 3'b001;
+    localparam logic [2:0] F3_CSRRS   = 3'b010;
+    localparam logic [2:0] F3_CSRRC   = 3'b011;
+    localparam logic [2:0] F3_CSRRWI  = 3'b101;
+    localparam logic [2:0] F3_CSRRSI  = 3'b110;
+    localparam logic [2:0] F3_CSRRCI  = 3'b111;
 
     /* verilator lint_on UNUSEDPARAM */
 

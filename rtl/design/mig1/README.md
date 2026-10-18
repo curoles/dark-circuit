@@ -1,6 +1,7 @@
 # Mig1: RV32I RISC-V CPU
 
-Mig1 is a small RISC-V CPU: RV32I base integer instructions, no CSRs, no interrupts.
+Mig1 is a small RISC-V CPU: RV32I base integer instructions, Zicsr (CSR instructions)
+and Zicntr (counters); no traps or interrupts yet.
 It passes riscv-tests rv32ui (40 of 42 tests; fence_i and ma_data do not apply, see Testing).
 
 - 2-stage pipeline: IF (fetch) | EX (everything else).
@@ -18,7 +19,7 @@ RTL is in this directory, configuration in `cfg/`, tests in `test/design/mig1/`.
 |------|------|
 | `mig1_pkg.sv` | Mig1Pkg: widths, port and boundary structs, kind_t, decoded_t |
 | `mig1_config_pkg.sv` | Mig1ConfigPkg, generated from `cfg/mig1_config.yaml` |
-| `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv` | the parts |
+| `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv`, `mig1_csr.sv` | the parts |
 | `mig1_core.sv` | Mig1Core: connects the parts, synthesizable, memories are outside |
 | `mig1_cpu.sv` | Mig1Cpu: Mig1Core with SimROM (imem) and SimRAM (dmem), for simulation |
 | `mig1.flist` | files in compile order |
@@ -34,9 +35,10 @@ EX  imem_rsp -> ex_insn -> Mig1Decode -> ex_dec
                       -> Mig1Branch -> branch (taken, target, misaligned), link = pc + 4
     address, rs2      -> Mig1Lsu    -> dmem_req; 1 clock later dmem_rsp -> load data
                                        lsu (stall, misaligned)
-    rd value = ALU result | link | load data, chosen by ex_dec.rd_src;
+    ex_dec, rs1       -> Mig1Csr    -> old CSR value; CSR write when the instruction completes
+    rd value = ALU result | link | load data | CSR value, chosen by ex_dec.rd_src;
                Mig1Regs writes it when ex_done=1
-    ex_dec, branch, lsu -> Mig1Control -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
+    ex_dec, branch, lsu, CSR fault -> Mig1Control -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
                                        -> ex_done, halt, illegal, halt_pc
 ```
 
@@ -53,6 +55,7 @@ is, so the same parts fit a 5-stage pipeline.
 | Mig1Alu     | EX    | rd value of OP, OP-IMM, LUI, AUIPC; address rs1 + imm of loads and stores |
 | Mig1Branch  | EX    | taken, target, misaligned target; link = pc + 4 for JAL, JALR |
 | Mig1Lsu     | EX    | dmem requests, store strobes, load data extension, misaligned address, load stall |
+| Mig1Csr     | EX    | CSRs and counters; CSR instructions read the old value and write the new one |
 
 Boundary structs are in Mig1Pkg, named by their producer: `fetch_t`, `fetch_ctrl_t`,
 `decoded_t`, `branch_t`, `lsu_t`; memory and debug ports are `<group>_req_t`/`_rsp_t`.
@@ -84,6 +87,26 @@ EX        a  b     EX         B    -   T         EX         L 1st   L 2nd   L+4
 - Stall: in the first cycle of a load, fetch holds everything (PC, imem output, fetch);
   the load and its registers stay, so its address is the same in the second cycle.
 
+## CSRs
+
+CSR instructions (Zicsr: CSRRW, CSRRS, CSRRC and their immediate forms) read the old
+value into rd and write the new one when they complete; CSRRS and CSRRC with rs1 = x0
+(immediate 0) do not write, so `csrr` reads read-only CSRs. Addresses come from
+RiscvCsrPkg (generated from riscv-opcodes, like the encodings).
+
+| CSR | Access | Value |
+|---|---|---|
+| `mcycle`, `mcycleh` | read/write | clock cycles since reset, 64-bit |
+| `minstret`, `minstreth` | read/write | instructions completed (traps do not count), 64-bit |
+| `cycle`, `instret` (and `h`) | read | Zicntr: the same counters |
+| `time`, `timeh` | read | the cycle counter: Mig1 has no real-time clock |
+| `mscratch` | read/write | scratch word |
+| `misa` | read, writes ignored | `0x40000100`: RV32I |
+| `mvendorid`, `marchid`, `mimpid`, `mhartid` | read | 0 |
+
+A CSR write wins over the count of its cycle: the next read gives the written value.
+A CSR instruction that reads instret sees the count before itself.
+
 ## Halt, faults and debug
 
 | Instruction in EX | Completes (rd, memory, retire) | halt | illegal | resume |
@@ -92,6 +115,7 @@ EX        a  b     EX         B    -   T         EX         L 1st   L 2nd   L+4
 | ECALL, illegal encoding | no | 1 | 1 | no effect, final |
 | taken jump/branch to an address not divisible by 4 | no | 1 | 1 | no effect, final |
 | load/store with misaligned address | no | 1 | 1 | no effect, final |
+| CSR instruction on a CSR Mig1 does not have, or writing a read-only CSR | no | 1 | 1 | no effect, final |
 
 `halt_pc` is the address of the instruction that stopped the core; nothing is in flight
 then. While halted, the debug port (`dbg_req_t`, `dbg_rsp_t`) reads a register
@@ -145,7 +169,8 @@ the trace to `<test>.<simulator>.trace`.
 | `design_mig1_decode`, `_regs`, `_alu`, `_mem` | unit tests with their own testbenches |
 | `fetch`, `alu_prog`, `branch`, `load_store`, `resume` | programs on TbMig1, registers checked at the end |
 | `semihosting` | C program of `test/sw/riscv/semihosting` (also run on QEMU): output and exit code 3 |
-| `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones}` | faults: halt at the instruction, nothing written |
+| `csr` | CSR instructions on mscratch, read-only CSRs, counters |
+| `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: halt at the instruction, nothing written |
 | `rv32ui_*` (labels `riscv-tests`, `rv32ui`) | riscv-tests, environment `test/design/mig1/riscv_test.h` |
 
 Not run from rv32ui: fence_i (writes code into memory, Mig1 fetches from a separate
@@ -163,5 +188,5 @@ the paths of trace files.
 
 ## Next
 
-Zicsr + Zicntr, 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
+Machine-mode traps (mtvec, mepc, mcause, mtval, mstatus, MRET), 5-stage pipeline, M extension; Spike cosim (lockstep) and riscv-formal
 on the RVFI trace.
