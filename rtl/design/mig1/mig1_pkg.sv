@@ -99,7 +99,16 @@ package Mig1Pkg;
     // Control -> Fetch.
     typedef struct packed {
         logic   run;      // 1: request the next instruction, 0: hold
+        logic   redirect; // 1: next request is at target; the request of this cycle is dropped
+        iaddr_t target;
     } fetch_ctrl_t;
+
+    // Branch -> Control: next pc of the instruction in EX, combinational.
+    typedef struct packed {
+        logic   taken;      // JAL, JALR, or a branch whose condition holds
+        iaddr_t target;     // word address of the target
+        logic   misaligned; // target byte address is not 4-byte aligned; with taken=1 a fault
+    } branch_t;
 
     // Kind of instruction, from exact match with the RISC-V encodings.
     typedef enum logic [3:0] {

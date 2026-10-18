@@ -8,11 +8,13 @@
  * - no X or Z in retire (Icarus only, Verilator is 2-state),
  * - with +expect_sequential: every pc is the previous pc + 4 (straight-line code).
  * Register writes of retire (rd, rd_data) are kept in a shadow copy of the registers.
- * At the end: illegal=1 fails, halt with illegal=0 passes, and
+ * At the end: halt with illegal=0 passes, illegal=1 fails; with +expect_illegal it is
+ * the other way around. And
  * - with +expect_retired=<n>: n instructions retired,
  * - with +expect_halt_pc=<hex byte address without 0x>: the core halted there,
  * - with +expect_regs: the shadow registers have the values of the table that the
- *   program puts right after the halting EBREAK: number of entries n, then n pairs of
+ *   program puts right after the halting instruction (EBREAK, or the instruction
+ *   that made illegal=1): number of entries n, then n pairs of
  *   words register, value; a register in the table that was never written fails.
  * Other plusargs: +trace=<file> writes every retired instruction and its register
  * write into <file>, +trace alone prints them; +max_cycles=<n> (default 100000).
@@ -37,6 +39,7 @@ module TbMig1;
     reg              expect_sequential;
     integer          max_cycles;
     integer          expect_retired; // -1: not checked
+    reg              expect_illegal;
     reg              check_halt_pc;
     reg [WIDTH-1:0]  expect_halt_pc;
     reg              expect_regs;
@@ -61,7 +64,8 @@ module TbMig1;
             imem_word[8*b +: 8] = u_mig1_cpu.u_imem.peek(a + b[AW-1:0]);
     endfunction
 
-    // +expect_regs: compare the shadow registers with the table after the EBREAK at halt_pc.
+    // +expect_regs: compare the shadow registers with the table after the halting
+    // instruction at halt_pc.
     task automatic check_regs;
         logic [WIDTH-1:0] a;
         logic [WIDTH-1:0] n;
@@ -71,7 +75,7 @@ module TbMig1;
         a = halt_pc + 4;
         n = imem_word(a[AW-1:0]);
         if (n == 0 || n > 32)
-            $fatal(1, "Mig1: +expect_regs: %0d entries at %h, no table after EBREAK?", n, a);
+            $fatal(1, "Mig1: +expect_regs: %0d entries at %h, no table after the halting instruction?", n, a);
         repeat (n) begin
             a = a + 4;
             r = imem_word(a[AW-1:0]);
@@ -125,6 +129,7 @@ module TbMig1;
         expect_regs       = $test$plusargs("expect_regs");
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
+        expect_illegal    = $test$plusargs("expect_illegal");
         check_halt_pc = $value$plusargs("expect_halt_pc=%h", expect_halt_pc);
 
         // +trace=<file> writes the trace into <file>, +trace alone prints it.
@@ -151,8 +156,10 @@ module TbMig1;
                 $fatal(1, "Mig1: no halt after %0d cycles, %0d instructions retired", max_cycles, retired);
         end
         halted = 1;
-        if (illegal)
-            $fatal(1, "Mig1: illegal instruction, last retired pc %h", prev_pc);
+        if (illegal && !expect_illegal)
+            $fatal(1, "Mig1: illegal=1 at %h, last retired pc %h", halt_pc, prev_pc);
+        if (!illegal && expect_illegal)
+            $fatal(1, "Mig1: halted at %h with illegal=0, +expect_illegal", halt_pc);
 
         repeat (5) @(posedge clk);  // nothing may retire after halt
         if (expect_retired >= 0 && retired != expect_retired)

@@ -55,4 +55,24 @@ if(DARK_CIRCUIT_RISCV)
                             +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_alu_prog.${sim}.trace
                             +expect_sequential +expect_regs)
     endforeach()
+
+    # Branches and jumps: every branch type taken and not taken, JAL, JALR.
+    dc_add_riscv_program(design_mig1_branch SOURCES branch.S LINK_FLAGS -T ${SW}/mig1.ld)
+    foreach(sim IN ITEMS icarus verilator)
+        cmake_language(CALL dc_add_${sim}_test design_mig1_branch TOP TbMig1 TB tb_mig1.sv
+                       FLISTS ${FLISTS}
+                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_branch.hex
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_branch.${sim}.trace
+                            +expect_regs)
+    endforeach()
+
+    # Jump to a misaligned target: halt with illegal=1, rd not written.
+    dc_add_riscv_program(design_mig1_misaligned SOURCES misaligned.S LINK_FLAGS -T ${SW}/mig1.ld)
+    foreach(sim IN ITEMS icarus verilator)
+        cmake_language(CALL dc_add_${sim}_test design_mig1_misaligned TOP TbMig1 TB tb_mig1.sv
+                       FLISTS ${FLISTS}
+                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_misaligned.hex
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_misaligned.${sim}.trace
+                            +expect_illegal +expect_halt_pc=c +expect_regs)
+    endforeach()
 endif()
