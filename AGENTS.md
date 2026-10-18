@@ -6,8 +6,6 @@ This file has the rules that are not in README.md.
 ## Code style
 
 - Indent 4 spaces, no tabs, in all files (SV, C, assembly, CMake, Python).
-- `test/third_party/` is copied by scripts in `tools/` and never edited by hand;
-  the style rules of this file do not apply there.
 - Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`),
   instances `u_` and name (`u_aoi22`, `u_mux4_0`). Cells use TSMC names and pins.
 - Multiplexer inputs are zero-based: `sel` = k selects `in<k>`.

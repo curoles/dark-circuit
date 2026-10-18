@@ -114,29 +114,31 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_exit=3
                       OUTPUT "semihost_write0 works[\r\n]+OK")
 
-    # riscv-tests with their standard environment env/p (test/third_party/riscv-tests):
+    # riscv-tests with their standard environment env/p (source fetched by cmake/fetch.cmake):
     # self-checking, each test ends with a store to tohost. Labels riscv-tests and the suite.
-    set(RISCV_TESTS ${PROJECT_SOURCE_DIR}/test/third_party/riscv-tests)
-    set(RISCV_TESTS_FLAGS -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
-    set(RISCV_TESTS_ARGS +riscv_test +no_debugger)
+    if(DARK_CIRCUIT_RISCV_TESTS)
+        set(RISCV_TESTS ${RISCV_TESTS_DIR})
+        set(RISCV_TESTS_FLAGS -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
+        set(RISCV_TESTS_ARGS +riscv_test +no_debugger)
 
-    # rv32ui: one test per instruction. Not run: fence_i (writes code into memory; Mig1
-    # fetches from a separate instruction memory), ma_data (misaligned loads and stores;
-    # Mig1 traps on them).
-    foreach(test IN ITEMS simple add addi and andi auipc beq bge bgeu blt bltu bne jal jalr
-                          lb lbu lh lhu lw ld_st lui or ori sb sh sw st_ld sll slli slt slti
-                          sltiu sltu sra srai srl srli sub xor xori)
-        mig1_program_test(rv32ui_${test} SOURCES ${RISCV_TESTS}/isa/rv32ui/${test}.S
-                          FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
-                          LABELS riscv-tests rv32ui)
-    endforeach()
+        # rv32ui: one test per instruction. Not run: fence_i (writes code into memory; Mig1
+        # fetches from a separate instruction memory), ma_data (misaligned loads and stores;
+        # Mig1 traps on them).
+        foreach(test IN ITEMS simple add addi and andi auipc beq bge bgeu blt bltu bne jal jalr
+                              lb lbu lh lhu lw ld_st lui or ori sb sh sw st_ld sll slli slt slti
+                              sltiu sltu sra srai srl srli sub xor xori)
+            mig1_program_test(rv32ui_${test} SOURCES ${RISCV_TESTS}/isa/rv32ui/${test}.S
+                              FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
+                              LABELS riscv-tests rv32ui)
+        endforeach()
 
-    # rv32mi: machine mode, CSRs, traps. Not run: breakpoint (needs the trigger CSRs of
-    # Sdtrig), pmpaddr (needs PMP); both are optional and Mig1 does not have them.
-    foreach(test IN ITEMS csr illegal instret_overflow lh-misaligned lw-misaligned ma_addr
-                          ma_fetch mcsr sbreak scall sh-misaligned shamt sw-misaligned zicntr)
-        mig1_program_test(rv32mi_${test} SOURCES ${RISCV_TESTS}/isa/rv32mi/${test}.S
-                          FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
-                          LABELS riscv-tests rv32mi)
-    endforeach()
+        # rv32mi: machine mode, CSRs, traps. Not run: breakpoint (needs the trigger CSRs of
+        # Sdtrig), pmpaddr (needs PMP); both are optional and Mig1 does not have them.
+        foreach(test IN ITEMS csr illegal instret_overflow lh-misaligned lw-misaligned ma_addr
+                              ma_fetch mcsr sbreak scall sh-misaligned shamt sw-misaligned zicntr)
+            mig1_program_test(rv32mi_${test} SOURCES ${RISCV_TESTS}/isa/rv32mi/${test}.S
+                              FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
+                              LABELS riscv-tests rv32mi)
+        endforeach()
+    endif()
 endif()

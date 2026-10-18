@@ -34,7 +34,6 @@ test/block/<block>/ testbench of a block
 test/numeric/<format>/<op>/ testbench of a numeric unit
 test/sim/        testbenches of simulation models
 test/design/mig1/ tests of Mig1
-test/third_party/ tests of other projects, copied by scripts in tools/: riscv-tests
 sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/
 test/sw/         tests of software, run on QEMU
 old2020/         old 2020 code, kept for reference
@@ -236,6 +235,10 @@ into Verilog hex files for `SimRAM` and `SimROM` `load()`. Cmake variables:
   `riscv32-unknown-elf-` or `riscv-none-elf-`
 - `DARK_CIRCUIT_USE_QEMU`: `AUTO`, `ON` or `OFF`; with QEMU, programs also run on
   `qemu-system-riscv32` with semihosting as a reference, tests have suffix and label `.qemu`
+- `DARK_CIRCUIT_USE_RISCV_TESTS`: `AUTO`, `ON` or `OFF`; riscv-tests are fetched when cmake
+  configures a build directory the first time (about 10 MB, needs network; `AUTO` disables
+  them when the repository can not be reached). Later configures and builds do not fetch.
+  Without network: `-D FETCHCONTENT_SOURCE_DIR_RISCV_TESTS=<riscv-tests checkout>`
 
 ```sh
 make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
@@ -262,9 +265,9 @@ The file is complete also when the test fails. Plusargs of `TbMig1`
 Mig1 also runs the rv32ui (instructions) and rv32mi (machine mode: CSRs, traps) suites of
 [riscv-tests](https://github.com/riscv-software-src/riscv-tests): self-checking tests
 written by the RISC-V community, so the expected values do not come from this project.
-`tools/riscv_tests.sh` copies them and their standard environment `env/p` at a pinned
-commit into `test/third_party/riscv-tests/` (BSD licenses there; run the script again only
-to move to a newer commit or add suites). A test ends with a store to the word `tohost`,
+Cmake fetches their source with the standard environment `env/p` at a pinned commit
+into the build directory (`cmake/fetch.cmake`, BSD licenses there), and compiles the tests
+with the rules of this project. A test ends with a store to the word `tohost`,
 which TbMig1 finds in the symbol table of the program. Run them with `make run L=rv32ui`,
 `make run L=rv32mi` or `make run L=riscv-tests`.
 
