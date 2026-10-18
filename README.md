@@ -20,6 +20,8 @@ rtl/lib/
     <block>/struct/  version made of blocks, parts and gates
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
                      not in aggregate flists, not tested yet
+  numeric/       number formats, built on blocks: int32/mul Int32Mul (signed, unsigned);
+                 <format>/<op>/<kind>/{behave,struct}, aggregate flists like block/
   riscv/         RISC-V instruction encodings and CSR addresses, generated from riscv-opcodes
                  by tools/riscv_opcodes.sh
   macro/         include files kept for old code; use $clog2, not `CLOG2
@@ -29,6 +31,7 @@ cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/   testbench of a part
 test/block/<block>/ testbench of a block
+test/numeric/<format>/<op>/ testbench of a numeric unit
 test/sim/        testbenches of simulation models
 test/design/mig1/ tests of Mig1
 test/third_party/ tests of other projects, copied by scripts in tools/: riscv-tests
