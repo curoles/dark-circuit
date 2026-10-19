@@ -4,9 +4,11 @@ mig1_fetch.sv
 mig1_control.sv
 mig1_decode.sv
 mig1_regs.sv
+mig1_forward.sv
 mig1_alu.sv
 mig1_branch.sv
 mig1_lsu.sv
+mig1_load_data.sv
 mig1_csr.sv
 mig1_muldiv.sv
 mig1_pipe.sv

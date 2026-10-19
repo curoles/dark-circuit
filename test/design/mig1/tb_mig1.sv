@@ -9,7 +9,8 @@
  * - load or store: mem_addr and the mask are the access of the instruction:
  *   address rs1_rdata + imm, size by funct3 (computed here from insn),
  * - load: bytes of mem_rdata under mem_rmask are the bytes of dmem,
- * - store: one clock later dmem has the bytes of mem_wdata under mem_wmask,
+ * - store: when it retires, dmem has the bytes of mem_wdata under mem_wmask (the store
+ *   wrote one cycle before, in EX; a younger store writes at the end of the retire cycle),
  * - traps only with +expect_trap,
  * - nothing retires after halt,
  * - no X or Z in retire (Icarus only, Verilator is 2-state),
@@ -95,10 +96,6 @@ module TbMig1;
     integer          retired;
     reg [WIDTH-1:0]  prev_pc;
     reg [WIDTH-1:0]  prev_pc_wdata;  // next pc told by the previous retired instruction
-    reg              store_check;    // check dmem for the store retired one clock before
-    reg [WIDTH-1:0]  store_addr;
-    strb_t           store_mask;
-    reg [WIDTH-1:0]  store_data;
     wire [WIDTH-1:0] access_addr;    // byte address of the load or store in retire
     strb_t           access_mask;    // its bytes
     reg              halted;
@@ -345,10 +342,6 @@ module TbMig1;
     // Checks of every retired instruction, values of the cycle before the rising edge;
     // register writes of the debugger.
     always @(posedge clk) begin
-        if (store_check && !dmem_has(store_addr, store_mask, store_data))
-            $fatal(1, "Mig1: store to %h mask %b data %h: dmem has %h", store_addr, store_mask,
-                   store_data, dmem_word(store_addr));
-        store_check <= 1'b0;
         if (rst_n && retire.valid) begin
 `ifndef VERILATOR
             if ($isunknown(retire))
@@ -383,6 +376,9 @@ module TbMig1;
             if (retire.mem_rmask != 0 && !dmem_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata))
                 $fatal(1, "Mig1: load at pc %h from %h mask %b got %h, dmem has %h", retire_pc, retire.mem_addr,
                        retire.mem_rmask, retire.mem_rdata, dmem_word(retire.mem_addr));
+            if (retire.mem_wmask != 0 && !dmem_has(retire.mem_addr, retire.mem_wmask, retire.mem_wdata))
+                $fatal(1, "Mig1: store at %h to %h mask %b data %h: dmem has %h", retire_pc,
+                       retire.mem_addr, retire.mem_wmask, retire.mem_wdata, dmem_word(retire.mem_addr));
             if (retire.trap && !expect_trap && !riscv_test)
                 $fatal(1, "Mig1: trap at pc %h", retire_pc);
             if (retire.insn == MRET && !retire.trap)
@@ -413,12 +409,6 @@ module TbMig1;
                 shadow[retire.rd_addr]  <= retire.rd_wdata;
                 written[retire.rd_addr] <= 1'b1;
             end
-            if (retire.mem_wmask != 0) begin
-                store_check <= 1'b1;
-                store_addr  <= retire.mem_addr;
-                store_mask  <= retire.mem_wmask;
-                store_data  <= retire.mem_wdata;
-            end
             prev_pc       <= retire_pc;
             prev_pc_wdata <= retire.pc_wdata;
             retired       <= retired + 1;
@@ -440,7 +430,6 @@ module TbMig1;
         prev_pc_wdata = 0;
         traps          = 0;
         ebreak_trapped = 0;
-        store_check   = 0;
         written = 0;
         dbg_req = '0;
         if (!$value$plusargs("resumes=%d", resumes)) resumes = 0;

@@ -128,12 +128,6 @@ package Mig1Pkg;
         logic   misaligned; // target byte address is not 4-byte aligned; with taken=1 a fault
     } branch_t;
 
-    // Lsu -> Control.
-    typedef struct packed {
-        logic   stall;      // instruction in EX needs one more cycle (load waits for data)
-        logic   misaligned; // load or store address not aligned to its size: a fault
-    } lsu_t;
-
     // Control -> Csr: trap of the instruction in EX (machine mode).
     typedef struct packed {
         logic       valid;
@@ -147,12 +141,12 @@ package Mig1Pkg;
         iaddr_t     mepc;       // MRET target
     } csr_t;
 
-    // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none.
+    // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none;
+    // mem_rdata of loads is filled in MEM/WB, where the data arrives.
     typedef struct packed {
         word_t  addr;       // word address as byte address
         strb_t  rmask;
         strb_t  wmask;
-        word_t  rdata;      // valid in the second cycle of a load
         word_t  wdata;
     } lsu_mem_t;
 
@@ -211,9 +205,19 @@ package Mig1Pkg;
         word_t      rs2_data;
     } id_ex_t;
 
+    // EX -> MEM/WB: the instruction after EX (Mig1Pipe). No stall or flush: an
+    // instruction that leaves EX always completes in MEM/WB.
+    typedef struct packed {
+        retire_t                ret;     // RVFI entry built in EX; valid: completes or traps.
+                                         // MEM/WB fills order, and rd_wdata and mem_rdata of loads
+        logic                   load;    // rd value comes from dmem
+        logic [2:0]             funct3;  // load size and sign
+        logic [DADDR_START-1:0] offset;  // load: byte in the word
+    } ex_mem_t;
+
     // Control -> Pipe, per boundary: keep the instruction (stall) or put a bubble (flush).
     typedef struct packed {
-        logic       ex_stall;   // EX keeps its instruction (load, division)
+        logic       ex_stall;   // EX keeps its instruction (division)
         logic       ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
     } pipe_ctrl_t;
 

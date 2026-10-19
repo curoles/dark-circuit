@@ -1,5 +1,5 @@
 /* Mig1 control: when the core runs, where it fetches, when it traps and when it stops,
- * and the stalls and flushes of the pipeline (IF | ID | EX).
+ * and the stalls and flushes of the pipeline (IF | ID | EX | MEM/WB).
  *
  * Traps (machine mode): when the instruction in EX faults, it does not complete (no
  * register or memory write, minstret does not count it), it retires as a trap with
@@ -12,15 +12,18 @@
  * - load or store with a misaligned address: misaligned load or store, the address;
  * - ECALL: machine ECALL, 0.
  * MRET goes to mepc. EBREAK while ebreak_halt=1 (a debugger is attached; dcsr.ebreakm of
- * the debug spec) completes and halts the core: halt=1, halt_pc is its address, nothing
- * more is fetched, nothing is in flight; resume=1 runs again from halt_pc + 4 (a
- * redirect: IF has fetched beyond EBREAK).
+ * the debug spec) completes and halts the core: fetch stops and ID is flushed at once,
+ * halt=1 comes the cycle after EBREAK retired in MEM/WB; halt_pc is its address, nothing
+ * is in flight; resume=1 runs again from halt_pc + 4 (a redirect: IF has fetched beyond
+ * EBREAK).
  * A redirect (taken jump or branch, trap, MRET in EX; resume) drops the instructions in
- * ID and IF (two bubbles). lsu.stall (load waiting for data) and muldiv_stall (division
- * not done) keep the instruction in EX: ID and IF hold. Interlock: the instruction in ID
- * waits while the instruction in EX writes a register that it reads (EX writes at the end
- * of its cycle, ID reads the register file then); EX gets bubbles meanwhile.
- * ex_done=1: the instruction in EX completes, it writes rd and retires.
+ * ID and IF (two bubbles). muldiv_stall (division not done) keeps the instruction in EX:
+ * ID and IF hold.
+ * Interlock: results are forwarded to ID (Mig1Forward), except load data, which comes
+ * in MEM/WB: the instruction in ID waits one cycle while it reads the rd of a load in
+ * EX (load-use); EX gets a bubble meanwhile.
+ * ex_done=1: the instruction in EX completes: CSR write and minstret now; it writes rd
+ * and retires in MEM/WB, which it always reaches.
  */
 module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     input  wire                        clk,
@@ -38,7 +41,7 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     /* verilator lint_on UNUSEDSIGNAL */
     input  logic [WIDTH-1:0]           ex_addr,     // word_t: load/store address, for mtval
     input  branch_t                    branch,      // next pc of the instruction in EX
-    input  lsu_t                       lsu,         // stall and fault of loads and stores
+    input  wire                        lsu_misaligned, // load/store address not aligned: a fault
     input  wire                        csr_illegal, // CSR instruction can not be done
     input  wire                        muldiv_stall, // division of the instruction in EX not done
     input  csr_t                       csr,         // mtvec, mepc
@@ -58,8 +61,6 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     logic   taken;
     logic   misaligned_target;
     iaddr_t target;
-    logic   lsu_misaligned;
-    logic   lsu_stall;
     logic   ex_stall;       // the instruction in EX stays for another cycle
     iaddr_t mtvec;
     iaddr_t mepc;
@@ -75,9 +76,7 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     assign taken             = branch.taken;
     assign misaligned_target = branch.misaligned;
     assign target            = branch.target;
-    assign lsu_misaligned    = lsu.misaligned;
-    assign lsu_stall         = lsu.stall;
-    assign ex_stall          = lsu_stall || muldiv_stall;
+    assign ex_stall          = muldiv_stall;
     assign mtvec             = csr.mtvec;
     assign mepc              = csr.mepc;
     assign id_uses_rs1       = id_dec.uses_rs1;
@@ -96,7 +95,9 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     logic       resuming;   // resume while halted
     logic       redirect;
     logic       ex_writes;  // the instruction in EX writes a register at the end of its cycle
-    logic       hazard;     // the instruction in ID reads that register
+    logic       halting;    // the EBREAK that halts the core is in MEM/WB, it retires now
+    logic       load_use;   // ID reads the rd of a load in EX: its data comes in MEM/WB
+    logic       hazard;
     logic       flush_id;   // the instruction in ID must not go on
 
     assign stop = ex.valid && kind == KIND_EBREAK && ebreak_halt;
@@ -131,9 +132,15 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     assign ex_trap.cause = cause;
     assign ex_trap.tval  = tval;
 
+    // EBREAK decides in EX (stop: fetch stops, ID is flushed); the core halts after
+    // it retired in MEM/WB, so halt=1 comes the cycle after its retire.
+    always_ff @(posedge clk)
+        if (!rst_n) halting <= 1'b0;
+        else        halting <= stop;
+
     always_ff @(posedge clk)
         if (!rst_n)              running <= 1'b1;
-        else if (stop)           running <= 1'b0;
+        else if (halting)        running <= 1'b0;
         else if (halt && resume) running <= 1'b1;
 
     always_ff @(posedge clk)
@@ -141,13 +148,16 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
 
     assign resuming  = halt && resume;
     assign redirect  = trap || mret || (valid && taken) || resuming;
-    assign ex_writes = valid && ex_rd_we && ex_rd != '0;
-    assign hazard    = id_valid && ex_writes &&
-                       ((id_uses_rs1 && id_rs1 == ex_rd) || (id_uses_rs2 && id_rs2 == ex_rd));
     assign flush_id  = redirect || stop;
 
+    // Interlock: other results are forwarded to ID (Mig1Forward); a load in EX has no data.
+    assign ex_writes = valid && ex_rd_we && ex_rd != '0;
+    assign load_use  = ex_writes && kind == KIND_LOAD &&
+                       ((id_uses_rs1 && id_rs1 == ex_rd) || (id_uses_rs2 && id_rs2 == ex_rd));
+    assign hazard    = id_valid && load_use;
+
     assign ex_done             = valid && !trap && !ex_stall;
-    assign fetch_ctrl.run      = rst_n && running && !stop;
+    assign fetch_ctrl.run      = rst_n && running && !stop && !halting;
     assign fetch_ctrl.stall    = (ex_stall || hazard) && !flush_id;
     assign fetch_ctrl.redirect = redirect;
     assign fetch_ctrl.target   = trap ? mtvec : mret ? mepc : resuming ? halt_pc + 1'b1 : target;

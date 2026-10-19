@@ -5,8 +5,9 @@ Zicsr (CSR instructions) and Zicntr (counters), machine-mode traps; no interrupt
 It passes riscv-tests rv32ui (40 of 42 tests), rv32um (8 of 8) and rv32mi (14 of 16) with
 their standard environment; the other tests need features Mig1 does not have, see Testing.
 
-- 3-stage pipeline: IF (fetch) | ID (decode, register read) | EX (everything else),
-  interlock instead of forwarding; on the way to 5 stages, step by step (see CPI).
+- 4-stage pipeline: IF (fetch) | ID (decode, register read) | EX (execute; branches,
+  traps, CSRs, stores) | MEM/WB (load data, register write, retire); interlock instead
+  of forwarding; on the way to 5 stages, step by step (see CPI).
 - Harvard: instruction memory and data memory, both with 1 clock read latency
   (like SRAM and FPGA block RAM). Mig1Cpu loads the same program image into both.
 - Faults trap to mtvec (machine mode), MRET returns. With a debugger attached, EBREAK
@@ -22,8 +23,8 @@ RTL is in this directory, configuration in `cfg/`, tests in `test/design/mig1/`.
 |------|------|
 | `mig1_pkg.sv` | Mig1Pkg: widths, port and boundary structs, kind_t, decoded_t |
 | `mig1_config_pkg.sv` | Mig1ConfigPkg, generated from `cfg/mig1_config.yaml` |
-| `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv`, `mig1_csr.sv`, `mig1_muldiv.sv` | the parts |
-| `mig1_pipe.sv` | Mig1Pipe: the pipeline registers (ID/EX) |
+| `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv`, `mig1_load_data.sv`, `mig1_csr.sv`, `mig1_muldiv.sv` | the parts |
+| `mig1_pipe.sv` | Mig1Pipe: the pipeline registers (ID/EX, EX/MEM) |
 | `mig1_core.sv` | Mig1Core: connects the parts, synthesizable, memories are outside |
 | `mig1_cpu.sv` | Mig1Cpu: Mig1Core with SimROM (imem) and SimRAM (dmem), for simulation |
 | `mig1.flist` | files in compile order |
@@ -40,40 +41,45 @@ ID  imem_rsp -> id_insn -> Mig1Decode -> id_dec
 EX  id_ex_q -> ex_insn, ex_dec, rs1, rs2, pc
     rs1, rs2, imm, pc -> Mig1Alu    -> ALU result: rd value, or address of load/store
                       -> Mig1Branch -> branch (taken, target, misaligned), link = pc + 4
-    address, rs2      -> Mig1Lsu    -> dmem_req; 1 clock later dmem_rsp -> load data
-                                       lsu (stall, misaligned)
+    address, rs2      -> Mig1Lsu    -> dmem_req: store written now, load read sent;
+                                       misaligned
     ex_dec, rs1       -> Mig1Csr    -> old CSR value; CSR write when the instruction completes
     rs1, rs2          -> Mig1MulDiv -> product (1 cycle) or quotient/remainder (34 cycles,
                                        muldiv stall)
-    rd value = ALU result | link | load data | CSR value | M result, chosen by ex_dec.rd_src;
-               Mig1Regs writes it when ex_done=1
-    id_dec, ex_dec, branch, lsu, CSR fault, muldiv stall -> Mig1Control
-        -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
-        -> pipe_ctrl (ex_stall, ex_flush) -> Mig1Pipe
-        -> ex_done, ex_trap (to Mig1Csr), halt, halt_pc
+    rd value = ALU result | link | CSR value | M result, chosen by ex_dec.rd_src
+    ex_mem_d = {retire entry, load, funct3, offset} -> Mig1Pipe
+                                   | 1 clock
+MEM/WB  ex_mem_q; dmem_rsp -> Mig1LoadData -> load data
+    rd value = load data (loads) or the value from EX; Mig1Regs writes it; retire
+
+id_dec, ex_dec, mem_rd, branch, misaligned, CSR fault, muldiv stall -> Mig1Control
+    -> if_ctrl (run, stall, redirect, target) -> Mig1Fetch
+    -> pipe_ctrl (ex_stall, ex_flush) -> Mig1Pipe
+    -> ex_done, ex_trap (to Mig1Csr), halt, halt_pc
 ```
 
 Mig1Core only connects parts; its signals have the prefix of their stage (`if_`, `id_`,
-`ex_`).
+`ex_`, `mem_`).
 Each part works on "the instruction in its stage" and does not know which stage that
 is, so the same parts fit a 5-stage pipeline.
 
-| Part        | Stage | Does |
-|-------------|-------|------|
-| Mig1Fetch   | IF    | PC (PrgCounter), imem request; holds on stall, jumps on redirect and reset |
-| Mig1Control | -     | run, stalls, flushes, interlock, redirect, traps (cause, mtval), halt, resume; ex_done: the instruction completes |
-| Mig1Pipe    | -     | pipeline registers: bubble on reset or flush, hold on stall |
-| Mig1Decode  | ID    | instruction -> decoded_t: kind, registers, funct3, alt, immediate, controls |
-| Mig1Regs    | ID    | x0..x31, 2 reads (ID) + 1 write (EX); the debug port owns read port 0 and the write port while halted |
-| Mig1Alu     | EX    | rd value of OP, OP-IMM, LUI, AUIPC; address rs1 + imm of loads and stores |
-| Mig1Branch  | EX    | taken, target, misaligned target; link = pc + 4 for JAL, JALR |
-| Mig1Lsu     | EX    | dmem requests, store strobes, load data extension, misaligned address, load stall |
-| Mig1Csr     | EX    | CSRs, counters, trap CSRs; CSR instructions read the old value and write the new one |
-| Mig1MulDiv  | EX    | M extension: Int32Mul (combinational), Int32Div (32 clocks, stalls), RISC-V results of divide by 0 and overflow |
+| Part         | Stage  | Does |
+|--------------|--------|------|
+| Mig1Fetch    | IF     | PC (PrgCounter), imem request; holds on stall, jumps on redirect and reset |
+| Mig1Control  | -      | run, stalls, flushes, interlock, redirect, traps (cause, mtval), halt, resume; ex_done: the instruction completes |
+| Mig1Pipe     | -      | pipeline registers: bubble on reset or flush, hold on stall |
+| Mig1Decode   | ID     | instruction -> decoded_t: kind, registers, funct3, alt, immediate, controls |
+| Mig1Regs     | ID     | x0..x31, 2 reads (ID) + 1 write (MEM/WB); the debug port owns read port 0 and the write port while halted |
+| Mig1Alu      | EX     | rd value of OP, OP-IMM, LUI, AUIPC; address rs1 + imm of loads and stores |
+| Mig1Branch   | EX     | taken, target, misaligned target; link = pc + 4 for JAL, JALR |
+| Mig1Lsu      | EX     | dmem requests, store strobes, misaligned address |
+| Mig1Csr      | EX     | CSRs, counters, trap CSRs; CSR instructions read the old value and write the new one |
+| Mig1MulDiv   | EX     | M extension: Int32Mul (combinational), Int32Div (32 clocks, stalls), RISC-V results of divide by 0 and overflow |
+| Mig1LoadData | MEM/WB | loaded value from the dmem word: bytes at the offset, sign/zero extension |
 
 Boundary structs are in Mig1Pkg, named by their producer: `fetch_t`, `fetch_ctrl_t`,
-`pipe_ctrl_t`, `decoded_t`, `branch_t`, `lsu_t`; pipeline registers by their boundary:
-`id_ex_t`; memory and debug ports are `<group>_req_t`/`_rsp_t`.
+`pipe_ctrl_t`, `decoded_t`, `branch_t`, `lsu_mem_t`; pipeline registers by their
+boundary: `id_ex_t`, `ex_mem_t`; memory and debug ports are `<group>_req_t`/`_rsp_t`.
 Decode gives controls (`rd_we`, `rd_src`, `uses_rs1`, `uses_rs2`); units derive their
 operation from `kind`, `funct3` and `alt` (RiscvPkg `F3_*` names the funct3 values).
 
@@ -83,39 +89,46 @@ Every instruction takes one cycle in each stage, plus:
 
 | Case | Extra cycles | Why |
 |------|--------------|-----|
-| taken branch, JAL, JALR; trap, MRET | 2 | decided in EX; the instructions in ID and IF are dropped (two bubbles) |
-| uses rd of the instruction before it | 1 | interlock: ID reads registers, EX writes them at the end of its cycle |
-| load | 1 | data comes 1 clock after the read request; the load waits in EX |
-| store | 0 | written in its cycle in EX |
+| taken branch, JAL, JALR; trap, MRET | 2 | decided in EX; the instructions in ID and IF are dropped |
+| uses rd of the instruction just before | 2 | interlock: rd is written at the end of MEM/WB, ID reads registers |
+| uses rd of the instruction 2 before | 1 | the same |
+| load | 0 | the read is sent in EX, the data arrives in MEM/WB |
+| store | 0 | written in EX |
 | multiply | 0 | Int32Mul is combinational |
 | divide, remainder | 33 | Int32Div takes 32 clocks; start, 32 steps, then the result |
 
-A load whose rd the next instruction uses costs 2: the load waits in EX, then the
-interlock. Measured: branch.S retires 58 instructions in 111 cycles, load_store.S 43 in 71.
+A load is like any other instruction for the interlock: its rd is written in MEM/WB.
+Measured: branch.S retires 58 instructions in 130 cycles, load_store.S 43 in 59.
 
 ```
-straight-line         b uses rd of a           taken branch B -> T
-cycle  1  2  3  4     cycle  1  2  3     4  5   cycle  1   2    3    4  5    6
-IF     a  b  c  d     IF     a  b  hold  c  d   IF     B   B+4  B+8  T  T+4  T+8
-ID        a  b  c     ID        a  b     b  c   ID         B    B+4  -  T    T+4
-EX           a  b     EX           a     -  b   EX              B    -  -    T
+straight-line                 b uses rd of a (a ALU or load)
+cycle   1  2  3  4  5         cycle   1  2  3     4     5  6  7
+IF      a  b  c  d  e         IF      a  b  hold  hold  c  d  e
+ID         a  b  c  d         ID         a  b     b     b  c  d
+EX            a  b  c         EX            a     -     -  b  c
+MEM/WB           a  b         MEM/WB           a     -     -  b
+                              dmem          read  data         (a load)
 
-load L, U uses rd of L
-cycle  1  2  3      4      5    6
-IF     L  U  hold   hold   U+4  U+8
-ID        L  U      U      U    U+4
-EX           L 1st  L 2nd  -    U
-dmem         read   data
+taken branch B -> T
+cycle   1   2    3    4   5    6
+IF      B   B+4  B+8  T   T+4  T+8
+ID          B    B+4  -   T    T+4
+EX               B    -   -    T
+MEM/WB                B   -    -
 ```
 
 - Redirect: Mig1Branch decides in EX; Mig1Control redirects fetch to the target, flushes
   ID (EX gets a bubble) and the instruction requested in the same cycle comes back with
   `fetch.valid=0`.
-- Stall: while a load or a division waits in EX, Mig1Pipe keeps it and fetch holds
-  everything (PC, imem output, fetch), so ID keeps its instruction too.
-- Interlock: when the instruction in ID reads a register that the instruction in EX
-  writes, fetch holds and EX gets a bubble; the next cycle ID reads the new value.
-- Halt: EBREAK halts in EX and flushes ID; resume redirects fetch to `halt_pc + 4`.
+- Stall: while a division waits in EX, Mig1Pipe keeps it and fetch holds everything
+  (PC, imem output, fetch); MEM/WB gets bubbles.
+- Interlock: while the instruction in ID reads a register that the instruction in EX or
+  MEM/WB writes, fetch holds and EX gets a bubble.
+- Loads and stores: Mig1Lsu writes stores and sends load reads in EX: nothing after EX
+  can fault, so an instruction that leaves EX always completes. The word arrives in
+  MEM/WB, where Mig1LoadData takes the loaded value.
+- Halt: EBREAK decides in EX: fetch stops, ID is flushed; `halt=1` comes the cycle after
+  it retired in MEM/WB; resume redirects fetch to `halt_pc + 4`.
 
 ## CSRs
 
@@ -236,103 +249,106 @@ instruction.
 - 2-stage: IF | EX, before the 5-stage work, 2026-10-18.
 - 3-stage (5a): IF | ID | EX with interlock, 2026-10-18. Redirects cost 2 bubbles
   instead of 1, an instruction that uses the rd of the one before it waits 1 cycle.
+- 4-stage (5b): IF | ID | EX | MEM/WB, 2026-10-19. Loads lose their extra cycle; using
+  the rd of the instruction before costs 2, of the one 2 before 1.
 
-| Programs | Count | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI |
-|---|---|---|---|---|---|---|
-| own programs (`test/design/mig1/*.S`, semihosting) | 17 | 421 | 655 | 1.56 | 822 | 1.95 |
-| riscv-tests rv32ui | 40 | 14722 | 16111 | 1.09 | 21758 | 1.48 |
-| riscv-tests rv32um | 8 | 2549 | 3885 | 1.52 | 4778 | 1.87 |
-| riscv-tests rv32mi | 14 | 2112 | 2373 | 1.12 | 3305 | 1.56 |
+| Programs | Count | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI |
+|---|---|---|---|---|---|---|---|---|
+| own programs (`test/design/mig1/*.S`, semihosting) | 17 | 421 | 655 | 1.56 | 822 | 1.95 | 926 | 2.20 |
+| riscv-tests rv32ui | 40 | 14722 | 16111 | 1.09 | 21758 | 1.48 | 26246 | 1.78 |
+| riscv-tests rv32um | 8 | 2549 | 3885 | 1.52 | 4778 | 1.87 | 5563 | 2.18 |
+| riscv-tests rv32mi | 14 | 2112 | 2373 | 1.12 | 3305 | 1.56 | 3976 | 1.88 |
 
 <details><summary>Every program</summary>
 
-| Program | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI |
-|---|---|---|---|---|---|
-| `alu_prog` | 28 | 29 | 1.04 | 32 | 1.14 |
-| `branch` | 58 | 78 | 1.34 | 111 | 1.91 |
-| `csr` | 39 | 40 | 1.03 | 52 | 1.33 |
-| `fetch` | 5 | 6 | 1.20 | 9 | 1.80 |
-| `illegal_csr_readonly` | 13 | 16 | 1.23 | 23 | 1.77 |
-| `illegal_csr_unknown` | 13 | 16 | 1.23 | 23 | 1.77 |
-| `illegal_ecall` | 11 | 13 | 1.18 | 18 | 1.64 |
-| `illegal_ones` | 13 | 16 | 1.23 | 23 | 1.77 |
-| `illegal_zero` | 13 | 16 | 1.23 | 23 | 1.77 |
-| `load_store` | 43 | 64 | 1.49 | 71 | 1.65 |
-| `misaligned_jalr` | 13 | 15 | 1.15 | 22 | 1.69 |
-| `misaligned_lw` | 13 | 15 | 1.15 | 22 | 1.69 |
-| `misaligned_sh` | 13 | 15 | 1.15 | 22 | 1.69 |
-| `muldiv` | 21 | 156 | 7.43 | 164 | 7.81 |
-| `resume` | 6 | 13 | 2.17 | 16 | 2.67 |
-| `rv32mi_csr` | 168 | 180 | 1.07 | 251 | 1.49 |
-| `rv32mi_illegal` | 120 | 137 | 1.14 | 194 | 1.62 |
-| `rv32mi_instret_overflow` | 108 | 120 | 1.11 | 162 | 1.50 |
-| `rv32mi_lh-misaligned` | 117 | 132 | 1.13 | 182 | 1.56 |
-| `rv32mi_lw-misaligned` | 175 | 196 | 1.12 | 280 | 1.60 |
-| `rv32mi_ma_addr` | 316 | 372 | 1.18 | 524 | 1.66 |
-| `rv32mi_ma_fetch` | 237 | 267 | 1.13 | 385 | 1.62 |
-| `rv32mi_mcsr` | 101 | 112 | 1.11 | 151 | 1.50 |
-| `rv32mi_sbreak` | 109 | 123 | 1.13 | 170 | 1.56 |
-| `rv32mi_scall` | 98 | 109 | 1.11 | 152 | 1.55 |
-| `rv32mi_sh-misaligned` | 125 | 141 | 1.13 | 194 | 1.55 |
-| `rv32mi_shamt` | 109 | 122 | 1.12 | 168 | 1.54 |
-| `rv32mi_sw-misaligned` | 179 | 201 | 1.12 | 280 | 1.56 |
-| `rv32mi_zicntr` | 150 | 161 | 1.07 | 212 | 1.41 |
-| `rv32ui_add` | 506 | 532 | 1.05 | 700 | 1.38 |
-| `rv32ui_addi` | 283 | 300 | 1.06 | 411 | 1.45 |
-| `rv32ui_and` | 526 | 552 | 1.05 | 784 | 1.49 |
-| `rv32ui_andi` | 239 | 256 | 1.07 | 356 | 1.49 |
-| `rv32ui_auipc` | 99 | 112 | 1.13 | 153 | 1.55 |
-| `rv32ui_beq` | 332 | 369 | 1.11 | 473 | 1.42 |
-| `rv32ui_bge` | 350 | 396 | 1.13 | 513 | 1.47 |
-| `rv32ui_bgeu` | 375 | 421 | 1.12 | 563 | 1.50 |
-| `rv32ui_blt` | 332 | 369 | 1.11 | 474 | 1.43 |
-| `rv32ui_bltu` | 357 | 394 | 1.10 | 524 | 1.47 |
-| `rv32ui_bne` | 332 | 371 | 1.12 | 478 | 1.44 |
-| `rv32ui_jal` | 96 | 109 | 1.14 | 148 | 1.54 |
-| `rv32ui_jalr` | 156 | 179 | 1.15 | 251 | 1.61 |
-| `rv32ui_lb` | 270 | 311 | 1.15 | 410 | 1.52 |
-| `rv32ui_lbu` | 270 | 311 | 1.15 | 410 | 1.52 |
-| `rv32ui_ld_st` | 1005 | 1209 | 1.20 | 1681 | 1.67 |
-| `rv32ui_lh` | 286 | 327 | 1.14 | 442 | 1.55 |
-| `rv32ui_lhu` | 295 | 336 | 1.14 | 460 | 1.56 |
-| `rv32ui_lui` | 106 | 117 | 1.10 | 158 | 1.49 |
-| `rv32ui_lw` | 300 | 341 | 1.14 | 470 | 1.57 |
-| `rv32ui_or` | 529 | 555 | 1.05 | 790 | 1.49 |
-| `rv32ui_ori` | 246 | 263 | 1.07 | 370 | 1.50 |
-| `rv32ui_sb` | 459 | 524 | 1.14 | 663 | 1.44 |
-| `rv32ui_sh` | 512 | 577 | 1.13 | 769 | 1.50 |
-| `rv32ui_simple` | 82 | 92 | 1.12 | 124 | 1.51 |
-| `rv32ui_sll` | 534 | 560 | 1.05 | 740 | 1.39 |
-| `rv32ui_slli` | 282 | 299 | 1.06 | 409 | 1.45 |
-| `rv32ui_slt` | 500 | 526 | 1.05 | 688 | 1.38 |
-| `rv32ui_slti` | 278 | 295 | 1.06 | 401 | 1.44 |
-| `rv32ui_sltiu` | 278 | 295 | 1.06 | 401 | 1.44 |
-| `rv32ui_sltu` | 500 | 526 | 1.05 | 688 | 1.38 |
-| `rv32ui_sra` | 553 | 579 | 1.05 | 774 | 1.40 |
-| `rv32ui_srai` | 297 | 314 | 1.06 | 439 | 1.48 |
-| `rv32ui_srl` | 547 | 573 | 1.05 | 762 | 1.39 |
-| `rv32ui_srli` | 291 | 308 | 1.06 | 427 | 1.47 |
-| `rv32ui_st_ld` | 525 | 585 | 1.11 | 817 | 1.56 |
-| `rv32ui_sub` | 498 | 524 | 1.05 | 688 | 1.38 |
-| `rv32ui_sw` | 520 | 585 | 1.12 | 787 | 1.51 |
-| `rv32ui_xor` | 528 | 554 | 1.05 | 788 | 1.49 |
-| `rv32ui_xori` | 248 | 265 | 1.07 | 374 | 1.51 |
-| `rv32um_div` | 137 | 445 | 3.25 | 496 | 3.62 |
-| `rv32um_divu` | 138 | 446 | 3.23 | 498 | 3.61 |
-| `rv32um_mul` | 500 | 526 | 1.05 | 692 | 1.38 |
-| `rv32um_mulh` | 500 | 526 | 1.05 | 700 | 1.40 |
-| `rv32um_mulhsu` | 500 | 526 | 1.05 | 700 | 1.40 |
-| `rv32um_mulhu` | 500 | 526 | 1.05 | 700 | 1.40 |
-| `rv32um_rem` | 137 | 445 | 3.25 | 496 | 3.62 |
-| `rv32um_remu` | 137 | 445 | 3.25 | 496 | 3.62 |
-| `semihosting` | 76 | 99 | 1.30 | 123 | 1.62 |
-| `trap` | 43 | 48 | 1.12 | 68 | 1.58 |
+| Program | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI |
+|---|---|---|---|---|---|---|---|
+| `alu_prog` | 28 | 29 | 1.04 | 32 | 1.14 | 35 | 1.25 |
+| `branch` | 58 | 78 | 1.34 | 111 | 1.91 | 130 | 2.24 |
+| `csr` | 39 | 40 | 1.03 | 52 | 1.33 | 64 | 1.64 |
+| `fetch` | 5 | 6 | 1.20 | 9 | 1.80 | 12 | 2.40 |
+| `illegal_csr_readonly` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 |
+| `illegal_csr_unknown` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 |
+| `illegal_ecall` | 11 | 13 | 1.18 | 18 | 1.64 | 22 | 2.00 |
+| `illegal_ones` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 |
+| `illegal_zero` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 |
+| `load_store` | 43 | 64 | 1.49 | 71 | 1.65 | 59 | 1.37 |
+| `misaligned_jalr` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 |
+| `misaligned_lw` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 |
+| `misaligned_sh` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 |
+| `muldiv` | 21 | 156 | 7.43 | 164 | 7.81 | 170 | 8.10 |
+| `resume` | 6 | 13 | 2.17 | 16 | 2.67 | 19 | 3.17 |
+| `rv32mi_csr` | 168 | 180 | 1.07 | 251 | 1.49 | 310 | 1.85 |
+| `rv32mi_illegal` | 120 | 137 | 1.14 | 194 | 1.62 | 234 | 1.95 |
+| `rv32mi_instret_overflow` | 108 | 120 | 1.11 | 162 | 1.50 | 192 | 1.78 |
+| `rv32mi_lh-misaligned` | 117 | 132 | 1.13 | 182 | 1.56 | 217 | 1.85 |
+| `rv32mi_lw-misaligned` | 175 | 196 | 1.12 | 280 | 1.60 | 343 | 1.96 |
+| `rv32mi_ma_addr` | 316 | 372 | 1.18 | 524 | 1.66 | 620 | 1.96 |
+| `rv32mi_ma_fetch` | 237 | 267 | 1.13 | 385 | 1.62 | 473 | 2.00 |
+| `rv32mi_mcsr` | 101 | 112 | 1.11 | 151 | 1.50 | 179 | 1.77 |
+| `rv32mi_sbreak` | 109 | 123 | 1.13 | 170 | 1.56 | 203 | 1.86 |
+| `rv32mi_scall` | 98 | 109 | 1.11 | 152 | 1.55 | 184 | 1.88 |
+| `rv32mi_sh-misaligned` | 125 | 141 | 1.13 | 194 | 1.55 | 231 | 1.85 |
+| `rv32mi_shamt` | 109 | 122 | 1.12 | 168 | 1.54 | 201 | 1.84 |
+| `rv32mi_sw-misaligned` | 179 | 201 | 1.12 | 280 | 1.56 | 337 | 1.88 |
+| `rv32mi_zicntr` | 150 | 161 | 1.07 | 212 | 1.41 | 252 | 1.68 |
+| `rv32ui_add` | 506 | 532 | 1.05 | 700 | 1.38 | 852 | 1.68 |
+| `rv32ui_addi` | 283 | 300 | 1.06 | 411 | 1.45 | 509 | 1.80 |
+| `rv32ui_and` | 526 | 552 | 1.05 | 784 | 1.49 | 1000 | 1.90 |
+| `rv32ui_andi` | 239 | 256 | 1.07 | 356 | 1.49 | 443 | 1.85 |
+| `rv32ui_auipc` | 99 | 112 | 1.13 | 153 | 1.55 | 181 | 1.83 |
+| `rv32ui_beq` | 332 | 369 | 1.11 | 473 | 1.42 | 548 | 1.65 |
+| `rv32ui_bge` | 350 | 396 | 1.13 | 513 | 1.47 | 592 | 1.69 |
+| `rv32ui_bgeu` | 375 | 421 | 1.12 | 563 | 1.50 | 667 | 1.78 |
+| `rv32ui_blt` | 332 | 369 | 1.11 | 474 | 1.43 | 550 | 1.66 |
+| `rv32ui_bltu` | 357 | 394 | 1.10 | 524 | 1.47 | 625 | 1.75 |
+| `rv32ui_bne` | 332 | 371 | 1.12 | 478 | 1.44 | 554 | 1.67 |
+| `rv32ui_jal` | 96 | 109 | 1.14 | 148 | 1.54 | 174 | 1.81 |
+| `rv32ui_jalr` | 156 | 179 | 1.15 | 251 | 1.61 | 302 | 1.94 |
+| `rv32ui_lb` | 270 | 311 | 1.15 | 410 | 1.52 | 472 | 1.75 |
+| `rv32ui_lbu` | 270 | 311 | 1.15 | 410 | 1.52 | 472 | 1.75 |
+| `rv32ui_ld_st` | 1005 | 1209 | 1.20 | 1681 | 1.67 | 1949 | 1.94 |
+| `rv32ui_lh` | 286 | 327 | 1.14 | 442 | 1.55 | 520 | 1.82 |
+| `rv32ui_lhu` | 295 | 336 | 1.14 | 460 | 1.56 | 547 | 1.85 |
+| `rv32ui_lui` | 106 | 117 | 1.10 | 158 | 1.49 | 188 | 1.77 |
+| `rv32ui_lw` | 300 | 341 | 1.14 | 470 | 1.57 | 562 | 1.87 |
+| `rv32ui_or` | 529 | 555 | 1.05 | 790 | 1.49 | 1009 | 1.91 |
+| `rv32ui_ori` | 246 | 263 | 1.07 | 370 | 1.50 | 464 | 1.89 |
+| `rv32ui_sb` | 459 | 524 | 1.14 | 663 | 1.44 | 745 | 1.62 |
+| `rv32ui_sh` | 512 | 577 | 1.13 | 769 | 1.50 | 904 | 1.77 |
+| `rv32ui_simple` | 82 | 92 | 1.12 | 124 | 1.51 | 146 | 1.78 |
+| `rv32ui_sll` | 534 | 560 | 1.05 | 740 | 1.39 | 904 | 1.69 |
+| `rv32ui_slli` | 282 | 299 | 1.06 | 409 | 1.45 | 506 | 1.79 |
+| `rv32ui_slt` | 500 | 526 | 1.05 | 688 | 1.38 | 834 | 1.67 |
+| `rv32ui_slti` | 278 | 295 | 1.06 | 401 | 1.44 | 494 | 1.78 |
+| `rv32ui_sltiu` | 278 | 295 | 1.06 | 401 | 1.44 | 494 | 1.78 |
+| `rv32ui_sltu` | 500 | 526 | 1.05 | 688 | 1.38 | 834 | 1.67 |
+| `rv32ui_sra` | 553 | 579 | 1.05 | 774 | 1.40 | 953 | 1.72 |
+| `rv32ui_srai` | 297 | 314 | 1.06 | 439 | 1.48 | 551 | 1.86 |
+| `rv32ui_srl` | 547 | 573 | 1.05 | 762 | 1.39 | 935 | 1.71 |
+| `rv32ui_srli` | 291 | 308 | 1.06 | 427 | 1.47 | 533 | 1.83 |
+| `rv32ui_st_ld` | 525 | 585 | 1.11 | 817 | 1.56 | 989 | 1.88 |
+| `rv32ui_sub` | 498 | 524 | 1.05 | 688 | 1.38 | 836 | 1.68 |
+| `rv32ui_sw` | 520 | 585 | 1.12 | 787 | 1.51 | 932 | 1.79 |
+| `rv32ui_xor` | 528 | 554 | 1.05 | 788 | 1.49 | 1006 | 1.91 |
+| `rv32ui_xori` | 248 | 265 | 1.07 | 374 | 1.51 | 470 | 1.90 |
+| `rv32um_div` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 |
+| `rv32um_divu` | 138 | 446 | 3.23 | 498 | 3.61 | 539 | 3.91 |
+| `rv32um_mul` | 500 | 526 | 1.05 | 692 | 1.38 | 842 | 1.68 |
+| `rv32um_mulh` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 |
+| `rv32um_mulhsu` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 |
+| `rv32um_mulhu` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 |
+| `rv32um_rem` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 |
+| `rv32um_remu` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 |
+| `semihosting` | 76 | 99 | 1.30 | 123 | 1.62 | 135 | 1.78 |
+| `trap` | 43 | 48 | 1.12 | 68 | 1.58 | 84 | 1.95 |
 
 </details>
 
 ## Known limits
 
-- Reset does not block a store or a register write of the instruction in EX in that cycle.
+- Reset does not block a store of the instruction in EX or the register write of the
+  one in MEM/WB in that cycle.
 - A load of memory outside the program image is X on Icarus (test fails) and 0 on Verilator.
 
 ## Next
