@@ -1,0 +1,13 @@
+// THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+// {{ generated_note }}
+//
+// Configuration of Mig2, Mig2Pkg takes its MIG2_* constants from here.
+package Mig2ConfigPkg;
+
+    // PC after reset, byte address.
+    localparam RST_ADDR = {{ rst_addr | sv_hex(32) }};
+
+    // imem and dmem: {{ 2 ** mem_addr_width }} bytes each.
+    localparam MEM_ADDR_WIDTH = {{ mem_addr_width }};
+
+endpackage

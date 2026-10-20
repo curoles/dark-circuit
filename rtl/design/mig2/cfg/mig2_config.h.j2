@@ -1,0 +1,13 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Configuration of Mig2 for programs, also usable in assembly (.S).
+ */
+#pragma once
+
+/* PC after reset. */
+#define MIG2_RST_ADDR {{ rst_addr | c_hex }}u
+
+/* imem and dmem: 1 << MIG2_MEM_ADDR_WIDTH = MIG2_MEM_SIZE bytes each. */
+#define MIG2_MEM_ADDR_WIDTH {{ mem_addr_width }}
+#define MIG2_MEM_SIZE {{ 2 ** mem_addr_width }}u

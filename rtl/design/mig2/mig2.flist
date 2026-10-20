@@ -1,0 +1,16 @@
+mig2_config_pkg.sv
+mig2_pkg.sv
+mig2_fetch.sv
+mig2_control.sv
+mig2_decode.sv
+mig2_regs.sv
+mig2_forward.sv
+mig2_alu.sv
+mig2_branch.sv
+mig2_lsu.sv
+mig2_load_data.sv
+mig2_csr.sv
+mig2_muldiv.sv
+mig2_pipe.sv
+mig2_core.sv
+mig2_cpu.sv
