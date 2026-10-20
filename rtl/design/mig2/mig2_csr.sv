@@ -40,7 +40,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;
     logic [2:0] funct3;
-    reg_addr_t  rs1;            // register, or immediate of the I forms
+    reg_id_t    rs1;            // register, or immediate of the I forms
     logic [11:0] addr;          // CSR address
     assign kind   = dec.kind;
     assign funct3 = dec.funct3;
@@ -76,7 +76,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     logic  we;
 
     assign imm_form  = funct3 == F3_CSRRWI || funct3 == F3_CSRRSI || funct3 == F3_CSRRCI;
-    assign src       = imm_form ? {{(WIDTH-REG_ADDR_WIDTH){1'b0}}, rs1} : rs1_data;
+    assign src       = imm_form ? {{(WIDTH-REG_ID_WIDTH){1'b0}}, rs1} : rs1_data;
     assign writes    = funct3 == F3_CSRRW || funct3 == F3_CSRRWI || rs1 != '0;
     assign read_only = addr[11:10] == 2'b11;
 

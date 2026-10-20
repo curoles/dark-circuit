@@ -10,16 +10,16 @@
  * The values go into the ID/EX register, so EX and the retire trace see them.
  */
 module Mig2Forward import Mig2Pkg::*; (
-    input  logic [REG_ADDR_WIDTH-1:0] rs1,          // reg_addr_t: registers read in ID
-    input  logic [REG_ADDR_WIDTH-1:0] rs2,
-    input  logic [WIDTH-1:0]          rf_rs1_data,  // word_t: register file values
-    input  logic [WIDTH-1:0]          rf_rs2_data,
-    input  logic [REG_ADDR_WIDTH-1:0] ex_rd,        // rd written by the instruction in EX, 0: none
-    input  logic [WIDTH-1:0]          ex_rd_data,
-    input  logic [REG_ADDR_WIDTH-1:0] mem_rd,       // rd written in MEM/WB, 0: none
-    input  logic [WIDTH-1:0]          mem_rd_data,
-    output logic [WIDTH-1:0]          rs1_data,
-    output logic [WIDTH-1:0]          rs2_data
+    input  reg_id_t          rs1,          // registers read in ID
+    input  reg_id_t          rs2,
+    input  logic [WIDTH-1:0] rf_rs1_data,  // word_t: register file values
+    input  logic [WIDTH-1:0] rf_rs2_data,
+    input  reg_id_t          ex_rd,        // rd written by the instruction in EX, 0: none
+    input  logic [WIDTH-1:0] ex_rd_data,
+    input  reg_id_t          mem_rd,       // rd written in MEM/WB, 0: none
+    input  logic [WIDTH-1:0] mem_rd_data,
+    output logic [WIDTH-1:0] rs1_data,
+    output logic [WIDTH-1:0] rs2_data
 );
     assign rs1_data = (rs1 != '0 && rs1 == ex_rd)  ? ex_rd_data  :
                       (rs1 != '0 && rs1 == mem_rd) ? mem_rd_data : rf_rs1_data;

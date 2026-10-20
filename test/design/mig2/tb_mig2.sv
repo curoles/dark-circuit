@@ -183,8 +183,8 @@ module TbMig2;
     endtask
 
     // Value of register r, read through the debug port while halted.
-    task automatic dbg_read(input logic [REG_ADDR_WIDTH-1:0] r, output logic [WIDTH-1:0] value);
-        dbg_req.reg_addr = r;
+    task automatic dbg_read(input reg_id_t r, output logic [WIDTH-1:0] value);
+        dbg_req.reg_id = r;
         #1;
         value = dbg_rsp.reg_rdata;
     endtask
@@ -413,11 +413,11 @@ module TbMig2;
             prev_pc_wdata <= retire.pc_wdata;
             retired       <= retired + 1;
         end
-        if (halt && dbg_req.reg_wr && dbg_req.reg_addr != 0) begin
+        if (halt && dbg_req.reg_wr && dbg_req.reg_id != 0) begin
             if (trace_fd != 0)
-                $fdisplay(trace_fd, "%8d debug x%0d <= %h", cycle, dbg_req.reg_addr, dbg_req.reg_wdata);
-            shadow[dbg_req.reg_addr]  <= dbg_req.reg_wdata;
-            written[dbg_req.reg_addr] <= 1'b1;
+                $fdisplay(trace_fd, "%8d debug x%0d <= %h", cycle, dbg_req.reg_id, dbg_req.reg_wdata);
+            shadow[dbg_req.reg_id]  <= dbg_req.reg_wdata;
+            written[dbg_req.reg_id] <= 1'b1;
         end else if (halt && dbg_req.resume && trace_fd != 0)
             $fdisplay(trace_fd, "%8d resume", cycle);
     end

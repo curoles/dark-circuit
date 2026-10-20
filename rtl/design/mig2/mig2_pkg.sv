@@ -2,13 +2,14 @@
  *
  * Port groups of Mig2Core are packed structs, one struct per direction:
  * <group>_req_t goes from the requester, <group>_rsp_t comes back.
- * Two rules because of Icarus 11 bugs:
+ * Two rules:
  * - modules import this package in their header, `module X import Mig2Pkg::*; #(`:
  *   Icarus crashes (assert in elab_type.cc) when the structs are used only as
  *   Mig2Pkg::<type> and no module imports the package;
- * - a port of a vector type (word_t, insn_t, iaddr_t, ...) is written with its range,
- *   `input logic [INSN_WIDTH-1:0] insn`: Icarus can not bind the range of the typedef
- *   in a port ("Unable to bind parameter"); structs and internal signals may use them.
+ * - ports use the types of this package (reg_id_t, ...). Icarus 11 can not bind the
+ *   range of a vector typedef in a port ("Unable to bind parameter"); Mig2 is tested
+ *   with Verilator. Ports of word_t, insn_t, iaddr_t, ... are still written with their
+ *   range, `input logic [INSN_WIDTH-1:0] insn`; they change to the types step by step.
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
  * register values are byte addresses like software sees them.
  */
@@ -18,7 +19,7 @@ package Mig2Pkg;
     localparam WIDTH          = 32;                 // register and data width (RISC-V XLEN)
     localparam INSN_WIDTH     = 32;                 // instruction width, 32 also for RV64
     localparam STRB_WIDTH     = WIDTH / 8;          // bytes in data word
-    localparam REG_ADDR_WIDTH = 5;                  // 32 registers x0..x31
+    localparam REG_ID_WIDTH   = 5;                  // 32 registers x0..x31
     localparam IADDR_START    = 2;                  // instructions are 4-byte aligned (1 with C extension)
     localparam DADDR_START    = $clog2(STRB_WIDTH); // data words are STRB_WIDTH-byte aligned
 
@@ -36,7 +37,7 @@ package Mig2Pkg;
     typedef logic [WIDTH-1:IADDR_START] iaddr_t;     // instruction address, word address
     typedef logic [WIDTH-1:DADDR_START] daddr_t;     // data address, word address
     typedef logic [STRB_WIDTH-1:0]      strb_t;      // byte enables of data word
-    typedef logic [REG_ADDR_WIDTH-1:0]  reg_addr_t;  // register number
+    typedef logic [REG_ID_WIDTH-1:0]    reg_id_t;    // register number x0..x31
 
     // Instructions with fixed encoding.
     localparam insn_t INSN_EBREAK = 32'h0010_0073;
@@ -79,11 +80,11 @@ package Mig2Pkg;
         logic        trap;       // the instruction faulted: no register or memory write
         word_t       pc_rdata;   // address of the instruction
         word_t       pc_wdata;   // address of the next instruction
-        reg_addr_t   rs1_addr;   // registers read, 0 when not read
+        reg_id_t     rs1_addr;   // registers read, 0 when not read (RVFI names)
         word_t       rs1_rdata;
-        reg_addr_t   rs2_addr;
+        reg_id_t     rs2_addr;
         word_t       rs2_rdata;
-        reg_addr_t   rd_addr;    // register written, 0 when none (also for x0)
+        reg_id_t     rd_addr;    // register written, 0 when none (also for x0)
         word_t       rd_wdata;
         word_t       mem_addr;   // load or store: word address as byte address
         strb_t       mem_rmask;  // bytes read
@@ -94,8 +95,8 @@ package Mig2Pkg;
 
     // Debug, used while the core is halted.
     typedef struct packed {
-        reg_addr_t reg_addr;  // register to read or write
-        logic      reg_wr;    // 1: write reg_wdata into reg_addr on rising edge
+        reg_id_t   reg_id;    // register to read or write
+        logic      reg_wr;    // 1: write reg_wdata into register reg_id on rising edge
         word_t     reg_wdata;
         logic      resume;    // 1 for one cycle: continue at halt_pc + 1 (next instruction)
         logic      ebreak_halt; // 1: EBREAK halts (dcsr.ebreakm of the debug spec), 0: it traps
@@ -103,7 +104,7 @@ package Mig2Pkg;
 
     typedef struct packed {
         iaddr_t    halt_pc;   // address of the instruction that stopped the core
-        word_t     reg_rdata; // value of register reg_addr, combinational
+        word_t     reg_rdata; // value of register reg_id, combinational
     } dbg_rsp_t;
 
     // Fetch -> next stage: the instruction that arrives from imem in this cycle
@@ -183,9 +184,9 @@ package Mig2Pkg;
     // Decode -> units: the instruction taken apart.
     typedef struct packed {
         kind_t      kind;
-        reg_addr_t  rd;
-        reg_addr_t  rs1;
-        reg_addr_t  rs2;
+        reg_id_t    rd;
+        reg_id_t    rs1;
+        reg_id_t    rs2;
         logic       rd_we;     // writes rd (writes to x0 are dropped by the register file)
         rd_src_t    rd_src;    // value written to rd
         logic       uses_rs1;  // reads rs1, for the interlock (Mig2Control)

@@ -61,9 +61,9 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
 
     // Fields at the same place in every format. Selected with assign, not in always_comb:
     // Icarus does not support constant selects there and warns.
-    reg_addr_t  rd;
-    reg_addr_t  rs1;
-    reg_addr_t  rs2;
+    reg_id_t    rd;
+    reg_id_t    rs1;
+    reg_id_t    rs2;
     logic [2:0] funct3;
     logic       alt;
     assign rd     = f.r.rd;

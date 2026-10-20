@@ -66,10 +66,10 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     iaddr_t mepc;
     logic   id_uses_rs1;
     logic   id_uses_rs2;
-    reg_addr_t id_rs1;
-    reg_addr_t id_rs2;
+    reg_id_t   id_rs1;
+    reg_id_t   id_rs2;
     logic   ex_rd_we;
-    reg_addr_t ex_rd;
+    reg_id_t   ex_rd;
     assign valid             = ex.valid;
     assign pc                = ex.pc;
     assign kind              = ex_dec.kind;

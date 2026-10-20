@@ -70,7 +70,7 @@ module Mig2Core import Mig2Pkg::*; #(
     trap_t       ex_trap;           // instruction in EX faults: retires as a trap
     csr_t        ex_csr;            // mtvec, mepc
     logic        ex_rd_write;       // instruction in EX will write rd
-    reg_addr_t   ex_rd;             // rd written by the instruction in EX, 0 when none
+    reg_id_t     ex_rd;             // rd written by the instruction in EX, 0 when none
     rd_src_t     ex_rd_src;
     word_t       ex_rd_data;
     retire_t     ex_retire;         // RVFI entry built in EX, completed in MEM/WB
@@ -81,7 +81,7 @@ module Mig2Core import Mig2Pkg::*; #(
     retire_t     mem_ret;           // instruction in MEM/WB: its entry from EX
     /* verilator lint_on UNUSEDSIGNAL */
     word_t       mem_load_data;
-    reg_addr_t   mem_rd;            // rd written in MEM/WB, 0 when none
+    reg_id_t     mem_rd;            // rd written in MEM/WB, 0 when none
     logic        mem_rd_write;
     word_t       mem_rd_data;
     iaddr_t      halt_pc;
@@ -108,7 +108,7 @@ module Mig2Core import Mig2Pkg::*; #(
         .clk(clk), .halt(halt),
         .rs1(id_dec.rs1), .rs2(id_dec.rs2), .rs1_data(id_rf_rs1_data), .rs2_data(id_rf_rs2_data),
         .rd_we(mem_rd_write), .rd(mem_rd), .rd_data(mem_rd_data),
-        .dbg_reg_addr(dbg_req.reg_addr), .dbg_reg_wr(dbg_req.reg_wr),
+        .dbg_reg_id(dbg_req.reg_id), .dbg_reg_wr(dbg_req.reg_wr),
         .dbg_reg_wdata(dbg_req.reg_wdata), .dbg_reg_rdata(dbg_reg_rdata));
 
     Mig2Forward u_mig2_forward(
