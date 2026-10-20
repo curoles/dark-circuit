@@ -1,20 +1,26 @@
-# Yosys synthesis script of DARKCIRCUIT, filled in for one design by dc_add_yosys_synth()
-# (cmake/yosys.cmake): @SYNTH_INPUT@ is the design converted by sv2v, @SYNTH_TOP@ its top
-# module. Yosys runs in the output directory of the design. Generic synthesis: Yosys
-# gates and flip-flops, no cell library.
+# Yosys synthesis script of DARKCIRCUIT, filled in for one design and technology by
+# dc_add_yosys_synth() (cmake/yosys.cmake): @SYNTH_INPUT@ is the design converted by sv2v,
+# @SYNTH_TOP@ its top module, @SYNTH_ARGS@ options of synth for the technology (-flatten
+# with a liberty file: optimization across modules, one ABC run times the whole design),
+# @SYNTH_TECH_SCRIPT@ the steps of the technology
+# (cmake/yosys_tech_<tech>.ys.in). Yosys runs in the output directory, quiet (-q):
+# log -stdout tells the user which step runs.
 
 # 1. Read the design: Verilog-2005 written by sv2v.
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): read
 read_verilog @SYNTH_INPUT@
 
 # 2. Structural problems are errors: multiple drivers, undriven inputs, combinational
 #    loops. Checked after elaboration and always blocks (proc), before optimization:
 #    optimization can remove a problem (one of two drivers) without an error.
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): structural checks
 hierarchy -check -top @SYNTH_TOP@
 proc
 check -assert
 
 # 3. Synthesis: optimize, map to generic gates.
-synth -top @SYNTH_TOP@
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): synthesis to generic gates
+synth -top @SYNTH_TOP@ @SYNTH_ARGS@
 
 # No latches: in a design clocked by flip-flops a latch is almost always an always_comb
 # that does not assign a signal on every path. A latch whose output is not used is
@@ -22,8 +28,5 @@ synth -top @SYNTH_TOP@
 select -assert-none t:$_DLATCH*
 check -assert
 
-# 4. Cells of every module.
-tee -o stat.txt stat
-
-# 5. Gate-level netlist.
-write_verilog netlist.v
+# 4. Technology: mapping, statistics (stat.txt), netlist (netlist.v).
+script @SYNTH_TECH_SCRIPT@

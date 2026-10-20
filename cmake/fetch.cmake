@@ -83,3 +83,65 @@ macro(dc_riscv_tests)
         GIT_TAG        d7e86f701b929b5d801f8cda1a4871ab05f452bb
         GIT_SUBMODULES env)
 endmacro()
+
+# dc_fetch_file(<NAME> URL <url> SHA256 <hash> FILE <file name>)
+#
+# Define cache variable DARK_CIRCUIT_USE_<NAME> (AUTO, ON or OFF) and download one file
+# into the build directory (_deps/<name>/<file name>); set DARK_CIRCUIT_<NAME> to TRUE and
+# <NAME>_FILE to its path when it is available. The SHA256 pins the content: a different
+# file is an error, not a new version. Downloaded once; a later configure only checks
+# the hash. AUTO: when the download fails (no network), <NAME> is disabled with a message.
+function(dc_fetch_file NAME)
+    cmake_parse_arguments(F "" "URL;SHA256;FILE" "" ${ARGN})
+    if(NOT F_URL OR NOT F_SHA256 OR NOT F_FILE)
+        message(FATAL_ERROR "dc_fetch_file(${NAME}): URL, SHA256 and FILE are required")
+    endif()
+    string(TOLOWER ${NAME} name)
+    set(use DARK_CIRCUIT_USE_${NAME})
+    set(${use} AUTO CACHE STRING "Use ${NAME}: AUTO (if it can be downloaded), ON (required) or OFF")
+    set_property(CACHE ${use} PROPERTY STRINGS AUTO ON OFF)
+    string(TOUPPER "${${use}}" mode)
+    if(NOT mode MATCHES "^(AUTO|ON|OFF)$")
+        message(FATAL_ERROR "${use}=${${use}}, expected AUTO, ON or OFF")
+    endif()
+    set(DARK_CIRCUIT_${NAME} FALSE PARENT_SCOPE)
+    if(mode STREQUAL "OFF")
+        message(STATUS "${NAME}: disabled by ${use}=OFF")
+        return()
+    endif()
+    set(path ${FETCHCONTENT_BASE_DIR}/${name}/${F_FILE})
+    set(hash)
+    if(EXISTS ${path})
+        file(SHA256 ${path} hash)
+    endif()
+    if(NOT hash STREQUAL F_SHA256)
+        file(DOWNLOAD ${F_URL} ${path} EXPECTED_HASH SHA256=${F_SHA256}
+             STATUS status TIMEOUT 300)
+        list(GET status 0 code)
+        if(NOT code EQUAL 0)
+            file(REMOVE ${path})
+            list(GET status 1 text)
+            if(mode STREQUAL "ON")
+                message(FATAL_ERROR "${NAME}: required by ${use}=ON, download failed: ${text}")
+            endif()
+            message(STATUS "${NAME}: download failed (${text}), ${NAME} is disabled")
+            return()
+        endif()
+    endif()
+    message(STATUS "${NAME}: enabled, ${path}")
+    set(DARK_CIRCUIT_${NAME} TRUE PARENT_SCOPE)
+    set(${NAME}_FILE ${path} PARENT_SCOPE)
+endfunction()
+
+# dc_sky130()
+#
+# SkyWater sky130 standard cells sky130_fd_sc_hd (Apache 2.0), liberty of the typical
+# corner (tt, 25 C, 1.80 V), from OpenROAD-flow-scripts at a pinned commit; for the
+# designs that synthesize, so other build trees do not download it. A macro: it sets
+# DARK_CIRCUIT_SKY130 and SKY130_FILE where it is called.
+macro(dc_sky130)
+    dc_fetch_file(SKY130
+        URL    https://raw.githubusercontent.com/The-OpenROAD-Project/OpenROAD-flow-scripts/bf3f9b344bf7d9d999f199778a722833bccbd33c/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+        SHA256 ec0e1067a35c8bf20b11e58d1e8ac53326067e4dac84a125cc1b917a3518d0d9
+        FILE   sky130_fd_sc_hd__tt_025C_1v80.lib)
+endmacro()

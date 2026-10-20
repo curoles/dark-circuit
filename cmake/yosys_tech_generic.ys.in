@@ -1,0 +1,4 @@
+# Generic technology: Yosys gates and flip-flops, cells of every module.
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): statistics, netlist
+tee -o stat.txt stat
+write_verilog netlist.v

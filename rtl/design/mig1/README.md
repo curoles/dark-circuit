@@ -355,6 +355,45 @@ pipeline can only win with a faster clock, which is not measured yet (see Next).
 
 </details>
 
+## Area and speed (sky130): 2-stage vs 4-stage
+
+Mig1 mapped to the SkyWater sky130 standard cells (sky130_fd_sc_hd, typical corner) with
+Yosys 0.66 and ABC, 2026-10-20, by hand, with the flow of the Mig2 README (section "Area
+and speed"). 2-stage: Mig1 of commit 6fcd97d, the last 2-stage version. 4-stage with
+forwarding: measured as Mig2Core, an unchanged copy of it. "Black box": Int32Mul is left
+out (a black box), to time everything else.
+
+| Design | Area (µm²) | Longest path (ns) | Clock (MHz) |
+|---|---|---|---|
+| 2-stage | 129 901 | 18.7 | 53 |
+| 4-stage with forwarding | 141 063 | 16.9 | 59 |
+| 2-stage, multiplier black box | 84 340 | 11.3 | 89 |
+| 4-stage with forwarding, multiplier black box | 97 004 | 6.8 | 146 |
+
+Critical paths (start and end point from ABC): 4-stage: ID/EX register, multiplier,
+forwarding mux, ID/EX register; without the multiplier: divider result, result mux.
+2-stage without the multiplier: instruction from imem, decode, register read, ALU and
+branch, write back, all in one cycle.
+
+Run time of all 79 programs, cycles (CPI table) x clock period:
+
+| | 2-stage | 4-stage with forwarding | 4-stage faster by |
+|---|---|---|---|
+| with the multiplier | 23 024 x 18.7 ns = 431 µs | 24 224 x 16.9 ns = 410 µs | 5 % |
+| multiplier black box | 23 024 x 11.3 ns = 260 µs | 24 224 x 6.8 ns = 166 µs | 1.6 x |
+
+- The single-cycle multiplier sets the clock of both: with it, the 4-stage clock is
+  11 % faster (operands come from the ID/EX register, not through decode and
+  register read), which pays for its 5 % more cycles and little more.
+- The deeper pipeline pays off only with a faster multiplier: without it, the 4-stage
+  clock is 1.65 x faster. A black box is the limit; a real faster multiplier (pipelined,
+  faster final adder) lands between the two rows.
+- The 2-stage numbers are optimistic: its path starts at the imem output, counted like a
+  flip-flop; a real memory adds its read time.
+- The 4-stage core is 9 % larger: pipeline registers and forwarding.
+- All delays are ABC estimates (no wires, no clock-to-Q and setup); good for comparing
+  designs, not a guaranteed fmax.
+
 ## Known limits
 
 - Reset does not block a store of the instruction in EX or the register write of the

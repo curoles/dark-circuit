@@ -1,0 +1,14 @@
+# sky130 (sky130_fd_sc_hd, @SYNTH_LIBERTY@): flip-flops and logic mapped to its cells,
+# area of the cells and ABC's delay estimate of the longest path (stime, in yosys.log).
+# Flattened by synth -flatten (yosys_synth.ys.in): one ABC run times the whole design.
+# Buffering and gate sizing (buffer,
+# upsize, dnsize) as real flows do; without them the default script maps for area only.
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): mapping flip-flops to sky130 cells
+read_liberty -lib @SYNTH_LIBERTY@
+dfflibmap -liberty @SYNTH_LIBERTY@
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): mapping logic to sky130 cells, buffering, sizing (ABC)
+abc -liberty @SYNTH_LIBERTY@ -script +strash;&get,-n;&fraig,-x;&put;scorr;dc2;dretime;strash;&get,-n;&dch,-f;&nf;&put;buffer;upsize;dnsize;topo;stime,-p
+opt_clean
+log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): statistics, netlist
+tee -o stat.txt stat -liberty @SYNTH_LIBERTY@
+write_verilog netlist.v
