@@ -11,6 +11,7 @@
 #   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
 #   make config  - generate files from design configurations
+#   make <design>_synth - synthesis of one design with Yosys, like make mig2_synth
 #   make test D=mig1 - the same in the build tree of one design (D=full, D=lib, D=<design>)
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
@@ -94,6 +95,11 @@ list: $(CONFIGURED)
 	    /^ *Test +#[0-9]+:/ { printf "%-40s %s\n", $$NF, labels; labels = "" } \
 	    /^Total Tests:/     { print }'
 
+# Synthesis of one design with Yosys: make mig2_synth builds CMake target
+# design_mig2.synth in tree D; outputs in its directory design_mig2.synth/.
+%_synth: $(CONFIGURED)
+	cmake --build $(BUILD_DIR) --target design_$*.synth
+
 # Generate files from design configurations, run after a change in cfg/.
 config:
 	@for cfg in $(CONFIGS); do \
@@ -116,6 +122,8 @@ Targets:
   make run          configure if needed, build and run tests selected by R and L
   make list         configure if needed and list tests: name and labels of every test
   make config       generate files from design configurations: rtl/design/*/cfg/*_config.yaml
+  make <design>_synth  synthesis of one design with Yosys (sv2v, then Yosys), like
+                       make mig2_synth: netlist, cell counts, log in the build directory
 
 Variables:
   D=<tree>             build tree: full (default) library and all designs, lib the library,
