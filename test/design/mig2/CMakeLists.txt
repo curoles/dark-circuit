@@ -10,6 +10,15 @@ set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/numeric/n
 # Files generated from cfg/mig2_config.yaml are up to date.
 dc_add_config_check(design_mig2 CONFIG ${MIG2}/cfg/mig2_config.yaml)
 
+# Mig2Core converts to Verilog-2005 with sv2v and elaborates (synthesizable code; sv2v
+# sets the syntax Mig2 can use). Struct versions of the library, built from generic
+# gates: the hardware, not the fast simulation models. Mig2Cpu is not checked: its
+# memories are simulation models.
+dc_add_sv2v_check(design_mig2 TOP Mig2Core
+                  FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
+                         ${LIB}/block/block_struct.flist ${LIB}/numeric/numeric_struct.flist
+                         ${LIB}/riscv/riscv.flist ${MIG2}/mig2.flist)
+
 # Mig2 runs on the main simulator only: DARK_CIRCUIT_MAIN_SIMULATOR, by default
 # Verilator when it is installed (see cmake/dark_circuit.cmake).
 if(NOT DARK_CIRCUIT_MAINSIM)
