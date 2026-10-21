@@ -16,10 +16,10 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
-    input  logic [WIDTH-1:0] rs1_data,    // word_t, see Mig2Pkg about ports
-    input  logic [WIDTH-1:0] rs2_data,
+    input  word_t            rs1_data,
+    input  word_t            rs2_data,
     output wire              stall,       // division of the instruction in EX not done yet
-    output logic [WIDTH-1:0] result
+    output word_t            result
 );
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;
@@ -36,8 +36,8 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     logic        div_signed;    // DIV, REM
     logic        start;
     logic [63:0] product;
-    logic [31:0] product_lo;
-    logic [31:0] product_hi;
+    word_t       product_lo;
+    word_t       product_hi;
     logic        busy;
     logic        done;          // last step of the division; results are valid after it
     logic        div_ready;     // the division finished in the clock before

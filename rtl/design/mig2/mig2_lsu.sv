@@ -15,8 +15,8 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
-    input  logic [WIDTH-1:0] addr,       // word_t, see Mig2Pkg about ports
-    input  logic [WIDTH-1:0] rs2_data,   // store data
+    input  word_t            addr,
+    input  word_t            rs2_data,   // store data
     output dmem_req_t        dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
     output lsu_mem_t         mem         // access for the retire trace

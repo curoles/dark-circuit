@@ -8,8 +8,8 @@
 module Mig2LoadData import Mig2Pkg::*, RiscvPkg::*; (
     input  logic [2:0]             funct3,
     input  logic [DADDR_START-1:0] offset,     // byte in the word
-    input  logic [WIDTH-1:0]       word,       // word_t: dmem word of the load
-    output logic [WIDTH-1:0]       load_data   // word_t
+    input  word_t                  word,       // dmem word of the load
+    output word_t                  load_data
 );
     // Bit selects with assign: Icarus warns about selects in always_comb.
     word_t       shifted;

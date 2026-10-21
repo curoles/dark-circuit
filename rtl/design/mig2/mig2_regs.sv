@@ -13,20 +13,20 @@ module Mig2Regs import Mig2Pkg::*; (
     input  wire                        clk,
     input  wire                        halt,         // 1: debug port owns read port 0 and write port
 
-    // Pipeline. Data ports are written with their range, see Mig2Pkg about ports.
+    // Pipeline.
     input  reg_id_t                    rs1,
     input  reg_id_t                    rs2,
-    output logic [WIDTH-1:0]           rs1_data,
-    output logic [WIDTH-1:0]           rs2_data,
+    output word_t                      rs1_data,
+    output word_t                      rs2_data,
     input  wire                        rd_we,
     input  reg_id_t                    rd,
-    input  logic [WIDTH-1:0]           rd_data,
+    input  word_t                      rd_data,
 
     // Debug, used while halt=1.
     input  reg_id_t                    dbg_reg_id,
     input  wire                        dbg_reg_wr,
-    input  logic [WIDTH-1:0]           dbg_reg_wdata,
-    output logic [WIDTH-1:0]           dbg_reg_rdata
+    input  word_t                      dbg_reg_wdata,
+    output word_t                      dbg_reg_rdata
 );
     // Read port 0 and write port: pipeline, or debug while halted.
     reg_id_t   rd_id0;

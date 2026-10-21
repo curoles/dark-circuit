@@ -13,10 +13,10 @@ module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
     input  decoded_t                   dec,
     /* verilator lint_on UNUSEDSIGNAL */
     input  logic [WIDTH-1:IADDR_START] pc,        // iaddr_t: address of the instruction
-    input  logic [WIDTH-1:0]           rs1_data,  // word_t, see Mig2Pkg about ports
-    input  logic [WIDTH-1:0]           rs2_data,
+    input  word_t                      rs1_data,
+    input  word_t                      rs2_data,
     output branch_t                    branch,
-    output logic [WIDTH-1:0]           link
+    output word_t                      link
 );
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;

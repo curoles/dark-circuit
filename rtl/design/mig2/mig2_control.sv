@@ -39,7 +39,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   ex_dec,      // instruction in EX taken apart
     /* verilator lint_on UNUSEDSIGNAL */
-    input  logic [WIDTH-1:0]           ex_addr,     // word_t: load/store address, for mtval
+    input  word_t                      ex_addr,     // load/store address, for mtval
     input  branch_t                    branch,      // next pc of the instruction in EX
     input  wire                        lsu_misaligned, // load/store address not aligned: a fault
     input  wire                        csr_illegal, // CSR instruction can not be done

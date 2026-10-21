@@ -28,10 +28,10 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
-    input  logic [WIDTH-1:0] rs1_data,   // word_t, see Mig2Pkg about ports
+    input  word_t            rs1_data,
     input  logic [WIDTH-1:IADDR_START] pc, // iaddr_t: address of the instruction in EX
     input  trap_t            trap,       // the instruction in EX traps
-    output logic [WIDTH-1:0] rdata,      // old value of the CSR
+    output word_t            rdata,      // old value of the CSR
     output wire              illegal,    // CSR does not exist, or write to a read-only CSR
     output csr_t             csr         // mtvec and mepc, for traps and MRET
 );

@@ -11,9 +11,9 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     input  decoded_t                   dec,
     /* verilator lint_on UNUSEDSIGNAL */
     input  logic [WIDTH-1:IADDR_START] pc,        // iaddr_t: address of the instruction, for AUIPC
-    input  logic [WIDTH-1:0]           rs1_data,
-    input  logic [WIDTH-1:0]           rs2_data,
-    output logic [WIDTH-1:0]           result
+    input  word_t                      rs1_data,
+    input  word_t                      rs2_data,
+    output word_t                      result
 );
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;
