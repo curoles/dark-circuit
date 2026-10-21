@@ -51,6 +51,11 @@ This file has the rules that are not in README.md.
   `<name>_state_d` and the outputs, with defaults first (next state = current state)
   and a comment above each state's case item; one `always_ff` holds only the reset and
   `<name>_state_q <= <name>_state_d`.
+- Case: plain `case`/`casez`, no `unique` or `priority` (they are synthesis promises:
+  if one is ever false, hardware differs from simulation); state exclusivity with
+  `DC_ASSERT`, e.g. `$onehot0`. Every case has a `default`, except a case that lists all
+  values of an enum: without `default`, Verilator (CASEINCOMPLETE) reports every case
+  that misses a value added to the enum later.
 - Packages: a module imports in its header the packages it uses throughout
   (`module X import Mig2Pkg::*; (`). A name used in only a few places, or whose origin
   matters to the reader (a spec constant next to design constants), is written with
