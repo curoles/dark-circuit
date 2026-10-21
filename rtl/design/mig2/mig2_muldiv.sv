@@ -21,12 +21,6 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     output wire              stall,       // division of the instruction in EX not done yet
     output word_t            result
 );
-    // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
-    kind_t      kind;
-    funct3_t    funct3;
-    assign kind   = dec.kind;
-    assign funct3 = dec.funct3;
-
     logic        muldiv;        // M instruction in EX
     logic        div;           // DIV, DIVU, REM, REMU
     logic        rem;           // REM, REMU
@@ -46,15 +40,14 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     logic        div_by_zero;
     logic        overflow;
 
-    // Operation from funct3, with assign: Icarus does not find package names in port
-    // expressions (see AGENTS.md).
-    assign muldiv     = valid && kind == KIND_MULDIV;
-    assign div        = funct3 == F3_DIV || funct3 == F3_DIVU || funct3 == F3_REM || funct3 == F3_REMU;
-    assign rem        = funct3 == F3_REM || funct3 == F3_REMU;
-    assign mul_lo     = funct3 == F3_MUL;
-    assign a_signed   = funct3 == F3_MULH || funct3 == F3_MULHSU;
-    assign b_signed   = funct3 == F3_MULH;
-    assign div_signed = funct3 == F3_DIV || funct3 == F3_REM;
+    // Operation from funct3.
+    assign muldiv     = valid && dec.kind == KIND_MULDIV;
+    assign div        = dec.funct3 == F3_DIV || dec.funct3 == F3_DIVU || dec.funct3 == F3_REM || dec.funct3 == F3_REMU;
+    assign rem        = dec.funct3 == F3_REM || dec.funct3 == F3_REMU;
+    assign mul_lo     = dec.funct3 == F3_MUL;
+    assign a_signed   = dec.funct3 == F3_MULH || dec.funct3 == F3_MULHSU;
+    assign b_signed   = dec.funct3 == F3_MULH;
+    assign div_signed = dec.funct3 == F3_DIV || dec.funct3 == F3_REM;
     assign start      = muldiv && div && !busy && !div_ready;
 
     Int32Mul u_int32_mul(.a(rs1_data), .b(rs2_data), .a_signed, .b_signed, .product);

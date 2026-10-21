@@ -71,7 +71,6 @@ module Mig2Core import Mig2Pkg::*; #(
     csr_t        ex_csr;            // mtvec, mepc
     logic        ex_rd_write;       // instruction in EX will write rd
     reg_id_t     ex_rd;             // rd written by the instruction in EX, 0 when none
-    rd_src_t     ex_rd_src;
     word_t       ex_rd_data;
     retire_t     ex_retire;         // RVFI entry built in EX, completed in MEM/WB
     ex_mem_t     ex_mem_d;
@@ -157,13 +156,11 @@ module Mig2Core import Mig2Pkg::*; #(
         .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall), .result(ex_muldiv_result));
 
     // rd value: decode tells whether rd is written and where its value comes from.
-    // ex_rd_src with assign: Icarus does not support selects of ex_dec in always_comb.
     assign ex_rd_write = ex_done && ex_dec.rd_we;
     assign ex_rd       = (ex_fetch.valid && ex_dec.rd_we) ? ex_dec.rd : '0;
-    assign ex_rd_src   = ex_dec.rd_src;
 
     always_comb
-        case (ex_rd_src)
+        case (ex_dec.rd_src)
             RD_LINK:   ex_rd_data = ex_link;
             RD_CSR:    ex_rd_data = ex_csr_rdata;
             RD_MULDIV: ex_rd_data = ex_muldiv_result;
@@ -192,7 +189,7 @@ module Mig2Core import Mig2Pkg::*; #(
 
     assign ex_mem_d.valid  = ex_retire.valid;
     assign ex_mem_d.ret    = ex_retire;
-    assign ex_mem_d.load   = ex_rd_src == RD_LOAD;
+    assign ex_mem_d.load   = ex_dec.rd_src == RD_LOAD;
     assign ex_mem_d.funct3 = ex_dec.funct3;
     assign ex_mem_d.offset = ex_load_offset;
 

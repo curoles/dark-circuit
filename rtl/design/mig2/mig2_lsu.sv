@@ -21,15 +21,11 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     output wire              misaligned, // address not aligned to the access size: a fault
     output lsu_mem_t         mem         // access for the retire trace
 );
-    // Fields and bit selects with assign: Icarus warns about selects in always_comb.
-    kind_t                  kind;
-    funct3_t                funct3;
+    // Parts of the address and of the store data.
     byte_offset_t           offset;     // byte in the word
     logic                   odd;        // odd byte address
     logic [7:0]             rs2_b;
     logic [15:0]            rs2_h;
-    assign kind   = dec.kind;
-    assign funct3 = dec.funct3;
     assign offset = addr[DADDR_START-1:0];
     assign odd    = addr[0];
     assign rs2_b  = rs2_data[7:0];
@@ -45,11 +41,11 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     assign strb_b = {{(STRB_WIDTH - 1){1'b0}}, 1'b1};
     assign strb_h = {{(STRB_WIDTH - 2){1'b0}}, 2'b11};
 
-    assign load  = valid && kind == KIND_LOAD;
-    assign store = valid && kind == KIND_STORE;
+    assign load  = valid && dec.kind == KIND_LOAD;
+    assign store = valid && dec.kind == KIND_STORE;
 
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_H, F3_HU: unaligned = odd;
             F3_W:        unaligned = offset != '0;
             default:     unaligned = 1'b0;      // bytes
@@ -59,7 +55,7 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
 
     // Bytes of the access; loads and stores have the same funct3 sizes (B, H, W).
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_B, F3_BU: strb = strb_b << offset;
             F3_H, F3_HU: strb = strb_h << offset;
             default:     strb = '1;
@@ -67,7 +63,7 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
 
     // Store: bytes of rs2 repeated over the word, strobes select the bytes at offset.
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_B:    wr_data = {STRB_WIDTH{rs2_b}};
             F3_H:    wr_data = {(STRB_WIDTH / 2){rs2_h}};
             default: wr_data = rs2_data;

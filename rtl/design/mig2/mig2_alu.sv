@@ -15,16 +15,6 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     input  word_t                      rs2_data,
     output word_t                      result
 );
-    // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
-    kind_t      kind;
-    funct3_t    funct3;
-    logic       alt;
-    word_t      imm;
-    assign kind   = dec.kind;
-    assign funct3 = dec.funct3;
-    assign alt    = dec.alt;
-    assign imm    = dec.imm;
-
     word_t                a;
     word_t                b;
     logic [CMD_WIDTH-1:0] cmd;
@@ -34,24 +24,23 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     logic                 lt_u;     // a < b unsigned
     logic                 lt_s;     // a < b signed
     logic                 sub;      // OP with alt: SUB instead of ADD
-    logic                 shift_left;
     logic                 a_sign;
     logic                 b_sign;
 
     // Operands.
-    assign a      = (kind == KIND_AUIPC) ? {pc, {IADDR_START{1'b0}}} :
-                    (kind == KIND_LUI)   ? '0 : rs1_data;
-    assign b      = (kind == KIND_OP) ? rs2_data : imm;
-    assign sub    = kind == KIND_OP && alt;
+    assign a      = (dec.kind == KIND_AUIPC) ? {pc, {IADDR_START{1'b0}}} :
+                    (dec.kind == KIND_LUI)   ? '0 : rs1_data;
+    assign b      = (dec.kind == KIND_OP) ? rs2_data : dec.imm;
+    assign sub    = dec.kind == KIND_OP && dec.alt;
     assign a_sign = a[WIDTH-1];
     assign b_sign = b[WIDTH-1];
 
     // Alu1 command by funct3; LUI and AUIPC add.
     always_comb
-        if (kind != KIND_OP && kind != KIND_OP_IMM)
+        if (dec.kind != KIND_OP && dec.kind != KIND_OP_IMM)
             cmd = OP_ADD;
         else
-            case (funct3)
+            case (dec.funct3)
                 F3_ADD_SUB:      cmd = sub ? OP_SUB : OP_ADD;
                 F3_SLT, F3_SLTU: cmd = OP_SUB;   // compare by subtraction
                 F3_XOR:          cmd = OP_XOR;
@@ -62,13 +51,10 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 
     Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd(cmd), .in1(a), .in2(b), .co(co), .out(sum));
 
-    // SLL left, SRL right with 0, SRA right with the sign bit. shift_left is an assign:
-    // Icarus does not find imported F3_SLL in a port expression (implicit wire).
-    assign shift_left = funct3 == F3_SLL;
-
+    // SLL left, SRL right with 0, SRA right with the sign bit.
     BarrelShifter #(.WIDTH(WIDTH)) u_barrel_shifter(
-        .in(a), .shift_in_bit(alt && a_sign), .shift(b[$clog2(WIDTH)-1:0]),
-        .shift_rotate(1'b1), .left_right(shift_left), .out(shifted));
+        .in(a), .shift_in_bit(dec.alt && a_sign), .shift(b[$clog2(WIDTH)-1:0]),
+        .shift_rotate(1'b1), .left_right(dec.funct3 == F3_SLL), .out(shifted));
 
     // Comparisons from the subtraction a - b.
     assign lt_u = !co;
@@ -76,10 +62,10 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 
     // Result by funct3; LUI and AUIPC take the sum.
     always_comb
-        if (kind != KIND_OP && kind != KIND_OP_IMM)
+        if (dec.kind != KIND_OP && dec.kind != KIND_OP_IMM)
             result = sum;
         else
-            case (funct3)
+            case (dec.funct3)
                 F3_SLL, F3_SRL_SRA: result = shifted;
                 F3_SLT:             result = {{(WIDTH-1){1'b0}}, lt_s};
                 F3_SLTU:            result = {{(WIDTH-1){1'b0}}, lt_u};

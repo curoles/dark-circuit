@@ -11,7 +11,8 @@ module Mig2LoadData import Mig2Pkg::*, RiscvPkg::*; (
     input  word_t                  word,       // dmem word of the load
     output word_t                  load_data
 );
-    // Bit selects with assign: Icarus warns about selects in always_comb.
+    // The word shifted so the bytes at offset are at bit 0, its low byte and halfword,
+    // and their sign bits.
     word_t       shifted;
     logic [7:0]  shifted_b;
     logic [15:0] shifted_h;

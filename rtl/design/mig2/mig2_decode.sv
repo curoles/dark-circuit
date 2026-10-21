@@ -59,8 +59,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     assign imm_csr = {{(WIDTH-12){1'b0}}, f.i.imm_11_0};
     assign csr_reg = f.i.funct3 == F3_CSRRW || f.i.funct3 == F3_CSRRS || f.i.funct3 == F3_CSRRC;
 
-    // Fields at the same place in every format. Selected with assign, not in always_comb:
-    // Icarus does not support constant selects there and warns.
+    // Fields at the same place in every format, with short names for the table below.
     reg_id_t    rd;
     reg_id_t    rs1;
     reg_id_t    rs2;

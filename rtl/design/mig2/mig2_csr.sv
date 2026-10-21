@@ -37,15 +37,8 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
 );
     localparam word_t MISA = 32'h4000_1100;    // MXL=1: 32-bit; extensions I, M
 
-    // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
-    kind_t      kind;
-    funct3_t    funct3;
-    reg_id_t    rs1;            // register, or immediate of the I forms
-    logic [11:0] addr;          // CSR address
-    assign kind   = dec.kind;
-    assign funct3 = dec.funct3;
-    assign rs1    = dec.rs1;
-    assign addr   = dec.imm[11:0];
+    logic [11:0] addr;          // CSR address (immediate of the CSR instruction)
+    assign addr = dec.imm[11:0];
 
     logic [63:0] mcycle;
     logic [63:0] minstret;
@@ -75,9 +68,10 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     word_t new_value;
     logic  we;
 
-    assign imm_form  = funct3 == F3_CSRRWI || funct3 == F3_CSRRSI || funct3 == F3_CSRRCI;
-    assign src       = imm_form ? {{(WIDTH-REG_ID_WIDTH){1'b0}}, rs1} : rs1_data;
-    assign writes    = funct3 == F3_CSRRW || funct3 == F3_CSRRWI || rs1 != '0;
+    assign imm_form  = dec.funct3 == F3_CSRRWI || dec.funct3 == F3_CSRRSI || dec.funct3 == F3_CSRRCI;
+    // rs1 field: register, or immediate of the I forms.
+    assign src       = imm_form ? {{(WIDTH-REG_ID_WIDTH){1'b0}}, dec.rs1} : rs1_data;
+    assign writes    = dec.funct3 == F3_CSRRW || dec.funct3 == F3_CSRRWI || dec.rs1 != '0;
     assign read_only = addr[11:10] == 2'b11;
 
     // mstatus: MPP (12:11) = 3, MPIE (7), MIE (3).
@@ -105,33 +99,27 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     end
 
     assign rdata   = old;
-    assign illegal = valid && kind == KIND_CSR && (!exists || (writes && read_only));
+    assign illegal = valid && dec.kind == KIND_CSR && (!exists || (writes && read_only));
 
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_CSRRS, F3_CSRRSI: new_value = old | src;
             F3_CSRRC, F3_CSRRCI: new_value = old & ~src;
             default:             new_value = src;       // CSRRW, CSRRWI
         endcase
 
     // done=1 means valid and not illegal.
-    assign we = done && kind == KIND_CSR && writes;
+    assign we = done && dec.kind == KIND_CSR && writes;
 
-    // Fields of new_value and trap, selected with assign (Icarus, see above).
+    // Bits of new_value: MIE and MPIE of mstatus, the address of mtvec and mepc.
     logic   new_mie;
     logic   new_mpie;
     iaddr_t new_iaddr;      // new value of mtvec, mepc without bits 1:0
-    logic   trap_valid;
-    logic [4:0] trap_cause;
-    word_t  trap_tval;
     logic   mret;           // MRET completes
-    assign new_mie    = new_value[3];
-    assign new_mpie   = new_value[7];
-    assign new_iaddr  = new_value[WIDTH-1:IADDR_START];
-    assign trap_valid = trap.valid;
-    assign trap_cause = trap.cause;
-    assign trap_tval  = trap.tval;
-    assign mret       = done && kind == KIND_MRET;
+    assign new_mie   = new_value[3];
+    assign new_mpie  = new_value[7];
+    assign new_iaddr = new_value[WIDTH-1:IADDR_START];
+    assign mret      = done && dec.kind == KIND_MRET;
 
     always_ff @(posedge clk)
         if (!rst_n)                         mcycle <= '0;
@@ -154,7 +142,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
         if (!rst_n) begin
             mstatus_mie  <= 1'b0;
             mstatus_mpie <= 1'b0;
-        end else if (trap_valid) begin
+        end else if (trap.valid) begin
             mstatus_mpie <= mstatus_mie;
             mstatus_mie  <= 1'b0;
         end else if (mret) begin
@@ -170,10 +158,10 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             mepc   <= '0;
             mcause <= '0;
             mtval  <= '0;
-        end else if (trap_valid) begin
+        end else if (trap.valid) begin
             mepc   <= pc;
-            mcause <= {{(WIDTH-5){1'b0}}, trap_cause};
-            mtval  <= trap_tval;
+            mcause <= {{(WIDTH-5){1'b0}}, trap.cause};
+            mtval  <= trap.tval;
         end else if (we && addr == CSR_MEPC)
             mepc   <= new_iaddr;
         else if (we && addr == CSR_MCAUSE)

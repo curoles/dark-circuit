@@ -18,14 +18,6 @@ module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
     output branch_t                    branch,
     output word_t                      link
 );
-    // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
-    kind_t      kind;
-    funct3_t    funct3;
-    word_t      imm;
-    assign kind   = dec.kind;
-    assign funct3 = dec.funct3;
-    assign imm    = dec.imm;
-
     logic  eq;
     logic  lt;      // rs1 < rs2 signed
     logic  ltu;     // rs1 < rs2 unsigned
@@ -40,7 +32,7 @@ module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
     assign ltu = rs1_data < rs2_data;
 
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_BEQ:  cond = eq;
             F3_BNE:  cond = !eq;
             F3_BLT:  cond = lt;
@@ -50,9 +42,9 @@ module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
             default: cond = 1'b0;   // 010 and 011 are not branches
         endcase
 
-    assign target = (kind == KIND_JALR) ? rs1_data + imm : {pc, {IADDR_START{1'b0}}} + imm;
+    assign target = (dec.kind == KIND_JALR) ? rs1_data + dec.imm : {pc, {IADDR_START{1'b0}}} + dec.imm;
 
-    assign branch.taken      = kind == KIND_JAL || kind == KIND_JALR || (kind == KIND_BRANCH && cond);
+    assign branch.taken      = dec.kind == KIND_JAL || dec.kind == KIND_JALR || (dec.kind == KIND_BRANCH && cond);
     assign branch.target     = target[WIDTH-1:IADDR_START];
     assign branch.misaligned = target[1];
 
