@@ -41,7 +41,8 @@ module Divider #(
     logic [WIDTH-1:0] r_next;
     logic [WIDTH-1:0] q_next;
 
-    // Next values with assign: Icarus does not support constant selects in always_ff.
+    // One division step: shift the next dividend bit into r, subtract d, keep the
+    // difference when it fits, shift the quotient bit into q.
     assign shifted   = {r, q[WIDTH-1]};
     assign diff      = shifted - {1'b0, d};
     assign fits      = !diff[WIDTH];
