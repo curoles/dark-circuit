@@ -1,3 +1,5 @@
+`include "dark_circuit_assert.svh"
+
 /* Mig2 multiply and divide unit (M extension), EX.
  *
  * MUL, MULH, MULHSU, MULHU: Int32Mul, combinational, one cycle. DIV, DIVU, REM, REMU:
@@ -61,6 +63,14 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
         else        div_ready <= done;
 
     assign stall = muldiv && div && !div_ready;
+
+    // A division runs only while its instruction is in EX: nothing removes a stalled
+    // instruction from EX (no interrupts yet).
+    `DC_ASSERT(a_busy_has_div, !busy || (muldiv && div))
+    // The header's promise: the instruction and its registers do not change during the
+    // division, so rs1_data is still the dividend at the end (REM by 0 returns it).
+    `DC_ASSERT_NEXT(a_div_inputs_held, stall,
+                    $stable(rs1_data) && $stable(rs2_data) && $stable(dec.funct3))
 
     assign product_lo = product[31:0];
     assign product_hi = product[63:32];
