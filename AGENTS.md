@@ -46,6 +46,11 @@ This file has the rules that are not in README.md.
   module that is not instantiated (Icarus parses every file it gets). Library
   modules with type parameters are inside `ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM`,
   not defined for Icarus.
+- Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
+  (IMPLICIT; in an expression always an error), and every design is built with it.
+  sv2v declares an undeclared name of a port connection as a wire, and Yosys makes
+  undeclared names wires unless read_verilog -noautowire, which the synthesis script
+  uses.
 - Icarus 11: one declaration per line, `wire a = x, b = y;` is rejected.
 - Icarus 11 does not support `inside`; use `case` or `==`.
 - Icarus 11 does not support casts to an enum (`kind_t'(x)`) or to a width (`AW'(x)`);

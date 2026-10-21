@@ -6,9 +6,10 @@
 # (cmake/yosys_tech_<tech>.ys.in). Yosys runs in the output directory, quiet (-q):
 # log -stdout tells the user which step runs.
 
-# 1. Read the design: Verilog-2005 written by sv2v.
+# 1. Read the design: Verilog-2005 written by sv2v. -noautowire: an undeclared name is an
+#    error, as in Verilator, not an implicit 1-bit wire.
 log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): read
-read_verilog @SYNTH_INPUT@
+read_verilog -noautowire @SYNTH_INPUT@
 
 # 2. Structural problems are errors: multiple drivers, undriven inputs, combinational
 #    loops. Checked after elaboration and always blocks (proc), before optimization:
