@@ -21,6 +21,14 @@ This file has the rules that are not in README.md.
   (running, halt_pc), control between stages (pipe_ctrl, redirect). Parts that work
   on "the instruction in their stage" (Alu, Lsu, ...) use no prefixes: they do not know
   their stage. Then adding a stage is a mechanical split along the prefixes.
+- Compute once, carry forward: in a pipeline, what a later stage needs about an item
+  (an instruction, a request, a packet) is computed in the earliest stage that can
+  compute it and travels with the item as ready fields of its stage struct (for
+  example decoded_t, grouped by the part that uses them). A later stage reads those
+  fields; it does not work them out again from raw data (the instruction, its kind,
+  an address). This holds at every stage: decode produces controls, and a later
+  stage passes on what it has computed for the stages after it (EX gives MEM/WB the
+  load size and offset, not the instruction).
 - Type parameters: when writing or refactoring, look for modules that store or move
   a value without computing on it (pipeline registers, FIFOs, memories, flip-flops,
   multiplexers). `parameter type T` makes the type part of the interface

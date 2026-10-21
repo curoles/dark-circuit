@@ -6,7 +6,7 @@
  * no borrow, a >= b unsigned. One BarrelShifter shifts by b[4:0].
  */
 module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
-    // Only kind, funct3, alt and imm are used.
+    // Only alu, funct3, alt and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   dec,
     /* verilator lint_on UNUSEDSIGNAL */
@@ -23,25 +23,27 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     word_t                shifted;
     logic                 lt_u;     // a < b unsigned
     logic                 lt_s;     // a < b signed
-    logic                 sub;      // OP with alt: SUB instead of ADD
     logic                 a_sign;
     logic                 b_sign;
 
     // Operands.
-    assign a      = (dec.kind == KIND_AUIPC) ? {pc, {IADDR_START{1'b0}}} :
-                    (dec.kind == KIND_LUI)   ? '0 : rs1_data;
-    assign b      = (dec.kind == KIND_OP) ? rs2_data : dec.imm;
-    assign sub    = dec.kind == KIND_OP && dec.alt;
+    always_comb
+        case (dec.alu.a)
+            A_PC:    a = {pc, {IADDR_START{1'b0}}};
+            A_ZERO:  a = '0;
+            default: a = rs1_data;
+        endcase
+    assign b      = dec.alu.b_imm ? dec.imm : rs2_data;
     assign a_sign = a[WIDTH-1];
     assign b_sign = b[WIDTH-1];
 
     // Alu1 command by funct3; LUI and AUIPC add.
     always_comb
-        if (dec.kind != KIND_OP && dec.kind != KIND_OP_IMM)
+        if (!dec.alu.op)
             cmd = OP_ADD;
         else
             case (dec.funct3)
-                F3_ADD_SUB:      cmd = sub ? OP_SUB : OP_ADD;
+                F3_ADD_SUB:      cmd = dec.alu.sub ? OP_SUB : OP_ADD;
                 F3_SLT, F3_SLTU: cmd = OP_SUB;   // compare by subtraction
                 F3_XOR:          cmd = OP_XOR;
                 F3_OR:           cmd = OP_OR;
@@ -62,7 +64,7 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 
     // Result by funct3; LUI and AUIPC take the sum.
     always_comb
-        if (dec.kind != KIND_OP && dec.kind != KIND_OP_IMM)
+        if (!dec.alu.op)
             result = sum;
         else
             case (dec.funct3)

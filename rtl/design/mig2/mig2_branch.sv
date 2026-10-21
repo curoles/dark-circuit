@@ -8,7 +8,7 @@
  * link is pc + 4, the value JAL and JALR write to rd.
  */
 module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
-    // Only kind, funct3 and imm are used.
+    // Only br, funct3 and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   dec,
     /* verilator lint_on UNUSEDSIGNAL */
@@ -42,9 +42,9 @@ module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
             default: cond = 1'b0;   // 010 and 011 are not branches
         endcase
 
-    assign target = (dec.kind == KIND_JALR) ? rs1_data + dec.imm : {pc, {IADDR_START{1'b0}}} + dec.imm;
+    assign target = (dec.br.target_rs1 ? rs1_data : {pc, {IADDR_START{1'b0}}}) + dec.imm;
 
-    assign branch.taken      = dec.kind == KIND_JAL || dec.kind == KIND_JALR || (dec.kind == KIND_BRANCH && cond);
+    assign branch.taken      = dec.br.jump || (dec.br.branch && cond);
     assign branch.target     = target[WIDTH-1:IADDR_START];
     assign branch.misaligned = target[1];
 

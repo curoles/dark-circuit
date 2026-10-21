@@ -11,7 +11,7 @@
  */
 module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     input  wire              valid,      // instruction in EX is valid
-    // Only kind and funct3 are used.
+    // Only mem and funct3 are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
@@ -41,8 +41,8 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     assign strb_b = {{(STRB_WIDTH - 1){1'b0}}, 1'b1};
     assign strb_h = {{(STRB_WIDTH - 2){1'b0}}, 2'b11};
 
-    assign load  = valid && dec.kind == KIND_LOAD;
-    assign store = valid && dec.kind == KIND_STORE;
+    assign load  = valid && dec.mem.read;
+    assign store = valid && dec.mem.write;
 
     always_comb
         case (dec.funct3)

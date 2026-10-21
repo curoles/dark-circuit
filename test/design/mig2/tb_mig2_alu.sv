@@ -47,12 +47,22 @@ module TbMig2Alu;
         endcase
     endfunction
 
+    // ALU controls of a kind, as Mig2Decode gives them (kinds of this test only).
+    function automatic alu_ctrl_t alu_of(input kind_t k, input logic al);
+        case (k)
+            KIND_LUI:   return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0};
+            KIND_AUIPC: return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0};
+            KIND_OP:    return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: al};
+            default:    return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0};  // OP-IMM
+        endcase
+    endfunction
+
     // Apply one case and compare.
     task automatic check(input kind_t k, input funct3_t f3, input al, input [31:0] x,
                          input [31:0] y, input [31:0] im, input [31:2] p);
         logic [31:0] exp;
         dec = '0;
-        dec.kind = k; dec.funct3 = f3; dec.alt = al; dec.imm = im;
+        dec.kind = k; dec.funct3 = f3; dec.alt = al; dec.imm = im; dec.alu = alu_of(k, al);
         pc = p; rs1_data = x; rs2_data = y;
         #1;
         exp = model(k, f3, al, x, y, im, {p, 2'b00});

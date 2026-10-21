@@ -12,7 +12,7 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     input  wire              clk,
     input  wire              rst_n,       // synchronous reset, active low
     input  wire              valid,       // instruction in EX is valid
-    // Only kind and funct3 are used.
+    // Only muldiv and funct3 are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
@@ -41,7 +41,7 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     logic        overflow;
 
     // Operation from funct3.
-    assign muldiv     = valid && dec.kind == KIND_MULDIV;
+    assign muldiv     = valid && dec.muldiv;
     assign div        = dec.funct3 == F3_DIV || dec.funct3 == F3_DIVU || dec.funct3 == F3_REM || dec.funct3 == F3_REMU;
     assign rem        = dec.funct3 == F3_REM || dec.funct3 == F3_REMU;
     assign mul_lo     = dec.funct3 == F3_MUL;

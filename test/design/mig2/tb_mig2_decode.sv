@@ -79,6 +79,42 @@ module TbMig2Decode;
         endcase
     endfunction
 
+    // Controls expected for a kind: a model of its own, not a copy of Mig2Decode's table.
+    function automatic logic uses_alu(input logic [4:0] kind);
+        case (kind)
+            KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP: return 1'b1;
+            default:                                                         return 1'b0;
+        endcase
+    endfunction
+
+    function automatic alu_ctrl_t alu_of(input logic [4:0] kind, input logic alt);
+        case (kind)
+            KIND_LUI:    return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0};
+            KIND_AUIPC:  return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0};
+            KIND_OP:     return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: alt};
+            KIND_OP_IMM: return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0};
+            default:     return '{a: A_RS1,  b_imm: 1'b1, op: 1'b0, sub: 1'b0};  // address rs1 + imm
+        endcase
+    endfunction
+
+    function automatic br_ctrl_t br_of(input logic [4:0] kind);
+        case (kind)
+            KIND_JAL:    return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b0};
+            KIND_JALR:   return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b1};
+            KIND_BRANCH: return '{jump: 1'b0, branch: 1'b1, target_rs1: 1'b0};
+            default:     return '0;
+        endcase
+    endfunction
+
+    function automatic mem_ctrl_t mem_of(input logic [4:0] kind);
+        return '{read: kind == KIND_LOAD, write: kind == KIND_STORE};
+    endfunction
+
+    function automatic sys_ctrl_t sys_of(input logic [4:0] kind);
+        return '{csr: kind == KIND_CSR, mret: kind == KIND_MRET, ecall: kind == KIND_ECALL,
+                 ebreak: kind == KIND_EBREAK, illegal: kind == KIND_ILLEGAL};
+    endfunction
+
     // Compare one field of case cn with instruction w.
     task automatic check(input integer cn, input [31:0] w, input string field, input [31:0] got, input [31:0] exp);
         if (got !== exp)
@@ -101,6 +137,12 @@ module TbMig2Decode;
             exp_kind = e[0][4:0];
             #1;
             check(c, insn, "kind", {27'b0, dec.kind}, e[0]);
+            check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind)));
+            check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
+            check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
+            check(c, insn, "muldiv", 32'(dec.muldiv), 32'(exp_kind == KIND_MULDIV));
+            if (uses_alu(exp_kind))
+                check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, e[8][0])));
             if (exp_kind != KIND_ILLEGAL) begin
                 check(c, insn, "rd_we",    {31'b0, dec.rd_we},    e[1]);
                 check(c, insn, "uses_rs1", {31'b0, dec.uses_rs1}, e[2]);

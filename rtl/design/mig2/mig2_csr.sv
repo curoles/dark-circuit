@@ -24,7 +24,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     input  wire              rst_n,      // synchronous reset, active low
     input  wire              valid,      // instruction in EX is valid
     input  wire              done,       // instruction in EX completes: CSR write, minstret
-    // Only kind, funct3, rs1 and imm are used.
+    // Only sys, funct3, rs1 and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
@@ -99,7 +99,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     end
 
     assign rdata   = old;
-    assign illegal = valid && dec.kind == KIND_CSR && (!exists || (writes && read_only));
+    assign illegal = valid && dec.sys.csr && (!exists || (writes && read_only));
 
     always_comb
         case (dec.funct3)
@@ -109,7 +109,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
         endcase
 
     // done=1 means valid and not illegal.
-    assign we = done && dec.kind == KIND_CSR && writes;
+    assign we = done && dec.sys.csr && writes;
 
     // Bits of new_value: MIE and MPIE of mstatus, the address of mtvec and mepc.
     logic   new_mie;
@@ -119,7 +119,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     assign new_mie   = new_value[3];
     assign new_mpie  = new_value[7];
     assign new_iaddr = new_value[WIDTH-1:IADDR_START];
-    assign mret      = done && dec.kind == KIND_MRET;
+    assign mret      = done && dec.sys.mret;
 
     always_ff @(posedge clk)
         if (!rst_n)                         mcycle <= '0;

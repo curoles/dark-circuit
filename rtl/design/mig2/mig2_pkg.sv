@@ -181,9 +181,43 @@ package Mig2Pkg;
         RD_MULDIV       // product or quotient/remainder: M instructions
     } rd_src_t;
 
-    // Decode -> units: the instruction taken apart.
+    // Decode -> parts: controls computed once in decode, one group per part; later
+    // stages read them and do not decode again (AGENTS.md, Compute once, carry forward).
+    typedef enum logic [1:0] {
+        A_RS1,          // OP, OP-IMM, LOAD, STORE
+        A_PC,           // AUIPC
+        A_ZERO          // LUI
+    } alu_a_t;
+
     typedef struct packed {
-        kind_t      kind;
+        alu_a_t a;          // operand a
+        logic   b_imm;      // operand b is imm, else rs2
+        logic   op;         // funct3 selects the operation (OP, OP-IMM), else a + b
+        logic   sub;        // OP with alt: SUB instead of ADD
+    } alu_ctrl_t;
+
+    typedef struct packed {
+        logic   jump;       // JAL, JALR: always taken
+        logic   branch;     // BRANCH: taken when the condition of funct3 holds
+        logic   target_rs1; // target is rs1 + imm (JALR), else pc + imm
+    } br_ctrl_t;
+
+    typedef struct packed {
+        logic   read;       // LOAD
+        logic   write;      // STORE
+    } mem_ctrl_t;
+
+    typedef struct packed {
+        logic   csr;        // CSR instruction (Mig2Csr)
+        logic   mret;
+        logic   ecall;
+        logic   ebreak;
+        logic   illegal;    // no instruction of Mig2: illegal instruction trap
+    } sys_ctrl_t;
+
+    // Decode -> parts: the instruction taken apart, with the controls of every part.
+    typedef struct packed {
+        kind_t      kind;      // for testbenches and traces; parts read the controls
         reg_id_t    rd;
         reg_id_t    rs1;
         reg_id_t    rs2;
@@ -191,7 +225,12 @@ package Mig2Pkg;
         rd_src_t    rd_src;    // value written to rd
         logic       uses_rs1;  // reads rs1, for the interlock (Mig2Control)
         logic       uses_rs2;
-        RiscvPkg::funct3_t funct3;  // operation within the kind: ALU op, branch compare, load/store size
+        alu_ctrl_t  alu;       // Mig2Alu
+        br_ctrl_t   br;        // Mig2Branch
+        mem_ctrl_t  mem;       // Mig2Lsu
+        sys_ctrl_t  sys;       // Mig2Control, Mig2Csr
+        logic       muldiv;    // M instruction (Mig2MulDiv)
+        RiscvPkg::funct3_t funct3;  // operation within the part: ALU op, branch compare, load/store size
         logic       alt;       // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
         word_t      imm;       // immediate of the instruction format, sign-extended
     } decoded_t;

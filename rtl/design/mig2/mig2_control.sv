@@ -35,7 +35,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_on UNUSEDSIGNAL */
     input  fetch_t                     ex_fetch,    // instruction in EX: valid and pc
     input  insn_t                      ex_insn,     // for mtval of illegal instructions
-    // Only kind, rd_we and rd are used.
+    // Only sys, mem, rd_we and rd are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   ex_dec,      // instruction in EX taken apart
     /* verilator lint_on UNUSEDSIGNAL */
@@ -71,20 +71,20 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       id_hazard;   // the instruction in ID must wait
     logic       flush_id;    // the instruction in ID must not go on
 
-    assign ex_stop = ex_fetch.valid && ex_dec.kind == KIND_EBREAK && ebreak_halt;
-    assign ex_mret = ex_fetch.valid && ex_dec.kind == KIND_MRET;
+    assign ex_stop = ex_fetch.valid && ex_dec.sys.ebreak && ebreak_halt;
+    assign ex_mret = ex_fetch.valid && ex_dec.sys.mret;
 
     // Fault of the instruction in EX; at most one source applies to an instruction.
     always_comb begin
         ex_fault = ex_fetch.valid;
         ex_cause = '0;
         ex_tval  = '0;
-        if (ex_dec.kind == KIND_ILLEGAL || ex_csr_illegal) begin
+        if (ex_dec.sys.illegal || ex_csr_illegal) begin
             ex_cause = CAUSE_ILLEGAL_INSTRUCTION;
             ex_tval  = ex_insn;
-        end else if (ex_dec.kind == KIND_ECALL)
+        end else if (ex_dec.sys.ecall)
             ex_cause = CAUSE_MACHINE_ECALL;
-        else if (ex_dec.kind == KIND_EBREAK && !ebreak_halt) begin
+        else if (ex_dec.sys.ebreak && !ebreak_halt) begin
             ex_cause = CAUSE_BREAKPOINT;
             ex_tval  = {ex_fetch.pc, {IADDR_START{1'b0}}};
         end else if (ex_branch.taken && ex_branch.misaligned) begin
@@ -93,7 +93,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
             ex_cause = CAUSE_MISALIGNED_FETCH;
             ex_tval  = {ex_branch.target, 2'b10};
         end else if (ex_lsu_misaligned) begin
-            ex_cause = (ex_dec.kind == KIND_STORE) ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
+            ex_cause = ex_dec.mem.write ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
             ex_tval  = ex_addr;
         end else
             ex_fault = 1'b0;
@@ -123,7 +123,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
 
     // Interlock: other results are forwarded to ID (Mig2Forward); a load in EX has no data.
     assign ex_writes   = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
-    assign id_load_use = ex_writes && ex_dec.kind == KIND_LOAD &&
+    assign id_load_use = ex_writes && ex_dec.mem.read &&
                          ((id_dec.uses_rs1 && id_dec.rs1 == ex_dec.rd) ||
                           (id_dec.uses_rs2 && id_dec.rs2 == ex_dec.rd));
     assign id_hazard   = id_valid && id_load_use;
