@@ -31,7 +31,7 @@ module TbMig2Decode;
     integer      k;
     integer      addr;
     logic [31:0] e [FIELDS];  // expected: kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
-    logic [4:0]  exp_kind;    // value of kind_t, compared with KIND_* (Icarus can not cast to enum)
+    logic [4:0]  exp_kind;    // value of kind_t, compared with KIND_*
     logic [31:0] tested;      // tested[k]: kind k had a case
 
     SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_cases(

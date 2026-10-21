@@ -43,30 +43,32 @@ This file has the rules that are not in README.md.
 
 ## Simulator traps (measured)
 
-- Icarus 11 and packages: import the package in the module header,
-  `module X import Pkg::*; #(`. Package structs used only as `Pkg::type`, with no
-  module importing the package, crash Icarus (assert in elab_type.cc).
-- Icarus 11 and typedef'd vectors: a port of a vector typedef (`insn_t`) does not
-  elaborate; write the range, `input logic [INSN_WIDTH-1:0] insn`. Structs are fine.
-- Icarus 13 and type parameters: they work (`parameter type T`, `#(.T(item_t))`),
+Icarus means Icarus 13, the version the project uses (Mig1's comments still describe
+Icarus 11, which had more limits).
+
+- Icarus and packages: a package must come before its first use in the file list;
+  dc_parse_test_args() puts the flists before the testbench.
+- Icarus and type parameters: they work (`parameter type T`, `#(.T(item_t))`),
   except `.T(...)` in an instance inside a module whose own type parameter is also
   named T: a syntax error (to the parser T is a type there). Name the outer type
-  parameter differently (FifoVldRdyT uses TT). Not parsed either: named assignment
-  patterns `'{field: value}`.
+  parameter differently (FifoVldRdyT uses TT).
+- Icarus does not parse named assignment patterns `'{field: value}`.
+- Icarus does not allow a field of a struct parameter in a constant expression,
+  `localparam W = CFG.mem_addr_width;` ("A hierarchical reference ... is not allowed
+  in a constant expression").
+- Icarus does not support `inside`; use `case` or `==`.
+- Icarus says "sorry: constant selects in always_* processes are not fully supported"
+  for `s.field` or `v[3:0]` inside `always_comb`; results are right (the process is
+  sensitive to all bits). A function or an `assign` into a signal avoids the message.
+- Icarus does not find a name imported from a package inside an instance port
+  expression, `.left_right(funct3 == F3_SLL)`: it silently makes an implicit wire.
+  For code that must run on Icarus, compute the value with `assign` into a signal and
+  connect the signal.
 - Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
   (IMPLICIT; in an expression always an error), and every design is built with it.
   sv2v declares an undeclared name of a port connection as a wire, and Yosys makes
   undeclared names wires unless read_verilog -noautowire, which the synthesis script
   uses.
-- Icarus 11: one declaration per line, `wire a = x, b = y;` is rejected.
-- Icarus 11 does not support `inside`; use `case` or `==`.
-- Icarus 11 does not support casts to an enum (`kind_t'(x)`) or to a width (`AW'(x)`);
-  keep enum values as bits and compare them with the enum names, slice integers.
-- Icarus 11 warns "constant selects in always_* processes are not currently supported"
-  for `s.field` or `v[3:0]` inside `always_comb`; select with `assign` into a signal first.
-- Icarus 11 does not find a name imported from a package inside an instance port
-  expression, `.left_right(funct3 == F3_SLL)`: it silently makes an implicit wire.
-  Compute the value with `assign` into a signal and connect the signal.
 - A variable with an initializer in a static function is initialized once at time 0;
   Icarus silently returns wrong values, Verilator refuses. Hence `automatic` everywhere.
 - Only `$fatal` makes `vvp` exit with an error; `$error` does not fail a test.

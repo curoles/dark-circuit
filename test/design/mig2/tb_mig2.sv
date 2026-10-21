@@ -122,7 +122,8 @@ module TbMig2;
 
     // Address of symbol `name` in file, the nm output of the program: lines of
     // address, type and name; lines without an address (undefined symbols) are skipped.
-    // Text is in reg vectors, not strings: Icarus reads lines only into regs ($fgets).
+    // Text is in reg vectors, not strings: written for Icarus 11, which read lines only
+    // into regs ($fgets); Icarus 13 and Verilator also read into strings.
     task automatic find_symbol(input string file, input [8*64-1:0] name, output logic found,
                                output logic [WIDTH-1:0] addr);
         integer         fd;

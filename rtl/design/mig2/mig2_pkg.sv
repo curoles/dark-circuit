@@ -2,13 +2,8 @@
  *
  * Port groups of Mig2Core are packed structs, one struct per direction:
  * <group>_req_t goes from the requester, <group>_rsp_t comes back.
- * Two rules:
- * - modules import this package in their header, `module X import Mig2Pkg::*; #(`:
- *   Icarus crashes (assert in elab_type.cc) when the structs are used only as
- *   Mig2Pkg::<type> and no module imports the package;
- * - ports use the types of this package (word_t, insn_t, iaddr_t, reg_id_t, ...).
- *   Icarus 11 can not bind the range of a vector typedef in a port ("Unable to bind
- *   parameter"); Mig2 is tested with Verilator.
+ * Modules import this package in their header, `module X import Mig2Pkg::*; #(`, and
+ * their ports use its types (word_t, insn_t, iaddr_t, reg_id_t, ...).
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
  * register values are byte addresses like software sees them.
  */
