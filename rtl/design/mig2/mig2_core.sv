@@ -68,7 +68,7 @@ module Mig2Core import Mig2Pkg::*; #(
     logic        ex_done;           // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
     trap_t       ex_trap;           // instruction in EX faults: retires as a trap
-    csr_t        ex_csr;            // mtvec, mepc
+    csr_t        csr;               // mtvec, mepc: where traps and MRET go (no stage)
     logic        ex_rd_write;       // instruction in EX will write rd
     reg_id_t     ex_rd;             // rd written by the instruction in EX, 0 when none
     word_t       ex_rd_data;
@@ -94,7 +94,7 @@ module Mig2Core import Mig2Pkg::*; #(
     Mig2Control u_mig2_control(
         .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex_fetch, .ex_insn, .ex_dec,
         .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned, .ex_csr_illegal,
-        .ex_muldiv_stall, .csr(ex_csr), .ebreak_halt(dbg_req.ebreak_halt),
+        .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap,
         .halt, .halt_pc);
 
@@ -149,7 +149,7 @@ module Mig2Core import Mig2Pkg::*; #(
     Mig2Csr u_mig2_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .trap(ex_trap), .rdata(ex_csr_rdata),
-        .illegal(ex_csr_illegal), .csr(ex_csr));
+        .illegal(ex_csr_illegal), .csr);
 
     Mig2MulDiv u_mig2_muldiv(
         .clk, .rst_n, .valid(ex_fetch.valid), .dec(ex_dec), .rs1_data(ex_rs1_data),
