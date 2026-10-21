@@ -19,6 +19,10 @@ This file has the rules that are not in README.md.
   otherwise; mixing is fine: `u_x(.clk, .rst_n, .ctrl(if_ctrl))`. `.name` never
   creates an implicit net, a missing signal is an error. No `.*`: it hides what is
   connected. Old code is converted when it is touched anyway.
+- Port groups: a module with many ports lists them in groups, one comment line per
+  group (`// From ID`, `// From EX`, `// Debug`, `// To fetch and pipeline`); the
+  module that instantiates it declares the wires in the same groups and connects them
+  in the same order.
 - Declarations: internal signals are `logic` or a package type (`word_t`); outputs
   are `output logic` when a process drives them, `output wire` when an `assign` does,
   or a package type; inputs are `input wire` or a package type. `wire` otherwise only
@@ -27,7 +31,13 @@ This file has the rules that are not in README.md.
   error in Verilator and Icarus, while a wire accepts it silently (Verilator picks one
   driver, Icarus shows x). Never declare with a value, `logic y = a & b;`: that is an
   initializer, computed once at time 0; declare, then `assign`. Old code is converted
-  when it is touched anyway.
+  when it is touched anyway. When the load condition of a register is its own signal,
+  it is named `<reg>_en` (`if (pc_en) pc_q <= pc_d;`); a condition that already has a
+  meaning of its own is used directly (`if (ex_stop) halt_pc <= ex_fetch.pc;`).
+- Raw and qualified: when a signal is first computed without the condition that makes
+  it count (valid, a fault, a flush) and then qualified, the first one is
+  `<name>_raw` and the qualified one gets the plain name; then every use shows whether
+  the condition is already in it.
 - Numbers: in comparisons a plain number is fine (`count == 0`, `sel == 2`); in
   assignments and fills use `'0`/`'1` or a sized literal (`1'b0`, `4'd3`), never a
   plain number, because there a width mismatch changes the value silently.
@@ -82,6 +92,8 @@ This file has the rules that are not in README.md.
   No other Doxygen markup (`/**`, `@brief`, `///<`): a documentation filter turns these
   conventions into Doxygen comments. Generated files start with their "generated"
   line instead. Files without @author and @copyright get them when touched anyway.
+  A long module (more than about 150 lines) starts each part of its body (faults,
+  halt and resume, interlock, outputs, assertions) with a comment line naming it.
 - Every SystemVerilog function is `automatic`; its arguments and result have types,
   it returns with `return x;`, and it reads only its arguments, parameters and
   constants, never module signals.
@@ -102,7 +114,10 @@ This file has the rules that are not in README.md.
   fields; it does not work them out again from raw data (the instruction, its kind,
   an address). This holds at every stage: decode produces controls, and a later
   stage passes on what it has computed for the stages after it (EX gives MEM/WB the
-  load size and offset, not the instruction).
+  load size and offset, not the instruction). Valid and flush gate only state changes
+  (a register load, a start, a stall, a write), never data selects: the data of a
+  bubble does not matter, and keeping valid out of the datapath keeps stall and flush
+  logic off its timing path.
 - Type parameters: when writing or refactoring, look for modules that store or move
   a value without computing on it (pipeline registers, FIFOs, memories, flip-flops,
   multiplexers). `parameter type T` makes the type part of the interface
@@ -203,6 +218,11 @@ knobs can not disagree between modules.
 - The struct holds instance knobs (addresses, sizes, optional features, variants).
   ISA-wide widths and the types built from them (WIDTH, word_t, ...) stay constants
   in the design package: a package type can not depend on a module parameter.
+- A feature with variants is one enum field of the config struct, not several bools:
+  `mul_e mul;` with `MUL_SINGLE_CYCLE`, `MUL_PIPELINED`, `MUL_ITERATIVE` (and `MUL_NONE`
+  if the feature can be left out); the design picks the implementation with
+  `if (CFG.mul == MUL_PIPELINED) begin : g_mul_pipelined`. One field can not express an
+  impossible combination, which two bools (`has_mul`, `mul_fast`) can.
 - It composes: a design's struct contains sub-structs per subsystem, for example a
   later mig3_cfg_t with `cache_cfg_t l1i, l1d;` and a `bus_cfg_t`. A library block
   takes only its own sub-struct (`Cache #(.CFG(CFG.l1d))`), never the design's.
