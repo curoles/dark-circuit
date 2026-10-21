@@ -76,7 +76,7 @@ module Mig2Core import Mig2Pkg::*; #(
     retire_t     ex_retire;         // RVFI entry built in EX, completed in MEM/WB
     ex_mem_t     ex_mem_d;
     ex_mem_t     ex_mem_q;
-    // order and mem_rdata of mem_ret are not used: MEM/WB fills them.
+    // valid, order and mem_rdata of mem_ret are not used: MEM/WB fills them.
     /* verilator lint_off UNUSEDSIGNAL */
     retire_t     mem_ret;           // instruction in MEM/WB: its entry from EX
     /* verilator lint_on UNUSEDSIGNAL */
@@ -190,6 +190,7 @@ module Mig2Core import Mig2Pkg::*; #(
     assign ex_retire.mem_rdata = '0;
     assign ex_retire.mem_wdata = ex_lsu_mem.wdata;
 
+    assign ex_mem_d.valid  = ex_retire.valid;
     assign ex_mem_d.ret    = ex_retire;
     assign ex_mem_d.load   = ex_rd_src == RD_LOAD;
     assign ex_mem_d.funct3 = ex_dec.funct3;
@@ -202,9 +203,10 @@ module Mig2Core import Mig2Pkg::*; #(
         .funct3(ex_mem_q.funct3), .offset(ex_mem_q.offset), .word(dmem_rsp.rd_data),
         .load_data(mem_load_data));
 
-    // Write back: rd_addr of the entry is 0 when nothing is written (RVFI): bubbles,
-    // traps, x0; EX builds it from ex_done.
-    assign mem_rd       = mem_ret.rd_addr;
+    // Write back: rd_addr of the entry is 0 when nothing is written (RVFI: traps, x0;
+    // EX builds it from ex_done). A bubble keeps old fields (Mig2PipeReg clears only
+    // valid, also at reset), so valid gates the write.
+    assign mem_rd       = ex_mem_q.valid ? mem_ret.rd_addr : '0;
     assign mem_rd_write = mem_rd != '0;
     assign mem_rd_data  = ex_mem_q.load ? mem_load_data : mem_ret.rd_wdata;
 
@@ -213,7 +215,7 @@ module Mig2Core import Mig2Pkg::*; #(
         if (!rst_n)            retire_order <= '0;
         else if (retire.valid) retire_order <= retire_order + 1'b1;
 
-    assign retire.valid     = mem_ret.valid;
+    assign retire.valid     = ex_mem_q.valid;
     assign retire.order     = retire_order;
     assign retire.insn      = mem_ret.insn;
     assign retire.trap      = mem_ret.trap;

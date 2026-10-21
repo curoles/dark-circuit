@@ -1,5 +1,6 @@
 mig2_config_pkg.sv
 mig2_pkg.sv
+mig2_pipe_reg.sv
 mig2_fetch.sv
 mig2_control.sv
 mig2_decode.sv

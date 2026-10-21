@@ -35,10 +35,13 @@ module Mig2Fetch import Mig2Pkg::*; #(
     assign imem_req.en   = advance;
     assign imem_req.addr = pc;
 
-    always_ff @(posedge clk)
-        if (!rst_n || !ctrl.stall) begin
-            fetch.valid <= rst_n && ctrl.run && !ctrl.redirect;
-            fetch.pc    <= pc;
-        end
+    // IF/ID: the instruction comes from imem 1 clock after its request; valid=0 when
+    // fetch did not run or the request was dropped by a redirect.
+    fetch_t fetch_d;
+    assign fetch_d.valid = ctrl.run && !ctrl.redirect;
+    assign fetch_d.pc    = pc;
+
+    Mig2PipeReg #(.T(fetch_t)) u_mig2_pipe_reg_if_id(
+        .clk, .rst_n, .stall(ctrl.stall), .flush(1'b0), .d(fetch_d), .q(fetch));
 
 endmodule

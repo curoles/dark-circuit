@@ -209,8 +209,9 @@ package Mig2Pkg;
     // EX -> MEM/WB: the instruction after EX (Mig2Pipe). No stall or flush: an
     // instruction that leaves EX always completes in MEM/WB.
     typedef struct packed {
-        retire_t                ret;     // RVFI entry built in EX; valid: completes or traps.
-                                         // MEM/WB fills order, and rd_wdata and mem_rdata of loads
+        logic                   valid;   // completes or traps
+        retire_t                ret;     // RVFI entry built in EX; MEM/WB fills valid,
+                                         // order, and rd_wdata and mem_rdata of loads
         logic                   load;    // rd value comes from dmem
         RiscvPkg::funct3_t      funct3;  // load size and sign
         byte_offset_t           offset;  // load: byte in the word
