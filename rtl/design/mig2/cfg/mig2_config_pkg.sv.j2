@@ -1,13 +1,19 @@
 // THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
 // {{ generated_note }}
 //
-// Configuration of Mig2, Mig2Pkg takes its MIG2_* constants from here.
+// Configuration of Mig2: struct mig2_cfg_t, its default MIG2_CFG has the values of
+// cfg/mig2_config.yaml. Modules that read a knob take `parameter mig2_cfg_t CFG`.
+// A new knob: a line in the YAML and a field here.
 package Mig2ConfigPkg;
 
-    // PC after reset, byte address.
-    localparam RST_ADDR = {{ rst_addr | sv_hex(32) }};
+    typedef struct packed {
+        logic [31:0] rst_addr;         // PC after reset, byte address
+        int unsigned mem_addr_width;   // Mig2Cpu memories: 1 << mem_addr_width bytes each
+    } mig2_cfg_t;
 
-    // imem and dmem: {{ 2 ** mem_addr_width }} bytes each.
-    localparam MEM_ADDR_WIDTH = {{ mem_addr_width }};
+    localparam mig2_cfg_t MIG2_CFG = '{
+        rst_addr:       {{ rst_addr | sv_hex(32) }},
+        mem_addr_width: {{ mem_addr_width }}   // {{ 2 ** mem_addr_width }} bytes each
+    };
 
 endpackage

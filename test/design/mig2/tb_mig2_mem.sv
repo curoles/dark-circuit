@@ -9,7 +9,7 @@
 module TbMig2Mem;
     import Mig2Pkg::*;
 
-    localparam AW = MIG2_MEM_ADDR_WIDTH;
+    localparam AW = MIG2_CFG.mem_addr_width;
     localparam NR = 6;  // number of checked words
 
     wire       clk;

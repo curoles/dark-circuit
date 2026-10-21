@@ -26,10 +26,10 @@ package Mig2Pkg;
     // module as top, like a unit test, uses only some of them.
     /* verilator lint_off UNUSEDPARAM */
 
-    // Configuration of Mig2 from cfg/mig2_config.yaml (Mig2ConfigPkg),
-    // defaults of module parameters RST_ADDR and MEM_ADDR_WIDTH.
-    localparam MIG2_RST_ADDR       = Mig2ConfigPkg::RST_ADDR;        // PC after reset, byte address
-    localparam MIG2_MEM_ADDR_WIDTH = Mig2ConfigPkg::MEM_ADDR_WIDTH;  // Mig2Cpu: imem and dmem size
+    // Configuration of Mig2 from cfg/mig2_config.yaml (Mig2ConfigPkg): modules that
+    // read a knob take `parameter mig2_cfg_t CFG = MIG2_CFG`.
+    typedef Mig2ConfigPkg::mig2_cfg_t mig2_cfg_t;
+    localparam mig2_cfg_t MIG2_CFG = Mig2ConfigPkg::MIG2_CFG;
 
     typedef logic [WIDTH-1:0]           word_t;        // register value, data word
     typedef logic [INSN_WIDTH-1:0]      insn_t;        // instruction

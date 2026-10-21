@@ -2,13 +2,13 @@
  *
  * load() puts the same hex image (objcopy -O verilog, see sw/riscv/mig2.ld) into
  * instruction memory (SimROM) and data memory (SimRAM): code is fetched from imem,
- * loads and stores go to dmem. Both have 1 << MEM_ADDR_WIDTH bytes; the core address
+ * loads and stores go to dmem. Both have 1 << CFG.mem_addr_width bytes; the core address
  * bits above them are ignored, so addresses wrap around.
  * The debug port of the core is a port of Mig2Cpu: the testbench (or a semihosting
  * service) reads and writes registers while halted and resumes the core.
  */
 module Mig2Cpu import Mig2Pkg::*; #(
-    parameter MEM_ADDR_WIDTH = MIG2_MEM_ADDR_WIDTH  // memory size: 1 << MEM_ADDR_WIDTH bytes
+    parameter mig2_cfg_t CFG = MIG2_CFG     // configuration, see Mig2ConfigPkg
 )(
     input  wire      clk,
     input  wire      rst_n,          // synchronous reset, active low
@@ -17,6 +17,8 @@ module Mig2Cpu import Mig2Pkg::*; #(
     input  dbg_req_t dbg_req,        // debug, used while halted
     output dbg_rsp_t dbg_rsp
 );
+    localparam MEM_ADDR_WIDTH = CFG.mem_addr_width;   // memory size: 1 << MEM_ADDR_WIDTH bytes
+
     imem_rsp_t imem_rsp;
     dmem_rsp_t dmem_rsp;
     // Not fully used: address bits above MEM_ADDR_WIDTH (memories wrap around),
@@ -27,7 +29,7 @@ module Mig2Cpu import Mig2Pkg::*; #(
     wire       dmem_rd_valid;
     /* verilator lint_on UNUSEDSIGNAL */
 
-    Mig2Core u_mig2_core(
+    Mig2Core #(.CFG(CFG)) u_mig2_core(
         .clk(clk), .rst_n(rst_n),
         .imem_req(imem_req), .imem_rsp(imem_rsp),
         .dmem_req(dmem_req), .dmem_rsp(dmem_rsp),

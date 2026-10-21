@@ -57,7 +57,7 @@ module TbMig2;
     import RiscvPkg::*;
     import RiscvInstrPkg::*;
 
-    localparam AW = MIG2_MEM_ADDR_WIDTH;
+    localparam AW = MIG2_CFG.mem_addr_width;
 
     wire             clk;
     wire             rst_n;
@@ -349,8 +349,8 @@ module TbMig2;
 `endif
             if (halted)
                 $fatal(1, "Mig2: instruction at %h retired after halt", retire_pc);
-            if (retired == 0 && retire_pc !== MIG2_RST_ADDR)
-                $fatal(1, "Mig2: first instruction at %h, expected reset address %h", retire_pc, MIG2_RST_ADDR);
+            if (retired == 0 && retire_pc !== MIG2_CFG.rst_addr)
+                $fatal(1, "Mig2: first instruction at %h, expected reset address %h", retire_pc, MIG2_CFG.rst_addr);
             if (expect_sequential && retired > 0 && retire_pc !== prev_pc + 4)
                 $fatal(1, "Mig2: pc %h after %h, expected %h", retire_pc, prev_pc, prev_pc + 4);
             if (retire.insn !== imem_word(retire_pc[AW-1:0]))

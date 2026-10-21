@@ -8,6 +8,9 @@ Simulation: Mig2 tests run on the main simulator of the build (cmake option
 DARK_CIRCUIT_MAIN_SIMULATOR, by default Verilator when it is installed). Mig2 is tested
 with Verilator; only Verilator is guaranteed to work.
 
+Configuration: cfg/mig2_config.yaml (make config) gives struct mig2_cfg_t and its default
+MIG2_CFG (Mig2ConfigPkg); Mig2Cpu, Mig2Core and Mig2Fetch take it as parameter CFG.
+
 Syntax: Mig2Core must convert with sv2v (test design_mig2.sv2v); sv2v decides which
 SystemVerilog Mig2 can use.
 

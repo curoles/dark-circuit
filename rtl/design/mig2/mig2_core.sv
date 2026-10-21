@@ -22,7 +22,7 @@
  * A division stays 34 cycles in EX.
  */
 module Mig2Core import Mig2Pkg::*; #(
-    parameter RST_ADDR = MIG2_RST_ADDR     // PC after reset, byte address
+    parameter mig2_cfg_t CFG = MIG2_CFG    // configuration, see Mig2ConfigPkg
 )(
     input  wire       clk,
     input  wire       rst_n,               // synchronous reset, active low
@@ -89,7 +89,7 @@ module Mig2Core import Mig2Pkg::*; #(
     logic [63:0] retire_order;      // number of instructions retired so far
 
     // IF
-    Mig2Fetch #(.RST_ADDR(RST_ADDR)) u_mig2_fetch(
+    Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(
         .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(id_fetch));
 
     Mig2Control u_mig2_control(

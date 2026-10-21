@@ -2,14 +2,14 @@
  *
  * pc is the address requested from imem in this cycle; the instruction comes
  * 1 clock later, together with fetch.valid and fetch.pc for the next stage.
- * Reset loads RST_ADDR (reset is a jump), then the PC advances every cycle with
+ * Reset loads CFG.rst_addr (reset is a jump), then the PC advances every cycle with
  * ctrl.run=1 and holds with ctrl.run=0. ctrl.redirect=1 loads ctrl.target (taken
  * branch or jump) and drops the request of this cycle: its instruction comes with
  * fetch.valid=0. ctrl.stall=1 keeps everything: pc, the imem output (SimROM and SRAM
  * hold data while en=0) and fetch, so the instruction in ID stays for another cycle.
  */
 module Mig2Fetch import Mig2Pkg::*; #(
-    parameter RST_ADDR = MIG2_RST_ADDR    // PC after reset, byte address
+    parameter mig2_cfg_t CFG = MIG2_CFG   // configuration, see Mig2ConfigPkg
 )(
     input  wire         clk,
     input  wire         rst_n,            // synchronous reset, active low
@@ -17,7 +17,7 @@ module Mig2Fetch import Mig2Pkg::*; #(
     output imem_req_t   imem_req,
     output fetch_t      fetch
 );
-    localparam iaddr_t RST_PC = RST_ADDR[WIDTH-1:IADDR_START];
+    localparam iaddr_t RST_PC = CFG.rst_addr[WIDTH-1:IADDR_START];
 
     iaddr_t pc;
     logic   advance;   // request the next instruction

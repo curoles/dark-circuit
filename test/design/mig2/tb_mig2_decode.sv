@@ -14,7 +14,7 @@
 module TbMig2Decode;
     import Mig2Pkg::*;
 
-    localparam AW     = MIG2_MEM_ADDR_WIDTH;
+    localparam AW     = MIG2_CFG.mem_addr_width;
     localparam FIELDS = 10;                  // expected values after the instruction
     localparam CASE   = 4 * (1 + FIELDS);    // bytes of one case
 
