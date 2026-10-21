@@ -64,7 +64,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     reg_id_t    rd;
     reg_id_t    rs1;
     reg_id_t    rs2;
-    logic [2:0] funct3;
+    funct3_t    funct3;
     logic       alt;
     assign rd     = f.r.rd;
     assign rs1    = f.r.rs1;

@@ -39,7 +39,7 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
 
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;
-    logic [2:0] funct3;
+    funct3_t    funct3;
     reg_id_t    rs1;            // register, or immediate of the I forms
     logic [11:0] addr;          // CSR address
     assign kind   = dec.kind;

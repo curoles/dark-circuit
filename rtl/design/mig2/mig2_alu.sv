@@ -17,7 +17,7 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 );
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;
-    logic [2:0] funct3;
+    funct3_t    funct3;
     logic       alt;
     word_t      imm;
     assign kind   = dec.kind;

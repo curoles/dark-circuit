@@ -20,7 +20,7 @@ module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
 );
     // Fields of dec, selected with assign: Icarus warns about selects in always_comb.
     kind_t      kind;
-    logic [2:0] funct3;
+    funct3_t    funct3;
     word_t      imm;
     assign kind   = dec.kind;
     assign funct3 = dec.funct3;

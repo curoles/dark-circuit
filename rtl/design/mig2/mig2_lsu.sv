@@ -23,7 +23,7 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
 );
     // Fields and bit selects with assign: Icarus warns about selects in always_comb.
     kind_t                  kind;
-    logic [2:0]             funct3;
+    funct3_t                funct3;
     byte_offset_t           offset;     // byte in the word
     logic                   odd;        // odd byte address
     logic [7:0]             rs2_b;

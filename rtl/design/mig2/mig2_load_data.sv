@@ -6,7 +6,7 @@
  * in EX now, MEM later).
  */
 module Mig2LoadData import Mig2Pkg::*, RiscvPkg::*; (
-    input  logic [2:0]             funct3,
+    input  funct3_t                funct3,
     input  byte_offset_t           offset,     // byte in the word
     input  word_t                  word,       // dmem word of the load
     output word_t                  load_data

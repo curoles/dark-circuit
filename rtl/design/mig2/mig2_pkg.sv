@@ -191,7 +191,7 @@ package Mig2Pkg;
         rd_src_t    rd_src;    // value written to rd
         logic       uses_rs1;  // reads rs1, for the interlock (Mig2Control)
         logic       uses_rs2;
-        logic [2:0] funct3;    // operation within the kind: ALU op, branch compare, load/store size
+        RiscvPkg::funct3_t funct3;  // operation within the kind: ALU op, branch compare, load/store size
         logic       alt;       // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
         word_t      imm;       // immediate of the instruction format, sign-extended
     } decoded_t;
@@ -212,7 +212,7 @@ package Mig2Pkg;
         retire_t                ret;     // RVFI entry built in EX; valid: completes or traps.
                                          // MEM/WB fills order, and rd_wdata and mem_rdata of loads
         logic                   load;    // rd value comes from dmem
-        logic [2:0]             funct3;  // load size and sign
+        RiscvPkg::funct3_t      funct3;  // load size and sign
         byte_offset_t           offset;  // load: byte in the word
     } ex_mem_t;
 
