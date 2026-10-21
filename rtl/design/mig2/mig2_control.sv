@@ -17,8 +17,8 @@
  * is in flight; resume=1 runs again from halt_pc + 4 (a redirect: IF has fetched beyond
  * EBREAK).
  * A redirect (taken jump or branch, trap, MRET in EX; resume) drops the instructions in
- * ID and IF (two bubbles). muldiv_stall (division not done) keeps the instruction in EX:
- * ID and IF hold.
+ * ID and IF (two bubbles). ex_muldiv_stall (division not done) keeps the instruction in
+ * EX: ID and IF hold.
  * Interlock: results are forwarded to ID (Mig2Forward), except load data, which comes
  * in MEM/WB: the instruction in ID waits one cycle while it reads the rd of a load in
  * EX (load-use); EX gets a bubble meanwhile.
@@ -33,17 +33,17 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   id_dec,      // instruction in ID taken apart
     /* verilator lint_on UNUSEDSIGNAL */
-    input  fetch_t                     ex,          // instruction in EX: valid and pc
+    input  fetch_t                     ex_fetch,    // instruction in EX: valid and pc
     input  insn_t                      ex_insn,     // for mtval of illegal instructions
     // Only kind, rd_we and rd are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   ex_dec,      // instruction in EX taken apart
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t                      ex_addr,     // load/store address, for mtval
-    input  branch_t                    branch,      // next pc of the instruction in EX
-    input  wire                        lsu_misaligned, // load/store address not aligned: a fault
-    input  wire                        csr_illegal, // CSR instruction can not be done
-    input  wire                        muldiv_stall, // division of the instruction in EX not done
+    input  branch_t                    ex_branch,   // next pc of the instruction in EX
+    input  wire                        ex_lsu_misaligned, // load/store address not aligned: a fault
+    input  wire                        ex_csr_illegal,    // CSR instruction can not be done
+    input  wire                        ex_muldiv_stall,   // division of the instruction in EX not done
     input  csr_t                       csr,         // mtvec, mepc
     input  wire                        ebreak_halt, // debug: EBREAK halts instead of trapping
     input  wire                        resume,      // debug: continue after EBREAK
@@ -55,114 +55,114 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     output iaddr_t                     halt_pc
 );
     // Fields of the inputs, selected with assign: Icarus warns about selects in always_comb.
-    logic   valid;
-    iaddr_t pc;
-    kind_t  kind;
-    logic   taken;
-    logic   misaligned_target;
-    iaddr_t target;
-    logic   ex_stall;       // the instruction in EX stays for another cycle
-    iaddr_t mtvec;
-    iaddr_t mepc;
-    logic   id_uses_rs1;
-    logic   id_uses_rs2;
-    reg_id_t   id_rs1;
-    reg_id_t   id_rs2;
-    logic   ex_rd_we;
-    reg_id_t   ex_rd;
-    assign valid             = ex.valid;
-    assign pc                = ex.pc;
-    assign kind              = ex_dec.kind;
-    assign taken             = branch.taken;
-    assign misaligned_target = branch.misaligned;
-    assign target            = branch.target;
-    assign ex_stall          = muldiv_stall;
-    assign mtvec             = csr.mtvec;
-    assign mepc              = csr.mepc;
-    assign id_uses_rs1       = id_dec.uses_rs1;
-    assign id_uses_rs2       = id_dec.uses_rs2;
-    assign id_rs1            = id_dec.rs1;
-    assign id_rs2            = id_dec.rs2;
-    assign ex_rd_we          = ex_dec.rd_we;
-    assign ex_rd             = ex_dec.rd;
+    logic    ex_valid;
+    iaddr_t  ex_pc;
+    kind_t   ex_kind;
+    logic    ex_taken;
+    logic    ex_misaligned_target;
+    iaddr_t  ex_target;
+    logic    ex_stall;       // the instruction in EX stays for another cycle
+    iaddr_t  mtvec;
+    iaddr_t  mepc;
+    logic    id_uses_rs1;
+    logic    id_uses_rs2;
+    reg_id_t id_rs1;
+    reg_id_t id_rs2;
+    logic    ex_rd_we;
+    reg_id_t ex_rd;
+    assign ex_valid             = ex_fetch.valid;
+    assign ex_pc                = ex_fetch.pc;
+    assign ex_kind              = ex_dec.kind;
+    assign ex_taken             = ex_branch.taken;
+    assign ex_misaligned_target = ex_branch.misaligned;
+    assign ex_target            = ex_branch.target;
+    assign ex_stall             = ex_muldiv_stall;
+    assign mtvec                = csr.mtvec;
+    assign mepc                 = csr.mepc;
+    assign id_uses_rs1          = id_dec.uses_rs1;
+    assign id_uses_rs2          = id_dec.uses_rs2;
+    assign id_rs1               = id_dec.rs1;
+    assign id_rs2               = id_dec.rs2;
+    assign ex_rd_we             = ex_dec.rd_we;
+    assign ex_rd                = ex_dec.rd;
 
-    logic       running;    // 1 from reset until EBREAK halts the core, again after resume
-    logic       stop;       // EBREAK in EX halts the core
-    logic       mret;       // MRET in EX
-    logic       trap;       // instruction in EX traps
-    logic [4:0] cause;
-    word_t      tval;
-    logic       resuming;   // resume while halted
+    logic       running;     // 1 from reset until EBREAK halts the core, again after resume
+    logic       ex_stop;     // EBREAK in EX halts the core
+    logic       ex_mret;     // MRET in EX
+    logic       ex_fault;    // instruction in EX traps
+    logic [4:0] ex_cause;
+    word_t      ex_tval;
+    logic       resuming;    // resume while halted
     logic       redirect;
-    logic       ex_writes;  // the instruction in EX writes a register at the end of its cycle
-    logic       halting;    // the EBREAK that halts the core is in MEM/WB, it retires now
-    logic       load_use;   // ID reads the rd of a load in EX: its data comes in MEM/WB
-    logic       hazard;
-    logic       flush_id;   // the instruction in ID must not go on
+    logic       ex_writes;   // the instruction in EX writes a register at the end of its cycle
+    logic       mem_halting; // the EBREAK that halts the core is in MEM/WB, it retires now
+    logic       id_load_use; // ID reads the rd of a load in EX: its data comes in MEM/WB
+    logic       id_hazard;   // the instruction in ID must wait
+    logic       flush_id;    // the instruction in ID must not go on
 
-    assign stop = ex.valid && kind == KIND_EBREAK && ebreak_halt;
-    assign mret = ex.valid && kind == KIND_MRET;
+    assign ex_stop = ex_valid && ex_kind == KIND_EBREAK && ebreak_halt;
+    assign ex_mret = ex_valid && ex_kind == KIND_MRET;
 
     // Fault of the instruction in EX; at most one source applies to an instruction.
     always_comb begin
-        trap  = valid;
-        cause = '0;
-        tval  = '0;
-        if (kind == KIND_ILLEGAL || csr_illegal) begin
-            cause = CAUSE_ILLEGAL_INSTRUCTION;
-            tval  = ex_insn;
-        end else if (kind == KIND_ECALL)
-            cause = CAUSE_MACHINE_ECALL;
-        else if (kind == KIND_EBREAK && !ebreak_halt) begin
-            cause = CAUSE_BREAKPOINT;
-            tval  = {pc, {IADDR_START{1'b0}}};
-        end else if (taken && misaligned_target) begin
+        ex_fault = ex_valid;
+        ex_cause = '0;
+        ex_tval  = '0;
+        if (ex_kind == KIND_ILLEGAL || ex_csr_illegal) begin
+            ex_cause = CAUSE_ILLEGAL_INSTRUCTION;
+            ex_tval  = ex_insn;
+        end else if (ex_kind == KIND_ECALL)
+            ex_cause = CAUSE_MACHINE_ECALL;
+        else if (ex_kind == KIND_EBREAK && !ebreak_halt) begin
+            ex_cause = CAUSE_BREAKPOINT;
+            ex_tval  = {ex_pc, {IADDR_START{1'b0}}};
+        end else if (ex_taken && ex_misaligned_target) begin
             // The target byte address: misaligned means bit 1 is set, bit 0 is always 0
             // (JALR clears it, other offsets are even).
-            cause = CAUSE_MISALIGNED_FETCH;
-            tval  = {target, 2'b10};
-        end else if (lsu_misaligned) begin
-            cause = (kind == KIND_STORE) ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
-            tval  = ex_addr;
+            ex_cause = CAUSE_MISALIGNED_FETCH;
+            ex_tval  = {ex_target, 2'b10};
+        end else if (ex_lsu_misaligned) begin
+            ex_cause = (ex_kind == KIND_STORE) ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
+            ex_tval  = ex_addr;
         end else
-            trap  = 1'b0;
+            ex_fault = 1'b0;
     end
 
-    assign ex_trap.valid = trap;
-    assign ex_trap.cause = cause;
-    assign ex_trap.tval  = tval;
+    assign ex_trap.valid = ex_fault;
+    assign ex_trap.cause = ex_cause;
+    assign ex_trap.tval  = ex_tval;
 
-    // EBREAK decides in EX (stop: fetch stops, ID is flushed); the core halts after
+    // EBREAK decides in EX (ex_stop: fetch stops, ID is flushed); the core halts after
     // it retired in MEM/WB, so halt=1 comes the cycle after its retire.
     always_ff @(posedge clk)
-        if (!rst_n) halting <= 1'b0;
-        else        halting <= stop;
+        if (!rst_n) mem_halting <= 1'b0;
+        else        mem_halting <= ex_stop;
 
     always_ff @(posedge clk)
         if (!rst_n)              running <= 1'b1;
-        else if (halting)        running <= 1'b0;
+        else if (mem_halting)    running <= 1'b0;
         else if (halt && resume) running <= 1'b1;
 
     always_ff @(posedge clk)
-        if (stop) halt_pc <= ex.pc;
+        if (ex_stop) halt_pc <= ex_pc;
 
-    assign resuming  = halt && resume;
-    assign redirect  = trap || mret || (valid && taken) || resuming;
-    assign flush_id  = redirect || stop;
+    assign resuming = halt && resume;
+    assign redirect = ex_fault || ex_mret || (ex_valid && ex_taken) || resuming;
+    assign flush_id = redirect || ex_stop;
 
     // Interlock: other results are forwarded to ID (Mig2Forward); a load in EX has no data.
-    assign ex_writes = valid && ex_rd_we && ex_rd != '0;
-    assign load_use  = ex_writes && kind == KIND_LOAD &&
-                       ((id_uses_rs1 && id_rs1 == ex_rd) || (id_uses_rs2 && id_rs2 == ex_rd));
-    assign hazard    = id_valid && load_use;
+    assign ex_writes   = ex_valid && ex_rd_we && ex_rd != '0;
+    assign id_load_use = ex_writes && ex_kind == KIND_LOAD &&
+                         ((id_uses_rs1 && id_rs1 == ex_rd) || (id_uses_rs2 && id_rs2 == ex_rd));
+    assign id_hazard   = id_valid && id_load_use;
 
-    assign ex_done             = valid && !trap && !ex_stall;
-    assign fetch_ctrl.run      = rst_n && running && !stop && !halting;
-    assign fetch_ctrl.stall    = (ex_stall || hazard) && !flush_id;
+    assign ex_done             = ex_valid && !ex_fault && !ex_stall;
+    assign fetch_ctrl.run      = rst_n && running && !ex_stop && !mem_halting;
+    assign fetch_ctrl.stall    = (ex_stall || id_hazard) && !flush_id;
     assign fetch_ctrl.redirect = redirect;
-    assign fetch_ctrl.target   = trap ? mtvec : mret ? mepc : resuming ? halt_pc + 1'b1 : target;
+    assign fetch_ctrl.target   = ex_fault ? mtvec : ex_mret ? mepc : resuming ? halt_pc + 1'b1 : ex_target;
     assign pipe_ctrl.ex_stall  = ex_stall;
-    assign pipe_ctrl.ex_flush  = !ex_stall && (hazard || flush_id);
+    assign pipe_ctrl.ex_flush  = !ex_stall && (id_hazard || flush_id);
     assign halt                = !running;
 
 endmodule

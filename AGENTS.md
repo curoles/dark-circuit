@@ -14,6 +14,13 @@ This file has the rules that are not in README.md.
   creates an implicit net, a missing signal is an error. No `.*`: it hides what is
   connected. Old code is converted when it is touched anyway.
 - Every SystemVerilog function is `automatic`.
+- Stage prefixes: in modules that combine pipeline stages (a design's core, control,
+  pipeline registers), every signal that belongs to one stage starts with its stage:
+  if_, id_, ex_, mem_, wb_ (mem_ also for a merged MEM/WB stage). Signals of no single
+  stage keep plain names: interfaces (imem_req, retire), state of the whole core
+  (running, halt_pc), control between stages (pipe_ctrl, redirect). Parts that work
+  on "the instruction in their stage" (Alu, Lsu, ...) use no prefixes: they do not know
+  their stage. Then adding a stage is a mechanical split along the prefixes.
 - Type parameters: when writing or refactoring, look for modules that store or move
   a value without computing on it (pipeline registers, FIFOs, memories, flip-flops,
   multiplexers). `parameter type T` makes the type part of the interface
@@ -88,6 +95,32 @@ directions). A missing block (arbiter, credit counter, ...) is added to the libr
 with these rules. Test every channel under random stalls with SimVldRdySource and
 SimVldRdySink (sim/sim_vld_rdy.sv): the sink checks rules 2 and 4, the testbench checks
 that every item arrives once, in order, unchanged (see test/block/skid_buffer).
+
+## Design configuration
+
+Every design has one configuration struct, not loose module parameters: one
+description per configuration. A large design has dozens of knobs (core options,
+cache sizes and ways, bus widths, NoC topology); a struct carries them through the
+hierarchy as one parameter, so a new knob does not change module headers and the
+knobs can not disagree between modules.
+
+- YAML stays the single source: `rtl/design/<d>/cfg/<d>_config.yaml`. `make config`
+  generates the struct type `<d>_cfg_t` and its default `<D>_CFG` into
+  `<d>_config_pkg.sv` (fields written by hand in the template `<d>_config_pkg.sv.j2`,
+  values from the YAML), and from the same YAML the C header and the linker script.
+  A new knob: a line in the YAML and a field in the template.
+- Modules that read a knob, or pass the struct down to one, take
+  `parameter <d>_cfg_t CFG = <D>_CFG`; other modules do not get it (no struct that
+  every module depends on). Example: Mig2Cpu, Mig2Core, Mig2Fetch.
+- The struct holds instance knobs (addresses, sizes, optional features, variants).
+  ISA-wide widths and the types built from them (WIDTH, word_t, ...) stay constants
+  in the design package: a package type can not depend on a module parameter.
+- It composes: a design's struct contains sub-structs per subsystem, for example a
+  later mig3_cfg_t with `cache_cfg_t l1i, l1d;` and a `bus_cfg_t`. A library block
+  takes only its own sub-struct (`Cache #(.CFG(CFG.l1d))`), never the design's.
+- A variant (another configuration in a test) is a whole struct: a localparam that
+  copies the default with changed fields, or a second YAML.
+- Mig1 keeps its loose parameters (it is done and runs on Icarus).
 
 ## Testbenches
 

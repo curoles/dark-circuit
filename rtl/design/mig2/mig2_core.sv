@@ -93,11 +93,11 @@ module Mig2Core import Mig2Pkg::*; #(
         .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(id_fetch));
 
     Mig2Control u_mig2_control(
-        .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex(ex_fetch), .ex_insn, .ex_dec,
-        .ex_addr(ex_alu_result), .branch(ex_branch), .lsu_misaligned(ex_lsu_misaligned),
-        .csr_illegal(ex_csr_illegal), .muldiv_stall(ex_muldiv_stall), .csr(ex_csr),
-        .ebreak_halt(dbg_req.ebreak_halt), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
-        .pipe_ctrl, .ex_done, .ex_trap, .halt, .halt_pc);
+        .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex_fetch, .ex_insn, .ex_dec,
+        .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned, .ex_csr_illegal,
+        .ex_muldiv_stall, .csr(ex_csr), .ebreak_halt(dbg_req.ebreak_halt),
+        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap,
+        .halt, .halt_pc);
 
     // ID
     assign id_insn = imem_rsp.data;
