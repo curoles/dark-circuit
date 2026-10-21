@@ -52,6 +52,24 @@ This file has the rules that are not in README.md.
   Icarus silently returns wrong values, Verilator refuses. Hence `automatic` everywhere.
 - Only `$fatal` makes `vvp` exit with an error; `$error` does not fail a test.
 
+## Valid/ready channels
+
+New blocks and designs move data through channels with the valid/ready handshake
+(Chisel Decoupled, AXI-Stream). A channel has valid and the data (sender to receiver)
+and ready (receiver to sender). Rules:
+
+1. Transfer: one item moves on a rising edge where valid and ready are both 1.
+2. No take-backs: once valid is 1, the sender keeps valid and the data unchanged
+   until the transfer.
+3. No loops: valid must not depend combinationally on ready; ready may depend on valid.
+4. Reset: valid is 0 during and right after reset; the data means nothing while valid
+   is 0, so it needs no reset.
+
+Ports: a library block has three ports per channel, `<ch>_valid`, `<ch>_ready`,
+`<ch>_data` (data of a type parameter T, see Code style). A design keeps one struct per
+direction for its port groups (`<group>_req_t`, `<group>_rsp_t`) and connects their
+fields to the channels of the blocks. Library blocks: FifoVldRdyT (block/fifo).
+
 ## Testbenches
 
 - Pure SystemVerilog, stop at the first mismatch with `$fatal(1, ...)`, always give

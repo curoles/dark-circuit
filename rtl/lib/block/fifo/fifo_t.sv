@@ -29,4 +29,50 @@ module FifoT #(
         .almost_full, .almost_empty);
 
 endmodule
+
+/* FIFO of type T with valid/ready channels: FifoT, items go in through channel in and
+ * come out through channel out, oldest first.
+ *
+ * Channels follow the valid/ready rules (AGENTS.md): an item moves on a rising edge
+ * where valid and ready are both 1; valid and data stay until then; valid does not
+ * depend on ready. in_ready = not full, out_valid = not empty: both come from the FIFO
+ * pointers only, never from the other side's valid or ready, so the FIFO also cuts
+ * combinational paths between its two sides. An item written into an empty FIFO comes
+ * out the next cycle (no pass-through). When full, a write waits even if an item leaves
+ * in the same cycle (Fifo ignores write when full).
+ */
+module FifoVldRdyT #(
+    parameter type             T            = logic [7:0],  // type of an item
+    parameter                  ADDR_WIDTH   = 3,            // 1 << ADDR_WIDTH items
+    parameter [ADDR_WIDTH:0]   ALMOST_FULL  = (1 << ADDR_WIDTH) - 1,
+    parameter [ADDR_WIDTH:0]   ALMOST_EMPTY = 1
+)(
+    input  wire                clk,
+    input  wire                rst_n,         // synchronous reset, active low: empty
+
+    input  wire                in_valid,      // channel in
+    output wire                in_ready,
+    input  T                   in_data,
+
+    output wire                out_valid,     // channel out
+    input  wire                out_ready,
+    output T                   out_data,
+
+    output wire [ADDR_WIDTH:0] count,         // 0..DEPTH items
+    output wire                almost_full,
+    output wire                almost_empty
+);
+    wire empty;
+    wire full;
+
+    // Fifo ignores write when full and read when empty: valid and ready map directly.
+    FifoT #(.T(T), .ADDR_WIDTH(ADDR_WIDTH), .ALMOST_FULL(ALMOST_FULL),
+            .ALMOST_EMPTY(ALMOST_EMPTY)) u_fifo_t(
+        .clk, .rst_n, .write(in_valid), .data_in(in_data), .read(out_ready),
+        .data_out(out_data), .empty, .full, .count, .almost_full, .almost_empty);
+
+    assign in_ready  = !full;
+    assign out_valid = !empty;
+
+endmodule
 `endif
