@@ -5,11 +5,15 @@ This file has the rules that are not in README.md.
 
 ## Code style
 
-- Indent 4 spaces, no tabs, in all files (SV, C, assembly, CMake, Python).
+- Indent 4 spaces, no tabs, Unix line endings (LF) and a newline at the end of every
+  file, in all files (SV, C, assembly, CMake, Python).
 - Line length: up to 100 characters; a longer line only when breaking it would read
   worse, and never over 120.
 - Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`),
   instances `u_` and name (`u_aoi22`, `u_mux4_0`). Cells use TSMC names and pins.
+- Types end in `_t`, enum types in `_e` (`kind_e`, `alu_a_e`); an enum declares its
+  storage, `enum logic [N-1:0]`, and its values are ALL_CAPS with a common prefix
+  (`KIND_LOAD`, `RD_ALU`).
 - Multiplexer inputs are zero-based: `sel` = k selects `in<k>`.
 - Port connections: `.name` when the signal has the port's name, `.port(signal)`
   otherwise; mixing is fine: `u_x(.clk, .rst_n, .ctrl(if_ctrl))`. `.name` never
@@ -27,6 +31,10 @@ This file has the rules that are not in README.md.
 - Numbers: in comparisons a plain number is fine (`count == 0`, `sel == 2`); in
   assignments and fills use `'0`/`'1` or a sized literal (`1'b0`, `4'd3`), never a
   plain number, because there a width mismatch changes the value silently.
+  A multi-bit signal is never used as a boolean: `if (count != 0)`, not `if (count)`.
+  Literals over 8 bits use `_` separators: `32'h8000_0000`.
+- Operators: logical `!`, `&&`, `||` for true/false, bitwise `~`, `&`, `|`, `^` for
+  data. A ternary nested in the true branch gets parentheses: `a ? (b ? x : y) : z`.
 - Generate loops: new code writes `for (genvar i = 0; i < W; i++) begin : g_<name>`,
   without `generate`/`endgenerate`; every generate block is named `g_<name>`, so
   hierarchy paths read well (`u_reg_file.g_reg[3]`). Existing loops in the older,
@@ -36,6 +44,13 @@ This file has the rules that are not in README.md.
   to be. Plain `always` only where code models time or checks rather than describing
   hardware: rtl/lib/sim, testbenches, the assertion macro. The dff gates keep their
   `always @(posedge clk)`: they model cells.
+  `<=` only in `always_ff`, `=` only in `always_comb`, never both in one block. In
+  `always_comb` every variable gets a value on every path (defaults first, or `else`
+  and `default`): a missing path is a latch (Verilator LATCH). No `X` is assigned.
+- State machines: a state enum `<name>_state_e`; one `always_comb` computes
+  `<name>_state_d` and the outputs, with defaults first (next state = current state)
+  and a comment above each state's case item; one `always_ff` holds only the reset and
+  `<name>_state_q <= <name>_state_d`.
 - Packages: a module imports in its header the packages it uses throughout
   (`module X import Mig2Pkg::*; (`). A name used in only a few places, or whose origin
   matters to the reader (a spec constant next to design constants), is written with
@@ -43,6 +58,7 @@ This file has the rules that are not in README.md.
   the body needs (an encoding table) is imported in the body: Mig2Decode imports
   RiscvInstrPkg there. Inside a package, names from other packages are always
   qualified (an import in a package is not passed on to its importers).
+- No hierarchical references (`u_core.u_alu.result`) in RTL: only testbenches use them.
 - File header: every file starts with a block comment, then its `include lines, then
   the module or package:
   ```
@@ -61,7 +77,12 @@ This file has the rules that are not in README.md.
   No other Doxygen markup (`/**`, `@brief`, `///<`): a documentation filter turns these
   conventions into Doxygen comments. Generated files start with their "generated"
   line instead. Files without @author and @copyright get them when touched anyway.
-- Every SystemVerilog function is `automatic`.
+- Every SystemVerilog function is `automatic`; its arguments and result have types,
+  it returns with `return x;`, and it reads only its arguments, parameters and
+  constants, never module signals.
+- Macros: a global macro carries the project prefix (`DC_ASSERT`,
+  `DARK_CIRCUIT_USE_SVA`); a macro used only inside one file is named `_NAME` and
+  `` `undef``'d after its last use.
 - Stage prefixes: in modules that combine pipeline stages (a design's core, control,
   pipeline registers), every signal that belongs to one stage starts with its stage:
   if_, id_, ex_, mem_, wb_ (mem_ also for a merged MEM/WB stage). Signals of no single
