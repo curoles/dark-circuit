@@ -27,8 +27,9 @@ function(dc_add_icarus_build NAME)
     set(vvp ${CMAKE_CURRENT_BINARY_DIR}/${sim}.vvp)
     add_custom_command(
         OUTPUT ${vvp}
-        COMMAND ${IVERILOG_BIN} -g2012 -Wall ${defines} -s ${T_TOP} -o ${vvp} ${T_SOURCES}
-        DEPENDS ${T_SOURCES}
+        COMMAND ${IVERILOG_BIN} -g2012 -Wall -I${DARK_CIRCUIT_RTL_MACRO} ${defines}
+                -s ${T_TOP} -o ${vvp} ${T_SOURCES}
+        DEPENDS ${T_SOURCES} ${DARK_CIRCUIT_ASSERT_SVH}
         COMMENT "Icarus Verilog: compiling ${sim}"
         VERBATIM
     )

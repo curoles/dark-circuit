@@ -136,6 +136,34 @@ knobs can not disagree between modules.
   copies the default with changed fields, or a second YAML.
 - Mig1 keeps its loose parameters (it is done and runs on Icarus).
 
+## Assertions
+
+Assertions are the rules of a design written as code next to the logic they guard: they
+document intent and stop the simulation in the cycle a rule breaks.
+
+- `include "dark_circuit_assert.svh" (rtl/lib/macro; every build passes the include path)
+  gives:
+  - `DC_ASSERT(a_name, expr)`: expr holds at every rising clk out of reset;
+    Verilator and Icarus.
+  - `DC_ASSERT_NEXT(a_name, cause, effect)`: cause at a clock edge implies effect at
+    the next one; concurrent SVA, only with DARK_CIRCUIT_USE_SVA (Verilator builds).
+  Both need clk and rst_n in scope; no semicolon after them; a failure is $fatal;
+  synthesis never sees them (sv2v removes them).
+- What to assert:
+  1. A comment that states a rule ("at most one source applies", "nothing is in flight
+     while halted"): put the assertion under it, and the comment becomes executable.
+  2. Contracts at ports: what a module assumes about its inputs (every block that
+     receives a valid/ready channel asserts rule 2 on it).
+  3. Facts that span modules or cycles (EX is empty while halted; a stalled instruction
+     stays in EX): they catch bugs no single module's code shows.
+- What not to assert: a restatement of the line above it (it can not fail), or behavior
+  the module defines as legal (Fifo ignores a write when full).
+- Name `a_<what holds>`, so the failure message reads as the broken rule.
+- Every new assertion gets a mutation check that breaks exactly the rule it states and
+  sees this assertion fire, not only a later test failure (a mutation that only breaks
+  nearby logic may never violate the rule). An assertion catches only what the tests
+  drive; it does not replace a test.
+
 ## Testbenches
 
 - Pure SystemVerilog, stop at the first mismatch with `$fatal(1, ...)`, always give

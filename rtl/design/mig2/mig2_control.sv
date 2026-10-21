@@ -1,3 +1,5 @@
+`include "dark_circuit_assert.svh"
+
 /* Mig2 control: when the core runs, where it fetches, when it traps and when it stops,
  * and the stalls and flushes of the pipeline (IF | ID | EX | MEM/WB).
  *
@@ -137,5 +139,15 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign pipe_ctrl.ex_stall  = ex_stall;
     assign pipe_ctrl.ex_flush  = !ex_stall && (id_hazard || flush_id);
     assign halt                = !running;
+
+    // Halted: nothing is in EX, so no redirect comes from EX (only resume redirects).
+    `DC_ASSERT(a_halted_ex_empty, !(halt && ex_fetch.valid))
+    // At most one fault source applies to an instruction (the fault block relies on it).
+    `DC_ASSERT(a_one_fault, !ex_fetch.valid ||
+               $onehot0({ex_dec.sys.illegal || ex_csr_illegal, ex_dec.sys.ecall,
+                         ex_dec.sys.ebreak && !ebreak_halt,
+                         ex_branch.taken && ex_branch.misaligned, ex_lsu_misaligned}))
+    // A stalled instruction stays in EX for the next cycle.
+    `DC_ASSERT_NEXT(a_ex_held, ex_stall, ex_fetch.valid && $stable(ex_fetch.pc))
 
 endmodule

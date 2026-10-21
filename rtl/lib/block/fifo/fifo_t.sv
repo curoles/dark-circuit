@@ -1,3 +1,5 @@
+`include "dark_circuit_assert.svh"
+
 /* FIFO of type T: Fifo with DATA_WIDTH = $bits(T); entries are values of T (a struct,
  * an enum, a vector typedef). Same behavior and status outputs as Fifo, behave or
  * struct version, whichever the flist has.
@@ -25,6 +27,12 @@ module FifoT #(
            .ALMOST_EMPTY(ALMOST_EMPTY)) u_fifo(
         .clk, .rst_n, .write, .data_in, .read, .data_out, .empty, .full, .count,
         .almost_full, .almost_empty);
+
+    localparam [ADDR_WIDTH:0] DEPTH = 1 << ADDR_WIDTH;
+
+    // Status outputs agree with count, whichever Fifo version the flist has.
+    `DC_ASSERT(a_empty_is_count_0, empty == (count == '0))
+    `DC_ASSERT(a_full_is_count_depth, full == (count == DEPTH))
 
 endmodule
 
@@ -73,5 +81,8 @@ module FifoVldRdyT #(
 
     assign in_ready  = !full;
     assign out_valid = !empty;
+
+    // Valid/ready rule 2 on channel in: an offered item stays until it is taken.
+    `DC_ASSERT_NEXT(a_in_held, in_valid && !in_ready, in_valid && $stable(in_data))
 
 endmodule

@@ -30,8 +30,9 @@ function(_dc_yosys_target NAME TECH TARGET LIBERTY TOP)
 
     add_custom_command(
         OUTPUT ${SYNTH_INPUT}
-        COMMAND ${SV2V_BIN} --top=${TOP} --write=${SYNTH_INPUT} ${files}
-        DEPENDS ${files}
+        COMMAND ${SV2V_BIN} -I${DARK_CIRCUIT_RTL_MACRO} --top=${TOP} --write=${SYNTH_INPUT}
+                ${files}
+        DEPENDS ${files} ${DARK_CIRCUIT_ASSERT_SVH}
         COMMENT "sv2v: ${NAME}"
         VERBATIM)
 

@@ -43,11 +43,13 @@ function(dc_add_verilator_build NAME)
     set(dir ${CMAKE_CURRENT_BINARY_DIR}/${sim}.dir)
     set(exe ${dir}/${sim})
     # -Wno-DECLFILENAME: file names are lower case, cell module names are upper case.
+    # DARK_CIRCUIT_USE_SVA: Verilator runs concurrent assertions (dark_circuit_assert.svh).
     add_custom_command(
         OUTPUT ${exe}
         COMMAND ${VERILATOR_BIN} --binary --timing -Wall -Wno-DECLFILENAME
+                -I${DARK_CIRCUIT_RTL_MACRO} -DDARK_CIRCUIT_USE_SVA
                 ${defines} --top-module ${T_TOP} -Mdir ${dir} -o ${sim} ${T_SOURCES}
-        DEPENDS ${T_SOURCES}
+        DEPENDS ${T_SOURCES} ${DARK_CIRCUIT_ASSERT_SVH}
         COMMENT "Verilator: building ${sim}"
         VERBATIM
     )

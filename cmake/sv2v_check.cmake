@@ -1,8 +1,9 @@
 # @brief Convert a design with sv2v and check that the result elaborates.
 #
 # cmake -D SV2V=<sv2v> [-D VERILATOR=<verilator>] -D TOP=<module> -D OUT=<file.v>
-#       -P sv2v_check.cmake -- <file>...
-# sv2v converts <file>... with top module TOP into OUT; then Verilator elaborates OUT
+#       -D INCLUDE=<dir> -P sv2v_check.cmake -- <file>...
+# sv2v converts <file>... with top module TOP into OUT, `include files are found in
+# INCLUDE; then Verilator elaborates OUT
 # (--lint-only, warnings are not errors): sv2v does not fail when a module is missing,
 # it can not know where modules come from. Fails (cmake exit code not 0) when either
 # step fails. Without VERILATOR only sv2v runs. See dc_add_sv2v_check() in sv2v.cmake.
@@ -17,12 +18,12 @@ foreach(i RANGE ${last})
         set(after_separator TRUE)
     endif()
 endforeach()
-if(NOT SV2V OR NOT TOP OR NOT OUT OR NOT files)
-    message(FATAL_ERROR "sv2v_check.cmake: SV2V, TOP, OUT and files after -- are required")
+if(NOT SV2V OR NOT TOP OR NOT OUT OR NOT INCLUDE OR NOT files)
+    message(FATAL_ERROR "sv2v_check.cmake: SV2V, TOP, OUT, INCLUDE and files after -- are required")
 endif()
 
 execute_process(
-    COMMAND ${SV2V} --top=${TOP} --write=${OUT} ${files}
+    COMMAND ${SV2V} -I${INCLUDE} --top=${TOP} --write=${OUT} ${files}
     RESULT_VARIABLE result
     OUTPUT_VARIABLE output
     ERROR_VARIABLE  output

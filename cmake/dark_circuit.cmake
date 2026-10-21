@@ -18,6 +18,9 @@ option(DARK_CIRCUIT_LIB_TESTS "Build and run the tests of the library (gates, pa
 
 set(DARK_CIRCUIT_RTL_LIB    ${PROJECT_SOURCE_DIR}/rtl/lib)
 set(DARK_CIRCUIT_RTL_DESIGN ${PROJECT_SOURCE_DIR}/rtl/design)
+# Include path of every tool that reads RTL: macro headers, `include "<name>.svh".
+set(DARK_CIRCUIT_RTL_MACRO  ${DARK_CIRCUIT_RTL_LIB}/macro)
+set(DARK_CIRCUIT_ASSERT_SVH ${DARK_CIRCUIT_RTL_MACRO}/dark_circuit_assert.svh)
 
 # dc_use_tool(<NAME> <program>...)
 #
