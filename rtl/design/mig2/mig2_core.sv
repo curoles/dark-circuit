@@ -60,7 +60,7 @@ module Mig2Core import Mig2Pkg::*; #(
     word_t       ex_link;           // pc + 4 for JAL, JALR
     logic        ex_lsu_misaligned;
     lsu_mem_t    ex_lsu_mem;        // memory access, for retire
-    logic [DADDR_START-1:0] ex_load_offset;    // byte of the load address in the word
+    byte_offset_t ex_load_offset;   // byte of the load address in the word
     word_t       ex_csr_rdata;      // old value of the CSR of a CSR instruction
     logic        ex_csr_illegal;
     word_t       ex_muldiv_result;  // product, quotient or remainder of an M instruction

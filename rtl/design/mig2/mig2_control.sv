@@ -52,7 +52,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     output wire                        ex_done,
     output trap_t                      ex_trap,
     output wire                        halt,
-    output logic [WIDTH-1:IADDR_START] halt_pc      // iaddr_t
+    output iaddr_t                     halt_pc
 );
     // Fields of the inputs, selected with assign: Icarus warns about selects in always_comb.
     logic   valid;

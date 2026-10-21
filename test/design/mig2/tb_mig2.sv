@@ -312,7 +312,7 @@ module TbMig2;
     endfunction
 
     // Bytes of the access of insn at byte offset `offset` in the word: size by funct3.
-    function automatic strb_t mem_mask(input insn_t insn, input [DADDR_START-1:0] offset);
+    function automatic strb_t mem_mask(input insn_t insn, input byte_offset_t offset);
         insn_fmt_t f;
         strb_t     size;
         f.word = insn;

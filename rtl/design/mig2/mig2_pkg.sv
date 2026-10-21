@@ -6,11 +6,9 @@
  * - modules import this package in their header, `module X import Mig2Pkg::*; #(`:
  *   Icarus crashes (assert in elab_type.cc) when the structs are used only as
  *   Mig2Pkg::<type> and no module imports the package;
- * - ports use the types of this package (reg_id_t, ...). Icarus 11 can not bind the
- *   range of a vector typedef in a port ("Unable to bind parameter"); Mig2 is tested
- *   with Verilator. Ports of iaddr_t and the other address types are still written with
- *   their range, `input logic [WIDTH-1:IADDR_START] pc`; they change to the types step
- *   by step.
+ * - ports use the types of this package (word_t, insn_t, iaddr_t, reg_id_t, ...).
+ *   Icarus 11 can not bind the range of a vector typedef in a port ("Unable to bind
+ *   parameter"); Mig2 is tested with Verilator.
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
  * register values are byte addresses like software sees them.
  */
@@ -33,12 +31,13 @@ package Mig2Pkg;
     localparam MIG2_RST_ADDR       = Mig2ConfigPkg::RST_ADDR;        // PC after reset, byte address
     localparam MIG2_MEM_ADDR_WIDTH = Mig2ConfigPkg::MEM_ADDR_WIDTH;  // Mig2Cpu: imem and dmem size
 
-    typedef logic [WIDTH-1:0]           word_t;      // register value, data word
-    typedef logic [INSN_WIDTH-1:0]      insn_t;      // instruction
-    typedef logic [WIDTH-1:IADDR_START] iaddr_t;     // instruction address, word address
-    typedef logic [WIDTH-1:DADDR_START] daddr_t;     // data address, word address
-    typedef logic [STRB_WIDTH-1:0]      strb_t;      // byte enables of data word
-    typedef logic [REG_ID_WIDTH-1:0]    reg_id_t;    // register number x0..x31
+    typedef logic [WIDTH-1:0]           word_t;        // register value, data word
+    typedef logic [INSN_WIDTH-1:0]      insn_t;        // instruction
+    typedef logic [WIDTH-1:IADDR_START] iaddr_t;       // instruction address, word address
+    typedef logic [WIDTH-1:DADDR_START] daddr_t;       // data address, word address
+    typedef logic [STRB_WIDTH-1:0]      strb_t;        // byte enables of data word
+    typedef logic [DADDR_START-1:0]     byte_offset_t; // byte in a data word
+    typedef logic [REG_ID_WIDTH-1:0]    reg_id_t;      // register number x0..x31
 
     // Instructions with fixed encoding.
     localparam insn_t INSN_EBREAK = 32'h0010_0073;
@@ -214,7 +213,7 @@ package Mig2Pkg;
                                          // MEM/WB fills order, and rd_wdata and mem_rdata of loads
         logic                   load;    // rd value comes from dmem
         logic [2:0]             funct3;  // load size and sign
-        logic [DADDR_START-1:0] offset;  // load: byte in the word
+        byte_offset_t           offset;  // load: byte in the word
     } ex_mem_t;
 
     // Control -> Pipe, per boundary: keep the instruction (stall) or put a bubble (flush).

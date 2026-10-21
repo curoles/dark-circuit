@@ -10,7 +10,7 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   dec,
     /* verilator lint_on UNUSEDSIGNAL */
-    input  logic [WIDTH-1:IADDR_START] pc,        // iaddr_t: address of the instruction, for AUIPC
+    input  iaddr_t                     pc,        // address of the instruction, for AUIPC
     input  word_t                      rs1_data,
     input  word_t                      rs2_data,
     output word_t                      result
