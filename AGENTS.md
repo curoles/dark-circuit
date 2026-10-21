@@ -6,6 +6,8 @@ This file has the rules that are not in README.md.
 ## Code style
 
 - Indent 4 spaces, no tabs, in all files (SV, C, assembly, CMake, Python).
+- Line length: up to 100 characters; a longer line only when breaking it would read
+  worse, and never over 120.
 - Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`),
   instances `u_` and name (`u_aoi22`, `u_mux4_0`). Cells use TSMC names and pins.
 - Multiplexer inputs are zero-based: `sel` = k selects `in<k>`.
@@ -13,6 +15,52 @@ This file has the rules that are not in README.md.
   otherwise; mixing is fine: `u_x(.clk, .rst_n, .ctrl(if_ctrl))`. `.name` never
   creates an implicit net, a missing signal is an error. No `.*`: it hides what is
   connected. Old code is converted when it is touched anyway.
+- Declarations: internal signals are `logic` or a package type (`word_t`); outputs
+  are `output logic` when a process drives them, `output wire` when an `assign` does,
+  or a package type; inputs are `input wire` or a package type. `wire` otherwise only
+  for nets between instances in struct versions and for real multi-driver nets
+  (inout). No `reg`. Why: a variable allows one driver, so a signal driven twice is an
+  error in Verilator and Icarus, while a wire accepts it silently (Verilator picks one
+  driver, Icarus shows x). Never declare with a value, `logic y = a & b;`: that is an
+  initializer, computed once at time 0; declare, then `assign`. Old code is converted
+  when it is touched anyway.
+- Numbers: in comparisons a plain number is fine (`count == 0`, `sel == 2`); in
+  assignments and fills use `'0`/`'1` or a sized literal (`1'b0`, `4'd3`), never a
+  plain number, because there a width mismatch changes the value silently.
+- Generate loops: new code writes `for (genvar i = 0; i < W; i++) begin : g_<name>`,
+  without `generate`/`endgenerate`; every generate block is named `g_<name>`, so
+  hierarchy paths read well (`u_reg_file.g_reg[3]`). Existing loops in the older,
+  more explicit style (separate `genvar i;`, `i = i + 1`, `generate`) stay as they are.
+- Processes: RTL (designs, behave and struct versions in the library) uses `always_ff`
+  for flip-flops and `always_comb` for logic: the keyword says what the block is meant
+  to be. Plain `always` only where code models time or checks rather than describing
+  hardware: rtl/lib/sim, testbenches, the assertion macro. The dff gates keep their
+  `always @(posedge clk)`: they model cells.
+- Packages: a module imports in its header the packages it uses throughout
+  (`module X import Mig2Pkg::*; (`). A name used in only a few places, or whose origin
+  matters to the reader (a spec constant next to design constants), is written with
+  its package: `RiscvPkg::CAUSE_BREAKPOINT`. A package of many short names that only
+  the body needs (an encoding table) is imported in the body: Mig2Decode imports
+  RiscvInstrPkg there. Inside a package, names from other packages are always
+  qualified (an import in a package is not passed on to its importers).
+- File header: every file starts with a block comment, then its `include lines, then
+  the module or package:
+  ```
+  /* <Title>: <one-sentence summary>.
+   *
+   * <What it does, its timing, the rules a user of the module must know.>
+   *
+   * @author    Igor Lesik
+   * @copyright 2026 Igor Lesik, MIT License
+   */
+  ```
+  The first sentence is the summary (Doxygen takes it as the brief). Every port,
+  parameter and struct field gets a trailing `//` comment on its line; an internal
+  signal gets one unless its name, or a comment above its group of signals, already
+  says what it is (`imm_i`, `rs2_b`).
+  No other Doxygen markup (`/**`, `@brief`, `///<`): a documentation filter turns these
+  conventions into Doxygen comments. Generated files start with their "generated"
+  line instead. Files without @author and @copyright get them when touched anyway.
 - Every SystemVerilog function is `automatic`.
 - Stage prefixes: in modules that combine pipeline stages (a design's core, control,
   pipeline registers), every signal that belongs to one stage starts with its stage:
