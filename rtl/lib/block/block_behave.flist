@@ -8,6 +8,7 @@
 -F barrel_shifter/behave/barrel_shifter.flist
 -F prg_counter/behave/prg_counter.flist
 -F fifo/behave/fifo.flist
+-F skid_buffer/behave/skid_buffer.flist
 -F incr/behave/incr.flist
 -F alu1/behave/alu1.flist
 -F add_cmp/behave/add_cmp.flist

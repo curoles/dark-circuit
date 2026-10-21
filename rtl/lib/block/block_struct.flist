@@ -8,6 +8,7 @@
 -F barrel_shifter/struct/barrel_shifter.flist
 -F prg_counter/struct/prg_counter.flist
 -F fifo/struct/fifo.flist
+-F skid_buffer/struct/skid_buffer.flist
 -F incr/struct/incr.flist
 -F alu1/struct/alu1.flist
 -F add_cmp/struct/add_cmp.flist

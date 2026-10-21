@@ -68,7 +68,9 @@ and ready (receiver to sender). Rules:
 Ports: a library block has three ports per channel, `<ch>_valid`, `<ch>_ready`,
 `<ch>_data` (data of a type parameter T, see Code style). A design keeps one struct per
 direction for its port groups (`<group>_req_t`, `<group>_rsp_t`) and connects their
-fields to the channels of the blocks. Library blocks: FifoVldRdyT (block/fifo).
+fields to the channels of the blocks. Library blocks: FifoVldRdyT (block/fifo),
+SkidBufferT (block/skid_buffer); testbench source and sink: SimVldRdySource,
+SimVldRdySink (sim/sim_vld_rdy.sv).
 
 ## Testbenches
 
