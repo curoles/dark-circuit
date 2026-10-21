@@ -1,1 +1,2 @@
 fifo.sv
+../fifo_t.sv

@@ -46,6 +46,7 @@ function(dc_add_verilator_build NAME)
     add_custom_command(
         OUTPUT ${exe}
         COMMAND ${VERILATOR_BIN} --binary --timing -Wall -Wno-DECLFILENAME
+                -D${DARK_CIRCUIT_TYPE_PARAM_MACRO}
                 ${defines} --top-module ${T_TOP} -Mdir ${dir} -o ${sim} ${T_SOURCES}
         DEPENDS ${T_SOURCES}
         COMMENT "Verilator: building ${sim}"

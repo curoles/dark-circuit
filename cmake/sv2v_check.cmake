@@ -1,7 +1,8 @@
 # @brief Convert a design with sv2v and check that the result elaborates.
 #
-# cmake -D SV2V=<sv2v> [-D VERILATOR=<verilator>] -D TOP=<module> -D OUT=<file.v>
-#       -P sv2v_check.cmake -- <file>...
+# cmake -D SV2V=<sv2v> [-D VERILATOR=<verilator>] [-D DEFINE=<macro>] -D TOP=<module>
+#       -D OUT=<file.v> -P sv2v_check.cmake -- <file>...
+# DEFINE: a macro for sv2v (--define), like DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM.
 # sv2v converts <file>... with top module TOP into OUT; then Verilator elaborates OUT
 # (--lint-only, warnings are not errors): sv2v does not fail when a module is missing,
 # it can not know where modules come from. Fails (cmake exit code not 0) when either
@@ -21,8 +22,12 @@ if(NOT SV2V OR NOT TOP OR NOT OUT OR NOT files)
     message(FATAL_ERROR "sv2v_check.cmake: SV2V, TOP, OUT and files after -- are required")
 endif()
 
+set(define)
+if(DEFINE)
+    set(define --define=${DEFINE})
+endif()
 execute_process(
-    COMMAND ${SV2V} --top=${TOP} --write=${OUT} ${files}
+    COMMAND ${SV2V} ${define} --top=${TOP} --write=${OUT} ${files}
     RESULT_VARIABLE result
     OUTPUT_VARIABLE output
     ERROR_VARIABLE  output

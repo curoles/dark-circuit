@@ -19,6 +19,11 @@ option(DARK_CIRCUIT_LIB_TESTS "Build and run the tests of the library (gates, pa
 set(DARK_CIRCUIT_RTL_LIB    ${PROJECT_SOURCE_DIR}/rtl/lib)
 set(DARK_CIRCUIT_RTL_DESIGN ${PROJECT_SOURCE_DIR}/rtl/design)
 
+# Library modules with type parameters (<Block>T wrappers) are inside
+# `ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM: tools that support type parameters
+# (Verilator, sv2v) get this macro, Icarus 11 does not (it can not parse them).
+set(DARK_CIRCUIT_TYPE_PARAM_MACRO DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM)
+
 # dc_use_tool(<NAME> <program>...)
 #
 # Define cache variable DARK_CIRCUIT_USE_<NAME> (AUTO, ON or OFF),

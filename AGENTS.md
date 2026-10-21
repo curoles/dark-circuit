@@ -14,6 +14,13 @@ This file has the rules that are not in README.md.
   creates an implicit net, a missing signal is an error. No `.*`: it hides what is
   connected. Old code is converted when it is touched anyway.
 - Every SystemVerilog function is `automatic`.
+- Type parameters: when writing or refactoring, look for modules that store or move
+  a value without computing on it (pipeline registers, FIFOs, memories, flip-flops,
+  multiplexers). `parameter type T` makes the type part of the interface
+  (`Mig2PipeReg #(.T(id_ex_t))`) instead of a width. Not for blocks that compute on
+  bits (adders, shifters). In the library: a typed wrapper <Block>T next to <Block>
+  in the same file, inside `ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM`, which the
+  build defines for Verilator and sv2v; designs that need Icarus use the width version.
 - Struct versions of blocks use blocks, parts and gates only, never cells and never
   behavioral operators; behave versions are plain SV.
 - Lint: Verilator runs with `-Wall` and warnings are errors. Disable a warning only
@@ -28,6 +35,10 @@ This file has the rules that are not in README.md.
   module importing the package, crash Icarus (assert in elab_type.cc).
 - Icarus 11 and typedef'd vectors: a port of a vector typedef (`insn_t`) does not
   elaborate; write the range, `input logic [INSN_WIDTH-1:0] insn`. Structs are fine.
+- Icarus 11 and type parameters: `parameter type T` is a syntax error, also in a
+  module that is not instantiated (Icarus parses every file it gets). Library
+  modules with type parameters are inside `ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM`,
+  not defined for Icarus.
 - Icarus 11: one declaration per line, `wire a = x, b = y;` is rejected.
 - Icarus 11 does not support `inside`; use `case` or `==`.
 - Icarus 11 does not support casts to an enum (`kind_t'(x)`) or to a width (`AW'(x)`);
