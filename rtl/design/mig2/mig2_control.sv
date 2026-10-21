@@ -34,7 +34,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     input  decoded_t                   id_dec,      // instruction in ID taken apart
     /* verilator lint_on UNUSEDSIGNAL */
     input  fetch_t                     ex,          // instruction in EX: valid and pc
-    input  logic [INSN_WIDTH-1:0]      ex_insn,     // insn_t, for mtval of illegal instructions
+    input  insn_t                      ex_insn,     // for mtval of illegal instructions
     // Only kind, rd_we and rd are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   ex_dec,      // instruction in EX taken apart

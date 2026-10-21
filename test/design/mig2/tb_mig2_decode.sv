@@ -22,7 +22,7 @@ module TbMig2Decode;
     /* verilator lint_off UNUSEDSIGNAL */
     wire [31:0]  rom_data;
     /* verilator lint_on UNUSEDSIGNAL */
-    logic [31:0] insn;
+    insn_t       insn;
     decoded_t    dec;
 
     string       hex;

@@ -114,8 +114,8 @@ module TbMig2;
     assign retire_pc = retire.pc_rdata;
     assign halt_pc   = {dbg_rsp.halt_pc, {IADDR_START{1'b0}}};
 
-    // Word of imem at byte address a, little-endian; imem has AW address bits.
-    function automatic [31:0] imem_word(input [AW-1:0] a);
+    // Instruction in imem at byte address a, little-endian; imem has AW address bits.
+    function automatic insn_t imem_word(input [AW-1:0] a);
         for (int b = 0; b < 4; b++)
             imem_word[8*b +: 8] = u_mig2_cpu.u_imem.peek(a + b[AW-1:0]);
     endfunction
@@ -216,8 +216,8 @@ module TbMig2;
     endfunction
 
     // Semihosting call at halt_pc: EBREAK between the entry and the exit no-op.
-    localparam [31:0] SEMIHOST_ENTRY = 32'h01f01013;    // slli x0, x0, 0x1f
-    localparam [31:0] SEMIHOST_NOP   = 32'h40705013;    // srai x0, x0, 7
+    localparam insn_t SEMIHOST_ENTRY = 'h01f01013;    // slli x0, x0, 0x1f
+    localparam insn_t SEMIHOST_NOP   = 'h40705013;    // srai x0, x0, 7
     localparam [31:0] ADP_STOPPED_APPLICATION_EXIT = 32'h20026;
 
     function automatic logic semihost_call;
@@ -294,7 +294,7 @@ module TbMig2;
     endtask
 
     // Kind of memory access of insn: 1 load, 2 store, 0 none.
-    function automatic logic [1:0] mem_kind(input [31:0] insn);
+    function automatic logic [1:0] mem_kind(input insn_t insn);
         casez (insn)
             LB, LH, LW, LBU, LHU: return 2'd1;
             SB, SH, SW:           return 2'd2;
@@ -303,7 +303,7 @@ module TbMig2;
     endfunction
 
     // Byte address of the load or store insn when rs1 is base: base + I or S immediate.
-    function automatic [WIDTH-1:0] mem_byte_addr(input [31:0] insn, input [WIDTH-1:0] base);
+    function automatic [WIDTH-1:0] mem_byte_addr(input insn_t insn, input [WIDTH-1:0] base);
         insn_fmt_t f;
         f.word = insn;
         if (mem_kind(insn) == 2'd2)
@@ -312,7 +312,7 @@ module TbMig2;
     endfunction
 
     // Bytes of the access of insn at byte offset `offset` in the word: size by funct3.
-    function automatic strb_t mem_mask(input [31:0] insn, input [DADDR_START-1:0] offset);
+    function automatic strb_t mem_mask(input insn_t insn, input [DADDR_START-1:0] offset);
         insn_fmt_t f;
         strb_t     size;
         f.word = insn;

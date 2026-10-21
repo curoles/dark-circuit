@@ -8,8 +8,9 @@
  *   Mig2Pkg::<type> and no module imports the package;
  * - ports use the types of this package (reg_id_t, ...). Icarus 11 can not bind the
  *   range of a vector typedef in a port ("Unable to bind parameter"); Mig2 is tested
- *   with Verilator. Ports of word_t, insn_t, iaddr_t, ... are still written with their
- *   range, `input logic [INSN_WIDTH-1:0] insn`; they change to the types step by step.
+ *   with Verilator. Ports of iaddr_t and the other address types are still written with
+ *   their range, `input logic [WIDTH-1:IADDR_START] pc`; they change to the types step
+ *   by step.
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
  * register values are byte addresses like software sees them.
  */

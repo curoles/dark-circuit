@@ -8,7 +8,7 @@
  * U-type is not sign-extended beyond 32 bits.
  */
 module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
-    input  logic [INSN_WIDTH-1:0] insn,   // insn_t, see Mig2Pkg about ports
+    input  insn_t                 insn,
     output decoded_t              dec
 );
     import RiscvInstrPkg::*;
