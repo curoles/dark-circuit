@@ -54,9 +54,21 @@ This file has the rules that are not in README.md.
 
 ## Valid/ready channels
 
-New blocks and designs move data through channels with the valid/ready handshake
-(Chisel Decoupled, AXI-Stream). A channel has valid and the data (sender to receiver)
-and ready (receiver to sender). Rules:
+This is the project's handshake convention: use it for every new interface where one
+side may have to wait for the other, and reach for it by default when designing new
+blocks and designs.
+
+When to use it:
+- Between blocks with variable latency or back-pressure: memories, caches, buses, the
+  NoC, queues, anything that can be busy.
+- Not needed for combinational blocks (an adder, a decoder) or for stages inside one
+  design that one control stalls and flushes together (a CPU pipeline, Mig2PipeReg).
+- Existing fixed-latency interfaces (the Mig1 and Mig2 memory ports) stay as they are
+  until a design needs them to wait, for example when caches come; then they change
+  to channels.
+
+A channel moves items in one direction: valid and the data go from sender to receiver,
+ready goes back from receiver to sender (Chisel Decoupled, AXI-Stream). Rules:
 
 1. Transfer: one item moves on a rising edge where valid and ready are both 1.
 2. No take-backs: once valid is 1, the sender keeps valid and the data unchanged
@@ -68,9 +80,14 @@ and ready (receiver to sender). Rules:
 Ports: a library block has three ports per channel, `<ch>_valid`, `<ch>_ready`,
 `<ch>_data` (data of a type parameter T, see Code style). A design keeps one struct per
 direction for its port groups (`<group>_req_t`, `<group>_rsp_t`) and connects their
-fields to the channels of the blocks. Library blocks: FifoVldRdyT (block/fifo),
-SkidBufferT (block/skid_buffer); testbench source and sink: SimVldRdySource,
-SimVldRdySink (sim/sim_vld_rdy.sv).
+fields to the channels of the blocks.
+
+Build with the library blocks instead of new handshake logic: FifoVldRdyT (block/fifo),
+SkidBufferT (block/skid_buffer: a register stage that cuts combinational paths in both
+directions). A missing block (arbiter, credit counter, ...) is added to the library
+with these rules. Test every channel under random stalls with SimVldRdySource and
+SimVldRdySink (sim/sim_vld_rdy.sv): the sink checks rules 2 and 4, the testbench checks
+that every item arrives once, in order, unchanged (see test/block/skid_buffer).
 
 ## Testbenches
 
