@@ -10,6 +10,9 @@
  * last, results and flags that stay after done, and a start while busy (with other
  * operands) that is ignored.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbInt32Div;
 `ifdef VERILATOR

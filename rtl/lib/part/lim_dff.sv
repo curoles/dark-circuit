@@ -15,6 +15,9 @@
  * 8.  OR (current,new): do_force=0, do_nand=0, do_xnor=0, do_invert=1.
  *
  * Priority: do_force, then do_nand, then do_xnor, otherwise NOR.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module LimDff #(
     parameter WIDTH = 1

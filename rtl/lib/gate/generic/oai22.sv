@@ -1,6 +1,5 @@
 /* Complex gate OR-AND-Invertor.
  *
- *
  * <pre>
  *  in1 ----------+--\
  *                )OR +----+
@@ -10,6 +9,9 @@
  *                )OR +----+
  *  in4 ----------+--/
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Oai22 #(
     parameter WIDTH = 1

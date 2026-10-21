@@ -1,6 +1,9 @@
 /* CMOS Buffer, TSMC-style cell BUF.
  *
  * Two inverters.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module BUF (
     input  wire I,

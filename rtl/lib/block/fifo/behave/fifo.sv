@@ -1,7 +1,5 @@
 /* FIFO for small depths, behavioral.
  *
- * Author: Igor Lesik 2020
- *
  * Entries are flops, so use it for small depths; deep FIFOs need SRAM.
  * First-word fall-through: data_out is the oldest entry while empty is 0,
  * read=1 removes it on rising edge. write=1 adds data_in on rising edge.
@@ -11,6 +9,9 @@
  * almost_full is count >= ALMOST_FULL, almost_empty is count <= ALMOST_EMPTY;
  * defaults mean one entry from full and one entry from empty.
  * rst_n=0 on rising edge empties the FIFO, entries are not cleared.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module Fifo #(
     parameter  ADDR_WIDTH   = 3,                     // 1 << ADDR_WIDTH entries

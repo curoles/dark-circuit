@@ -1,7 +1,5 @@
 /* Debug Access Port (DAP).
  *
- * Author: Igor Lesik 2021
- *
  * Debug Access Port (DAP) is an implementation of Debug Interface.
  * DAP provides external debugger with a standard interface to access
  * Core debug facilities.
@@ -10,6 +8,9 @@
  *
  * - JTAG TAP Controller with TAP FSM.
  * - JTAG Debug Port and Core Debug Port.
+ *
+ * @author    Igor Lesik
+ * @copyright 2021 Igor Lesik, MIT License
  */
 module DbgAccPort #(
     parameter MEMI_NR_SLAVES=1,

@@ -5,6 +5,9 @@
  * jump, jump_addr of INSN_SIZE=4 is the top bits of jump_addr of INSN_SIZE=1.
  * Inputs change on falling edge, after every rising edge pc is compared with model.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbPrgCounter;
     localparam AW = 6;

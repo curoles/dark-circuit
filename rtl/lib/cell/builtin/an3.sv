@@ -1,5 +1,7 @@
 /* 3-input AND with Verilog primitive `and`, TSMC-style cell AN3.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module AN3 (
     input  wire A1,

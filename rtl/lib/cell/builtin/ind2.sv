@@ -1,6 +1,8 @@
 /* 2-input NAND with 1 inverted input, Verilog primitives `not` and `nand`,
  * TSMC-style cell IND2.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module IND2 (
     input  wire A1, // inverted

@@ -2,6 +2,9 @@
  *
  * The M2, M1, and M0 inputs are the three bits from the multiplier
  * that are used to derive the Partial Product.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module BENC (
     input  wire M0,

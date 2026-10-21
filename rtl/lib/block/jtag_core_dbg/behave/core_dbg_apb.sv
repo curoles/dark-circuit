@@ -4,8 +4,8 @@
  *
  * Module CoreDbgApb is APB bus slave.
  *
- *
- *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module CoreDbgApb #(
     parameter APB_ADDR_WIDTH =5,

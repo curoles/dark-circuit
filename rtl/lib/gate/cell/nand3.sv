@@ -1,6 +1,9 @@
 /* 3-input NAND.
  *
  * Built bit by bit from cell ND3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Nand3 #(
     parameter WIDTH = 1

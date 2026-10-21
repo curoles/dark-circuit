@@ -1,6 +1,9 @@
 /* 3:1 Multiplexer, TSMC-style cell MUX3.
  *
  * Two MUX2 cells: S0 selects I1 or I0, then S1 selects I2.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX3 (
     input  wire I0,

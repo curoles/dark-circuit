@@ -6,6 +6,9 @@
  *
  * out + 1 = RippleCarryAdder(out, 0, ci=1), its carry is co.
  * out - 1 = RippleCarryAdder(out, all ones, ci=0), inverted carry is borrow.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Counter #(
     parameter WIDTH = 8

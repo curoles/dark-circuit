@@ -8,6 +8,9 @@
  * While halt=1 the debug port owns read port 0 and the write port: dbg_reg_rdata is
  * register dbg_reg_id, dbg_reg_wr=1 writes dbg_reg_wdata into it on rising edge.
  * The core is idle then, so pipeline and debug never use the ports together.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Regs import Mig2Pkg::*; (
     input  wire                        clk,

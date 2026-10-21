@@ -8,6 +8,9 @@
  *   ...
  *   8'b00000001: out = 0
  *   8'b00000000: out = 0, valid = 0
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module PriorityEncoder #(
     parameter  SIZE  = 3,

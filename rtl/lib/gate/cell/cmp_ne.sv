@@ -1,8 +1,9 @@
 /* Comparator, returns 1 if in1 mismatches in2.
  *
- * Author:  Igor Lesik 2014
- *
  * Xor2 per bit, then OrReduce.
+ *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 module CmpNe #(
     parameter WIDTH = 1

@@ -1,7 +1,5 @@
 /* Program counter, made of blocks and gates.
  *
- * Author: Igor Lesik 2020
- *
  * Assumes RISC style fixed instruction size of INSN_SIZE bytes. pc is instruction
  * address: bits ADDR_WIDTH-1..ADDR_START of byte address.
  *
@@ -15,6 +13,9 @@
  *
  * Incr increments pc, Mux2 chooses pc or pc+1 by en,
  * then Mux2 closer to Dff chooses jump_addr by jump, so jump wins.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module PrgCounter #(
     parameter  ADDR_WIDTH = 32,                 // byte address width

@@ -12,6 +12,9 @@
  * out_valid <= stall or any, skid_valid <= stall and any. The next item for out is the
  * skid item when there is one, else in_data; it is also the next skid data, because
  * the skid register loads in_data while empty (nobody reads it until skid_valid=1).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module SkidBuffer #(
     parameter DATA_WIDTH = 8

@@ -5,6 +5,9 @@
  * Expected value is made bit by bit: out[j] is in[j-s] for left, in[j+s] for right,
  * shift_in_bit when that bit is outside of in (shift), index modulo WIDTH (rotate).
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbBarrelShifter;
     localparam W8 = 8;

@@ -6,6 +6,9 @@
  * in 255 clocks; the tolerance is 4, the largest error measured with a model over
  * a grid of a, b was 3.3.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbStochasticDensity #(
     parameter WIDTH = 4,

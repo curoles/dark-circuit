@@ -1,6 +1,9 @@
 /* CMOS 3-input AND, TSMC-style cell AN3.
  *
  * NAND followed by inverter.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module AN3 (
     input  wire A1,

@@ -1,7 +1,7 @@
 /* D type Flip Flop with asynchronous reset.
  *
- * Author: Igor Lesik
- *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module DffAsyncRst #(
     parameter WIDTH = 1,
@@ -23,8 +23,6 @@ module DffAsyncRst #(
 endmodule
 
 /* D type Flip Flop with asynchronous reset and Enable.
- *
- * Author: Igor Lesik
  *
  */
 module DffAsyncRstEn #(

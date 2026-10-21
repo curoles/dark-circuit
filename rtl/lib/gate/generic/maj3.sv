@@ -1,5 +1,7 @@
 /* 3-input Majority, out bit is 1 when at least 2 of 3 input bits are 1.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Maj3 #(
     parameter WIDTH = 1

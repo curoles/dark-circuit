@@ -1,5 +1,7 @@
 /* 2-input OR, TSMC-style cell OR2.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OR2 (
     input  wire A1,

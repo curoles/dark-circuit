@@ -1,6 +1,9 @@
 /* 3-input XOR.
  *
  * Built bit by bit from cell XOR3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Xor3 #(
     parameter WIDTH = 1

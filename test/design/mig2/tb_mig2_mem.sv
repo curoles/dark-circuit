@@ -5,6 +5,9 @@
  * hold these words, read with peek() as little-endian bytes. Running programs is
  * tested by TbMig2.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig2Mem;
     import Mig2Pkg::*;

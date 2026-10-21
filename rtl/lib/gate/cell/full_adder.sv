@@ -1,6 +1,9 @@
 /* Full Adder, independent for every bit (no carry chain between bits).
  *
  * Built bit by bit from cell FA1.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module FullAdder #(
     parameter WIDTH = 1

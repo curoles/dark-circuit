@@ -2,6 +2,9 @@
  *
  * out = (sel[0] & in0) | (sel[1] & in1) | (sel[2] & in2)
  *     = Nand2(Aoi22(in0, sel[0], in1, sel[1]), Nand2(in2, sel[2])).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux1hot3 #(
     parameter WIDTH = 1

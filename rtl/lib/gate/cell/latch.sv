@@ -1,6 +1,9 @@
 /* Latch, transparent while enable is 1.
  *
  * Built bit by bit from cell LHQ.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Latch #(
     parameter WIDTH = 1

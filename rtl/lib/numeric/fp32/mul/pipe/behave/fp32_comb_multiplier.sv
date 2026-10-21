@@ -1,3 +1,13 @@
+/* Fp32 pipelined multiplier: IEEE-754 single precision a * b in three stages, behavioral.
+ *
+ * The arithmetic of Fp32CombMultiplier in three register stages: mantissa product and
+ * exponents, then the normalized result, then the output; result is the product of a
+ * and b of three rising edges before. Only the zero flags and result are reset.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
 // Standard IEEE-754 Single Precision Layout
 typedef struct packed {
     logic        sign;

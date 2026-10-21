@@ -1,5 +1,7 @@
 /* Rising edge D Flip Flop with asynchronous clear, TSMC-style cell DFCNQ.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module DFCNQ (
     input  wire D,

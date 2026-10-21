@@ -6,6 +6,9 @@
  * their ports use its types (word_t, insn_t, iaddr_t, reg_id_t, ...).
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
  * register values are byte addresses like software sees them.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 package Mig2Pkg;
 

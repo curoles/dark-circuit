@@ -1,5 +1,7 @@
 /* 2-input NAND.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Nand2 #(
     parameter WIDTH = 1

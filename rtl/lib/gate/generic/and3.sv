@@ -1,5 +1,7 @@
 /* 3-input AND.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module And3 #(
     parameter WIDTH = 1

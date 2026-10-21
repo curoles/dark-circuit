@@ -8,6 +8,9 @@
  * busy for exactly WIDTH clocks, done in the last of them, results that stay after
  * done, and a start while busy that is ignored (the first division wins).
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbDividerWidth #(
     parameter WIDTH  = 4,

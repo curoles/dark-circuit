@@ -1,5 +1,7 @@
 /* OR-AND-Invert with Verilog primitives `or` and `nand`, TSMC-style cell OAI22.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OAI22 (
     input  wire A1,

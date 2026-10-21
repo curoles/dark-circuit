@@ -2,6 +2,9 @@
  * in1 + in2 + in3 = ps + (sc << 1).
  *
  * Row of independent full adders, no carry chain.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module CarrySaveAdder #(
     parameter WIDTH = 32

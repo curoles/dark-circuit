@@ -1,5 +1,7 @@
 /* Inverting 2:1 Multiplexer, TSMC-style cell MUX2N.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX2N (
     input  wire I0,  // inverted to ZN when S is 0

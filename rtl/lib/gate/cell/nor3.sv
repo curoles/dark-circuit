@@ -1,6 +1,9 @@
 /* 3-input NOR.
  *
  * Built bit by bit from cell NR3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Nor3 #(
     parameter WIDTH = 1

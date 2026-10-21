@@ -54,6 +54,9 @@
  *   config:{bits: 36}
  * }
  * </script>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module CoreDbgPort #(
     parameter MEMI_NR_SLAVES   = 1,

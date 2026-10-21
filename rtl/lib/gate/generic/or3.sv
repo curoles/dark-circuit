@@ -1,5 +1,7 @@
 /* 3-input OR.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Or3 #(
     parameter WIDTH = 1

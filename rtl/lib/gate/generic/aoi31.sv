@@ -1,6 +1,7 @@
 /* AND-OR-Invert, 3-Input AND Feeding NOR with 1 input.
  *
- *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Aoi31 #(
     parameter WIDTH = 1

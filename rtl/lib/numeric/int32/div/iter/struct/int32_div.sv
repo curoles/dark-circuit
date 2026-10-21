@@ -1,13 +1,14 @@
 /* 32-bit integer divider: quotient and remainder, signed or unsigned, iterative
  * (Divider, 32 clocks), made of blocks, parts and gates.
  *
- * Author: Igor Lesik
- *
  * Same ports and timing as the behave version, see there. Negation is -x = ~x + 1
  * (Inv, Incr); Mux2 picks the magnitudes for Divider and the signed results. Signs and
  * flags are registered on start (DffSyncRstEn, reset 0): div_by_zero is NorReduce of the
  * divisor, overflow is signed_op && dividend == 0x80000000 (CmpEq) && divisor all ones
  * (AndReduce).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Int32Div (
     input  wire        clk,

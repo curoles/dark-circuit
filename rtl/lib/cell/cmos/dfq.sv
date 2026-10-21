@@ -2,6 +2,9 @@
  *
  * Master-slave: master latch is transparent while CP is 0,
  * slave latch is transparent while CP is 1.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module DFQ (
     input  wire D,

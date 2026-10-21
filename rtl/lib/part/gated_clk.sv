@@ -1,7 +1,4 @@
-/**@file
- * @brief     Gated clock
- * @author    Igor Lesik
- * @copyright Igor Lesik
+/* Gated clock.
  *
  * Gated clock `gclk` is basically `clk` signal AND-ed with `enable` signal.
  * When `enable` is HI then `gclk` follows `clk`.
@@ -15,6 +12,9 @@
  * Are there really 2 usage cases?
  *
  * It also beneficial to latch `enable` signal before AND-ing with `clk` signal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module GatedClk #(
     parameter CLK_LO_WHEN_DISABLED = 1

@@ -18,6 +18,9 @@
  *             |             |
  *           --+-------------+------ gnd
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX2 (
     input  wire I0,  // selected when S is 0

@@ -1,6 +1,9 @@
 /* 3-input Majority, TSMC-style cell MAJ3.
  *
  * Z is 1 when at least 2 of 3 inputs are 1, it is carry of full adder.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MAJ3 (
     input  wire A1,

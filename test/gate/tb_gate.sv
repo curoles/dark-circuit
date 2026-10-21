@@ -1,6 +1,9 @@
 /* Exhaustive test of gates common to all gate/cell flavors.
  *
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbGate;
     localparam W = 3;

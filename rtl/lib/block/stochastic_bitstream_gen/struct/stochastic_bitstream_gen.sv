@@ -1,10 +1,11 @@
 /* Stochastic bitstream generator: binary_in -> 1-bit stream with density of ones
  * binary_in / (2^WIDTH - 1), made of blocks, parts and gates.
  *
- * Author: Igor Lesik
- *
  * Same behavior as the behave version, see there. binary_in >= r is the carry out of
  * binary_in - r = binary_in + ~r + 1: carry 1 means no borrow. DffSyncRst registers it.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module StochasticBitstreamGen #(
     parameter             WIDTH = 8,

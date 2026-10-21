@@ -1,10 +1,11 @@
 /* Commands of Alu1.
  *
- * Author: Igor Lesik 2020
- *
  * Arithmetic (cmd[3]=0) adds in1 and S1 S0 = cmd[2:1] selected 0, in2, ~in2 or all ones,
  * with carry in cmd[0]. Logic (cmd[3]=1) is selected by cmd[1:0]; cmd 12..15 are not
  * commands, they work as 8..11.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 package Alu1Pkg;
 

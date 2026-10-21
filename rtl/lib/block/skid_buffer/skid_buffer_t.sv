@@ -1,8 +1,12 @@
-`include "dark_circuit_assert.svh"
-
 /* Skid buffer of type T: SkidBuffer with DATA_WIDTH = $bits(T); items are values of T.
  * Same behavior as SkidBuffer, behave or struct version, whichever the flist has.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module SkidBufferT #(
     parameter type T = logic [7:0]            // type of an item
 )(

@@ -1,6 +1,9 @@
 /* 2-input NAND with 1 inverted input, out = ~(~in1 & in2).
  *
  * Built bit by bit from cell IND2.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Ind2 #(
     parameter WIDTH = 1

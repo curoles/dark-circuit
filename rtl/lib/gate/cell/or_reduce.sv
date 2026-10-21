@@ -3,6 +3,9 @@
  * Balanced tree of OR2 cells. Tree nodes are heap-indexed:
  * node 0 is the root, node k has children 2k+1 and 2k+2,
  * nodes WIDTH-1 .. 2*WIDTH-2 are the inputs.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OrReduce #(
     parameter WIDTH = 1

@@ -1,6 +1,9 @@
 /* 2-input OR.
  *
  * Built bit by bit from cell OR2.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Or2 #(
     parameter WIDTH = 1

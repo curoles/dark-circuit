@@ -6,6 +6,9 @@
  * struct version is about 1000 gates, event-driven Icarus needs ~50 ms per product.
  * The expected product is a * b computed in 2*WIDTH bits.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbCsaMultiplier;
 `ifdef VERILATOR

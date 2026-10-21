@@ -1,8 +1,9 @@
-/**@file
- * @brief  Simple clock generator to use in RTL simulations.
- * @author Igor Lesik 2012
+/* Simple clock generator to use in RTL simulations.
  *
  * clk starts at 0 and toggles every HALF_PERIOD.
+ *
+ * @author    Igor Lesik
+ * @copyright 2012 Igor Lesik, MIT License
  */
 module SimClkGen #(
     parameter HALF_PERIOD = 1,  // clk toggles every HALF_PERIOD

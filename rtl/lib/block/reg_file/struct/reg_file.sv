@@ -21,6 +21,9 @@
  * FPGA tools map that Mux2 to the clock enable pin of the flop. Clock gating made
  * of FPGA logic adds clock skew and glitches. So hold Mux2 gives clock gating on ASIC
  * and works on FPGA, explicit GatedClk would give nothing on ASIC and hurt on FPGA.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module RegFile #(
     parameter  RD_PORTS   = 2,

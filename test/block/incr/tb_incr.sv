@@ -7,6 +7,9 @@
  *   WIDTH=5,  GROUP=8  one group, shorter than GROUP
  *   WIDTH=1,  GROUP=4
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbIncr;
     reg  [15:0] in;

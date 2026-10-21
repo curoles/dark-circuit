@@ -1,7 +1,5 @@
 /* 2:1 Multiplexer.
  *
- * Author: Igor Lesik 2014.
- *
  * <pre>
  *           +-----+
  * in1 ------| 1   |
@@ -10,6 +8,9 @@
  *           +--+--+
  *         sel  |
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 module Mux2 #(
     parameter WIDTH = 1

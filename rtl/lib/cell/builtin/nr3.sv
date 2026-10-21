@@ -1,5 +1,7 @@
 /* 3-input NOR with Verilog primitive `nor`, TSMC-style cell NR3.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module NR3 (
     input  wire A1,

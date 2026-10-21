@@ -2,6 +2,9 @@
  *
  * Needs TSMC standard cell Verilog models; change D1 to use other drive strength.
  * Define DARK_CIRCUIT_FAKE_TSMC to use the fake MUX2ND1 below instead.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX2N (
     input  wire I0,  // inverted to ZN when S is 0

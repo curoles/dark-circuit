@@ -10,6 +10,9 @@
  * write when its write word line is 1, otherwise hold. Read selects word by
  * AND of every data bit column with read word lines, then OR of the column.
  * Size is WORDS*DATA_WIDTH flops, use it for small memories and for learning.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Sram1R1W #(
     parameter  ADDR_WIDTH = 4,

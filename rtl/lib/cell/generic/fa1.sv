@@ -1,5 +1,7 @@
 /* Full Adder, TSMC-style cell FA1.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module FA1 (
     input  wire A,

@@ -1,8 +1,9 @@
 /* Carry-save array multiplier: product = a * b, unsigned, behavioral.
  *
- * Author: Igor Lesik
- *
  * Same ports and result as the struct version (array of carry-save adders).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module CsaMultiplier #(
     parameter WIDTH = 32

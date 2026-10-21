@@ -1,7 +1,5 @@
 /* APB bus.
  *
- * Author: Igor Lesik 2020
- *
  * The Advanced Peripheral Bus (APB) is used for connecting
  * low bandwidth peripherals.
  * It is a simple non-pipelined protocol that can be used to read/write
@@ -45,6 +43,9 @@
  *
  * Verilog module ApbBus takes inputs from APB Bridge and outputs Slave
  * signals to APB Bridge.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module DbgApbBus #(
     parameter ADDR_WIDTH=32,

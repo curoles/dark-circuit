@@ -2,6 +2,9 @@
  *
  * Needs TSMC standard cell Verilog models; change D1 to use other drive strength.
  * Define DARK_CIRCUIT_FAKE_TSMC to use the fake IND3D1 below instead.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module IND3 (
     input  wire A1, // inverted

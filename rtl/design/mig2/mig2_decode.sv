@@ -7,6 +7,9 @@
  * computes the controls of every part, grouped in decoded_t (the table below); parts
  * use funct3 and alt only to choose an operation within their part. Immediates are for RV32:
  * U-type is not sign-extended beyond 32 bits.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     input  insn_t                 insn,

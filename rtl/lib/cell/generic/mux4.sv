@@ -1,6 +1,9 @@
 /* 4:1 Multiplexer, TSMC-style cell MUX4.
  *
  * {S1,S0} = k selects Ik.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX4 (
     input  wire I0,

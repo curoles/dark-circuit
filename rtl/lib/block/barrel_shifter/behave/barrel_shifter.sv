@@ -1,12 +1,13 @@
 /* Barrel shifter, behavioral.
  *
- * Author: Igor Lesik 2019-2020
- *
  * Shifts or rotates in by shift positions, left or right, combinational.
  * Shift fills vacated bits with shift_in_bit: 0 for logical shift,
  * in[WIDTH-1] for arithmetic shift right.
  * WIDTH is 2 or more, not only a power of 2: rotate by shift >= WIDTH rotates
  * by shift % WIDTH, shift by shift >= WIDTH gives all shift_in_bit.
+ *
+ * @author    Igor Lesik
+ * @copyright 2019-2020 Igor Lesik, MIT License
  */
 module BarrelShifter #(
     parameter  WIDTH       = 64,

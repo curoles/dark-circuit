@@ -3,6 +3,9 @@
  * Inputs change on falling edge, after every rising edge
  * {co, out} is compared with reference model.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbCounter;
     localparam W = 8;

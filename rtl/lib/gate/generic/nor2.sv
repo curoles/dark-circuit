@@ -1,5 +1,7 @@
 /* 2-input NOR.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Nor2 #(
     parameter WIDTH = 1

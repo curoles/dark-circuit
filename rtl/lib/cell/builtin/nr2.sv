@@ -1,5 +1,7 @@
 /* 2-input NOR with Verilog primitive `nor`, TSMC-style cell NR2.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module NR2 (
     input  wire A1,

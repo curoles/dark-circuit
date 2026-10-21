@@ -8,6 +8,9 @@
  *
  * Port k is element k of the packed ports, a CPU with 2 read ports connects
  * .rd_addr({rs2, rs1}) and .rd_data({rs2_val, rs1_val}).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module RegFile #(
     parameter  RD_PORTS   = 2,

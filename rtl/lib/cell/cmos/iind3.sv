@@ -1,6 +1,9 @@
 /* CMOS 3-input NAND with 2 inverted inputs, TSMC-style cell IIND3.
  *
  * Inverters on A1 and A2 followed by NAND.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module IIND3 (
     input  wire A1, // inverted

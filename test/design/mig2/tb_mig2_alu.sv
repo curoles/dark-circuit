@@ -5,6 +5,9 @@
  * directly, like Mig2Decode would: for OP-IMM alt is imm[10], shifts have funct7 in
  * imm[11:5]. Cases: every OP and OP-IMM operation with edge values, LUI, AUIPC,
  * then random cases. Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig2Alu;
     import Mig2Pkg::*;

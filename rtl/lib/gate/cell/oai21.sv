@@ -1,6 +1,9 @@
 /* OR-AND-Invert, out = ~((in1 | in2) & in3).
  *
  * Built bit by bit from cell OAI21.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Oai21 #(
     parameter WIDTH = 1

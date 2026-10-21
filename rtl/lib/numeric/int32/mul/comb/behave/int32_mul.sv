@@ -1,11 +1,12 @@
 /* 32-bit integer multiplier: product = a * b, each operand signed or unsigned,
  * combinational, behavioral.
  *
- * Author: Igor Lesik
- *
  * a_signed=1: a is two's complement, else unsigned; the same for b. product is the
  * full 64-bit product, two's complement when an operand is signed (for example the
  * RISC-V MULH, MULHSU, MULHU take its upper half, MUL its lower half).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Int32Mul (
     input  wire [31:0] a,

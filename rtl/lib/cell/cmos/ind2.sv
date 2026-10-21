@@ -1,6 +1,9 @@
 /* CMOS 2-input NAND with 1 inverted input, TSMC-style cell IND2.
  *
  * Inverter on A1 followed by NAND.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module IND2 (
     input  wire A1, // inverted

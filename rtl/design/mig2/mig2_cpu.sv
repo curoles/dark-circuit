@@ -6,6 +6,9 @@
  * bits above them are ignored, so addresses wrap around.
  * The debug port of the core is a port of Mig2Cpu: the testbench (or a semihosting
  * service) reads and writes registers while halted and resumes the core.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Cpu import Mig2Pkg::*; #(
     parameter mig2_cfg_t CFG = MIG2_CFG     // configuration, see Mig2ConfigPkg

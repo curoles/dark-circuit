@@ -1,7 +1,5 @@
 /* ALU with arithmetic and logic commands of Alu1Pkg, made of parts and gates.
  *
- * Author: Igor Lesik 2020
- *
  * cmd is Alu1Pkg::Op, out is the result, combinational.
  * co is carry out of arithmetic commands, 0 for logic commands.
  * Subtraction uses 2's complement: -in2 = ~in2 + 1, so in1 - in2 = in1 + ~in2 + 1,
@@ -15,6 +13,9 @@
  *
  * References:
  * - https://www.egr.msu.edu/classes/ece410/mason/files/Ch12.pdf
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module Alu1 #(
     parameter  WIDTH     = 64,

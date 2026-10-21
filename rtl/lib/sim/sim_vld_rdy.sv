@@ -2,6 +2,9 @@
  * channel out, raising valid at random: gap_pct is the percent of cycles without an
  * offer while items wait. Follows the valid/ready rules (AGENTS.md) by construction.
  * Random numbers come from $urandom with the simulator's fixed seed: runs repeat.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module SimVldRdySource #(
     parameter type T = logic [7:0]            // type of an item

@@ -1,5 +1,7 @@
 /* 2-input XOR with Verilog primitive `xor`, TSMC-style cell XOR2.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module XOR2 (
     input  wire A1,

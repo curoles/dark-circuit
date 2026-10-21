@@ -1,6 +1,9 @@
 /* CMOS 2-input AND, TSMC-style cell AN2.
  *
  * NAND followed by inverter.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module AN2 (
     input  wire A1,

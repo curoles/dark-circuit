@@ -1,5 +1,7 @@
 /* Full Adder with Verilog primitives `xor`, `and` and `or`, TSMC-style cell FA1.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module FA1 (
     input  wire A,

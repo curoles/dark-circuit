@@ -1,9 +1,10 @@
-/**@file
- * @brief  Simple reset signal generator to use in RTL simulations.
- * @author Igor Lesik 2012
+/* Simple reset signal generator to use in RTL simulations.
  *
  * rst_n is 0 (reset is active) at the first CYCLES rising edges of clk,
  * it becomes 1 right after the CYCLES-th rising edge.
+ *
+ * @author    Igor Lesik
+ * @copyright 2012 Igor Lesik, MIT License
  */
 module SimRstGen #(
     parameter CYCLES = 1   // reset is active during first CYCLES rising clock edges

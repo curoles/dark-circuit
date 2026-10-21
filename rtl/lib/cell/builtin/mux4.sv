@@ -1,6 +1,9 @@
 /* 4:1 Multiplexer, TSMC-style cell MUX4.
  *
  * Three MUX2 cells: S0 selects within pairs, then S1 selects the pair.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX4 (
     input  wire I0,

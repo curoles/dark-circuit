@@ -6,6 +6,9 @@
  * 2. Decoder then PriorityEncoder, SIZE 3: encoder gives back decoder input.
  *
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbPriorityEncoder;
     reg  [15:0] v;

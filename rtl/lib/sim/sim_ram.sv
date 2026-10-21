@@ -1,7 +1,5 @@
 /* Verilog simulation RAM model.
  *
- * Author: Igor Lesik 2013-2021
- *
  * Memory is array of bytes, because `objcopy -O verilog` uses byte address
  * @addr regardless of data width. Access is by word of DATA_SIZE bytes,
  * little-endian. Address ports are word addresses: bits ADDR_WIDTH-1..ADDR_START
@@ -14,6 +12,9 @@
  * rd_valid is rd_en delayed by 1 cycle.
  * Read and write of the same word in the same cycle reads old data.
  * Use peek() to read a byte directly, without clock.
+ *
+ * @author    Igor Lesik
+ * @copyright 2013-2021 Igor Lesik, MIT License
  */
 module SimRAM #(
     parameter  DATA_SIZE  = 1,                  // bytes in word: 1, 2, 4, 8, ...

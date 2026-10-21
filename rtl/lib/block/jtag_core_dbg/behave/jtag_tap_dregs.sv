@@ -1,14 +1,15 @@
+/* JTAG TAP Data Registers and TDO MUX.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
+ */
+
 // version:part number:manufacturer id:1 required by standard
 // FIXME mfg code 0x787 must be changed to corrent one assigned to your company.
 // 10000000000000001111100001111=0x10001F0F=268443407; ver=1, part=1, mfg=787
 localparam DEFAULT_IDCODE_VALUE = 32'b0001_0000000000000001_11110000111_1;
 
 
-/* JTAG TAP Data Registers and TDO MUX.
- *
- * Author: Igor Lesik 2020
- *
- */
 module JtagTapDRegs #(
     parameter IDCODE_VALUE=DEFAULT_IDCODE_VALUE,
     parameter INSN_WIDTH=8

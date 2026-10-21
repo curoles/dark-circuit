@@ -9,6 +9,9 @@
  * 6. en=0: data holds although addr changes; en=1: new word 1 clock later.
  *
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbSimRom;
     localparam AW = 4;  // 16 bytes

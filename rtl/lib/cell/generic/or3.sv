@@ -1,5 +1,7 @@
 /* 3-input OR, TSMC-style cell OR3.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OR3 (
     input  wire A1,

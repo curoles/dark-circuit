@@ -1,5 +1,7 @@
 /* 2-input AND with Verilog primitive `and`, TSMC-style cell AN2.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module AN2 (
     input  wire A1,

@@ -1,8 +1,6 @@
 /* 32-bit integer divider: quotient and remainder, signed or unsigned, iterative
  * (Divider, 32 clocks), behavioral.
  *
- * Author: Igor Lesik
- *
  * Same handshake as Divider: start=1 while busy=0 takes the operands, busy=1 for 32
  * clocks, done=1 in the last; outputs are valid after that clock (busy=0 again) until
  * the next start.
@@ -13,6 +11,9 @@
  * div_by_zero=1: the divisor was 0. overflow=1: signed -2^31 / -1, the quotient does
  * not fit. In both cases quotient and remainder have no defined value: the user (an
  * ISA, a language) decides what they are.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Int32Div (
     input  wire        clk,

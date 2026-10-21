@@ -1,11 +1,12 @@
 /* D type Flip Flop with Synchronous Reset to RST_VAL.
  *
- * Author: Igor Lesik
- *
  * http://www.sunburst-design.com/papers/CummingsSNUG2003Boston_Resets.pdf
  *
  * Gate in front of Dff, bit by bit: And2 with rst_n for reset value 0,
  * Or2 with inverted rst_n for reset value 1.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module DffSyncRst #(
     parameter WIDTH = 1,
@@ -34,8 +35,6 @@ endmodule
 
 
 /* D type Flip Flop with Synchronous Reset to RST_VAL and Enable.
- *
- * Author: Igor Lesik
  *
  * http://www.sunburst-design.com/papers/CummingsSNUG2003Boston_Resets.pdf
  *

@@ -3,6 +3,9 @@
  * Master-slave like DFQ, every latch is
  * Q = ((D & E) | (Q & ~E) | (D & Q)) & CDN, made of NAND cells,
  * so CDN=0 clears both latches without clock.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module DFCNQ (
     input  wire D,

@@ -1,6 +1,9 @@
 /* 3-input OR.
  *
  * Built bit by bit from cell OR3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Or3 #(
     parameter WIDTH = 1

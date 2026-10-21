@@ -2,6 +2,9 @@
  *
  * Define DARK_CIRCUIT_BUILTIN_UDP to use Verilog user-defined primitive,
  * otherwise always_ff is used.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 `ifdef DARK_CIRCUIT_BUILTIN_UDP
 // BLKSEQ warnings at UDP table rows come from how Verilator translates UDP.

@@ -1,7 +1,5 @@
 /* Program counter, behavioral.
  *
- * Author: Igor Lesik 2020
- *
  * Assumes RISC style fixed instruction size of INSN_SIZE bytes. pc is instruction
  * address: bits ADDR_WIDTH-1..ADDR_START of byte address.
  *
@@ -12,6 +10,9 @@
  * Reset is a jump: the core connects .jump(rst | branch_taken) and
  * .jump_addr(rst ? rst_addr : branch_target); pc is rst_addr in the first cycle
  * after the last rising edge with rst=1.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module PrgCounter #(
     parameter  ADDR_WIDTH = 32,                 // byte address width

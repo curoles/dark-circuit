@@ -5,6 +5,9 @@
  * 3. CarrySaveAdder WIDTH=4 then RippleCarryAdder adds ps + 2*sc, all inputs: a + b + c.
  *
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbRippleCarryAdder;
     localparam W  = 4;

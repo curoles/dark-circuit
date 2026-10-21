@@ -1,5 +1,7 @@
 /* Half Adder with Verilog primitives `xor` and `and`, TSMC-style cell HA1.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module HA1 (
     input  wire A,

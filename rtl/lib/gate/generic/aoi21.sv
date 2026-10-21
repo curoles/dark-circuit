@@ -1,5 +1,7 @@
 /* AND-OR-Invert, out = ~((in1 & in2) | in3).
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Aoi21 #(
     parameter WIDTH = 1

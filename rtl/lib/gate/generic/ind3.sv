@@ -1,5 +1,7 @@
 /* 3-input NAND with 1 inverted input.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Ind3 #(
     parameter WIDTH = 1

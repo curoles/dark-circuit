@@ -1,6 +1,9 @@
 /* CMOS 3-input XOR, TSMC-style cell XOR3.
  *
  * Two 2-input XOR cells.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module XOR3 (
     input  wire A1,

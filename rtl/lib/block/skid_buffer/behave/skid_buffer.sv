@@ -7,6 +7,9 @@
  * out_ready=0) an item that arrives in the same cycle goes into the skid register and
  * in_ready becomes 0; the skid item moves to the output register when out takes the
  * waiting one. rst_n=0 empties both registers; data registers are not reset.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module SkidBuffer #(
     parameter DATA_WIDTH = 8

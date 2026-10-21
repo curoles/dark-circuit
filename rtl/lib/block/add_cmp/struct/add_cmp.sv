@@ -1,7 +1,5 @@
 /* Adder-comparator: eq = (a + b == c), mod 2^WIDTH, made of parts and gates.
  *
- * Author: Igor Lesik 2019
- *
  * a + b wraps around like a WIDTH-bit adder, its carry out is not compared.
  *
  * No carry chain, see The Power of Carry-Save Addition, D. R. Lutz 1994:
@@ -10,6 +8,9 @@
  * X + Y == all ones exactly when X == ~Y (mod 2^WIDTH, X = -1 - Y = ~Y),
  * so eq is AND of all bits of ps ^ (sc << 1). Delay is full adder, XOR and AND tree,
  * it does not grow with a carry chain like a + b would.
+ *
+ * @author    Igor Lesik
+ * @copyright 2019 Igor Lesik, MIT License
  */
 module AddCmp #(
     parameter WIDTH = 32

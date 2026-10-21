@@ -20,6 +20,9 @@
  * IF are dropped. Results are forwarded to ID (Mig2Forward); an instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Core import Mig2Pkg::*; #(
     parameter mig2_cfg_t CFG = MIG2_CFG    // configuration, see Mig2ConfigPkg

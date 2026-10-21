@@ -1,7 +1,5 @@
 /* Incrementer, made of gates.
  *
- * Author: Igor Lesik 2019
- *
  * out = in + 1, co is carry out: 1 when in is all ones (out wraps to 0).
  *
  * Fast incrementer: in is split into groups of GROUP bits, the last group may be
@@ -11,6 +9,9 @@
  * GROUP bits, AndReduce of the group flags and Mux2, not WIDTH steps of a carry
  * chain; GROUP near sqrt(WIDTH) gives the shortest delay.
  * WIDTH=16, GROUP=4 and WIDTH=9, GROUP=3 are the old Incr16 and Incr9.
+ *
+ * @author    Igor Lesik
+ * @copyright 2019 Igor Lesik, MIT License
  */
 module Incr #(
     parameter WIDTH = 16,

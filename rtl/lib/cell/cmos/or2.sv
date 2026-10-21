@@ -1,6 +1,9 @@
 /* CMOS 2-input OR, TSMC-style cell OR2.
  *
  * NOR followed by inverter.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OR2 (
     input  wire A1,

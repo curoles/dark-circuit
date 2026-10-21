@@ -1,6 +1,5 @@
 /* Complex gate OR-AND-Invertor, TSMC-style cell OAI22.
  *
- *
  * <pre>
  *  A1 ----------+--\
  *               )OR +----+
@@ -10,6 +9,9 @@
  *               )OR +----+
  *  B2 ----------+--/
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OAI22 (
     input  wire A1, // to be OR-ed with A2

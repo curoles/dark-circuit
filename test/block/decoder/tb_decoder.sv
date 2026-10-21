@@ -2,6 +2,9 @@
  * with SIZE 1, 3 and 5 side by side.
  *
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbDecoder;
     reg         en;

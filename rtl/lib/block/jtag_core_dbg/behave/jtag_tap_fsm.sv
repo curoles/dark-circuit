@@ -1,3 +1,25 @@
+/* JTAG TAP state machine.
+ *
+ * <!-- ![TAP states](https://upload.wikimedia.org/wikipedia/commons/1/1a/JTAG_TAP_Controller_State_Diagram.svg "JTAG TAP Controller State Diagram") -->
+ * ![TAP states](https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/JTAG_TAP_Controller_State_Diagram.svg/563px-JTAG_TAP_Controller_State_Diagram.svg.png)
+ *
+ * The state machine is simple, comprising two paths: DR path and IR path.
+ * The state machine progresses on the test clock (TCK) edge,
+ * with the value of the test mode select (TMS) pin controlling the behavior/transition.
+ *
+ * ![TAP states descr](https://www.allaboutcircuits.com/uploads/articles/jtag-part-ii-the-test-access-port-state-machine-SG-aac-image2_2.png)
+ *
+ * The Shift-DR and Shift-IR states are the main states for serial-loading data into
+ * either data registers or the instruction register. While the state machine is in one of these states,
+ * TMS is held LOW, until the shifting operation is complete.
+ * The Update-DR and Update-IR states latch the data into the registers,
+ * setting the data in the instruction register as the current instruction
+ * (and in doing so, setting the current data register for the next cycle).
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
+ */
+
 package JtagTapStatesPkg;
 
     // The TAP controller is/has a 16-state FSM that responds
@@ -46,25 +68,6 @@ endpackage
 
 import JtagTapStatesPkg::*;
 
-/* JTAG TAP state machine.
- * Author: Igor Lesik 2020
- *
- * <!-- ![TAP states](https://upload.wikimedia.org/wikipedia/commons/1/1a/JTAG_TAP_Controller_State_Diagram.svg "JTAG TAP Controller State Diagram") -->
- * ![TAP states](https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/JTAG_TAP_Controller_State_Diagram.svg/563px-JTAG_TAP_Controller_State_Diagram.svg.png)
- *
- * The state machine is simple, comprising two paths: DR path and IR path.
- * The state machine progresses on the test clock (TCK) edge,
- * with the value of the test mode select (TMS) pin controlling the behavior/transition.
- *
- * ![TAP states descr](https://www.allaboutcircuits.com/uploads/articles/jtag-part-ii-the-test-access-port-state-machine-SG-aac-image2_2.png)
- *
- * The Shift-DR and Shift-IR states are the main states for serial-loading data into
- * either data registers or the instruction register. While the state machine is in one of these states,
- * TMS is held LOW, until the shifting operation is complete.
- * The Update-DR and Update-IR states latch the data into the registers,
- * setting the data in the instruction register as the current instruction
- * (and in doing so, setting the current data register for the next cycle).
- */
 module JtagTapFsm #(
     localparam WIDTH = JTAG_TAP_STATE_VAR_WIDTH
 )(

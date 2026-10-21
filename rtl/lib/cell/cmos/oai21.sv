@@ -7,6 +7,9 @@
  *  pull-down:  ZN -- n3(B) --+-- n1(A1) --+-- gnd
  *                            +-- n2(A2) --+
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module OAI21 (
     input  wire A1,

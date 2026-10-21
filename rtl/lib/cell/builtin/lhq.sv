@@ -2,6 +2,9 @@
  *
  * Define DARK_CIRCUIT_BUILTIN_UDP to use Verilog user-defined primitive,
  * otherwise always_latch is used.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 `ifdef DARK_CIRCUIT_BUILTIN_UDP
 primitive UDP_LHQ (Q, D, E);

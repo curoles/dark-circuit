@@ -10,6 +10,9 @@
  * `DC_ASSERT_NEXT(name, cause, effect): when cause holds at a clock edge, effect holds at
  * the next one. Concurrent SVA, which Icarus does not parse: empty unless
  * DARK_CIRCUIT_USE_SVA is defined (Verilator builds define it).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 `ifndef DARK_CIRCUIT_ASSERT_SVH_INCLUDED_
 `define DARK_CIRCUIT_ASSERT_SVH_INCLUDED_

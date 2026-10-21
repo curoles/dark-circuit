@@ -1,6 +1,9 @@
 /* 2-input AND.
  *
  * Built bit by bit from cell AN2.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module And2 #(
     parameter WIDTH = 1

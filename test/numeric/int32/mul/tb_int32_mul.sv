@@ -8,6 +8,9 @@
  * tell a from b): the struct version contains CsaMultiplier, about 1000 gates, slow
  * on event-driven Icarus.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbInt32Mul;
 `ifdef VERILATOR

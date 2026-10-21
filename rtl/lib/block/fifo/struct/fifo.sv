@@ -1,7 +1,5 @@
 /* FIFO for small depths, made of blocks, parts and gates.
  *
- * Author: Igor Lesik 2020
- *
  * Entries are flops, so use it for small depths; deep FIFOs need SRAM.
  * First-word fall-through: data_out is the oldest entry while empty is 0,
  * read=1 removes it on rising edge. write=1 adds data_in on rising edge.
@@ -19,6 +17,9 @@
  * equal and wrap bits differ: writer is one lap ahead, full.
  * count = wr_ptr - rd_ptr = wr_ptr + ~rd_ptr + 1; count >= N is carry out of
  * count + ~N + 1, count <= N is carry out of N + ~count + 1.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module Fifo #(
     parameter  ADDR_WIDTH   = 3,                     // 1 << ADDR_WIDTH entries

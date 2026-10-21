@@ -1,6 +1,7 @@
 /* 4:1 Multiplexer, sel k selects input in<k>.
- * Author: Igor Lesik 2014
  *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 
 module Mux4 #(

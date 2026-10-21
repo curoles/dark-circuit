@@ -1,5 +1,7 @@
 /* AND-OR-Invert with Verilog primitives `and` and `nor`, TSMC-style cell AOI31.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module AOI31 (
     input  wire A1,

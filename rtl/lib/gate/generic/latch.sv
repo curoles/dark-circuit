@@ -1,7 +1,4 @@
-/**@file
- * @brief     Latch
- * @author    Igor Lesik
- * @copyright Igor Lesik 2014
+/* Latch.
  *
  * See paper:
  * Nonblocking Assignments in Verilog Synthesis, Coding Styles That Kill!
@@ -14,6 +11,8 @@
  *  always_latch
  *  if(ck) q <= d;
  *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 module Latch #(
     parameter WIDTH = 1

@@ -3,6 +3,9 @@
  * For WIDTH 4, 8, 12 and 16: after reset q is all ones, q is never 0, and q is
  * all ones again after exactly 2^WIDTH - 1 clocks (maximal period).
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbLfsrPeriod #(
     parameter WIDTH = 4

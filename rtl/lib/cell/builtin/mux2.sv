@@ -1,7 +1,5 @@
 /* Multiplexer made with Verilog primitives `nand` and `not`, TSMC-style cell MUX2.
  *
- * Author: Igor Lesik 2020.
- *
  * <pre>
  *                  +------+
  *                  |      |
@@ -19,6 +17,9 @@
  *                  |      |
  *                  +------+
  *  </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module MUX2 (
     input  wire I0,  // selected when S is 0

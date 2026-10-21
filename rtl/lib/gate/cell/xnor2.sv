@@ -1,6 +1,9 @@
 /* 2-input XNOR.
  *
  * Built bit by bit from cell XNR2.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Xnor2 #(
     parameter WIDTH = 1

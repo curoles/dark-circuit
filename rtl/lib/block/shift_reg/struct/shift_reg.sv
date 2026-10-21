@@ -1,7 +1,4 @@
-/**
- * @file
- * @brief  Shift register with parallel load, made of gates
- * @author Igor Lesik 2020
+/* Shift register with parallel load, made of gates.
  *
  * On every rising edge: srl_prl=1 shifts toward MSB, srl_in goes into bit 0;
  * srl_prl=0 loads prl_in. srl_out is bit WIDTH-1.
@@ -20,6 +17,9 @@
  *  output      +-+--+      +---------+
  *                |
  *                + serial/parallel selector
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module ShiftReg #(
     parameter WIDTH = 8                 // 2 or more

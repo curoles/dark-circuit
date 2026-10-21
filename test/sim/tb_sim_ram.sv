@@ -10,6 +10,9 @@
  *
  * Inputs change on falling edge, outputs are checked after rising edge.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbSimRam;
     localparam AW    = 6;   // 64 bytes

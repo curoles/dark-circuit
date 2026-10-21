@@ -1,7 +1,5 @@
 /* Full Adder using And-Or-Invert (AOI) logic, independent for every bit.
  *
- * Author: Igor Lesik 2020.
- *
  * AOI logic is a technique of using equivalent Boolean logic expressions
  * to reduce the number of gates required for a particular expression.
  * This, in turn, reduces capacitance and consequently propagation times.
@@ -15,6 +13,9 @@
  * Instead of using two XOR gates to implement the Sum bit,
  * the circuit takes advantage of the fact that ~Cₖ₊₁ already computed
  * and uses fewer gates to calculate the rest of the expression.
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module FullAdderAoi #(
     parameter WIDTH = 1

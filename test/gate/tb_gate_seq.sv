@@ -2,6 +2,9 @@
  *
  * Inputs change while clk is 0, away from the rising edge.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbGateSeq;
     localparam W = 3;

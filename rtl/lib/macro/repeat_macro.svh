@@ -1,3 +1,11 @@
+/* REPEAT: macro that repeats its argument n times, n from 0 to 9.
+ *
+ * `REPEAT(3, x) gives xxx.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
 `define REPEAT(n, d) `REPEAT_``n(d)
 
 `define REPEAT_0(d)

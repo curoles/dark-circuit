@@ -9,6 +9,9 @@
  *        |       )OR +----+
  * sel  --+-NOT---+--/
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux2i #(
     parameter WIDTH = 1

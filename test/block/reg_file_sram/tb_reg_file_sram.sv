@@ -4,6 +4,9 @@
  * Inputs change on falling edge, after every rising edge rd_data of both
  * instances is compared with model of the registers.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbRegFileSram;
     localparam AW   = 3;

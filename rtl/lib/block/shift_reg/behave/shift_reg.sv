@@ -3,6 +3,9 @@
  * On every rising edge: srl_prl=1 shifts toward MSB, srl_in goes into bit 0;
  * srl_prl=0 loads prl_in. srl_out is bit WIDTH-1.
  * WIDTH must be 2 or more.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module ShiftReg #(
     parameter WIDTH = 8                 // 2 or more

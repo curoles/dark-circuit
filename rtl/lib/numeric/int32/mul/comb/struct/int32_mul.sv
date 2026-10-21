@@ -1,8 +1,6 @@
 /* 32-bit integer multiplier: product = a * b, each operand signed or unsigned,
  * combinational, made of blocks, parts and gates.
  *
- * Author: Igor Lesik
- *
  * Same ports and result as the behave version. CsaMultiplier gives the product p of
  * the unsigned values; a negative signed operand is its unsigned value minus 2^32,
  * so modulo 2^64 only the upper half changes:
@@ -10,6 +8,9 @@
  * The two subtractions are one CarrySaveAdder and one RippleCarryAdder: with x, y the
  * two terms, p_hi - x - y = p_hi + ~x + ~y + 2 = ps + {sc, 1} + 1, where ps and sc
  * are the partial sum and the carries of the CarrySaveAdder of p_hi, ~x and ~y.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Int32Mul (
     input  wire [31:0] a,

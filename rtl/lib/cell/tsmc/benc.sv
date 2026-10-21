@@ -3,6 +3,9 @@
  * Needs TSMC standard cell Verilog models; change D1 to use other drive strength.
  * Not every TSMC library has BENC, check yours and its pin names.
  * Define DARK_CIRCUIT_FAKE_TSMC to use the fake BENCD1 below instead.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module BENC (
     input  wire M0,

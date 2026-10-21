@@ -1,8 +1,9 @@
 /* 8 inputs Multiplexer, sel k selects input in<k>.
- * Author:    Igor Lesik 2014
- * Copyright: Igor Lesik 2014
  *
  * Made of Mux4 and Mux2 gates.
+ *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 module Mux8 #(
     parameter WIDTH = 1

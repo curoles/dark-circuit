@@ -3,6 +3,9 @@
  * Inputs change on falling edge, after every rising edge
  * data_out is compared with model of the memory.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbSram1R1W;
     localparam AW    = 3;

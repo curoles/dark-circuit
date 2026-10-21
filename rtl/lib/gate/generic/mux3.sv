@@ -1,8 +1,7 @@
-/**@file
- * @brief     Multiplexer, sel 0 selects in0, 1 selects in1, 2 and 3 select in2
- * @author    Igor Lesik
- * @copyright Igor Lesik 2014
+/* Multiplexer, sel 0 selects in0, 1 selects in1, 2 and 3 select in2.
  *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 
 module Mux3 #(

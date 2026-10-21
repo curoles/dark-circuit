@@ -1,7 +1,5 @@
 /* Barrel shifter, made of gates.
  *
- * Author: Igor Lesik 2019-2020
- *
  * Shifts or rotates in by shift positions, left or right, combinational.
  * Shift fills vacated bits with shift_in_bit: 0 for logical shift,
  * in[WIDTH-1] for arithmetic shift right.
@@ -18,6 +16,9 @@
  *   stage[1] = rotate 1     -> 65432107
  *   stage[2] = rotate 2     -> 43210765
  *   stage[3] = rotate 4     -> 07654321
+ *
+ * @author    Igor Lesik
+ * @copyright 2019-2020 Igor Lesik, MIT License
  */
 module BarrelShifter #(
     parameter  WIDTH       = 64,

@@ -1,6 +1,9 @@
 /* Test of simulation clock and reset generators.
  *
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbSim;
     localparam HALF_PERIOD = 3;

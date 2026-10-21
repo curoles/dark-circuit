@@ -9,6 +9,9 @@
  * - pull-down (nmos): (A1-A2 in series) in parallel with (A3 in series with (A1 || A2))
  * - pull-up (pmos): the same structure with pmos. It's "mirrored": for majority
  *   the same topology works for both networks, because majority is self-dual.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MAJ3 (
     input  wire A1,

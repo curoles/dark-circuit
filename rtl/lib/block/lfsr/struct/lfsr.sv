@@ -1,7 +1,5 @@
 /* Linear feedback shift register (LFSR), Galois form, made of gates.
  *
- * Author: Igor Lesik
- *
  * q steps through all 2^WIDTH - 1 nonzero values before it repeats (maximal period):
  * on every rising edge q shifts right and, when the bit shifted out is 1, the tap mask
  * of LfsrPkg is XORed in. Supported WIDTH: 4, 8, 12, 16, 32; any other width stops
@@ -11,6 +9,9 @@
  *
  * Next value, bit by bit: a bit with a tap is Xor2 of the shifted bit and q[0],
  * other bits are the shifted bit. DffSyncRst resets q to SEED (RST_VAL).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Lfsr import LfsrPkg::*; #(
     parameter             WIDTH = 8,

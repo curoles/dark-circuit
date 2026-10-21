@@ -1,6 +1,9 @@
 /* 2-input XOR.
  *
  * Built bit by bit from cell XOR2.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Xor2 #(
     parameter WIDTH = 1

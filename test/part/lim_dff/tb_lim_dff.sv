@@ -5,6 +5,9 @@
  *
  * Inputs change while clk is 0, value is stored on rising edge.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbLimDff;
     localparam W = 4;

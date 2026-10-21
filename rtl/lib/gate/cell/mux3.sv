@@ -1,6 +1,9 @@
 /* 3:1 Multiplexer, sel 0 selects in0, 1 selects in1, 2 and 3 select in2.
  *
  * Built bit by bit from cell MUX3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux3 #(
     parameter WIDTH = 1

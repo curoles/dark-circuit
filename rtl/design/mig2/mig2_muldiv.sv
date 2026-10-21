@@ -1,5 +1,3 @@
-`include "dark_circuit_assert.svh"
-
 /* Mig2 multiply and divide unit (M extension), EX.
  *
  * MUL, MULH, MULHSU, MULHU: Int32Mul, combinational, one cycle. DIV, DIVU, REM, REMU:
@@ -9,7 +7,13 @@
  * meanwhile, so rs1_data is still the dividend at the end. Results of the special cases
  * as RISC-V M defines them (no traps): divide by 0 gives quotient all ones and remainder
  * the dividend; signed overflow (-2^31 / -1) gives quotient -2^31 and remainder 0.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     input  wire              clk,
     input  wire              rst_n,       // synchronous reset, active low

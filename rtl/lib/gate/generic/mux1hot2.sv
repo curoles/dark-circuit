@@ -1,8 +1,7 @@
-/**@file
- * @brief     One-hot Multiplexer, sel[k] selects input in<k>
- * @author    Igor Lesik
- * @copyright Igor Lesik 2014
+/* One-hot Multiplexer, sel[k] selects input in<k>.
  *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 
 module Mux1hot2

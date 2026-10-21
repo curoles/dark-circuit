@@ -1,8 +1,9 @@
 /* Incrementer, behavioral.
  *
- * Author: Igor Lesik 2019
- *
  * out = in + 1, co is carry out: 1 when in is all ones (out wraps to 0).
+ *
+ * @author    Igor Lesik
+ * @copyright 2019 Igor Lesik, MIT License
  */
 module Incr #(
     parameter WIDTH = 16,

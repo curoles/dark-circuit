@@ -6,6 +6,9 @@
  * 4. Halted: debug writes and reads, x0 is 0 also through debug, pipeline write is ignored.
  * 5. Running again: the pipeline reads the register debug wrote.
  * Inputs change on falling edge. Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig2Regs;
     import Mig2Pkg::*;

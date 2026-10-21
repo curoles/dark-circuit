@@ -1,6 +1,9 @@
 /* 4:1 Multiplexer, sel k selects input in<k>.
  *
  * Built bit by bit from cell MUX4.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux4 #(
     parameter WIDTH = 1

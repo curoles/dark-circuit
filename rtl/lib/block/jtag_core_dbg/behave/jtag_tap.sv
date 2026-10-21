@@ -1,7 +1,5 @@
 /* JTAG device TAP.
  *
- * Author: Igor Lesik 2020
- *
  * In JTAG, devices expose one or more test access ports (TAPs).
  * A daisy chain of TAPs is called a scan chain.
  *
@@ -58,6 +56,9 @@
  *   https://www.corelis.com/education/tutorials/jtag-tutorial/what-is-jtag/)
  * - [Adding User Specific Registers to JTAG](
  *   https://www.embecosm.com/appnotes/ean5/html/ch02s01s02.html)
+ *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module JtagTap #(
     localparam INSN_WIDTH=8,

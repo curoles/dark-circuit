@@ -5,6 +5,9 @@
  * Inputs change on falling edge. Read is combinational, so rd_data is compared
  * with model of the registers before rising edge (old values) and after it (new values).
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbRegFile;
     localparam AW   = 3;

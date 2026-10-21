@@ -5,6 +5,9 @@
  * Model uses meaning of every command, not the adder: co of SUB is in1 >= in2,
  * co of DEC is in1 != 0, co of TRANSFER2 is 1, co of logic is 0, ...
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbAlu1;
     import Alu1Pkg::*;

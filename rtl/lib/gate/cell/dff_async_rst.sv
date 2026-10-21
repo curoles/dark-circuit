@@ -2,6 +2,9 @@
  *
  * Built bit by bit from cell DFCNQ that clears to 0;
  * bit with reset value 1 has inverters on DFCNQ input and output.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module DffAsyncRst #(
     parameter WIDTH = 1,

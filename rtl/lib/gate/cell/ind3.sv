@@ -1,6 +1,9 @@
 /* 3-input NAND with 1 inverted input, out = ~(~in1 & in2 & in3).
  *
  * Built bit by bit from cell IND3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Ind3 #(
     parameter WIDTH = 1

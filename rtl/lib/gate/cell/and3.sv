@@ -1,6 +1,9 @@
 /* 3-input AND.
  *
  * Built bit by bit from cell AN3.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module And3 #(
     parameter WIDTH = 1

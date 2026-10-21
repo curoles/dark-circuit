@@ -1,5 +1,7 @@
 /* 2-input XOR.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Xor2 #(
     parameter WIDTH = 1

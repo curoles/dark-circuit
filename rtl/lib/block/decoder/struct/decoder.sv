@@ -34,6 +34,9 @@
  *
  * Cost: 2**SIZE outputs, each with SIZE+1 input AND; this is why behavioral
  * version (out = en << in) is much faster to simulate for wide decoders.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Decoder #(
     parameter  SIZE  = 3,

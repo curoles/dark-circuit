@@ -4,6 +4,9 @@
  *
  * Clock is driven here, period 10: 5 low, then 5 high.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbGatedClk;
     reg  clk;

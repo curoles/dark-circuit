@@ -3,6 +3,9 @@
  * Priority: rst_n=0 resets, then load, then count_en counts.
  * Counting up co is carry; counting down co=1 is borrow, 0 wraps to all ones.
  * co keeps its value while counter holds.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Counter #(
     parameter WIDTH = 8

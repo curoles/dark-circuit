@@ -24,6 +24,9 @@
  * valid = in[0] | above[0], some bit at or above 0 is set.
  *
  * Chain of above is ripple, its depth grows with WIDTH like ripple carry adder.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module PriorityEncoder #(
     parameter  SIZE  = 3,

@@ -1,7 +1,5 @@
 /* Verilog simulation ROM model.
  *
- * Author: Igor Lesik 2013-2020
- *
  * Wrapper around SimRAM with write port disabled, so memory layout and
  * file format are the same as SimRAM: memory is array of bytes, access is
  * by word of DATA_SIZE bytes, little-endian. Address port is word address:
@@ -27,6 +25,9 @@
  * 3
  * 4
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2013-2020 Igor Lesik, MIT License
  */
 module SimROM #(
     parameter  DATA_SIZE  = 1,                  // bytes in word: 1, 2, 4, 8, ...

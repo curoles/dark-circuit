@@ -1,13 +1,14 @@
 /* Full Adder made of MAJ3 gates and inverters only, independent for every bit.
  *
- * Author: Igor Lesik
- *
  * M1  = MAJ3(A, B, Cin)         -> Cout
  * M2  = MAJ3(A, B, NOT(Cin))    -> intermediate
  * Sum = MAJ3(NOT(M1), M2, Cin)  -> Sum
  *
  * See article:
  * https://www.linkedin.com/pulse/full-adder-maj3-gates-igor-lesik-n0wtc/
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module FullAdderMaj3 #(
     parameter WIDTH = 1

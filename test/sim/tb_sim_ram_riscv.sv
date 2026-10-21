@@ -5,6 +5,9 @@
  * 0x00..0x10 must be the RV32I encodings of the program instructions
  * (from the RISC-V spec), and words at 0x80, 0x84 the data words.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbSimRamRiscv;
     localparam AW    = 8;  // 256 bytes

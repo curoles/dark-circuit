@@ -3,6 +3,9 @@
  * Needs TSMC standard cell Verilog models; change D1 to use other drive strength.
  * Expects S1 to select I2 regardless of S0, check your library.
  * Define DARK_CIRCUIT_FAKE_TSMC to use the fake MUX3D1 below instead.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MUX3 (
     input  wire I0,

@@ -3,6 +3,8 @@
  * Takes in two bits of the multiplicand at a time and generates the partial product
  * using other inputs that come in from the booth encoder Benc.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Bml #(
     parameter WIDTH = 1

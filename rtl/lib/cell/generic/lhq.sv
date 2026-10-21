@@ -1,5 +1,7 @@
 /* Latch, transparent while E is 1, TSMC-style cell LHQ.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module LHQ (
     input  wire D,

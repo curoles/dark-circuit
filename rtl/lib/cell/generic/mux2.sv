@@ -1,7 +1,5 @@
 /* 2:1 Multiplexer, TSMC-style cell MUX2.
  *
- * Author: Igor Lesik 2014.
- *
  * <pre>
  *           +-----+
  * I1 -------| 1   |
@@ -10,6 +8,9 @@
  *           +--+--+
  *           S  |
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 module MUX2 (
     input  wire I0,  // selected when S is 0

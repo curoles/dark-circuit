@@ -1,6 +1,7 @@
 /* Tap masks of Lfsr, shared by the behave and struct versions.
  *
- * Author: Igor Lesik
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 package LfsrPkg;
 

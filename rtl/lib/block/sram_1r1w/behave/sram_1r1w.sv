@@ -5,6 +5,9 @@
  * data comes 1 cycle after address; data_out holds while rd_en=0.
  * Read and write of the same word in the same cycle reads old data (read-first).
  * Content is unknown until written.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Sram1R1W #(
     parameter  ADDR_WIDTH = 4,

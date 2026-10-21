@@ -1,6 +1,9 @@
 /* One-hot Multiplexer, sel[k] selects input in<k>.
  *
  * out = (sel[0] & in0) | (sel[1] & in1) = ~Aoi22(in0, sel[0], in1, sel[1]).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux1hot2 #(
     parameter WIDTH = 1

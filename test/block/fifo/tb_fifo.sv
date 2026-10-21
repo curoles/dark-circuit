@@ -8,6 +8,9 @@
  * after every rising edge data_out (when not empty), empty, full, count,
  * almost_full and almost_empty of every instance are compared with its model.
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbFifo;
     localparam DW = 8;

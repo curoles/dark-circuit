@@ -1,7 +1,5 @@
 /* JTAG TAP Instruction Register.
  *
- * Author: Igor Lesik 2020
- *
  * Most JTAG instructions can broadly be described as connecting different
  * data registers to the TDI/TDO path. The BYPASS instruction connects
  * TDI directly to TDO through a 1-bit shift register,
@@ -9,6 +7,8 @@
  * the EXTEST, INTEST, SAMPLE, PRELOAD instructions all connect
  * the boundary-scan register (BSR) data register to TDI and TDO, and so on.
  *
+ * @author    Igor Lesik
+ * @copyright 2020 Igor Lesik, MIT License
  */
 module JtagTapInsnReg #(
     parameter WIDTH=8,

@@ -1,5 +1,7 @@
 /* Buffer.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Buf #(
     parameter WIDTH = 1

@@ -10,6 +10,9 @@
  *           +--+--+
  *         sel  |
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux2 #(
     parameter WIDTH = 1

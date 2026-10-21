@@ -1,8 +1,6 @@
 /* Divider: quotient and remainder of unsigned integers, one quotient bit per clock
  * (restoring division), made of blocks, parts and gates.
  *
- * Author: Igor Lesik
- *
  * Same ports and timing as the behave version, see there. Registers d (divisor), q
  * (dividend bits not used yet, then quotient bits) and r (partial remainder) are loaded
  * on start and stepped while busy; a Counter counts the WIDTH steps down, busy is
@@ -10,6 +8,9 @@
  * RippleCarryAdder computes shifted + ~d + 1 = shifted - d, its carry out is "fits"
  * (no borrow); Mux2 keeps shifted or takes the difference as the new r, and fits is
  * the new quotient bit.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Divider #(
     parameter WIDTH = 32

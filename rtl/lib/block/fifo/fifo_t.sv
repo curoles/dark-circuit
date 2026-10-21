@@ -1,9 +1,13 @@
-`include "dark_circuit_assert.svh"
-
 /* FIFO of type T: Fifo with DATA_WIDTH = $bits(T); entries are values of T (a struct,
  * an enum, a vector typedef). Same behavior and status outputs as Fifo, behave or
  * struct version, whichever the flist has.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module FifoT #(
     parameter type             T            = logic [7:0],  // type of an entry
     parameter                  ADDR_WIDTH   = 3,            // 1 << ADDR_WIDTH entries

@@ -1,8 +1,4 @@
-/**@file
- * @brief     Return 1 if input vector has odd number of 1's.
- * @author    Igor Lesik
- * @copyright Igor Lesik 2014
- *
+/* Return 1 if input vector has odd number of 1's.
  *
  * Verilog Reduction Operators
  * - and(&), nand(~&), or(|), nor(~|) xor(^), xnor(^~,~^)
@@ -10,9 +6,12 @@
  * - perform a bitwise operation on all bits of the operand
  * - return a 1-bit result
  * - work from right to left, bit by bit
+ *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 
-/** Return 1 if input vector has odd number of 1's.
+/* Return 1 if input vector has odd number of 1's.
  *
  */
 module Parity #(

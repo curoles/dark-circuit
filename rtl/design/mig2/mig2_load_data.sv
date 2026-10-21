@@ -4,6 +4,9 @@
  * load_data is the bytes at offset, sign- or zero-extended by funct3 (LB, LH, LW, LBU,
  * LHU; RiscvPkg F3_*). Combinational; used where dmem data arrives (2nd cycle of a load
  * in EX now, MEM later).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2LoadData import Mig2Pkg::*, RiscvPkg::*; (
     input  funct3_t                funct3,

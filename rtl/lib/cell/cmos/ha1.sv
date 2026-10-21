@@ -1,6 +1,9 @@
 /* CMOS Half Adder, TSMC-style cell HA1.
  *
  * XOR for sum, AND for carry.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module HA1 (
     input  wire A,

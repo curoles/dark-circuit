@@ -4,6 +4,9 @@
  * immediate. funct3 (RiscvPkg F3_*) selects the operation, alt (insn[30]) SUB and SRA.
  * One Alu1 adds, subtracts and does AND, OR, XOR; comparisons use its SUB: co=1 is
  * no borrow, a >= b unsigned. One BarrelShifter shifts by b[4:0].
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     // Only alu, funct3, alt and imm are used.

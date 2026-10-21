@@ -6,6 +6,9 @@
  * receive them all, once, in order, unchanged, and it checks the valid/ready rules
  * itself (SimVldRdySink). At full speed the chain must move one item per cycle.
  * Stops at the first mismatch with $fatal. Verilator only (type parameters).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbSkidBuffer;
     typedef struct packed {

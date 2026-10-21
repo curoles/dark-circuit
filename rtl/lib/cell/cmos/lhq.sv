@@ -4,6 +4,9 @@
  *
  * Term D & Q keeps Q stable while E changes,
  * plain 2:1 MUX with feedback would glitch when E falls.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module LHQ (
     input  wire D,

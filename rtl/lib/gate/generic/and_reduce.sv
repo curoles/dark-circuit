@@ -1,5 +1,7 @@
 /* AND reduction, returns 1 if all bits of input are 1.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module AndReduce #(
     parameter WIDTH = 1

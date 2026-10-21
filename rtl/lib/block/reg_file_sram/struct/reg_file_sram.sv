@@ -12,6 +12,9 @@
  * Every read port has its own Sram1R1W copy, all copies get the same write,
  * so they always hold the same registers. Memory size is RD_PORTS times
  * the size of the register file.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module RegFileSram #(
     parameter  RD_PORTS   = 2,

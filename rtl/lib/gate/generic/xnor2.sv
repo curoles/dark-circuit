@@ -1,5 +1,7 @@
 /* 2-input XNOR.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Xnor2 #(
     parameter WIDTH = 1

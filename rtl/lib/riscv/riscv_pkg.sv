@@ -7,6 +7,9 @@
  * CAUSE_* the exception codes of mcause (privileged spec).
  * Encodings of instructions are in RiscvInstrPkg, CSR addresses in RiscvCsrPkg
  * (both generated from riscv-opcodes).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 package RiscvPkg;
 

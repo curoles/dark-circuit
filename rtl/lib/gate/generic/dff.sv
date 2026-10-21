@@ -1,8 +1,7 @@
-/**@file
- * @brief     Rising edge triggered D Flip Flop
- * @author    Igor Lesik
- * @copyright Igor Lesik 2014
+/* Rising edge triggered D Flip Flop.
  *
+ * @author    Igor Lesik
+ * @copyright 2014 Igor Lesik, MIT License
  */
 
 module Dff #(

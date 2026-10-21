@@ -5,6 +5,9 @@
  * wraps around), near miss of a + b with one bit flipped or +-1 (eq=0),
  * and random (almost always eq=0).
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbAddCmp;
     localparam W = 50;

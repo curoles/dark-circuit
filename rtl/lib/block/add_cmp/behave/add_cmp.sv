@@ -1,8 +1,9 @@
 /* Adder-comparator: eq = (a + b == c), mod 2^WIDTH, behavioral.
  *
- * Author: Igor Lesik 2019
- *
  * a + b wraps around like a WIDTH-bit adder, its carry out is not compared.
+ *
+ * @author    Igor Lesik
+ * @copyright 2019 Igor Lesik, MIT License
  */
 module AddCmp #(
     parameter WIDTH = 32

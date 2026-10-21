@@ -11,6 +11,9 @@
  *        |            |ND2 o-- n3 ---/
  *  A2 ---+------------+---/
  * </pre>
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module XOR2 (
     input  wire A1,

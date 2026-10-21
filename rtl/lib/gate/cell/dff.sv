@@ -1,6 +1,9 @@
 /* Rising edge triggered D Flip Flop.
  *
  * Built bit by bit from cell DFQ.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Dff #(
     parameter WIDTH = 1

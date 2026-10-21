@@ -1,3 +1,14 @@
+/* Fp32 combinational multiplier: IEEE-754 single precision a * b, behavioral.
+ *
+ * Multiplies the 24-bit mantissas (hidden 1 added), adds the exponents minus the bias
+ * 127 and normalizes by one bit; the mantissa is truncated, not rounded. An input with
+ * exponent 0 (zero or subnormal) gives 0. Infinity, NaN and exponent overflow or
+ * underflow are not handled.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
 // Packed struct definition for IEEE-754 Single Precision Float
 typedef struct packed {
     logic        sign;

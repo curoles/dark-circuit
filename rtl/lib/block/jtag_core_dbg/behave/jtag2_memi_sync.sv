@@ -1,7 +1,5 @@
 /* Slow JTAG to fast Memory Interface clock domain synchronization.
  *
- * Author: Igor Lesik 2021
- *
  * Toggle synchronizer is used to synchronize a pulse generating
  * in source clock domain to destination clock domain.
  * Signal `cdp_req` is a pulse because `state_capture_dr` is HIGH for 1 cycle.
@@ -23,6 +21,9 @@
  * - https://www.edn.com/get-those-clock-domains-in-sync/
  * - https://www.edn.com/synchronizer-techniques-for-multi-clock-domain-socs-fpgas/
  * - https://www.verilogpro.com/clock-domain-crossing-part-2/
+ *
+ * @author    Igor Lesik
+ * @copyright 2021 Igor Lesik, MIT License
  */
 module Jtag2MemiSync (
     input  wire src_clk, // slow Source domain clock

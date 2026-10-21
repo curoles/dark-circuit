@@ -1,12 +1,13 @@
 /* Carry-save array multiplier: product = a * b, unsigned, made of gates and parts.
  *
- * Author: Igor Lesik
- *
  * Partial product row i is a & b[i] (And2), weight 2^i. Row i of adders adds it to the
  * sums and carries of row i - 1: carries are saved for the next row, not propagated
  * along the row, so a row is one full adder deep. Bit i of the product is the lowest
  * sum of row i. The last row leaves two numbers, its sums and its carries: a
  * RippleCarryAdder adds them into the upper half of the product.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module CsaMultiplier #(
     parameter WIDTH = 32

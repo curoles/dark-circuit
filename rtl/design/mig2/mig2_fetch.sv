@@ -7,6 +7,9 @@
  * branch or jump) and drops the request of this cycle: its instruction comes with
  * fetch.valid=0. ctrl.stall=1 keeps everything: pc, the imem output (SimROM and SRAM
  * hold data while en=0) and fetch, so the instruction in ID stays for another cycle.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Fetch import Mig2Pkg::*; #(
     parameter mig2_cfg_t CFG = MIG2_CFG   // configuration, see Mig2ConfigPkg

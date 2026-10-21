@@ -6,6 +6,9 @@
  * S  = ~(M2 & ~(M1 & M0))  = ND2(M2, ND2(M1, M0))
  * A  = ~(~M2 & (M1 | M0))  = IND2(M2, OR2(M1, M0))
  * X2 = ~(M1 ^ M0)          = XNR2(M1, M0)
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module BENC (
     input  wire M0,

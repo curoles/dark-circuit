@@ -1,5 +1,7 @@
 /* 3-input NAND with Verilog primitive `nand`, TSMC-style cell ND3.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module ND3 (
     input  wire A1,

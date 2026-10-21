@@ -1,7 +1,7 @@
 /* Connect JTAG debugger/probe as an external DPI module.
  *
- * Author: Igor Lesik 2021
- *
+ * @author    Igor Lesik
+ * @copyright 2021 Igor Lesik, MIT License
  */
 
 
@@ -25,8 +25,6 @@ void dpi_jtag_create
 );
 
 /* Connect JTAG debugger/probe as an external DPI module.
- *
- * Author: Igor Lesik 2021
  *
  * This module calls DPI function `dpi_jtag_tick`.
  * This module represents JTAG pins connected to an external

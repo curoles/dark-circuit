@@ -8,6 +8,9 @@
  * the instruction writes no register; x0 is never forwarded (reads 0). A load in EX has
  * no data yet: Mig2Control holds the instruction in ID for that cycle (load-use).
  * The values go into the ID/EX register, so EX and the retire trace see them.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Forward import Mig2Pkg::*; (
     input  reg_id_t rs1,          // registers read in ID

@@ -1,6 +1,8 @@
 /* 3-input NAND with 2 inverted inputs, Verilog primitives `not` and `nand`,
  * TSMC-style cell IIND3.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module IIND3 (
     input  wire A1, // inverted

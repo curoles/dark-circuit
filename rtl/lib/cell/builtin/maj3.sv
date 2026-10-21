@@ -1,5 +1,7 @@
 /* 3-input Majority with Verilog primitives `and` and `or`, TSMC-style cell MAJ3.
  *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MAJ3 (
     input  wire A1,

@@ -5,6 +5,9 @@
  * Check that your library has MAOI222 and its pin names,
  * or map to non-inverting majority cell if your library has one.
  * Define DARK_CIRCUIT_FAKE_TSMC to use the fake MAOI222D1 below instead.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module MAJ3 (
     input  wire A1,

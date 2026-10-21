@@ -1,6 +1,9 @@
 /* Half Adder, independent for every bit.
  *
  * Built bit by bit from cell HA1.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module HalfAdder #(
     parameter WIDTH = 1

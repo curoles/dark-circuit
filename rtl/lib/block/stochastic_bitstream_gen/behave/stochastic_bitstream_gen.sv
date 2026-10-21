@@ -1,8 +1,6 @@
 /* Stochastic bitstream generator: binary_in -> 1-bit stream with density of ones
  * binary_in / (2^WIDTH - 1), behavioral.
  *
- * Author: Igor Lesik
- *
  * Stochastic computing encodes a number as the probability of 1 in a bitstream;
  * then, for example, AND of two independent streams is the product of their values.
  * Every clock stream_out = binary_in >= r, r is the Lfsr value. Lfsr visits each of
@@ -12,6 +10,9 @@
  * Streams that are combined must be uncorrelated: generators with the same WIDTH and
  * SEED give the same stream, and AND of them is the minimum, not the product.
  * Supported WIDTH: as Lfsr, 4, 8, 12, 16, 32.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module StochasticBitstreamGen #(
     parameter             WIDTH = 8,

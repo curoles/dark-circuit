@@ -1,6 +1,9 @@
 /* Inverting 2:1 Multiplexer, out = ~(sel ? in1 : in0).
  *
  * Built bit by bit from cell MUX2N.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mux2i #(
     parameter WIDTH = 1

@@ -8,6 +8,9 @@
  * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete.
  * mem describes the access for the retire trace (RVFI): bytes read or written; the word
  * read is added in MEM/WB.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     input  wire              valid,      // instruction in EX is valid

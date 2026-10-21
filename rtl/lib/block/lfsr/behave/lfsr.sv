@@ -1,13 +1,14 @@
 /* Linear feedback shift register (LFSR), Galois form, behavioral.
  *
- * Author: Igor Lesik
- *
  * q steps through all 2^WIDTH - 1 nonzero values before it repeats (maximal period):
  * on every rising edge q shifts right and, when the bit shifted out is 1, the tap mask
  * of LfsrPkg is XORed in. Supported WIDTH: 4, 8, 12, 16, 32; any other width stops
  * the simulation. rst_n=0 on rising edge sets q to SEED, all ones by default; SEED=0
  * stops the simulation: the zero state would lock the LFSR. Lfsrs with different SEED
  * give the same sequence at different phases.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Lfsr import LfsrPkg::*; #(
     parameter             WIDTH = 8,

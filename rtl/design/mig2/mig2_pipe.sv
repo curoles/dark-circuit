@@ -4,6 +4,9 @@
  * ID/EX: Mig2Control stalls and flushes it. EX/MEM has no stall or flush: an
  * instruction that leaves EX always completes in MEM/WB. The IF/ID register is in
  * Mig2Fetch (the instruction comes from imem 1 clock after its request).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Pipe import Mig2Pkg::*; (
     input  wire        clk,

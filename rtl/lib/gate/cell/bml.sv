@@ -1,6 +1,9 @@
 /* Booth Multiplexer.
  *
  * Built bit by bit from cell BML.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Bml #(
     parameter WIDTH = 1

@@ -1,3 +1,11 @@
+/* CLOG2: compile-time log2 as a macro, kept only for old code.
+ *
+ * Use the built-in $clog2(); the macro is defined only with DARK_CIRCUIT_CLOG2_MACRO.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
 `ifndef CLOG2_SVH_INCLUDED_
 `define CLOG2_SVH_INCLUDED_
 

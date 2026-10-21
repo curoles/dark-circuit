@@ -51,6 +51,9 @@
  * debug action and semihosting call into <file>, +trace alone prints them;
  * +max_cycles=<n> (default 100000).
  * Stops at the first failure with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig2;
     import Mig2Pkg::*;

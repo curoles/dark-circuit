@@ -1,5 +1,3 @@
-`include "dark_circuit_assert.svh"
-
 /* Mig2 control: when the core runs, where it fetches, when it traps and when it stops,
  * and the stalls and flushes of the pipeline (IF | ID | EX | MEM/WB).
  *
@@ -26,7 +24,13 @@
  * EX (load-use); EX gets a bubble meanwhile.
  * ex_done=1: the instruction in EX completes: CSR write and minstret now; it writes rd
  * and retires in MEM/WB, which it always reaches.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     input  wire                        clk,
     input  wire                        rst_n,       // synchronous reset, active low

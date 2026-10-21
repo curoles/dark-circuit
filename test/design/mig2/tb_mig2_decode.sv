@@ -10,6 +10,9 @@
  * At the end every kind must have had a case.
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig2Decode;
     import Mig2Pkg::*;

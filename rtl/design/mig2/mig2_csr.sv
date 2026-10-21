@@ -18,6 +18,9 @@
  * instructions), mcause, mtval, mie and mip (0, no interrupts yet; writes are ignored).
  * A trap (trap.valid) sets mepc to pc, mcause and mtval from trap, MPIE to MIE and MIE
  * to 0; MRET when it completes sets MIE to MPIE and MPIE to 1. csr has mtvec and mepc.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     input  wire              clk,
