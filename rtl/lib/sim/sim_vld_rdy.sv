@@ -1,4 +1,3 @@
-`ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM
 /* Valid/ready source for testbenches: sends the items of its queue (push()) through
  * channel out, raising valid at random: gap_pct is the percent of cycles without an
  * offer while items wait. Follows the valid/ready rules (AGENTS.md) by construction.
@@ -67,4 +66,3 @@ module SimVldRdySink #(
     end
 
 endmodule
-`endif

@@ -1,8 +1,8 @@
 set(LIB ${DARK_CIRCUIT_RTL_LIB})
 
 # Same testbench for both versions, built with the aggregate flists. Verilator only:
-# SkidBufferT, FifoVldRdyT and the source/sink have type parameters, which Icarus 11
-# can not parse (DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM).
+# the testbench uses named assignment patterns ('{field: value}), which Icarus 13 does
+# not parse.
 dc_add_verilator_test(block_skid_buffer_behave TOP TbSkidBuffer TB tb_skid_buffer.sv
                       FLISTS ${LIB}/sim/sim.flist
                              ${LIB}/block/block_behave.flist)

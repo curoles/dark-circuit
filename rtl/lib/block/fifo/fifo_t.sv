@@ -1,8 +1,6 @@
-`ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM
 /* FIFO of type T: Fifo with DATA_WIDTH = $bits(T); entries are values of T (a struct,
  * an enum, a vector typedef). Same behavior and status outputs as Fifo, behave or
- * struct version, whichever the flist has. Needs a tool that supports type parameters,
- * see DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM in AGENTS.md.
+ * struct version, whichever the flist has.
  */
 module FifoT #(
     parameter type             T            = logic [7:0],  // type of an entry
@@ -30,8 +28,10 @@ module FifoT #(
 
 endmodule
 
-/* FIFO of type T with valid/ready channels: FifoT, items go in through channel in and
- * come out through channel out, oldest first.
+/* FIFO of type TT with valid/ready channels: FifoT, items go in through channel in and
+ * come out through channel out, oldest first. The type parameter is TT, not T:
+ * Icarus 13 does not parse .T(...) of the FifoT instance inside a module whose own
+ * type parameter is T.
  *
  * Channels follow the valid/ready rules (AGENTS.md): an item moves on a rising edge
  * where valid and ready are both 1; valid and data stay until then; valid does not
@@ -42,7 +42,7 @@ endmodule
  * in the same cycle (Fifo ignores write when full).
  */
 module FifoVldRdyT #(
-    parameter type             T            = logic [7:0],  // type of an item
+    parameter type             TT           = logic [7:0],  // type of an item
     parameter                  ADDR_WIDTH   = 3,            // 1 << ADDR_WIDTH items
     parameter [ADDR_WIDTH:0]   ALMOST_FULL  = (1 << ADDR_WIDTH) - 1,
     parameter [ADDR_WIDTH:0]   ALMOST_EMPTY = 1
@@ -52,11 +52,11 @@ module FifoVldRdyT #(
 
     input  wire                in_valid,      // channel in
     output wire                in_ready,
-    input  T                   in_data,
+    input  TT                  in_data,
 
     output wire                out_valid,     // channel out
     input  wire                out_ready,
-    output T                   out_data,
+    output TT                  out_data,
 
     output wire [ADDR_WIDTH:0] count,         // 0..DEPTH items
     output wire                almost_full,
@@ -66,7 +66,7 @@ module FifoVldRdyT #(
     wire full;
 
     // Fifo ignores write when full and read when empty: valid and ready map directly.
-    FifoT #(.T(T), .ADDR_WIDTH(ADDR_WIDTH), .ALMOST_FULL(ALMOST_FULL),
+    FifoT #(.T(TT), .ADDR_WIDTH(ADDR_WIDTH), .ALMOST_FULL(ALMOST_FULL),
             .ALMOST_EMPTY(ALMOST_EMPTY)) u_fifo_t(
         .clk, .rst_n, .write(in_valid), .data_in(in_data), .read(out_ready),
         .data_out(out_data), .empty, .full, .count, .almost_full, .almost_empty);
@@ -75,4 +75,3 @@ module FifoVldRdyT #(
     assign out_valid = !empty;
 
 endmodule
-`endif

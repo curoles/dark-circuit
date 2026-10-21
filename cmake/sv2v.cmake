@@ -32,7 +32,6 @@ function(dc_add_sv2v_check NAME)
     set(test ${NAME}.sv2v)
     add_test(NAME ${test}
         COMMAND ${CMAKE_COMMAND} -D SV2V=${SV2V_BIN} -D VERILATOR=${verilator}
-                -D DEFINE=${DARK_CIRCUIT_TYPE_PARAM_MACRO}
                 -D TOP=${S_TOP} -D OUT=${CMAKE_CURRENT_BINARY_DIR}/${test}.v
                 -P ${PROJECT_SOURCE_DIR}/cmake/sv2v_check.cmake -- ${files})
     dc_test_labels(labels)

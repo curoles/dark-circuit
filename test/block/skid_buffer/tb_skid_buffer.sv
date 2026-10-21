@@ -50,7 +50,7 @@ module TbSkidBuffer;
         .clk, .rst_n, .in_valid(a_valid), .in_ready(a_ready), .in_data(a_data),
         .out_valid(b_valid), .out_ready(b_ready), .out_data(b_data));
 
-    FifoVldRdyT #(.T(item_t), .ADDR_WIDTH(2)) u_fifo_vld_rdy_t(
+    FifoVldRdyT #(.TT(item_t), .ADDR_WIDTH(2)) u_fifo_vld_rdy_t(
         .clk, .rst_n, .in_valid(b_valid), .in_ready(b_ready), .in_data(b_data),
         .out_valid(c_valid), .out_ready(c_ready), .out_data(c_data),
         .count, .almost_full, .almost_empty);

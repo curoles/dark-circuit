@@ -33,9 +33,7 @@ This file has the rules that are not in README.md.
   a value without computing on it (pipeline registers, FIFOs, memories, flip-flops,
   multiplexers). `parameter type T` makes the type part of the interface
   (`Mig2PipeReg #(.T(id_ex_t))`) instead of a width. Not for blocks that compute on
-  bits (adders, shifters). In the library: a typed wrapper <Block>T next to <Block>
-  in the same file, inside `ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM`, which the
-  build defines for Verilator and sv2v; designs that need Icarus use the width version.
+  bits (adders, shifters). In the library: a typed wrapper <Block>T next to <Block>.
 - Struct versions of blocks use blocks, parts and gates only, never cells and never
   behavioral operators; behave versions are plain SV.
 - Lint: Verilator runs with `-Wall` and warnings are errors. Disable a warning only
@@ -50,10 +48,11 @@ This file has the rules that are not in README.md.
   module importing the package, crash Icarus (assert in elab_type.cc).
 - Icarus 11 and typedef'd vectors: a port of a vector typedef (`insn_t`) does not
   elaborate; write the range, `input logic [INSN_WIDTH-1:0] insn`. Structs are fine.
-- Icarus 11 and type parameters: `parameter type T` is a syntax error, also in a
-  module that is not instantiated (Icarus parses every file it gets). Library
-  modules with type parameters are inside `ifdef DARK_CIRCUIT_ENABLE_MODULE_TYPE_PARAM`,
-  not defined for Icarus.
+- Icarus 13 and type parameters: they work (`parameter type T`, `#(.T(item_t))`),
+  except `.T(...)` in an instance inside a module whose own type parameter is also
+  named T: a syntax error (to the parser T is a type there). Name the outer type
+  parameter differently (FifoVldRdyT uses TT). Not parsed either: named assignment
+  patterns `'{field: value}`.
 - Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
   (IMPLICIT; in an expression always an error), and every design is built with it.
   sv2v declares an undeclared name of a port connection as a wire, and Yosys makes
