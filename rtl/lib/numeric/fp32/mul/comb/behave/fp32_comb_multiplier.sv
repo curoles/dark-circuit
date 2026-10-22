@@ -8,68 +8,36 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-
-// Packed struct definition for IEEE-754 Single Precision Float
-typedef struct packed {
-    logic        sign;
-    logic [7:0]  exp;
-    logic [22:0] mant;
-} fp32_t;
-
-module Fp32CombMultiplier #(
-    localparam int WIDTH = 32
-)(
-    input  wire  [WIDTH-1:0] a,
-    input  wire  [WIDTH-1:0] b,
-    output logic [WIDTH-1:0] result
+module Fp32CombMultiplier import Fp32Pkg::*; (
+    input  fp32_t a,        // operands
+    input  fp32_t b,
+    output fp32_t result    // a * b
 );
+    fp32_sig_t  a_sig;      // significands: hidden 1 and fraction
+    fp32_sig_t  b_sig;
+    // Product of the significands, in [1, 4); its low bits are dropped: the result is
+    // truncated, not rounded.
+    /* verilator lint_off UNUSEDSIGNAL */
+    fp32_prod_t prod;
+    /* verilator lint_on UNUSEDSIGNAL */
+    fp32_exp_t  exp_sum;    // a.exp + b.exp - bias, mod 256: overflow is not handled
+    logic       zero;       // an operand has exponent 0 (zero or subnormal)
+    logic       sign;       // sign of the product
+    fp32_exp_t  exp;        // exponent of the normalized product
+    fp32_mant_t mant;       // its fraction, truncated
 
-    // Cast the raw input wires into our SystemVerilog structure
-    fp32_t float_a;
-    fp32_t float_b;
-    fp32_t float_out;
+    assign a_sig   = {1'b1, a.mant};
+    assign b_sig   = {1'b1, b.mant};
+    assign prod    = a_sig * b_sig;
+    assign exp_sum = a.exp + b.exp - FP32_BIAS;
+    assign zero    = a.exp == 0 || b.exp == 0;
 
-    assign float_a = fp32_t'(a);
-    assign float_b = fp32_t'(b);
-
-    // Append the implicit leading 1 to the mantissas (24 bits each)
-    wire [23:0] mant_a = {1'b1, float_a.mant};
-    wire [23:0] mant_b = {1'b1, float_b.mant};
-
-    // Intermediate calculations
-    logic        sign_out;
-    logic [8:0]  exp_out_raw; 
-    wire  [47:0] prod_mant;   
-
-    // Multiply the 24-bit mantissas to get a 48-bit product
-    assign prod_mant = mant_a * mant_b;
-
-    always_comb begin
-        // Calculate output sign via XOR
-        sign_out = float_a.sign ^ float_b.sign;
-
-        // Add exponents and subtract the 127 bias
-        exp_out_raw = float_a.exp + float_b.exp - 8'd127;
-
-        // Normalization and Result Assembly
-        if (prod_mant[47]) begin
-            float_out.sign = sign_out;
-            float_out.exp  = exp_out_raw + 1'b1;
-            float_out.mant = prod_mant[46:24]; 
-        end 
-        else begin
-            float_out.sign = sign_out;
-            float_out.exp  = exp_out_raw;
-            float_out.mant = prod_mant[45:23]; 
-        end
-
-        // Cast structured output back to the raw bitstream result
-        result = WIDTH'(float_out);
-
-        // Edge case: Handle zero inputs safely
-        if ((float_a.exp == 8'd0) || (float_b.exp == 8'd0)) begin
-            result = '0; // SystemVerilog fill literal
-        end
-    end
+    // A product in [2, 4) (its top bit set) shifts right by one: exponent + 1.
+    // The fraction is prod[46:24], else prod[45:23].
+    assign sign   = a.sign ^ b.sign;
+    assign exp    = prod[FP32_PROD_MSB] ? exp_sum + 1'b1 : exp_sum;
+    assign mant   = prod[FP32_PROD_MSB] ? prod[FP32_PROD_MSB-1 -: FP32_MANT_WIDTH]
+                                        : prod[FP32_PROD_MSB-2 -: FP32_MANT_WIDTH];
+    assign result = zero ? '0 : {sign, exp, mant};
 
 endmodule
