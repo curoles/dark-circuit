@@ -357,6 +357,10 @@ pipeline can only win with a faster clock, which is not measured yet (see Next).
 
 ## Area and speed (sky130): 2-stage vs 4-stage
 
+These numbers come from the flow before 2026-10-21 (ABC restructured the logic) and the
+library of that day (carry-save array multiplier, ripple-carry adders): they compare the
+two pipelines with each other, not with the current numbers in the Mig2 README.
+
 Mig1 mapped to the SkyWater sky130 standard cells (sky130_fd_sc_hd, typical corner) with
 Yosys 0.66 and ABC, 2026-10-20, by hand, with the flow of the Mig2 README (section "Area
 and speed"). 2-stage: Mig1 of commit 6fcd97d, the last 2-stage version. 4-stage with
