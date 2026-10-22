@@ -1,7 +1,7 @@
 /* Verilog simulation RAM model.
  *
- * Memory is array of bytes, because `objcopy -O verilog` uses byte address
- * @addr regardless of data width. Access is by word of DATA_SIZE bytes,
+ * Memory is array of bytes, because `objcopy -O verilog` writes byte addresses (lines
+ * @<address>) regardless of data width. Access is by word of DATA_SIZE bytes,
  * little-endian. Address ports are word addresses: bits ADDR_WIDTH-1..ADDR_START
  * of byte address, connect them as addr[ADDR_WIDTH-1:ADDR_START].
  *

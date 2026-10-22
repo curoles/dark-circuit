@@ -2,10 +2,11 @@
 # Settings not listed have Doxygen's defaults.
 PROJECT_NAME      = dark-circuit
 OUTPUT_DIRECTORY  = @DOC_DIR@
-INPUT             = @PROJECT_SOURCE_DIR@/rtl/lib @PROJECT_SOURCE_DIR@/rtl/design/mig2
+INPUT             = @PROJECT_SOURCE_DIR@/doc @PROJECT_SOURCE_DIR@/rtl/lib \
+                    @PROJECT_SOURCE_DIR@/rtl/design/mig2
 RECURSIVE         = YES
-FILE_PATTERNS     = *.sv *.svh
-EXCLUDE_PATTERNS  = */behave/*
+FILE_PATTERNS     = *.sv *.svh *.dox *.md
+USE_MDFILE_AS_MAINPAGE = @PROJECT_SOURCE_DIR@/doc/mainpage.md
 EXTENSION_MAPPING = sv=C++ svh=C++
 FILTER_PATTERNS   = "*.sv=@PYTHON3_BIN@ @PROJECT_SOURCE_DIR@/tools/sv2doxy.py" \
                     "*.svh=@PYTHON3_BIN@ @PROJECT_SOURCE_DIR@/tools/sv2doxy.py"

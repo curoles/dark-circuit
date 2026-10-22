@@ -56,7 +56,7 @@ CONFIGS := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_config.yaml)
 # Plain `make` without a target shows help.
 .DEFAULT_GOAL := help
 
-.PHONY: cmake build test test_gates test_parts test_blocks run list config help
+.PHONY: cmake build test test_gates test_parts test_blocks run list config doc help
 
 cmake:
 	$(CONFIGURE)

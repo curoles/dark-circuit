@@ -14,11 +14,13 @@ if(DARK_CIRCUIT_DOXYGEN AND PYTHON3_BIN)
     else()
         set(DOC_HAVE_DOT NO)
     endif()
-    configure_file(${CMAKE_CURRENT_LIST_DIR}/Doxyfile.in ${DOC_DIR}/Doxyfile @ONLY)
+    # The Doxyfile outside DOC_DIR: deleting the documentation keeps it.
+    configure_file(${CMAKE_CURRENT_LIST_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
     add_custom_target(doc
-        COMMAND ${DOXYGEN_BIN} ${DOC_DIR}/Doxyfile
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${DOC_DIR}
+        COMMAND ${DOXYGEN_BIN} ${CMAKE_BINARY_DIR}/Doxyfile
         COMMAND ${CMAKE_COMMAND} -E echo "Documentation: ${DOC_DIR}/html/index.html"
-        WORKING_DIRECTORY ${DOC_DIR}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Doxygen: documentation of the RTL"
         VERBATIM)
 endif()

@@ -1,0 +1,29 @@
+/* Doxygen groups of dark-circuit: sv2doxy.py puts every module into the group of its
+ * directory (rtl/lib/<group>, rtl/design/<design>).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
+/** @defgroup cell Cells
+ * Standard cells (rtl/lib/cell), each in four versions: Builtin, Cmos, Generic, Tsmc.
+ */
+/** @defgroup gate Gates
+ * Gates (rtl/lib/gate): Generic, and Cell (made of cells).
+ */
+/** @defgroup part Parts
+ * Parts made of gates (rtl/lib/part): adders and other pieces of blocks.
+ */
+/** @defgroup block Blocks
+ * Blocks (rtl/lib/block): counters, FIFOs, multipliers, ...; Behave and Struct versions.
+ */
+/** @defgroup numeric Numeric
+ * Arithmetic units (rtl/lib/numeric): integer multiplier and divider, floating point;
+ * Behave and Struct versions.
+ */
+/** @defgroup sim Simulation models
+ * Models for testbenches (rtl/lib/sim): clock, reset, memories, valid/ready source and sink.
+ */
+/** @defgroup mig2 Mig2
+ * RISC-V CPU (rtl/design/mig2): RV32IM, Zicsr, Zicntr, 4-stage pipeline.
+ */
