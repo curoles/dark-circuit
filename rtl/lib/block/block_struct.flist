@@ -15,5 +15,6 @@
 -F lfsr/struct/lfsr.flist
 -F stochastic_bitstream_gen/struct/stochastic_bitstream_gen.flist
 -F csa_multiplier/struct/csa_multiplier.flist
+-F wallace_tree/struct/wallace_tree.flist
 -F wallace_multiplier/struct/wallace_multiplier.flist
 -F divider/struct/divider.flist
