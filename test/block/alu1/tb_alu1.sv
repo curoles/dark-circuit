@@ -1,7 +1,8 @@
 /* Test of Alu1 block, behave or struct version.
  *
  * WIDTH=4: exhaustive, every cmd (also 12..15) x in1 x in2.
- * WIDTH=64: random, inputs are often all zeros or all ones.
+ * WIDTH=64: random, inputs are often all zeros or all ones; 2000 cases on Verilator, 200
+ * on Icarus (the struct version of 64 bits is slow on event-driven Icarus).
  * Model uses meaning of every command, not the adder: co of SUB is in1 >= in2,
  * co of DEC is in1 != 0, co of TRANSFER2 is 1, co of logic is 0, ...
  * Stops at the first mismatch with $fatal.
@@ -11,6 +12,12 @@
  */
 module TbAlu1;
     import Alu1Pkg::*;
+
+`ifdef VERILATOR
+    localparam int RANDOM_64 = 2000;
+`else
+    localparam int RANDOM_64 = 200;
+`endif
 
     reg  [3:0]  cmd4;
     reg  [3:0]  a4;
@@ -93,9 +100,9 @@ module TbAlu1;
                        cmd4, a4, b4, co4, out4, exp4[64], exp4[3:0]);
         end
 
-        // WIDTH=64, random; few cycles, struct of 64 bits is slow in Icarus.
+        // WIDTH=64, random.
         seed = 1;
-        for (i = 0; i < 2000; i = i + 1) begin
+        for (i = 0; i < RANDOM_64; i = i + 1) begin
             rnd   = $random(seed);
             cmd64 = rnd[3:0];
             a64   = operand($random(seed), $random(seed));

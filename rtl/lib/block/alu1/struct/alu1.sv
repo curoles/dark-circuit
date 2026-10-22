@@ -10,6 +10,7 @@
  *                       carry in is C; cmd 0..7 are all 8 combinations
  *   cmd[1:0]            logic: AND, OR, XOR, NOT
  *   cmd[3]              1 selects logic
+ * The adder is a KoggeStoneAdder: its carries take log2(WIDTH) levels, not WIDTH.
  *
  * References:
  * - https://www.egr.msu.edu/classes/ece410/mason/files/Ch12.pdf
@@ -35,7 +36,7 @@ module Alu1 #(
     Inv  #(WIDTH) u_inv_in2(.in(in2), .out(in2_inv));
     Mux4 #(WIDTH) u_mux4_adder_in2(.in0({WIDTH{1'b0}}), .in1(in2), .in2(in2_inv), .in3({WIDTH{1'b1}}),
                                    .sel(cmd[2:1]), .out(adder_in2));
-    RippleCarryAdder #(.WIDTH(WIDTH)) u_ripple_carry_adder(
+    KoggeStoneAdder #(.WIDTH(WIDTH)) u_kogge_stone_adder(
         .in1(in1), .in2(adder_in2), .ci(cmd[0]), .co(adder_co), .sum(adder_out));
 
     // Logic by cmd[1:0]: AND, OR, XOR, NOT.

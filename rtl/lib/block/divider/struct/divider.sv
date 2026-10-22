@@ -5,7 +5,7 @@
  * (dividend bits not used yet, then quotient bits) and r (partial remainder) are loaded
  * on start and stepped while busy; a Counter counts the WIDTH steps down, busy is
  * count != 0, done is count == 1. One step: shifted = {r, top bit of q};
- * RippleCarryAdder computes shifted + ~d + 1 = shifted - d, its carry out is "fits"
+ * KoggeStoneAdder computes shifted + ~d + 1 = shifted - d, its carry out is "fits"
  * (no borrow); Mux2 keeps shifted or takes the difference as the new r, and fits is
  * the new quotient bit.
  *
@@ -65,7 +65,7 @@ module Divider #(
     // One step.
     assign shifted = {r, q[WIDTH-1]};
     Inv #(WIDTH) u_inv_d(.in(d), .out(d_inv));
-    RippleCarryAdder #(.WIDTH(WIDTH + 1)) u_ripple_carry_adder(
+    KoggeStoneAdder #(.WIDTH(WIDTH + 1)) u_kogge_stone_adder(
         .in1(shifted), .in2({1'b1, d_inv}), .ci(1'b1), .co(fits), .sum(diff));
     Mux2 #(WIDTH) u_mux2_r_next(.in0(shifted[WIDTH-1:0]), .in1(diff[WIDTH-1:0]), .sel(fits),
                                 .out(r_next));
