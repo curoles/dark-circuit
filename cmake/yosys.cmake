@@ -23,7 +23,7 @@ function(_dc_yosys_target NAME TECH TARGET LIBERTY TOP)
     set(SYNTH_TECH_SCRIPT ${dir}/tech.ys)
     set(SYNTH_ARGS)
     if(NOT TECH STREQUAL "generic")
-        set(SYNTH_ARGS -flatten)
+        set(SYNTH_ARGS "-flatten -noabc")   # one string: a list would be written with ;
     endif()
     configure_file(${PROJECT_SOURCE_DIR}/cmake/yosys_synth.ys.in ${dir}/synth.ys @ONLY)
     configure_file(${PROJECT_SOURCE_DIR}/cmake/yosys_tech_${TECH}.ys.in ${dir}/tech.ys @ONLY)

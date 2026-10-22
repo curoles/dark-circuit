@@ -1,13 +1,16 @@
 # sky130 (sky130_fd_sc_hd, @SYNTH_LIBERTY@): flip-flops and logic mapped to its cells,
 # area of the cells and ABC's delay estimate of the longest path (stime, in yosys.log).
 # Flattened by synth -flatten (yosys_synth.ys.in): one ABC run times the whole design.
-# Buffering and gate sizing (buffer,
-# upsize, dnsize) as real flows do; without them the default script maps for area only.
+# ABC maps the logic as written (strash only merges identical nodes, &nf maps for the best
+# delay) and buffers and sizes gates (buffer, upsize, dnsize) as real flows do. No
+# restructuring (fraig, scorr, dc2, dch, nor synth's own ABC): it optimizes area and
+# turns fast carry logic into chains, measured: a 64-bit Kogge-Stone adder 7.8 ns with
+# restructuring, 1.4 ns without.
 log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): mapping flip-flops to sky130 cells
 read_liberty -lib @SYNTH_LIBERTY@
 dfflibmap -liberty @SYNTH_LIBERTY@
 log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): mapping logic to sky130 cells, buffering, sizing (ABC)
-abc -liberty @SYNTH_LIBERTY@ -script +strash;&get,-n;&fraig,-x;&put;scorr;dc2;dretime;strash;&get,-n;&dch,-f;&nf;&put;buffer;upsize;dnsize;topo;stime,-p
+abc -liberty @SYNTH_LIBERTY@ -script +strash;&get,-n;&nf;&put;buffer;upsize;dnsize;topo;stime,-p
 opt_clean
 log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): statistics, netlist
 tee -o stat.txt stat -liberty @SYNTH_LIBERTY@

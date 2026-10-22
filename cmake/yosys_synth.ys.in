@@ -1,7 +1,9 @@
 # Yosys synthesis script of DARKCIRCUIT, filled in for one design and technology by
 # dc_add_yosys_synth() (cmake/yosys.cmake): @SYNTH_INPUT@ is the design converted by sv2v,
-# @SYNTH_TOP@ its top module, @SYNTH_ARGS@ options of synth for the technology (-flatten
-# with a liberty file: optimization across modules, one ABC run times the whole design),
+# @SYNTH_TOP@ its top module, @SYNTH_ARGS@ options of synth for the technology (with a
+# liberty file: -flatten, optimization across modules and one ABC run times the whole
+# design; -noabc, synth does not run its own ABC, which restructures logic for area:
+# the technology script maps the structure as written),
 # @SYNTH_TECH_SCRIPT@ the steps of the technology
 # (cmake/yosys_tech_<tech>.ys.in). Yosys runs in the output directory, quiet (-q):
 # log -stdout tells the user which step runs.
