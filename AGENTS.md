@@ -34,6 +34,10 @@ This file has the rules that are not in README.md.
   when it is touched anyway. When the load condition of a register is its own signal,
   it is named `<reg>_en` (`if (pc_en) pc_q <= pc_d;`); a condition that already has a
   meaning of its own is used directly (`if (ex_stop) halt_pc <= ex_fetch.pc;`).
+- Reset: ports are `rst_n`, synchronous and active low. A module that uses the reset in
+  expressions declares `logic rst;  // reset active` with `assign rst = !rst_n;` and then
+  writes `rst` everywhere in that module, also `if (rst)` in its always_ff blocks: one
+  spelling per module. A module that only resets flip-flops keeps `if (!rst_n)`.
 - Raw and qualified: when a signal is first computed without the condition that makes
   it count (valid, a fault, a flush) and then qualified, the first one is
   `<name>_raw` and the qualified one gets the plain name; then every use shows whether
@@ -85,10 +89,10 @@ This file has the rules that are not in README.md.
    * @copyright 2026 Igor Lesik, MIT License
    */
   ```
-  The first sentence is the summary (Doxygen takes it as the brief). Every port,
-  parameter and struct field gets a trailing `//` comment on its line; an internal
-  signal gets one unless its name, or a comment above its group of signals, already
-  says what it is (`imm_i`, `rs2_b`).
+  The first sentence is the summary (Doxygen takes it as the brief). A port, parameter,
+  struct field or internal signal gets a trailing `//` comment on its line, unless its
+  name, or a comment above its group, already says what it is (`clk`, the inputs `a` and
+  `b` of an And2, `imm_i`).
   No other Doxygen markup (`/**`, `@brief`, `///<`): a documentation filter turns these
   conventions into Doxygen comments. Generated files start with their "generated"
   line instead. Files without @author and @copyright get them when touched anyway.

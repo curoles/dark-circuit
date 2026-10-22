@@ -16,24 +16,25 @@ module Mig2Fetch import Mig2Pkg::*; #(
 )(
     input  wire         clk,
     input  wire         rst_n,            // synchronous reset, active low
-    input  fetch_ctrl_t ctrl,
-    output imem_req_t   imem_req,
-    output fetch_t      fetch
+    input  fetch_ctrl_t ctrl,             // run, stall, redirect and target, from Mig2Control
+    output imem_req_t   imem_req,         // request to imem: enable and word address
+    output fetch_t      fetch             // instruction arriving from imem: valid and pc, to ID
 );
-    localparam iaddr_t RST_PC = CFG.rst_addr[WIDTH-1:IADDR_START];
+    localparam iaddr_t RST_PC = CFG.rst_addr[WIDTH-1:IADDR_START];   // word address
 
-    iaddr_t pc;
-    logic   advance;   // request the next instruction
-    logic   jump;
-    iaddr_t jump_pc;
+    logic   rst;        // reset active
+    iaddr_t pc;         // address requested from imem in this cycle
+    logic   advance;    // request the next instruction
+    logic   jump;       // load jump_pc: reset or redirect
+    iaddr_t jump_pc;    // address of the jump
 
+    assign rst     = !rst_n;
     assign advance = ctrl.run && !ctrl.stall;
-
-    assign jump    = !rst_n || ctrl.redirect;
-    assign jump_pc = !rst_n ? RST_PC : ctrl.target;
+    assign jump    = rst || ctrl.redirect;
+    assign jump_pc = rst ? RST_PC : ctrl.target;
 
     PrgCounter #(.ADDR_WIDTH(WIDTH), .INSN_SIZE(INSN_WIDTH / 8)) u_prg_counter(
-        .clk(clk), .en(advance), .jump(jump), .jump_addr(jump_pc), .pc(pc));
+        .clk, .en(advance), .jump, .jump_addr(jump_pc), .pc);
 
     assign imem_req.en   = advance;
     assign imem_req.addr = pc;
