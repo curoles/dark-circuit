@@ -1,5 +1,6 @@
 add_subdirectory(carry_save_adder)
 add_subdirectory(ripple_carry_adder)
 add_subdirectory(kogge_stone_adder)
+add_subdirectory(brent_kung_adder)
 add_subdirectory(gated_clk)
 add_subdirectory(lim_dff)
