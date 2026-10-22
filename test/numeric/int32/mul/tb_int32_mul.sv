@@ -5,8 +5,8 @@
  * zero-extended operands with SV signed arithmetic and keeps the lower 64 bits.
  * On Verilator every pair of edge values and 5000 random per combination; on Icarus
  * each edge value times the next one and 1 random (operands differ: a square can not
- * tell a from b): the struct version contains CsaMultiplier, about 1000 gates, slow
- * on event-driven Icarus.
+ * tell a from b): the struct version contains WallaceMultiplier, a few thousand gates,
+ * slow on event-driven Icarus.
  * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik

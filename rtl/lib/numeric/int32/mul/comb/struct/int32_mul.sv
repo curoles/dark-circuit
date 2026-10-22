@@ -1,11 +1,11 @@
 /* 32-bit integer multiplier: product = a * b, each operand signed or unsigned,
  * combinational, made of blocks, parts and gates.
  *
- * Same ports and result as the behave version. CsaMultiplier gives the product p of
+ * Same ports and result as the behave version. WallaceMultiplier gives the product p of
  * the unsigned values; a negative signed operand is its unsigned value minus 2^32,
  * so modulo 2^64 only the upper half changes:
  *   hi = p_hi - (a_neg ? b : 0) - (b_neg ? a : 0)  (mod 2^32),   lo = p_lo.
- * The two subtractions are one CarrySaveAdder and one RippleCarryAdder: with x, y the
+ * The two subtractions are one CarrySaveAdder and one KoggeStoneAdder: with x, y the
  * two terms, p_hi - x - y = p_hi + ~x + ~y + 2 = ps + {sc, 1} + 1, where ps and sc
  * are the partial sum and the carries of the CarrySaveAdder of p_hi, ~x and ~y.
  *
@@ -34,7 +34,7 @@ module Int32Mul (
     wire        co;
     /* verilator lint_on UNUSEDSIGNAL */
 
-    CsaMultiplier #(.WIDTH(32)) u_csa_multiplier(.a, .b, .product(p));
+    WallaceMultiplier #(.WIDTH(32)) u_wallace_multiplier(.a, .b, .product(p));
 
     And2 #(1)  u_and2_a_neg(.in1(a_signed), .in2(a[31]), .out(a_neg));
     And2 #(1)  u_and2_b_neg(.in1(b_signed), .in2(b[31]), .out(b_neg));
@@ -45,7 +45,7 @@ module Int32Mul (
 
     CarrySaveAdder #(.WIDTH(32)) u_carry_save_adder(
         .in1(p[63:32]), .in2(x_inv), .in3(y_inv), .ps, .sc);
-    RippleCarryAdder #(.WIDTH(32)) u_ripple_carry_adder(
+    KoggeStoneAdder #(.WIDTH(32)) u_kogge_stone_adder(
         .in1(ps), .in2({sc[30:0], 1'b1}), .ci(1'b1), .co, .sum(product[63:32]));
 
     assign product[31:0] = p[31:0];
