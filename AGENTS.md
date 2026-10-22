@@ -146,6 +146,10 @@ Icarus 11, which had more limits).
   `localparam W = CFG.mem_addr_width;` ("A hierarchical reference ... is not allowed
   in a constant expression").
 - Icarus does not support `inside`; use `case` or `==`.
+- Icarus crashes (assert in elab_expr.cc) on an indexed part-select of a struct field,
+  `s.f[i -: w]`; copy the field to a plain vector and select on that.
+- Icarus has no queues of packed structs ("Queue of type netstruct_t is not yet
+  supported"); queue plain vectors of `$bits(T)` and assign to and from T.
 - Icarus says "sorry: constant selects in always_* processes are not fully supported"
   for `s.field` or `v[3:0]` inside `always_comb`; results are right (the process is
   sensitive to all bits). A function or an `assign` into a signal avoids the message.

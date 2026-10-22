@@ -25,9 +25,11 @@ module Fp32PipelinedMultiplier import Fp32Pkg::*; (
     fp32_sig_t  b_sig;
     fp32_prod_t prod;       // a_sig * b_sig
     stage1_t    s1_d;       // into the stage 1 register
-    // The low product bits are dropped: the result is truncated, not rounded.
-    /* verilator lint_off UNUSEDSIGNAL */
     stage1_t    s1_q;
+    // The product in stage 1, a plain vector: Icarus 13 crashes on an indexed part-select
+    // of a struct field. Its low bits are dropped: truncated, not rounded.
+    /* verilator lint_off UNUSEDSIGNAL */
+    fp32_prod_t s1_prod;
     /* verilator lint_on UNUSEDSIGNAL */
     logic       s1_zero_q;  // an operand in stage 1 has exponent 0
     fp32_exp_t  exp_sum;    // exponents summed minus bias, mod 256: overflow not handled
@@ -49,10 +51,11 @@ module Fp32PipelinedMultiplier import Fp32Pkg::*; (
 
     // Stage 2: normalize; a product in [2, 4) (its top bit set) shifts right by one:
     // exponent + 1. The fraction is prod[46:24], else prod[45:23].
+    assign s1_prod = s1_q.prod;
     assign exp_sum = s1_q.a_exp + s1_q.b_exp - FP32_BIAS;
-    assign s2_exp  = s1_q.prod[FP32_PROD_MSB] ? exp_sum + 1'b1 : exp_sum;
-    assign s2_mant = s1_q.prod[FP32_PROD_MSB] ? s1_q.prod[FP32_PROD_MSB-1 -: FP32_MANT_WIDTH]
-                                              : s1_q.prod[FP32_PROD_MSB-2 -: FP32_MANT_WIDTH];
+    assign s2_exp  = s1_prod[FP32_PROD_MSB] ? exp_sum + 1'b1 : exp_sum;
+    assign s2_mant = s1_prod[FP32_PROD_MSB] ? s1_prod[FP32_PROD_MSB-1 -: FP32_MANT_WIDTH]
+                                            : s1_prod[FP32_PROD_MSB-2 -: FP32_MANT_WIDTH];
 
     always_ff @(posedge clk) s2_q <= {s1_q.sign, s2_exp, s2_mant};  // data: not reset
     always_ff @(posedge clk)

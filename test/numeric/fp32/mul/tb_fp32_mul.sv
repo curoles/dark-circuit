@@ -31,7 +31,9 @@ module TbFp32Mul;
     fp32_t b;
     fp32_t comb_result;
     fp32_t pipe_result;
-    case_t in_flight[$];    // pairs in the pipelined multiplier, oldest first
+    // Pairs in the pipelined multiplier, oldest first; plain vectors: Icarus 13 has no
+    // queues of packed structs.
+    logic [$bits(case_t)-1:0] in_flight[$];
 
     Fp32CombMultiplier u_fp32_comb_multiplier(.a, .b, .result(comb_result));
     Fp32PipelinedMultiplier u_fp32_pipelined_multiplier(
