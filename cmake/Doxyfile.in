@@ -1,0 +1,18 @@
+# Doxygen configuration of dark-circuit, filled in by cmake/doxygen.cmake (target doc).
+# Settings not listed have Doxygen's defaults.
+PROJECT_NAME      = dark-circuit
+OUTPUT_DIRECTORY  = @DOC_DIR@
+INPUT             = @PROJECT_SOURCE_DIR@/rtl/lib @PROJECT_SOURCE_DIR@/rtl/design/mig2
+RECURSIVE         = YES
+FILE_PATTERNS     = *.sv *.svh
+EXCLUDE_PATTERNS  = */behave/*
+EXTENSION_MAPPING = sv=C++ svh=C++
+FILTER_PATTERNS   = "*.sv=@PYTHON3_BIN@ @PROJECT_SOURCE_DIR@/tools/sv2doxy.py" \
+                    "*.svh=@PYTHON3_BIN@ @PROJECT_SOURCE_DIR@/tools/sv2doxy.py"
+JAVADOC_AUTOBRIEF = YES
+EXTRACT_ALL       = YES
+SOURCE_BROWSER    = YES
+GENERATE_LATEX    = NO
+HAVE_DOT          = @DOC_HAVE_DOT@
+QUIET             = YES
+WARN_LOGFILE      = @DOC_DIR@/warnings.txt

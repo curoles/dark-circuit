@@ -12,6 +12,7 @@
 #   make list    - list tests with their labels
 #   make config  - generate files from design configurations
 #   make <design>_synth [TECH=sky130] - synthesis of one design with Yosys, like make mig2_synth
+#   make doc     - documentation of the RTL with Doxygen
 #   make test D=mig1 - the same in the build tree of one design (D=full, D=lib, D=<design>)
 #   make test BUILD_DIR=/tmp/dc CMAKE_ARGS="-D DARK_CIRCUIT_USE_ICARUS=ON"
 
@@ -103,6 +104,10 @@ SYNTH_TECHS := sky130
 	$(if $(filter-out $(SYNTH_TECHS),$(TECH)),$(error TECH=$(TECH): supported $(SYNTH_TECHS)))
 	cmake --build $(BUILD_DIR) --target design_$*.synth$(if $(TECH),_$(TECH))
 
+# Documentation of the RTL with Doxygen: ../build/<D>/doc/html/index.html.
+doc: $(CONFIGURED)
+	cmake --build $(BUILD_DIR) --target doc
+
 # Generate files from design configurations, run after a change in cfg/.
 config:
 	@for cfg in $(CONFIGS); do \
@@ -128,6 +133,8 @@ Targets:
   make <design>_synth  synthesis of one design with Yosys (sv2v, then Yosys), like
                        make mig2_synth: netlist, cell counts, log in the build directory;
                        with TECH=sky130 mapped to sky130 cells, prints area and longest path
+  make doc          documentation of the RTL with Doxygen: doc/html/index.html in the build
+                    directory
 
 Variables:
   D=<tree>             build tree: full (default) library and all designs, lib the library,

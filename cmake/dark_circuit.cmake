@@ -191,6 +191,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/yosys.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/riscv.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/qemu.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/config.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/doxygen.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/fetch.cmake)
 
 # Main simulator runs tests that need only one simulator, like tests of parts.
