@@ -14,11 +14,11 @@
 
 `include "dark_circuit_assert.svh"
 
-module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
+module Mig2MulDiv import Mig2Pkg::*; (
     input  wire              clk,
     input  wire              rst_n,       // synchronous reset, active low
     input  wire              valid,       // instruction in EX is valid
-    // Only muldiv and funct3 are used.
+    // Only muldiv is used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
@@ -28,12 +28,6 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     output word_t            result
 );
     logic        muldiv;        // M instruction in EX
-    logic        div;           // DIV, DIVU, REM, REMU
-    logic        rem;           // REM, REMU
-    logic        mul_lo;        // MUL: lower half of the product
-    logic        a_signed;      // MULH, MULHSU: rs1 is signed
-    logic        b_signed;      // MULH: rs2 is signed
-    logic        div_signed;    // DIV, REM
     logic        start;
     logic [63:0] product;
     word_t       product_lo;
@@ -46,43 +40,39 @@ module Mig2MulDiv import Mig2Pkg::*, RiscvPkg::*; (
     logic        div_by_zero;
     logic        overflow;
 
-    // Operation from funct3.
-    assign muldiv     = valid && dec.muldiv;
-    assign div        = dec.funct3 == F3_DIV || dec.funct3 == F3_DIVU || dec.funct3 == F3_REM || dec.funct3 == F3_REMU;
-    assign rem        = dec.funct3 == F3_REM || dec.funct3 == F3_REMU;
-    assign mul_lo     = dec.funct3 == F3_MUL;
-    assign a_signed   = dec.funct3 == F3_MULH || dec.funct3 == F3_MULHSU;
-    assign b_signed   = dec.funct3 == F3_MULH;
-    assign div_signed = dec.funct3 == F3_DIV || dec.funct3 == F3_REM;
-    assign start      = muldiv && div && !busy && !div_ready;
+    // Controls from Decode (decoded_t.muldiv); muldiv: an M instruction is in EX.
+    assign muldiv = valid && dec.muldiv.en;
+    assign start  = muldiv && dec.muldiv.div && !busy && !div_ready;
 
-    Int32Mul u_int32_mul(.a(rs1_data), .b(rs2_data), .a_signed, .b_signed, .product);
+    Int32Mul u_int32_mul(.a(rs1_data), .b(rs2_data), .a_signed(dec.muldiv.a_signed),
+                         .b_signed(dec.muldiv.b_signed), .product);
 
     Int32Div u_int32_div(
-        .clk, .rst_n, .start, .dividend(rs1_data), .divisor(rs2_data), .signed_op(div_signed),
+        .clk, .rst_n, .start, .dividend(rs1_data), .divisor(rs2_data),
+        .signed_op(dec.muldiv.div_signed),
         .busy, .done, .quotient, .remainder, .div_by_zero, .overflow);
 
     always_ff @(posedge clk)
         if (!rst_n) div_ready <= 1'b0;
         else        div_ready <= done;
 
-    assign stall = muldiv && div && !div_ready;
+    assign stall = muldiv && dec.muldiv.div && !div_ready;
 
     // A division runs only while its instruction is in EX: nothing removes a stalled
     // instruction from EX (no interrupts yet).
-    `DC_ASSERT(a_busy_has_div, !busy || (muldiv && div))
+    `DC_ASSERT(a_busy_has_div, !busy || (muldiv && dec.muldiv.div))
     // The header's promise: the instruction and its registers do not change during the
     // division, so rs1_data is still the dividend at the end (REM by 0 returns it).
     `DC_ASSERT_NEXT(a_div_inputs_held, stall,
-                    $stable(rs1_data) && $stable(rs2_data) && $stable(dec.funct3))
+                    $stable(rs1_data) && $stable(rs2_data) && $stable(dec.muldiv))
 
     assign product_lo = product[31:0];
     assign product_hi = product[63:32];
 
     always_comb
-        if (!div)             result = mul_lo ? product_lo : product_hi;
-        else if (div_by_zero) result = rem ? rs1_data : '1;
-        else if (overflow)    result = rem ? '0 : 32'h8000_0000;
-        else                  result = rem ? remainder : quotient;
+        if (!dec.muldiv.div)  result = dec.muldiv.mul_lo ? product_lo : product_hi;
+        else if (div_by_zero) result = dec.muldiv.rem ? rs1_data : '1;
+        else if (overflow)    result = dec.muldiv.rem ? '0 : 32'h8000_0000;
+        else                  result = dec.muldiv.rem ? remainder : quotient;
 
 endmodule

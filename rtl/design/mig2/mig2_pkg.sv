@@ -213,6 +213,16 @@ package Mig2Pkg;
         logic   illegal;    // no instruction of Mig2: illegal instruction trap
     } sys_ctrl_t;
 
+    typedef struct packed {
+        logic   en;         // M instruction (Mig2MulDiv)
+        logic   div;        // DIV, DIVU, REM, REMU: the divider, else the multiplier
+        logic   rem;        // REM, REMU: the remainder, else the quotient
+        logic   mul_lo;     // MUL: the lower half of the product, else the upper half
+        logic   a_signed;   // MULH, MULHSU: rs1 is signed
+        logic   b_signed;   // MULH: rs2 is signed
+        logic   div_signed; // DIV, REM
+    } muldiv_ctrl_t;
+
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
         kind_t      kind;      // for testbenches and traces; parts read the controls
@@ -227,7 +237,7 @@ package Mig2Pkg;
         br_ctrl_t   br;        // Mig2Branch
         mem_ctrl_t  mem;       // Mig2Lsu
         sys_ctrl_t  sys;       // Mig2Control, Mig2Csr
-        logic       muldiv;    // M instruction (Mig2MulDiv)
+        muldiv_ctrl_t muldiv;  // Mig2MulDiv
         RiscvPkg::funct3_t funct3;  // operation within the part: ALU op, branch compare, load/store size
         logic       alt;       // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
         word_t      imm;       // immediate of the instruction format, sign-extended

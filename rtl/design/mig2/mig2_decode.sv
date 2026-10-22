@@ -63,6 +63,19 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     assign imm_csr = {{(WIDTH-12){1'b0}}, f.i.imm_11_0};
     assign csr_reg = f.i.funct3 == F3_CSRRW || f.i.funct3 == F3_CSRRS || f.i.funct3 == F3_CSRRC;
 
+    // Controls of an M instruction from its funct3.
+    function automatic muldiv_ctrl_t muldiv_of(funct3_t f3);
+        muldiv_ctrl_t m;
+        m.en         = 1'b1;
+        m.div        = f3 == F3_DIV || f3 == F3_DIVU || f3 == F3_REM || f3 == F3_REMU;
+        m.rem        = f3 == F3_REM || f3 == F3_REMU;
+        m.mul_lo     = f3 == F3_MUL;
+        m.a_signed   = f3 == F3_MULH || f3 == F3_MULHSU;
+        m.b_signed   = f3 == F3_MULH;
+        m.div_signed = f3 == F3_DIV || f3 == F3_REM;
+        return m;
+    endfunction
+
     // Fields at the same place in every format, with short names for the table below.
     reg_id_t    rd;
     reg_id_t    rs1;
@@ -95,7 +108,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.br       = '0;
         dec.mem      = '0;
         dec.sys      = '0;
-        dec.muldiv   = 1'b0;
+        dec.muldiv   = '0;
         case (kind)
             KIND_LUI: begin
                 dec.rd_we = 1'b1;  dec.imm = imm_u;  dec.alu.a = A_ZERO;
@@ -128,7 +141,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             end
             KIND_MULDIV: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_MULDIV;  dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
-                dec.muldiv = 1'b1;
+                dec.muldiv = muldiv_of(funct3);
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;  dec.imm = imm_csr;

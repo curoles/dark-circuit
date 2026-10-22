@@ -118,6 +118,16 @@ module TbMig2Decode;
                  ebreak: kind == KIND_EBREAK, illegal: kind == KIND_ILLEGAL};
     endfunction
 
+    // M controls expected: from the bits of funct3 (MUL 000, MULH 001, MULHSU 010,
+    // MULHU 011, DIV 100, DIVU 101, REM 110, REMU 111).
+    function automatic muldiv_ctrl_t muldiv_of(input logic [4:0] kind, input logic [2:0] f3);
+        if (kind != KIND_MULDIV)
+            return '0;
+        return '{en: 1'b1, div: f3[2], rem: f3[2] && f3[1], mul_lo: f3 == 3'b000,
+                 a_signed: f3 == 3'b001 || f3 == 3'b010, b_signed: f3 == 3'b001,
+                 div_signed: f3[2] && !f3[0]};
+    endfunction
+
     // Compare one field of case cn with instruction w.
     task automatic check(input integer cn, input [31:0] w, input string field, input [31:0] got, input [31:0] exp);
         if (got !== exp)
@@ -143,7 +153,7 @@ module TbMig2Decode;
             check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind)));
             check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
-            check(c, insn, "muldiv", 32'(dec.muldiv), 32'(exp_kind == KIND_MULDIV));
+            check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));
             if (uses_alu(exp_kind))
                 check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, e[8][0])));
             if (exp_kind != KIND_ILLEGAL) begin
