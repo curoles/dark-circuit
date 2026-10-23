@@ -64,18 +64,20 @@ package RiscvPkg;
     localparam funct3_t F3_REM     = 3'b110;
     localparam funct3_t F3_REMU    = 3'b111;
 
+    typedef logic [4:0] excp_code_t;     // Exception Code of mcause: why a trap was taken
+
     // Exception codes of mcause (interrupt bit 0), privileged spec; names as in riscv-opcodes.
-    localparam logic [4:0] CAUSE_MISALIGNED_FETCH    = 5'd0;
-    localparam logic [4:0] CAUSE_FETCH_ACCESS        = 5'd1;
-    localparam logic [4:0] CAUSE_ILLEGAL_INSTRUCTION = 5'd2;
-    localparam logic [4:0] CAUSE_BREAKPOINT          = 5'd3;
-    localparam logic [4:0] CAUSE_MISALIGNED_LOAD     = 5'd4;
-    localparam logic [4:0] CAUSE_LOAD_ACCESS         = 5'd5;
-    localparam logic [4:0] CAUSE_MISALIGNED_STORE    = 5'd6;
-    localparam logic [4:0] CAUSE_STORE_ACCESS        = 5'd7;
-    localparam logic [4:0] CAUSE_USER_ECALL          = 5'd8;
-    localparam logic [4:0] CAUSE_SUPERVISOR_ECALL    = 5'd9;
-    localparam logic [4:0] CAUSE_MACHINE_ECALL       = 5'd11;
+    localparam excp_code_t CAUSE_MISALIGNED_FETCH    = 5'd0;
+    localparam excp_code_t CAUSE_FETCH_ACCESS        = 5'd1;
+    localparam excp_code_t CAUSE_ILLEGAL_INSTRUCTION = 5'd2;
+    localparam excp_code_t CAUSE_BREAKPOINT          = 5'd3;
+    localparam excp_code_t CAUSE_MISALIGNED_LOAD     = 5'd4;
+    localparam excp_code_t CAUSE_LOAD_ACCESS         = 5'd5;
+    localparam excp_code_t CAUSE_MISALIGNED_STORE    = 5'd6;
+    localparam excp_code_t CAUSE_STORE_ACCESS        = 5'd7;
+    localparam excp_code_t CAUSE_USER_ECALL          = 5'd8;
+    localparam excp_code_t CAUSE_SUPERVISOR_ECALL    = 5'd9;
+    localparam excp_code_t CAUSE_MACHINE_ECALL       = 5'd11;
 
     /* verilator lint_on UNUSEDPARAM */
 

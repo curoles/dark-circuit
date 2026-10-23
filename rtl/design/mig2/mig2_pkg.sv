@@ -129,7 +129,7 @@ package Mig2Pkg;
     // Control -> Csr: trap of the instruction in EX (machine mode).
     typedef struct packed {
         logic       valid;
-        logic [4:0] cause;      // exception code for mcause, RiscvPkg CAUSE_*
+        RiscvPkg::excp_code_t cause;    // exception code for mcause, RiscvPkg CAUSE_*
         word_t      tval;       // value for mtval: address or instruction, 0 when none
     } trap_t;
 

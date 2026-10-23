@@ -67,7 +67,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       ex_stop;     // EBREAK in EX halts the core
     logic       ex_mret;     // MRET in EX
     logic       ex_fault;    // instruction in EX traps
-    logic [4:0] ex_cause;
+    excp_code_t ex_cause;
     word_t      ex_tval;
     logic       resuming;    // resume while halted
     logic       redirect;
@@ -127,11 +127,19 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign redirect = ex_fault || ex_mret || (ex_fetch.valid && ex_branch.taken) || resuming;
     assign flush_id = redirect || ex_stop;
 
-    // Interlock: other results are forwarded to ID (Mig2Forward); a load in EX has no data.
-    assign ex_writes   = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
-    assign id_load_use = ex_writes && ex_dec.mem.read &&
-                         ((id_dec.uses_rs1 && id_dec.rs1 == ex_dec.rd) ||
-                          (id_dec.uses_rs2 && id_dec.rs2 == ex_dec.rd));
+    // Interlock: other results are forwarded to ID (Mig2Forward), but a load's data comes
+    // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
+    // load is in EX. The instruction in ID that reads the load's rd waits one cycle, EX gets
+    // a bubble. uses_rs1/uses_rs2: only real register reads count, not immediate bits in
+    // the rs fields.
+    logic ex_load;          // the instruction in EX is a load that writes a register
+    logic id_reads_ex_rd;   // the instruction in ID reads the register EX writes
+
+    assign ex_writes      = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
+    assign ex_load        = ex_writes && ex_dec.mem.read;
+    assign id_reads_ex_rd = (id_dec.uses_rs1 && id_dec.rs1 == ex_dec.rd) ||
+                            (id_dec.uses_rs2 && id_dec.rs2 == ex_dec.rd);
+    assign id_load_use    = ex_load && id_reads_ex_rd;
     assign id_hazard   = id_valid && id_load_use;
 
     assign ex_done             = ex_fetch.valid && !ex_fault && !ex_stall;
