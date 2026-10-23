@@ -11,7 +11,7 @@
 module Mig2Pipe import Mig2Pkg::*; (
     input  wire        clk,
     input  wire        rst_n,       // synchronous reset, active low
-    input  pipe_ctrl_t ctrl,
+    input  pipe_ctrl_t ctrl,        // stall and flush of ID/EX, from Mig2Control
     input  id_ex_t     id_ex_d,     // from ID
     output id_ex_t     id_ex_q,     // to EX
     input  ex_mem_t    ex_mem_d,    // from EX

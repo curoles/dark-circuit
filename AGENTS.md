@@ -34,10 +34,11 @@ This file has the rules that are not in README.md.
   when it is touched anyway. When the load condition of a register is its own signal,
   it is named `<reg>_en` (`if (pc_en) pc_q <= pc_d;`); a condition that already has a
   meaning of its own is used directly (`if (ex_stop) halt_pc <= ex_fetch.pc;`).
-- Reset: ports are `rst_n`, synchronous and active low. A module that uses the reset in
-  expressions declares `logic rst;  // reset active` with `assign rst = !rst_n;` and then
-  writes `rst` everywhere in that module, also `if (rst)` in its always_ff blocks: one
-  spelling per module. A module that only resets flip-flops keeps `if (!rst_n)`.
+- Reset: ports are `rst_n`, synchronous and active low, and code writes `!rst_n`. Only a
+  module that uses the reset in two or more places may declare
+  `logic rst;  // reset active` with `assign rst = !rst_n;`, because `rst || x` reads
+  better than `!rst_n || x`; it then writes `rst` everywhere in that module, also
+  `if (rst)` in its always_ff blocks: one spelling per module.
 - Raw and qualified: when a signal is first computed without the condition that makes
   it count (valid, a fault, a flush) and then qualified, the first one is
   `<name>_raw` and the qualified one gets the plain name; then every use shows whether

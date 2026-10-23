@@ -13,23 +13,23 @@
  * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig2Regs import Mig2Pkg::*; (
-    input  wire                        clk,
-    input  wire                        halt,         // 1: debug port owns read port 0 and write port
+    input  wire     clk,
+    input  wire     halt,           // 1: debug port owns read port 0 and write port
 
     // Pipeline.
-    input  reg_id_t                    rs1,
-    input  reg_id_t                    rs2,
-    output word_t                      rs1_data,
-    output word_t                      rs2_data,
-    input  wire                        rd_we,
-    input  reg_id_t                    rd,
-    input  word_t                      rd_data,
+    input  reg_id_t rs1,
+    input  reg_id_t rs2,
+    output word_t   rs1_data,
+    output word_t   rs2_data,
+    input  wire     rd_we,
+    input  reg_id_t rd,
+    input  word_t   rd_data,
 
     // Debug, used while halt=1.
-    input  reg_id_t                    dbg_reg_id,
-    input  wire                        dbg_reg_wr,
-    input  word_t                      dbg_reg_wdata,
-    output word_t                      dbg_reg_rdata
+    input  reg_id_t dbg_reg_id,
+    input  wire     dbg_reg_wr,
+    input  word_t   dbg_reg_wdata,
+    output word_t   dbg_reg_rdata
 );
     // Read port 0 and write port: pipeline, or debug while halted.
     reg_id_t   rd_id0;
@@ -46,9 +46,9 @@ module Mig2Regs import Mig2Pkg::*; (
 
     // RegFile is a generic storage block: its register numbers are addresses.
     RegFile #(.RD_PORTS(2), .WR_PORTS(1), .ADDR_WIDTH(REG_ID_WIDTH), .DATA_WIDTH(WIDTH)) u_reg_file(
-        .clk(clk),
+        .clk,
         .rd_addr({rs2, rd_id0}), .rd_data({rf_data1, rf_data0}),
-        .wr_en(wr_en), .wr_addr(wr_id), .wr_data(wr_data));
+        .wr_en, .wr_addr(wr_id), .wr_data);
 
     // x0 reads 0.
     assign rs1_data      = (rd_id0 == '0) ? '0 : rf_data0;
