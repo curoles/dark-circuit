@@ -1,4 +1,4 @@
-/* Mig2 RISC-V RV32I core, synthesizable, memories are outside.
+/* Mig2 core: RISC-V RV32IM with Zicsr and Zicntr, synthesizable; the memories are outside.
  *
  * Instruction fetch and data access have 1 clock read latency, like SimROM,
  * SimRAM, SRAM and FPGA block RAM. Faults (ECALL, illegal instruction, misaligned
@@ -7,10 +7,16 @@
  * dbg_req.ebreak_halt; while halted, the debug port reads and writes registers, and
  * resume continues after EBREAK.
  *
- * Mig2Core only connects its parts: Mig2Fetch (PC, imem requests),
- * Mig2Control (run, stall, redirect, traps, halt), Mig2Decode, Mig2Regs, Mig2Alu,
- * Mig2Branch, Mig2Lsu (dmem requests), Mig2LoadData, Mig2Csr, Mig2MulDiv,
- * Mig2Forward, Mig2Pipe (pipeline registers).
+ * Mig2Core only connects its parts:
+ * - Mig2Fetch: PC, imem requests, the IF/ID register;
+ * - Mig2Control: run, stall, redirect, traps, halt;
+ * - Mig2Decode: the instruction taken apart, with the controls of every part;
+ * - Mig2Regs: the register file, also for the debug port;
+ * - Mig2Forward: results not yet in the register file, for ID;
+ * - Mig2Pipe: the ID/EX and EX/MEM registers;
+ * - Mig2Alu, Mig2Branch, Mig2Lsu (dmem requests), Mig2Csr, Mig2MulDiv: the parts of EX;
+ * - Mig2LoadData: the loaded value, in MEM/WB.
+ *
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
  * from imem and reads its registers; EX executes: branches, traps, CSRs and stores
  * happen there, loads send their read; MEM/WB gets load data, writes rd and retires.
@@ -21,6 +27,9 @@
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
  *
+ * Mig2Cpu instantiates it, with simulation memories; synthesis (make mig2_synth) takes
+ * Mig2Core as its top.
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
@@ -30,69 +39,80 @@ module Mig2Core import Mig2Pkg::*; #(
     input  wire       clk,
     input  wire       rst_n,               // synchronous reset, active low
 
+    // Memories: requests out, read data back 1 clock later.
     output imem_req_t imem_req,
     input  imem_rsp_t imem_rsp,
     output dmem_req_t dmem_req,
     input  dmem_rsp_t dmem_rsp,
 
+    // Retire trace and halt.
     output wire       halt,                // core halted at EBREAK, see dbg_req.ebreak_halt
     output retire_t   retire,              // RVFI trace, see Mig2Pkg
 
+    // Debug, used while halted.
     input  dbg_req_t  dbg_req,
     output dbg_rsp_t  dbg_rsp
 );
+    // IF and control
+    fetch_ctrl_t  if_ctrl;          // Control -> Fetch
+    pipe_ctrl_t   pipe_ctrl;        // Control -> Pipe
+    csr_t         csr;              // mtvec, mepc: where traps and MRET go (no stage)
 
-    fetch_ctrl_t if_ctrl;           // Control -> Fetch
-    pipe_ctrl_t  pipe_ctrl;         // Control -> Pipe
-    fetch_t      id_fetch;          // instruction in ID: valid, pc; arrives from imem
-    insn_t       id_insn;
-    decoded_t    id_dec;            // instruction in ID taken apart
-    word_t       id_rf_rs1_data;    // register file values; id_rs1_data has forwarding
-    word_t       id_rf_rs2_data;
-    word_t       id_rs1_data;
-    word_t       id_rs2_data;
-    id_ex_t      id_ex_d;
-    id_ex_t      id_ex_q;
-    fetch_t      ex_fetch;          // instruction in EX: valid, pc
-    insn_t       ex_insn;
-    decoded_t    ex_dec;            // instruction in EX taken apart
-    word_t       ex_rs1_data;
-    word_t       ex_rs2_data;
-    word_t       ex_alu_result;     // also the load/store address rs1 + imm
-    branch_t     ex_branch;
-    word_t       ex_link;           // pc + 4 for JAL, JALR
-    logic        ex_lsu_misaligned;
-    lsu_mem_t    ex_lsu_mem;        // memory access, for retire
+    // ID
+    fetch_t       id_fetch;         // instruction in ID: valid, pc; arrives from imem
+    insn_t        id_insn;
+    decoded_t     id_dec;           // instruction in ID taken apart
+    word_t        id_rf_rs1_data;   // register file values; id_rs1_data has forwarding
+    word_t        id_rf_rs2_data;
+    word_t        id_rs1_data;
+    word_t        id_rs2_data;
+    id_ex_t       id_ex_d;
+    id_ex_t       id_ex_q;
+
+    // EX
+    fetch_t       ex_fetch;         // instruction in EX: valid, pc
+    insn_t        ex_insn;
+    decoded_t     ex_dec;           // instruction in EX taken apart
+    word_t        ex_rs1_data;
+    word_t        ex_rs2_data;
+    word_t        ex_alu_result;    // also the load/store address rs1 + imm
+    branch_t      ex_branch;        // taken, target, misaligned, from Mig2Branch
+    word_t        ex_link;          // pc + 4 for JAL, JALR
+    logic         ex_lsu_misaligned;
+    lsu_mem_t     ex_lsu_mem;       // memory access, for retire
     byte_offset_t ex_load_offset;   // byte of the load address in the word
-    word_t       ex_csr_rdata;      // old value of the CSR of a CSR instruction
-    logic        ex_csr_illegal;
-    word_t       ex_muldiv_result;  // product, quotient or remainder of an M instruction
-    logic        ex_muldiv_stall;
-    logic        ex_done;           // instruction in EX completes: CSR write and minstret
+    word_t        ex_csr_rdata;     // old value of the CSR of a CSR instruction
+    logic         ex_csr_illegal;
+    word_t        ex_muldiv_result; // product, quotient or remainder of an M instruction
+    logic         ex_muldiv_stall;
+    logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
-    trap_t       ex_trap;           // instruction in EX faults: retires as a trap
-    csr_t        csr;               // mtvec, mepc: where traps and MRET go (no stage)
-    logic        ex_rd_write;       // instruction in EX will write rd
-    reg_id_t     ex_rd;             // rd written by the instruction in EX, 0 when none
-    word_t       ex_rd_data;
-    retire_t     ex_retire;         // RVFI entry built in EX, completed in MEM/WB
-    ex_mem_t     ex_mem_d;
-    ex_mem_t     ex_mem_q;
+    trap_t        ex_trap;          // instruction in EX faults: retires as a trap
+    logic         ex_rd_write;      // instruction in EX will write rd (not x0)
+    reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
+    word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
+    retire_t      ex_retire;        // RVFI entry built in EX, completed in MEM/WB
+    ex_mem_t      ex_mem_d;
+    ex_mem_t      ex_mem_q;
+
+    // MEM/WB
     // valid, order and mem_rdata of mem_ret are not used: MEM/WB fills them.
     /* verilator lint_off UNUSEDSIGNAL */
-    retire_t     mem_ret;           // instruction in MEM/WB: its entry from EX
+    retire_t      mem_ret;          // instruction in MEM/WB: its entry from EX
     /* verilator lint_on UNUSEDSIGNAL */
-    word_t       mem_load_data;
-    reg_id_t     mem_rd;            // rd written in MEM/WB, 0 when none
-    logic        mem_rd_write;
-    word_t       mem_rd_data;
-    iaddr_t      halt_pc;
-    word_t       dbg_reg_rdata;
-    logic [63:0] retire_order;      // number of instructions retired so far
+    word_t        mem_load_data;
+    reg_id_t      mem_rd;           // rd written in MEM/WB, 0 when none
+    logic         mem_rd_write;
+    word_t        mem_rd_data;      // rd value written in MEM/WB: load data or EX's value
+    logic [63:0]  retire_order;     // number of instructions retired so far
+
+    // Debug
+    iaddr_t       halt_pc;          // address of the EBREAK that halted the core
+    word_t        dbg_reg_rdata;
 
     // IF
     Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(
-        .clk(clk), .rst_n(rst_n), .ctrl(if_ctrl), .imem_req(imem_req), .fetch(id_fetch));
+        .clk, .rst_n, .ctrl(if_ctrl), .imem_req, .fetch(id_fetch));
 
     Mig2Control u_mig2_control(
         .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex_fetch, .ex_insn, .ex_dec,
@@ -107,11 +127,11 @@ module Mig2Core import Mig2Pkg::*; #(
     Mig2Decode u_mig2_decode(.insn(id_insn), .dec(id_dec));
 
     Mig2Regs u_mig2_regs(
-        .clk(clk), .halt(halt),
+        .clk, .halt,
         .rs1(id_dec.rs1), .rs2(id_dec.rs2), .rs1_data(id_rf_rs1_data), .rs2_data(id_rf_rs2_data),
         .rd_we(mem_rd_write), .rd(mem_rd), .rd_data(mem_rd_data),
         .dbg_reg_id(dbg_req.reg_id), .dbg_reg_wr(dbg_req.reg_wr),
-        .dbg_reg_wdata(dbg_req.reg_wdata), .dbg_reg_rdata(dbg_reg_rdata));
+        .dbg_reg_wdata(dbg_req.reg_wdata), .dbg_reg_rdata);
 
     Mig2Forward u_mig2_forward(
         .rs1(id_dec.rs1), .rs2(id_dec.rs2), .rf_rs1_data(id_rf_rs1_data),
@@ -159,7 +179,7 @@ module Mig2Core import Mig2Pkg::*; #(
         .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall), .result(ex_muldiv_result));
 
     // rd value: decode tells whether rd is written and where its value comes from.
-    assign ex_rd_write = ex_done && ex_dec.rd_we;
+    assign ex_rd_write = ex_done && ex_dec.rd_we && ex_dec.rd != '0;
     assign ex_rd       = (ex_fetch.valid && ex_dec.rd_we) ? ex_dec.rd : '0;
 
     always_comb
@@ -182,8 +202,8 @@ module Mig2Core import Mig2Pkg::*; #(
     assign ex_retire.rs1_rdata = ex_dec.uses_rs1 ? ex_rs1_data : '0;
     assign ex_retire.rs2_addr  = ex_dec.uses_rs2 ? ex_dec.rs2 : '0;
     assign ex_retire.rs2_rdata = ex_dec.uses_rs2 ? ex_rs2_data : '0;
-    assign ex_retire.rd_addr   = (ex_rd_write && ex_dec.rd != '0) ? ex_dec.rd : '0;
-    assign ex_retire.rd_wdata  = (ex_rd_write && ex_dec.rd != '0) ? ex_rd_data : '0;
+    assign ex_retire.rd_addr   = ex_rd_write ? ex_dec.rd : '0;
+    assign ex_retire.rd_wdata  = ex_rd_write ? ex_rd_data : '0;
     assign ex_retire.mem_addr  = ex_lsu_mem.addr;
     assign ex_retire.mem_rmask = ex_lsu_mem.rmask;
     assign ex_retire.mem_wmask = ex_lsu_mem.wmask;
