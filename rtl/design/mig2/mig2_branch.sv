@@ -6,6 +6,7 @@
  * the spec says). branch.misaligned=1 when bit 1 of the target is set: without the
  * C extension instructions are 4-byte aligned, a taken jump there must not complete.
  * link is pc + 4, the value JAL and JALR write to rd.
+ * Mig2Core instantiates it in EX, for the instruction in EX.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -13,13 +14,14 @@
 module Mig2Branch import Mig2Pkg::*, RiscvPkg::*; (
     // Only br, funct3 and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
-    input  decoded_t                   dec,
+    input  decoded_t dec,       // the instruction taken apart
     /* verilator lint_on UNUSEDSIGNAL */
-    input  iaddr_t                     pc,        // address of the instruction
-    input  word_t                      rs1_data,
-    input  word_t                      rs2_data,
-    output branch_t                    branch,
-    output word_t                      link
+    input  iaddr_t   pc,        // address of the instruction
+    input  word_t    rs1_data,  // compared, and the base of JALR
+    input  word_t    rs2_data,  // compared
+    output branch_t  branch,    // taken, target, misaligned: to Mig2Control
+    output word_t    link       // pc + 4 as a byte address: rd of JAL and JALR, next pc of
+                                // the retire trace
 );
     logic  eq;
     logic  lt;      // rs1 < rs2 signed
