@@ -91,6 +91,7 @@ module Mig2Core import Mig2Pkg::*; #(
     logic         ex_rd_write;      // instruction in EX will write rd (not x0)
     reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
+    word_t        ex_next_pc;       // byte address of the next instruction, for retire
     retire_t      ex_retire;        // RVFI entry built in EX, completed in MEM/WB
     ex_mem_t      ex_mem_d;
     ex_mem_t      ex_mem_q;
@@ -138,18 +139,17 @@ module Mig2Core import Mig2Pkg::*; #(
         .rf_rs2_data(id_rf_rs2_data), .ex_rd, .ex_rd_data, .mem_rd, .mem_rd_data,
         .rs1_data(id_rs1_data), .rs2_data(id_rs2_data));
 
-    assign id_ex_d.valid    = id_fetch.valid;
-    assign id_ex_d.pc       = id_fetch.pc;
-    assign id_ex_d.insn     = id_insn;
-    assign id_ex_d.dec      = id_dec;
-    assign id_ex_d.rs1_data = id_rs1_data;
-    assign id_ex_d.rs2_data = id_rs2_data;
+    assign id_ex_d = '{valid:    id_fetch.valid,
+                       pc:       id_fetch.pc,
+                       insn:     id_insn,
+                       dec:      id_dec,
+                       rs1_data: id_rs1_data,
+                       rs2_data: id_rs2_data};
 
     Mig2Pipe u_mig2_pipe(.clk, .rst_n, .ctrl(pipe_ctrl), .id_ex_d, .id_ex_q, .ex_mem_d, .ex_mem_q);
 
     // EX
-    assign ex_fetch.valid = id_ex_q.valid;
-    assign ex_fetch.pc    = id_ex_q.pc;
+    assign ex_fetch       = '{valid: id_ex_q.valid, pc: id_ex_q.pc};
     assign ex_insn        = id_ex_q.insn;
     assign ex_dec         = id_ex_q.dec;
     assign ex_rs1_data    = id_ex_q.rs1_data;
@@ -192,29 +192,30 @@ module Mig2Core import Mig2Pkg::*; #(
 
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not
     // use are 0. MEM/WB adds order, and the load data.
-    assign ex_retire.valid     = ex_done || ex_trap.valid;
-    assign ex_retire.order     = '0;
-    assign ex_retire.insn      = ex_insn;
-    assign ex_retire.trap      = ex_trap.valid;
-    assign ex_retire.pc_rdata  = {ex_fetch.pc, {IADDR_START{1'b0}}};
-    assign ex_retire.pc_wdata  = if_ctrl.redirect ? {if_ctrl.target, {IADDR_START{1'b0}}} : ex_link;
-    assign ex_retire.rs1_addr  = ex_dec.uses_rs1 ? ex_dec.rs1 : '0;
-    assign ex_retire.rs1_rdata = ex_dec.uses_rs1 ? ex_rs1_data : '0;
-    assign ex_retire.rs2_addr  = ex_dec.uses_rs2 ? ex_dec.rs2 : '0;
-    assign ex_retire.rs2_rdata = ex_dec.uses_rs2 ? ex_rs2_data : '0;
-    assign ex_retire.rd_addr   = ex_rd_write ? ex_dec.rd : '0;
-    assign ex_retire.rd_wdata  = ex_rd_write ? ex_rd_data : '0;
-    assign ex_retire.mem_addr  = ex_lsu_mem.addr;
-    assign ex_retire.mem_rmask = ex_lsu_mem.rmask;
-    assign ex_retire.mem_wmask = ex_lsu_mem.wmask;
-    assign ex_retire.mem_rdata = '0;
-    assign ex_retire.mem_wdata = ex_lsu_mem.wdata;
+    assign ex_next_pc = if_ctrl.redirect ? {if_ctrl.target, {IADDR_START{1'b0}}} : ex_link;
+    assign ex_retire  = '{valid:     ex_done || ex_trap.valid,
+                          order:     '0,
+                          insn:      ex_insn,
+                          trap:      ex_trap.valid,
+                          pc_rdata:  {ex_fetch.pc, {IADDR_START{1'b0}}},
+                          pc_wdata:  ex_next_pc,
+                          rs1_addr:  ex_dec.uses_rs1 ? ex_dec.rs1 : '0,
+                          rs1_rdata: ex_dec.uses_rs1 ? ex_rs1_data : '0,
+                          rs2_addr:  ex_dec.uses_rs2 ? ex_dec.rs2 : '0,
+                          rs2_rdata: ex_dec.uses_rs2 ? ex_rs2_data : '0,
+                          rd_addr:   ex_rd_write ? ex_dec.rd : '0,
+                          rd_wdata:  ex_rd_write ? ex_rd_data : '0,
+                          mem_addr:  ex_lsu_mem.addr,
+                          mem_rmask: ex_lsu_mem.rmask,
+                          mem_wmask: ex_lsu_mem.wmask,
+                          mem_rdata: '0,
+                          mem_wdata: ex_lsu_mem.wdata};
 
-    assign ex_mem_d.valid  = ex_retire.valid;
-    assign ex_mem_d.ret    = ex_retire;
-    assign ex_mem_d.load   = ex_dec.rd_src == RD_LOAD;
-    assign ex_mem_d.funct3 = ex_dec.funct3;
-    assign ex_mem_d.offset = ex_load_offset;
+    assign ex_mem_d = '{valid:  ex_retire.valid,
+                        ret:    ex_retire,
+                        load:   ex_dec.rd_src == RD_LOAD,
+                        funct3: ex_dec.funct3,
+                        offset: ex_load_offset};
 
     // MEM/WB
     assign mem_ret = ex_mem_q.ret;

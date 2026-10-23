@@ -58,6 +58,9 @@ This file has the rules that are not in README.md.
   Symmetric terms may stay in one statement:
   `(uses_rs1 && rs1 == ex_rd) || (uses_rs2 && rs2 == ex_rd)`.
   Example: `assign id_load_use = ex_load && id_reads_ex_rd;` (Mig2Control).
+- A struct built from several values is written as one named assignment pattern,
+  `assign id_ex_d = '{valid: …, pc: …, …};`, one field per line, without `default:`: the
+  compiler checks that every field is set. A long value gets a name of its own first.
 - Numbers: in comparisons a plain number is fine (`count == 0`, `sel == 2`); in
   assignments and fills use `'0`/`'1` or a sized literal (`1'b0`, `4'd3`), never a
   plain number, because there a width mismatch changes the value silently.
