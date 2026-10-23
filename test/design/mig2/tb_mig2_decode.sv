@@ -34,7 +34,7 @@ module TbMig2Decode;
     integer      k;
     integer      addr;
     logic [31:0] e [FIELDS];  // expected: kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
-    logic [4:0]  exp_kind;    // value of kind_e, compared with KIND_*
+    kind_e       exp_kind;    // kind expected, from the case file
     logic [31:0] tested;      // tested[k]: kind k had a case
 
     SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_cases(
@@ -55,7 +55,7 @@ module TbMig2Decode;
     endfunction
 
     // Kinds that have funct3, and kinds that have an immediate.
-    function automatic logic has_funct3(input logic [4:0] kind);
+    function automatic logic has_funct3(input kind_e kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP, KIND_FENCE,
             KIND_CSR, KIND_MULDIV:                                                         return 1'b1;
@@ -63,7 +63,7 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    function automatic logic has_imm(input logic [4:0] kind);
+    function automatic logic has_imm(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM,
             KIND_CSR:                                                                                  return 1'b1;
@@ -71,8 +71,8 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    // Source of rd expected for a kind that writes rd, as a value of rd_src_e.
-    function automatic logic [2:0] rd_src_of(input logic [4:0] kind);
+    // Source of rd expected for a kind that writes rd.
+    function automatic rd_src_e rd_src_of(input kind_e kind);
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
             KIND_LOAD:           return RD_LOAD;
@@ -83,14 +83,14 @@ module TbMig2Decode;
     endfunction
 
     // Controls expected for a kind: a model of its own, not a copy of Mig2Decode's table.
-    function automatic logic uses_alu(input logic [4:0] kind);
+    function automatic logic uses_alu(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP: return 1'b1;
             default:                                                         return 1'b0;
         endcase
     endfunction
 
-    function automatic alu_ctrl_t alu_of(input logic [4:0] kind, input logic alt);
+    function automatic alu_ctrl_t alu_of(input kind_e kind, input logic alt);
         case (kind)
             KIND_LUI:    return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0};
             KIND_AUIPC:  return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0};
@@ -100,7 +100,7 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    function automatic br_ctrl_t br_of(input logic [4:0] kind);
+    function automatic br_ctrl_t br_of(input kind_e kind);
         case (kind)
             KIND_JAL:    return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b0};
             KIND_JALR:   return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b1};
@@ -109,18 +109,18 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    function automatic mem_ctrl_t mem_of(input logic [4:0] kind);
+    function automatic mem_ctrl_t mem_of(input kind_e kind);
         return '{read: kind == KIND_LOAD, write: kind == KIND_STORE};
     endfunction
 
-    function automatic sys_ctrl_t sys_of(input logic [4:0] kind);
+    function automatic sys_ctrl_t sys_of(input kind_e kind);
         return '{csr: kind == KIND_CSR, mret: kind == KIND_MRET, ecall: kind == KIND_ECALL,
                  ebreak: kind == KIND_EBREAK, illegal: kind == KIND_ILLEGAL};
     endfunction
 
     // M controls expected: from the bits of funct3 (MUL 000, MULH 001, MULHSU 010,
     // MULHU 011, DIV 100, DIVU 101, REM 110, REMU 111).
-    function automatic muldiv_ctrl_t muldiv_of(input logic [4:0] kind, input logic [2:0] f3);
+    function automatic muldiv_ctrl_t muldiv_of(input kind_e kind, input logic [2:0] f3);
         if (kind != KIND_MULDIV)
             return '0;
         return '{en: 1'b1, div: f3[2], rem: f3[2] && f3[1], mul_lo: f3 == 3'b000,
@@ -147,7 +147,7 @@ module TbMig2Decode;
             insn = word(addr);
             for (k = 0; k < FIELDS; k = k + 1)
                 e[k] = word(addr + 4 + 4 * k);
-            exp_kind = e[0][4:0];
+            exp_kind = kind_e'(e[0][4:0]);
             #1;
             check(c, insn, "kind", {27'b0, dec.kind}, e[0]);
             check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind)));
