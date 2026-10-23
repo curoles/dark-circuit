@@ -14,7 +14,6 @@ package Mig2Pkg;
 
     // ISA facts.
     localparam WIDTH          = 32;                 // register and data width (RISC-V XLEN)
-    localparam INSN_WIDTH     = 32;                 // instruction width, 32 also for RV64
     localparam STRB_WIDTH     = WIDTH / 8;          // bytes in data word
     localparam REG_ID_WIDTH   = 5;                  // 32 registers x0..x31
     localparam IADDR_START    = 2;                  // instructions are 4-byte aligned (1 with C extension)
@@ -30,7 +29,7 @@ package Mig2Pkg;
     localparam mig2_cfg_t MIG2_CFG = Mig2ConfigPkg::MIG2_CFG;
 
     typedef logic [WIDTH-1:0]           word_t;        // register value, data word
-    typedef logic [INSN_WIDTH-1:0]      insn_t;        // instruction
+    typedef RiscvPkg::riscv_insn_t      insn_t;        // instruction (RiscvPkg)
     typedef logic [WIDTH-1:IADDR_START] iaddr_t;       // instruction address, word address
     typedef logic [WIDTH-1:DADDR_START] daddr_t;       // data address, word address
     typedef logic [STRB_WIDTH-1:0]      strb_t;        // byte enables of data word

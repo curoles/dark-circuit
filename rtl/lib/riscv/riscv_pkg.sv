@@ -3,6 +3,8 @@
  *
  * Assign an instruction to insn_fmt_t.word and read the fields of a format,
  * for example f.b.imm_12; immediate bits keep the spec names (imm_10_5 is imm[10:5]).
+ * imm_i_of, imm_s_of, imm_b_of, imm_u_of, imm_j_of give the immediate of an instruction,
+ * sign-extended to 32 bits; for RV64 sign-extend it to 64: imm = sext64(imm_i_of(insn)).
  * F3_* are the funct3 values that select the operation inside an opcode,
  * CAUSE_* the exception codes of mcause (privileged spec).
  * Encodings of instructions are in RiscvInstrPkg, CSR addresses in RiscvCsrPkg
@@ -129,9 +131,11 @@ package RiscvPkg;
         logic [6:0] opcode;
     } insn_j_t;
 
+    typedef logic [31:0] riscv_insn_t;      // instruction word, 32 bits also in RV64
+
     // One instruction seen in every format: assign word, read the fields of a format.
     typedef union packed {
-        logic [31:0] word;
+        riscv_insn_t word;
         insn_r_t     r;
         insn_i_t     i;
         insn_s_t     s;
@@ -139,5 +143,44 @@ package RiscvPkg;
         insn_u_t     u;
         insn_j_t     j;
     } insn_fmt_t;
+
+    // Immediates of the instruction formats, sign-extended to 32 bits; insn is the
+    // instruction word. Every immediate is a 32-bit value sign-extended to XLEN, also in
+    // RV64:
+    // RV64 imm = sext64(imm_i_of(insn));
+    function automatic logic [31:0] imm_i_of(riscv_insn_t insn);
+        insn_fmt_t f;
+        f.word = insn;
+        return {{20{f.i.imm_11_0[11]}}, f.i.imm_11_0};
+    endfunction
+
+    function automatic logic [31:0] imm_s_of(riscv_insn_t insn);
+        insn_fmt_t f;
+        f.word = insn;
+        return {{20{f.s.imm_11_5[6]}}, f.s.imm_11_5, f.s.imm_4_0};
+    endfunction
+
+    function automatic logic [31:0] imm_b_of(riscv_insn_t insn);
+        insn_fmt_t f;
+        f.word = insn;
+        return {{19{f.b.imm_12}}, f.b.imm_12, f.b.imm_11, f.b.imm_10_5, f.b.imm_4_1, 1'b0};
+    endfunction
+
+    function automatic logic [31:0] imm_u_of(riscv_insn_t insn);
+        insn_fmt_t f;
+        f.word = insn;
+        return {f.u.imm_31_12, 12'b0};
+    endfunction
+
+    function automatic logic [31:0] imm_j_of(riscv_insn_t insn);
+        insn_fmt_t f;
+        f.word = insn;
+        return {{11{f.j.imm_20}}, f.j.imm_20, f.j.imm_19_12, f.j.imm_11, f.j.imm_10_1, 1'b0};
+    endfunction
+
+    // A 32-bit value sign-extended to 64 bits: an immediate for RV64 (XLEN = 64).
+    function automatic logic [63:0] sext64(logic [31:0] v);
+        return {{32{v[31]}}, v};
+    endfunction
 
 endpackage

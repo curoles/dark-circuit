@@ -33,7 +33,7 @@ module Mig2Fetch import Mig2Pkg::*; #(
     assign jump    = rst || ctrl.redirect;
     assign jump_pc = rst ? RST_PC : ctrl.target;
 
-    PrgCounter #(.ADDR_WIDTH(WIDTH), .INSN_SIZE(INSN_WIDTH / 8)) u_prg_counter(
+    PrgCounter #(.ADDR_WIDTH(WIDTH), .INSN_SIZE($bits(insn_t) / 8)) u_prg_counter(
         .clk, .en(advance), .jump, .jump_addr(jump_pc), .pc);
 
     assign imem_req.en   = advance;

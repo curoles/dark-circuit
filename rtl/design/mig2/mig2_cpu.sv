@@ -40,7 +40,7 @@ module Mig2Cpu import Mig2Pkg::*; #(
         .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
 
     // Instruction memory, read only.
-    SimROM #(.DATA_SIZE(INSN_WIDTH / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_imem(
+    SimROM #(.DATA_SIZE($bits(insn_t) / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_imem(
         .clk(clk),
         .en(imem_req.en), .addr(imem_req.addr[MEM_ADDR_WIDTH-1:IADDR_START]),
         .data(imem_rsp.data));
