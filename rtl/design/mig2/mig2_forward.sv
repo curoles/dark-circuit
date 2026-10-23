@@ -9,6 +9,8 @@
  * no data yet: Mig2Control holds the instruction in ID for that cycle (load-use).
  * The values go into the ID/EX register, so EX and the retire trace see them.
  *
+ * Mig2Core instantiates it in ID, after the register file read (Mig2Regs).
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */

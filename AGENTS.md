@@ -43,6 +43,21 @@ This file has the rules that are not in README.md.
   it count (valid, a fault, a flush) and then qualified, the first one is
   `<name>_raw` and the qualified one gets the plain name; then every use shows whether
   the condition is already in it.
+- Long expressions: a statement that combines more than about three conditions, or that
+  needs a comment to be read, is split into named signals, each saying what holds, with
+  the reason in a comment above the group:
+  1. a sub-expression used in several places becomes one signal;
+  2. a signal that chooses between two cases (a mode, valid) splits the expression
+     (Shannon decomposition): write the expression with that signal 1 and with it 0,
+     each as a signal, and combine them with a ternary, `out = mode ? out_1 : out_0`;
+  3. related conditions are grouped by meaning, a few per signal, as a balanced tree,
+     not a long chain (synthesis maps the structure as written);
+  4. the result is a sum of products, `(a && b) || (c && d)`, simplified (De Morgan) so
+     that `!` stands on single signals, not on groups, and parentheses do not nest.
+  A name must say more than its expression: no copies (`x = y`), no name per operator.
+  Symmetric terms may stay in one statement:
+  `(uses_rs1 && rs1 == ex_rd) || (uses_rs2 && rs2 == ex_rd)`.
+  Example: `assign id_load_use = ex_load && id_reads_ex_rd;` (Mig2Control).
 - Numbers: in comparisons a plain number is fine (`count == 0`, `sel == 2`); in
   assignments and fills use `'0`/`'1` or a sized literal (`1'b0`, `4'd3`), never a
   plain number, because there a width mismatch changes the value silently.

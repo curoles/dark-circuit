@@ -29,25 +29,22 @@ module Mig2Cpu import Mig2Pkg::*; #(
     /* verilator lint_off UNUSEDSIGNAL */
     imem_req_t imem_req;
     dmem_req_t dmem_req;
-    wire       dmem_rd_valid;
+    logic      dmem_rd_valid;
     /* verilator lint_on UNUSEDSIGNAL */
 
     Mig2Core #(.CFG(CFG)) u_mig2_core(
-        .clk(clk), .rst_n(rst_n),
-        .imem_req(imem_req), .imem_rsp(imem_rsp),
-        .dmem_req(dmem_req), .dmem_rsp(dmem_rsp),
-        .halt(halt), .retire(retire),
-        .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
+        .clk, .rst_n, .imem_req, .imem_rsp, .dmem_req, .dmem_rsp, .halt, .retire, .dbg_req,
+        .dbg_rsp);
 
     // Instruction memory, read only.
     SimROM #(.DATA_SIZE($bits(insn_t) / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_imem(
-        .clk(clk),
+        .clk,
         .en(imem_req.en), .addr(imem_req.addr[MEM_ADDR_WIDTH-1:IADDR_START]),
         .data(imem_rsp.data));
 
     // Data memory.
     SimRAM #(.DATA_SIZE(STRB_WIDTH), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_dmem(
-        .clk(clk),
+        .clk,
         .rd_en(dmem_req.rd_en), .rd_addr(dmem_req.addr[MEM_ADDR_WIDTH-1:DADDR_START]),
         .wr_en(dmem_req.wr_en), .wr_addr(dmem_req.addr[MEM_ADDR_WIDTH-1:DADDR_START]),
         .wr_data(dmem_req.wr_data), .wr_strb(dmem_req.wr_strb),
