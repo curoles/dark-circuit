@@ -53,24 +53,16 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     logic [11:0] addr;          // CSR address (immediate of the CSR instruction)
     assign addr = dec.imm[11:0];
 
-    logic [63:0] mcycle;
-    logic [63:0] minstret;
-    word_t       mscratch;
-    logic        mstatus_mie;   // machine interrupt enable
-    logic        mstatus_mpie;  // MIE before the trap
-    iaddr_t      mtvec;
-    iaddr_t      mepc;
-    word_t       mcause;
-    word_t       mtval;
-    word_t       mstatus;
-    word_t       mcycle_lo;
-    word_t       mcycle_hi;
-    word_t       minstret_lo;
-    word_t       minstret_hi;
-    assign mcycle_lo   = mcycle[31:0];
-    assign mcycle_hi   = mcycle[63:32];
-    assign minstret_lo = minstret[31:0];
-    assign minstret_hi = minstret[63:32];
+    dword_t mcycle;         // also cycle and time
+    dword_t minstret;       // also instret
+    word_t  mscratch;
+    logic   mstatus_mie;    // machine interrupt enable
+    logic   mstatus_mpie;   // MIE before the trap
+    iaddr_t mtvec;
+    iaddr_t mepc;
+    word_t  mcause;
+    word_t  mtval;
+    word_t  mstatus;
 
     logic  imm_form;    // CSRRWI, CSRRSI, CSRRCI
     logic  writes;      // the instruction writes the CSR
@@ -95,10 +87,10 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     always_comb begin
         exists = 1'b1;
         case (addr)
-            CSR_CYCLE, CSR_TIME, CSR_MCYCLE:        old = mcycle_lo;
-            CSR_CYCLEH, CSR_TIMEH, CSR_MCYCLEH:     old = mcycle_hi;
-            CSR_INSTRET, CSR_MINSTRET:              old = minstret_lo;
-            CSR_INSTRETH, CSR_MINSTRETH:            old = minstret_hi;
+            CSR_CYCLE, CSR_TIME, CSR_MCYCLE:        old = mcycle.lo;
+            CSR_CYCLEH, CSR_TIMEH, CSR_MCYCLEH:     old = mcycle.hi;
+            CSR_INSTRET, CSR_MINSTRET:              old = minstret.lo;
+            CSR_INSTRETH, CSR_MINSTRETH:            old = minstret.hi;
             CSR_MSCRATCH:                           old = mscratch;
             CSR_MSTATUS:                            old = mstatus;
             CSR_MTVEC:                              old = {mtvec, {IADDR_START{1'b0}}};
@@ -140,14 +132,14 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     // Counters.
     always_ff @(posedge clk)
         if (!rst_n)                         mcycle <= '0;
-        else if (we && addr == CSR_MCYCLE)  mcycle <= {mcycle_hi, new_value};
-        else if (we && addr == CSR_MCYCLEH) mcycle <= {new_value, mcycle_lo};
+        else if (we && addr == CSR_MCYCLE)  mcycle.lo <= new_value;
+        else if (we && addr == CSR_MCYCLEH) mcycle.hi <= new_value;
         else                                mcycle <= mcycle + 1'b1;
 
     always_ff @(posedge clk)
         if (!rst_n)                           minstret <= '0;
-        else if (we && addr == CSR_MINSTRET)  minstret <= {minstret_hi, new_value};
-        else if (we && addr == CSR_MINSTRETH) minstret <= {new_value, minstret_lo};
+        else if (we && addr == CSR_MINSTRET)  minstret.lo <= new_value;
+        else if (we && addr == CSR_MINSTRETH) minstret.hi <= new_value;
         else if (done)                        minstret <= minstret + 1'b1;
 
     // mscratch.

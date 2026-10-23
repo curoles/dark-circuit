@@ -36,6 +36,12 @@ package Mig2Pkg;
     typedef logic [DADDR_START-1:0]     byte_offset_t; // byte in a data word
     typedef logic [REG_ID_WIDTH-1:0]    reg_id_t;      // register number x0..x31
 
+    // Two words, hi and lo: a 64-bit value on RV32 (a product, a 64-bit counter).
+    typedef struct packed {
+        word_t hi;      // upper word
+        word_t lo;      // lower word
+    } dword_t;
+
     // Instructions with fixed encoding.
     localparam insn_t INSN_EBREAK = 32'h0010_0073;
 

@@ -2,8 +2,13 @@
  *
  * word is the dmem word of the load; offset is the byte of the address in the word.
  * load_data is the bytes at offset, sign- or zero-extended by funct3 (LB, LH, LW, LBU,
- * LHU; RiscvPkg F3_*). Combinational; used where dmem data arrives (2nd cycle of a load
- * in EX now, MEM later).
+ * LHU; RiscvPkg F3_*). Combinational.
+ *
+ * Mig2Core instantiates it in MEM/WB, where dmem's word arrives one clock after the read
+ * request that Mig2Lsu sent in EX. funct3 and offset come from the EX/MEM register: EX
+ * puts them there with the load. load_data is the load's rd value: the register file
+ * writes it at the end of MEM/WB, Mig2Forward forwards it to the instruction in ID (a
+ * load right before it waits one cycle, see Mig2Control), and the retire trace shows it.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
