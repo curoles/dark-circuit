@@ -1,4 +1,5 @@
-/* Constants and port types of Mig2 RISC-V CPU.
+/* Constants and types of Mig2: ports of Mig2Core, the signals between its parts, the
+ * decode controls and the pipeline registers.
  *
  * Port groups of Mig2Core are packed structs, one struct per direction:
  * <group>_req_t goes from the requester, <group>_rsp_t comes back.
@@ -16,7 +17,8 @@ package Mig2Pkg;
     localparam WIDTH          = 32;                 // register and data width (RISC-V XLEN)
     localparam STRB_WIDTH     = WIDTH / 8;          // bytes in data word
     localparam REG_ID_WIDTH   = 5;                  // 32 registers x0..x31
-    localparam IADDR_START    = 2;                  // instructions are 4-byte aligned (1 with C extension)
+    localparam IADDR_START    = 2;                  // instructions are 4-byte aligned
+                                                    // (2-byte with the C extension)
     localparam DADDR_START    = $clog2(STRB_WIDTH); // data words are STRB_WIDTH-byte aligned
 
     // Constants below are for all modules and testbenches; a design with one
@@ -46,6 +48,8 @@ package Mig2Pkg;
     localparam insn_t INSN_EBREAK = 32'h0010_0073;
 
     /* verilator lint_on UNUSEDPARAM */
+
+    // Ports of Mig2Core
 
     // Instruction fetch: rsp.data is the word at req.addr 1 clock after req.en=1.
     typedef struct packed {
@@ -98,20 +102,21 @@ package Mig2Pkg;
 
     // Debug, used while the core is halted.
     typedef struct packed {
-        reg_id_t   reg_id;    // register to read or write
-        logic      reg_wr;    // 1: write reg_wdata into register reg_id on rising edge
-        word_t     reg_wdata;
-        logic      resume;    // 1 for one cycle: continue at halt_pc + 1 (next instruction)
-        logic      ebreak_halt; // 1: EBREAK halts (dcsr.ebreakm of the debug spec), 0: it traps
+        reg_id_t reg_id;        // register to read or write
+        logic    reg_wr;        // 1: write reg_wdata into register reg_id on rising edge
+        word_t   reg_wdata;
+        logic    resume;        // 1 for one cycle: continue at halt_pc + 1 (next instruction)
+        logic    ebreak_halt;   // 1: EBREAK halts (dcsr.ebreakm of the debug spec), 0: traps
     } dbg_req_t;
 
     typedef struct packed {
-        iaddr_t    halt_pc;   // address of the instruction that stopped the core
-        word_t     reg_rdata; // value of register reg_id, combinational
+        iaddr_t  halt_pc;       // address of the instruction that stopped the core
+        word_t   reg_rdata;     // value of register reg_id, combinational
     } dbg_rsp_t;
 
-    // Fetch -> next stage: the instruction that arrives from imem in this cycle
-    // (ID).
+    // Between the parts
+
+    // IF -> ID: the instruction that arrives from imem in this cycle.
     typedef struct packed {
         logic   valid;
         iaddr_t pc;
@@ -134,15 +139,15 @@ package Mig2Pkg;
 
     // Control -> Csr: trap of the instruction in EX (machine mode).
     typedef struct packed {
-        logic       valid;
+        logic                 valid;
         RiscvPkg::excp_code_t cause;    // exception code for mcause, RiscvPkg CAUSE_*
-        word_t      tval;       // value for mtval: address or instruction, 0 when none
+        word_t                tval;     // value for mtval: address or instruction, 0 when none
     } trap_t;
 
     // Csr -> Control: where traps and MRET go.
     typedef struct packed {
-        iaddr_t     mtvec;      // trap handler
-        iaddr_t     mepc;       // MRET target
+        iaddr_t mtvec;      // trap handler
+        iaddr_t mepc;       // MRET target
     } csr_t;
 
     // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none;
@@ -154,9 +159,11 @@ package Mig2Pkg;
         word_t  wdata;
     } lsu_mem_t;
 
+    // Decode
+
     // Kind of instruction, from exact match with the RISC-V encodings.
     typedef enum logic [4:0] {
-        KIND_ILLEGAL,   // any word that is not an RV32I instruction
+        KIND_ILLEGAL,   // any word that is not an instruction of Mig2
         KIND_LUI,
         KIND_AUIPC,
         KIND_JAL,
@@ -230,49 +237,52 @@ package Mig2Pkg;
 
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
-        kind_e      kind;      // for testbenches and traces; parts read the controls
-        reg_id_t    rd;
-        reg_id_t    rs1;
-        reg_id_t    rs2;
-        logic       rd_we;     // writes rd (writes to x0 are dropped by the register file)
-        rd_src_e    rd_src;    // value written to rd
-        logic       uses_rs1;  // reads rs1, for the interlock (Mig2Control)
-        logic       uses_rs2;
-        alu_ctrl_t  alu;       // Mig2Alu
-        br_ctrl_t   br;        // Mig2Branch
-        mem_ctrl_t  mem;       // Mig2Lsu
-        sys_ctrl_t  sys;       // Mig2Control, Mig2Csr
-        muldiv_ctrl_t muldiv;  // Mig2MulDiv
-        RiscvPkg::funct3_t funct3;  // operation within the part: ALU op, branch compare, load/store size
-        logic       alt;       // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
-        word_t      imm;       // immediate of the instruction format, sign-extended
+        kind_e             kind;     // for testbenches and traces; parts read the controls
+        reg_id_t           rd;
+        reg_id_t           rs1;
+        reg_id_t           rs2;
+        logic              rd_we;    // writes rd (writes to x0 are dropped by the register file)
+        rd_src_e           rd_src;   // value written to rd
+        logic              uses_rs1; // reads rs1, for the interlock (Mig2Control)
+        logic              uses_rs2;
+        alu_ctrl_t         alu;      // Mig2Alu
+        br_ctrl_t          br;       // Mig2Branch
+        mem_ctrl_t         mem;      // Mig2Lsu
+        sys_ctrl_t         sys;      // Mig2Control, Mig2Csr
+        muldiv_ctrl_t      muldiv;   // Mig2MulDiv
+        RiscvPkg::funct3_t funct3;   // operation within a part: ALU op, branch compare,
+                                     // load/store size
+        logic              alt;      // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
+        word_t             imm;      // immediate of the instruction format, sign-extended
     } decoded_t;
+
+    // Pipeline registers
 
     // ID -> EX: the instruction taken apart with its register values (Mig2Pipe).
     typedef struct packed {
-        logic       valid;
-        iaddr_t     pc;
-        insn_t      insn;
-        decoded_t   dec;
-        word_t      rs1_data;   // read in ID; no older instruction writes rs1 (interlock)
-        word_t      rs2_data;
+        logic     valid;
+        iaddr_t   pc;
+        insn_t    insn;
+        decoded_t dec;
+        word_t    rs1_data;     // read in ID; no older instruction writes rs1 (interlock)
+        word_t    rs2_data;
     } id_ex_t;
 
     // EX -> MEM/WB: the instruction after EX (Mig2Pipe). No stall or flush: an
     // instruction that leaves EX always completes in MEM/WB.
     typedef struct packed {
-        logic                   valid;   // completes or traps
-        retire_t                ret;     // RVFI entry built in EX; MEM/WB fills valid,
-                                         // order, and rd_wdata and mem_rdata of loads
-        logic                   load;    // rd value comes from dmem
-        RiscvPkg::funct3_t      funct3;  // load size and sign
-        byte_offset_t           offset;  // load: byte in the word
+        logic              valid;   // completes or traps
+        retire_t           ret;     // RVFI entry built in EX; MEM/WB fills valid,
+                                    // order, and rd_wdata and mem_rdata of loads
+        logic              load;    // rd value comes from dmem
+        RiscvPkg::funct3_t funct3;  // load size and sign
+        byte_offset_t      offset;  // load: byte in the word
     } ex_mem_t;
 
     // Control -> Pipe, per boundary: keep the instruction (stall) or put a bubble (flush).
     typedef struct packed {
-        logic       ex_stall;   // EX keeps its instruction (division)
-        logic       ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
+        logic   ex_stall;   // EX keeps its instruction (division)
+        logic   ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
     } pipe_ctrl_t;
 
 endpackage
