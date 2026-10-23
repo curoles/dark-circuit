@@ -15,7 +15,7 @@ package Alu1Pkg;
     localparam NR_COMMANDS = 8 + 4;
     /* verilator lint_on UNUSEDPARAM */
 
-    typedef enum bit [CMD_WIDTH-1:0] {
+    typedef enum logic [CMD_WIDTH-1:0] {
         OP_TRANSFER   = 0,   // in1
         OP_INC        = 1,   // in1 + 1
         OP_ADD        = 2,   // in1 + in2
@@ -28,6 +28,6 @@ package Alu1Pkg;
         OP_OR         = 9,   // in1 | in2
         OP_XOR        = 10,  // in1 ^ in2
         OP_NOT        = 11   // ~in1
-    } Op;
+    } op_e;
 
 endpackage

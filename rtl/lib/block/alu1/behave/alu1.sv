@@ -1,6 +1,6 @@
 /* ALU with arithmetic and logic commands of Alu1Pkg, behavioral.
  *
- * cmd is Alu1Pkg::Op, out is the result, combinational.
+ * cmd is Alu1Pkg::op_e, out is the result, combinational.
  * co is carry out of arithmetic commands, 0 for logic commands.
  * Subtraction uses 2's complement: -in2 = ~in2 + 1, so in1 - in2 = in1 + ~in2 + 1,
  * and co of subtraction is 1 when there is no borrow (in1 >= in2).
@@ -15,7 +15,7 @@ module Alu1 #(
     parameter  WIDTH     = 64,
     localparam CMD_WIDTH = Alu1Pkg::CMD_WIDTH
 )(
-    input  wire [CMD_WIDTH-1:0] cmd,  // Alu1Pkg::Op
+    input  wire [CMD_WIDTH-1:0] cmd,  // Alu1Pkg::op_e
     input  wire [WIDTH-1:0]     in1,
     input  wire [WIDTH-1:0]     in2,
     output reg                  co,   // carry out of arithmetic; for SUB 1 means no borrow; 0 for logic

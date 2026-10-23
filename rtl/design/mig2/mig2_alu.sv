@@ -22,16 +22,16 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     input  word_t    rs2_data,
     output word_t    result     // rd value, or the load/store address
 );
-    word_t                a;
-    word_t                b;
-    logic [CMD_WIDTH-1:0] cmd;
-    word_t                sum;      // Alu1 out
-    logic                 co;       // Alu1 carry out
-    word_t                shifted;
-    logic                 lt_u;     // a < b unsigned
-    logic                 lt_s;     // a < b signed
-    logic                 a_sign;
-    logic                 b_sign;
+    word_t a;           // operand a: rs1, pc or 0
+    word_t b;           // operand b: rs2 or the immediate
+    op_e   cmd;         // Alu1 command
+    word_t sum;         // Alu1 out
+    logic  co;          // Alu1 carry out
+    word_t shifted;     // BarrelShifter out
+    logic  lt_u;        // a < b unsigned
+    logic  lt_s;        // a < b signed
+    logic  a_sign;
+    logic  b_sign;
 
     // Operands.
     always_comb
