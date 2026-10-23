@@ -10,43 +10,41 @@ set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/numeric/n
 # Files generated from cfg/mig1_config.yaml are up to date.
 dc_add_config_check(design_mig1 CONFIG ${MIG1}/cfg/mig1_config.yaml)
 
+# Mig1 runs on the main simulator only: DARK_CIRCUIT_MAIN_SIMULATOR, by default
+# Verilator when it is installed (see cmake/dark_circuit.cmake).
+if(NOT DARK_CIRCUIT_MAINSIM)
+    message(STATUS "Mig1: no main simulator, Mig1 tests are disabled")
+    return()
+endif()
+set(SIM ${DARK_CIRCUIT_MAINSIM})
+
 # Registers and ALU: unit tests of Mig1Regs and Mig1Alu, no program.
-foreach(sim IN ITEMS icarus verilator)
-    cmake_language(CALL dc_add_${sim}_test design_mig1_regs TOP TbMig1Regs TB tb_mig1_regs.sv
-                   FLISTS ${FLISTS})
-    cmake_language(CALL dc_add_${sim}_test design_mig1_alu TOP TbMig1Alu TB tb_mig1_alu.sv
-                   FLISTS ${FLISTS})
-endforeach()
+dc_add_mainsim_test(design_mig1_regs TOP TbMig1Regs TB tb_mig1_regs.sv FLISTS ${FLISTS})
+dc_add_mainsim_test(design_mig1_alu TOP TbMig1Alu TB tb_mig1_alu.sv FLISTS ${FLISTS})
 
 # Programs need the RISC-V toolchain.
 if(DARK_CIRCUIT_RISCV)
     # Mig1Cpu memories: load() of a program.
     dc_add_riscv_program(design_mig1_mem SOURCES mem.S LINK_FLAGS -T ${SW}/mig1.ld)
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_mem TOP TbMig1Mem TB tb_mig1_mem.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_mem.hex)
-    endforeach()
+    dc_add_mainsim_test(design_mig1_mem TOP TbMig1Mem TB tb_mig1_mem.sv
+                        FLISTS ${FLISTS}
+                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_mem.hex)
 
     # Decode: unit test of Mig1Decode with cases encoded by the assembler.
     dc_add_riscv_program(design_mig1_decode SOURCES decode.S ARCH rv32im LINK_FLAGS -T ${SW}/mig1.ld)
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_test design_mig1_decode TOP TbMig1Decode TB tb_mig1_decode.sv
-                       FLISTS ${FLISTS}
-                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_decode.hex)
-    endforeach()
+    dc_add_mainsim_test(design_mig1_decode TOP TbMig1Decode TB tb_mig1_decode.sv
+                        FLISTS ${FLISTS}
+                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_decode.hex)
 
-    # Programs run on TbMig1, built once per simulator.
-    foreach(sim IN ITEMS icarus verilator)
-        cmake_language(CALL dc_add_${sim}_build design_mig1_sim TOP TbMig1 TB tb_mig1.sv
-                       FLISTS ${FLISTS})
-    endforeach()
+    # Programs run on TbMig1, built once.
+    cmake_language(CALL dc_add_${SIM}_build design_mig1_sim TOP TbMig1 TB tb_mig1.sv
+                   FLISTS ${FLISTS})
 
     # mig1_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...]
     #                   [ARGS <arg>...] [LABELS <label>...] [OUTPUT <regex>])
     #
-    # Build RISC-V program design_mig1_<name> and add tests design_mig1_<name>.<sim>
-    # that run it on TbMig1 with both simulators; ARGS get +hex=<program hex>,
+    # Build RISC-V program design_mig1_<name> and add test design_mig1_<name>.<sim>
+    # that runs it on TbMig1 with the main simulator; ARGS get +hex=<program hex>,
     # +symbols=<program symbols> and +trace=<test>.<sim>.trace in the build directory;
     # ARCH is -march of the program (default rv32i);
     # LABELS are added to the tests;
@@ -59,14 +57,12 @@ if(DARK_CIRCUIT_RISCV)
         set(prog design_mig1_${NAME})
         dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} ARCH ${P_ARCH} FLAGS ${P_FLAGS}
                              LINK_FLAGS -T ${SW}/mig1.ld)
-        foreach(sim IN ITEMS icarus verilator)
-            cmake_language(CALL dc_add_${sim}_run ${prog} BUILD design_mig1_sim
-                           ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
-                                +symbols=${CMAKE_CURRENT_BINARY_DIR}/${prog}.sym
-                                +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${sim}.trace
-                                ${P_ARGS}
-                           LABELS ${P_LABELS} OUTPUT ${P_OUTPUT})
-        endforeach()
+        cmake_language(CALL dc_add_${SIM}_run ${prog} BUILD design_mig1_sim
+                       ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
+                            +symbols=${CMAKE_CURRENT_BINARY_DIR}/${prog}.sym
+                            +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.trace
+                            ${P_ARGS}
+                       LABELS ${P_LABELS} OUTPUT ${P_OUTPUT})
     endfunction()
 
     # Fetch: straight-line program, every instruction retires, halt at EBREAK.

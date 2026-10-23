@@ -260,7 +260,7 @@ knobs can not disagree between modules.
   takes only its own sub-struct (`Cache #(.CFG(CFG.l1d))`), never the design's.
 - A variant (another configuration in a test) is a whole struct: a localparam that
   copies the default with changed fields, or a second YAML.
-- Mig1 keeps its loose parameters (it is done and runs on Icarus).
+- Mig1 keeps its loose parameters until Mig2 is copied to it.
 
 ## Assertions
 

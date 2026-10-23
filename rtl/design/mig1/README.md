@@ -239,8 +239,8 @@ instruction memory) and ma_data (misaligned loads and stores, Mig1 traps on them
 Not run from rv32mi: breakpoint (needs the trigger CSRs of Sdtrig) and pmpaddr (needs
 PMP); both are optional extensions Mig1 does not have.
 
-All run on Icarus (4-state: X in retire fails) and Verilator. TbMig1 is built once per
-simulator; its plusargs (`+expect_regs`, `+resumes`, `+riscv_test`, ...) are explained
+All run on the main simulator (Verilator by default). TbMig1 is built once; its
+plusargs (`+expect_regs`, `+resumes`, `+riscv_test`, ...) are explained
 at the top of `tb_mig1.sv`. Run: `make run R=mig1`, `make run L=riscv-tests`; `V=1` shows
 the paths of trace files.
 
