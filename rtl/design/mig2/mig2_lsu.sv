@@ -9,6 +9,13 @@
  * mem describes the access for the retire trace (RVFI): bytes read or written; the word
  * read is added in MEM/WB.
  *
+ * Mig2Core instantiates it in EX, for the instruction in EX. In: addr is the result of
+ * Mig2Alu, rs2_data comes from the ID/EX register. Out: dmem_req goes straight out of
+ * Mig2Core to data memory (SimRAM in Mig2Cpu); misaligned goes to Mig2Control, which
+ * makes it a misaligned load or store trap with mtval = addr; mem goes into the retire
+ * entry. The loaded word comes back from dmem in MEM/WB, where Mig2LoadData picks its
+ * bytes by the offset and funct3 that EX/MEM carries.
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */

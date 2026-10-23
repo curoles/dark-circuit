@@ -1,9 +1,13 @@
-/* Mig2 ALU: value for rd of OP, OP-IMM, LUI and AUIPC, purely combinational.
+/* Mig2 ALU: value for rd of OP, OP-IMM, LUI and AUIPC, and the address rs1 + imm of loads
+ * and stores, purely combinational.
  *
  * Operand a is rs1, or pc for AUIPC, or 0 for LUI; operand b is rs2 for OP, else the
  * immediate. funct3 (RiscvPkg F3_*) selects the operation, alt (insn[30]) SUB and SRA.
  * One Alu1 adds, subtracts and does AND, OR, XOR; comparisons use its SUB: co=1 is
  * no borrow, a >= b unsigned. One BarrelShifter shifts by b[4:0].
+ *
+ * Mig2Core instantiates it in EX, for the instruction in EX. result is rd's value
+ * (rd_src RD_ALU) and the load/store address for Mig2Lsu and Mig2Control (mtval).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -11,12 +15,12 @@
 module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     // Only alu, funct3, alt and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
-    input  decoded_t                   dec,
+    input  decoded_t dec,       // the instruction taken apart
     /* verilator lint_on UNUSEDSIGNAL */
-    input  iaddr_t                     pc,        // address of the instruction, for AUIPC
-    input  word_t                      rs1_data,
-    input  word_t                      rs2_data,
-    output word_t                      result
+    input  iaddr_t   pc,        // address of the instruction, for AUIPC
+    input  word_t    rs1_data,
+    input  word_t    rs2_data,
+    output word_t    result     // rd value, or the load/store address
 );
     word_t                a;
     word_t                b;
@@ -54,7 +58,7 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
                 default:         cmd = OP_ADD;   // shifts do not use Alu1
             endcase
 
-    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd(cmd), .in1(a), .in2(b), .co(co), .out(sum));
+    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd, .in1(a), .in2(b), .co, .out(sum));
 
     // SLL left, SRL right with 0, SRA right with the sign bit.
     BarrelShifter #(.WIDTH(WIDTH)) u_barrel_shifter(
