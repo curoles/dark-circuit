@@ -99,6 +99,9 @@ This file has the rules that are not in README.md.
   line instead. Files without @author and @copyright get them when touched anyway.
   A long module (more than about 150 lines) starts each part of its body (faults,
   halt and resume, interlock, outputs, assertions) with a comment line naming it.
+  A module instantiated in one or two places says where in a paragraph of its own
+  (`Mig2Core instantiates it in EX, for the instruction in EX.`); a module used in many
+  places (library blocks, gates) does not.
 - Every SystemVerilog function is `automatic`; its arguments and result have types,
   it returns with `return x;`, and it reads only its arguments, parameters and
   constants, never module signals.

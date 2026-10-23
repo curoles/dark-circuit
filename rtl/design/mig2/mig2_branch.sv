@@ -6,6 +6,7 @@
  * the spec says). branch.misaligned=1 when bit 1 of the target is set: without the
  * C extension instructions are 4-byte aligned, a taken jump there must not complete.
  * link is pc + 4, the value JAL and JALR write to rd.
+ *
  * Mig2Core instantiates it in EX, for the instruction in EX.
  *
  * @author    Igor Lesik
