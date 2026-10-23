@@ -61,6 +61,8 @@ This file has the rules that are not in README.md.
 - A struct built from several values is written as one named assignment pattern,
   `assign id_ex_d = '{valid: …, pc: …, …};`, one field per line, without `default:`: the
   compiler checks that every field is set. A long value gets a name of its own first.
+  A copy of a struct with a few changed fields is the whole copy followed by the changes,
+  in `always_comb`: `retire = mem_ret; retire.valid = ex_mem_q.valid; ...` (Mig2Core).
 - Numbers: in comparisons a plain number is fine (`count == 0`, `sel == 2`); in
   assignments and fills use `'0`/`'1` or a sized literal (`1'b0`, `4'd3`), never a
   plain number, because there a width mismatch changes the value silently.

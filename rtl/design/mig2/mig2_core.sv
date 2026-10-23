@@ -97,10 +97,7 @@ module Mig2Core import Mig2Pkg::*; #(
     ex_mem_t      ex_mem_q;
 
     // MEM/WB
-    // valid, order and mem_rdata of mem_ret are not used: MEM/WB fills them.
-    /* verilator lint_off UNUSEDSIGNAL */
     retire_t      mem_ret;          // instruction in MEM/WB: its entry from EX
-    /* verilator lint_on UNUSEDSIGNAL */
     word_t        mem_load_data;
     reg_id_t      mem_rd;           // rd written in MEM/WB, 0 when none
     logic         mem_rd_write;
@@ -231,28 +228,18 @@ module Mig2Core import Mig2Pkg::*; #(
     assign mem_rd_write = mem_rd != '0;
     assign mem_rd_data  = ex_mem_q.load ? mem_load_data : mem_ret.rd_wdata;
 
-    // Retire, RVFI: the entry from EX with order, and load data.
+    // Retire, RVFI: the entry from EX, with what MEM/WB adds.
     always_ff @(posedge clk)
         if (!rst_n)            retire_order <= '0;
         else if (retire.valid) retire_order <= retire_order + 1'b1;
 
-    assign retire.valid     = ex_mem_q.valid;
-    assign retire.order     = retire_order;
-    assign retire.insn      = mem_ret.insn;
-    assign retire.trap      = mem_ret.trap;
-    assign retire.pc_rdata  = mem_ret.pc_rdata;
-    assign retire.pc_wdata  = mem_ret.pc_wdata;
-    assign retire.rs1_addr  = mem_ret.rs1_addr;
-    assign retire.rs1_rdata = mem_ret.rs1_rdata;
-    assign retire.rs2_addr  = mem_ret.rs2_addr;
-    assign retire.rs2_rdata = mem_ret.rs2_rdata;
-    assign retire.rd_addr   = mem_ret.rd_addr;
-    assign retire.rd_wdata  = mem_rd_write ? mem_rd_data : '0;
-    assign retire.mem_addr  = mem_ret.mem_addr;
-    assign retire.mem_rmask = mem_ret.mem_rmask;
-    assign retire.mem_wmask = mem_ret.mem_wmask;
-    assign retire.mem_rdata = mem_ret.mem_rmask != '0 ? dmem_rsp.rd_data : '0;
-    assign retire.mem_wdata = mem_ret.mem_wdata;
+    always_comb begin
+        retire           = mem_ret;
+        retire.valid     = ex_mem_q.valid;
+        retire.order     = retire_order;
+        retire.rd_wdata  = mem_rd_write ? mem_rd_data : '0;
+        retire.mem_rdata = mem_ret.mem_rmask != '0 ? dmem_rsp.rd_data : '0;
+    end
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;
