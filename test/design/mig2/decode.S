@@ -23,7 +23,7 @@
  */
     .option norelax
 
-/* Kinds, same order as kind_t in rtl/design/mig2/mig2_pkg.sv. */
+/* Kinds, same order as kind_e in rtl/design/mig2/mig2_pkg.sv. */
     .equ K_ILLEGAL, 0
     .equ K_LUI,     1
     .equ K_AUIPC,   2

@@ -29,7 +29,7 @@ module TbMig2Alu;
     Mig2Alu u_mig2_alu(.dec(dec), .pc(pc), .rs1_data(rs1_data), .rs2_data(rs2_data), .result(result));
 
     // Expected result.
-    function automatic [31:0] model(input kind_t k, input funct3_t f3, input al, input [31:0] x,
+    function automatic [31:0] model(input kind_e k, input funct3_t f3, input al, input [31:0] x,
                                     input [31:0] y, input [31:0] im, input [31:0] pcb);
         logic [31:0] bb;
         if (k == KIND_LUI)   return im;
@@ -51,7 +51,7 @@ module TbMig2Alu;
     endfunction
 
     // ALU controls of a kind, as Mig2Decode gives them (kinds of this test only).
-    function automatic alu_ctrl_t alu_of(input kind_t k, input logic al);
+    function automatic alu_ctrl_t alu_of(input kind_e k, input logic al);
         case (k)
             KIND_LUI:   return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0};
             KIND_AUIPC: return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0};
@@ -61,7 +61,7 @@ module TbMig2Alu;
     endfunction
 
     // Apply one case and compare.
-    task automatic check(input kind_t k, input funct3_t f3, input al, input [31:0] x,
+    task automatic check(input kind_e k, input funct3_t f3, input al, input [31:0] x,
                          input [31:0] y, input [31:0] im, input [31:2] p);
         logic [31:0] exp;
         dec = '0;

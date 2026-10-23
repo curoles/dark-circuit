@@ -167,7 +167,7 @@ package Mig2Pkg;
         KIND_MRET,
         KIND_WFI,
         KIND_MULDIV     // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
-    } kind_t;
+    } kind_e;
 
     // Source of the value written to rd.
     typedef enum logic [2:0] {
@@ -176,7 +176,7 @@ package Mig2Pkg;
         RD_LOAD,        // loaded data
         RD_CSR,         // old value of the CSR: CSR instructions
         RD_MULDIV       // product or quotient/remainder: M instructions
-    } rd_src_t;
+    } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
     // stages read them and do not decode again (AGENTS.md, Compute once, carry forward).
@@ -184,10 +184,10 @@ package Mig2Pkg;
         A_RS1,          // OP, OP-IMM, LOAD, STORE
         A_PC,           // AUIPC
         A_ZERO          // LUI
-    } alu_a_t;
+    } alu_a_e;
 
     typedef struct packed {
-        alu_a_t a;          // operand a
+        alu_a_e a;          // operand a
         logic   b_imm;      // operand b is imm, else rs2
         logic   op;         // funct3 selects the operation (OP, OP-IMM), else a + b
         logic   sub;        // OP with alt: SUB instead of ADD
@@ -224,12 +224,12 @@ package Mig2Pkg;
 
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
-        kind_t      kind;      // for testbenches and traces; parts read the controls
+        kind_e      kind;      // for testbenches and traces; parts read the controls
         reg_id_t    rd;
         reg_id_t    rs1;
         reg_id_t    rs2;
         logic       rd_we;     // writes rd (writes to x0 are dropped by the register file)
-        rd_src_t    rd_src;    // value written to rd
+        rd_src_e    rd_src;    // value written to rd
         logic       uses_rs1;  // reads rs1, for the interlock (Mig2Control)
         logic       uses_rs2;
         alu_ctrl_t  alu;       // Mig2Alu

@@ -17,7 +17,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
 );
     import RiscvInstrPkg::*;
 
-    kind_t kind;    // instruction group, from the exact encodings: decides the controls
+    kind_e kind;    // instruction group, from the exact encodings: decides the controls
 
     always_comb
         casez (insn)

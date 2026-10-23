@@ -34,7 +34,7 @@ module TbMig2Decode;
     integer      k;
     integer      addr;
     logic [31:0] e [FIELDS];  // expected: kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
-    logic [4:0]  exp_kind;    // value of kind_t, compared with KIND_*
+    logic [4:0]  exp_kind;    // value of kind_e, compared with KIND_*
     logic [31:0] tested;      // tested[k]: kind k had a case
 
     SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_cases(
@@ -71,7 +71,7 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    // Source of rd expected for a kind that writes rd, as a value of rd_src_t.
+    // Source of rd expected for a kind that writes rd, as a value of rd_src_e.
     function automatic logic [2:0] rd_src_of(input logic [4:0] kind);
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
