@@ -14,7 +14,7 @@ their standard environment; the other tests need features Mig1 does not have, se
   halts the core and the debugger resumes it.
 - Runs C programs with semihosting (print, exit code): the same binary code as on QEMU.
 - Retire trace of every retired instruction in RVFI form (riscv-formal), for testbenches.
-- Synthesizable: Mig1Core converts with sv2v and maps with Yosys, 5.4 ns in sky130 (see
+- Synthesizable: Mig1Core converts with sv2v and maps with Yosys, 5.3 ns in sky130 (see
   Area and speed).
 
 RTL is in this directory, configuration in `cfg/`, tests in `test/design/mig1/`.
@@ -388,19 +388,20 @@ It fails on a latch or a structural problem (multiple drivers, undriven inputs, 
 ## Area and speed (sky130)
 
 Mig1Core mapped to the SkyWater sky130 standard cells (sky130_fd_sc_hd, typical corner
-tt_025C_1v80) with Yosys 0.66 and ABC. Reproduce with `make mig1_synth TECH=sky130`.
+tt_025C_1v80) with Yosys 0.66 and ABC, 2026-10-23. Reproduce with
+`make mig1_synth TECH=sky130`.
 
 | Mig1Core | |
 |---|---|
-| Area | 157 415 µm² (0.157 mm²), 18 461 cells |
-| Longest logic path (ABC estimate) | 5.4 ns, about 186 MHz |
+| Area | 157 621 µm² (0.158 mm²), 18 311 cells |
+| Longest logic path (ABC estimate) | 5.3 ns, about 188 MHz |
 
 The longest path is the forwarding loop: ID/EX register, an EX part (funct3 decoded in
 EX, then the multiplier or the ALU), EX result mux, forwarding mux into ID. Several paths
 of this loop are within a few tenths of a nanosecond of it.
 
-How the clock got there, 2026-10-21, measured on Mig2 before Mig1 took over its code
-(each row adds one change to the row above):
+How the clock got there, 2026-10-21 to 2026-10-23, measured on Mig2 until Mig1 took over its
+code (each row adds one change to the row above):
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -410,6 +411,7 @@ How the clock got there, 2026-10-21, measured on Mig2 before Mig1 took over its 
 | Divider: KoggeStoneAdder | 157 690 | 7.4 |
 | Int32Mul: sign correction as three rows of one WallaceTree, one final adder | 157 004 | 5.6 |
 | Decode delivers the M controls, MulDiv no longer decodes funct3 | 157 415 | 5.4 |
+| Line-by-line cleanup of 2026-10-22/23, measured as Mig1Core | 157 621 | 5.3 |
 
 The delay is an estimate: ABC timing (stime) after buffering and gate sizing, without
 wires (no wire load), without clock-to-Q and setup of the flip-flops; the ports of
