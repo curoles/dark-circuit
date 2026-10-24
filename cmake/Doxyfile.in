@@ -3,7 +3,7 @@
 PROJECT_NAME      = dark-circuit
 OUTPUT_DIRECTORY  = @DOC_DIR@
 INPUT             = @PROJECT_SOURCE_DIR@/doc @PROJECT_SOURCE_DIR@/rtl/lib \
-                    @PROJECT_SOURCE_DIR@/rtl/design/mig2
+                    @PROJECT_SOURCE_DIR@/rtl/design/mig1 @PROJECT_SOURCE_DIR@/rtl/design/mig2
 RECURSIVE         = YES
 FILE_PATTERNS     = *.sv *.svh *.dox *.md
 USE_MDFILE_AS_MAINPAGE = @PROJECT_SOURCE_DIR@/doc/mainpage.md

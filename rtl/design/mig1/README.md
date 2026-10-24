@@ -1,4 +1,4 @@
-# Mig1: RV32I RISC-V CPU
+# Mig1: RISC-V CPU
 
 Mig1 is a small RISC-V CPU: RV32IM (base integer instructions, multiply and divide),
 Zicsr (CSR instructions) and Zicntr (counters), machine-mode traps; no interrupts.
@@ -14,17 +14,26 @@ their standard environment; the other tests need features Mig1 does not have, se
   halts the core and the debugger resumes it.
 - Runs C programs with semihosting (print, exit code): the same binary code as on QEMU.
 - Retire trace of every retired instruction in RVFI form (riscv-formal), for testbenches.
+- Synthesizable: Mig1Core converts with sv2v and maps with Yosys, 5.4 ns in sky130 (see
+  Area and speed).
 
 RTL is in this directory, configuration in `cfg/`, tests in `test/design/mig1/`.
+
+Mig1 is the small, simple core of the project; Mig2 (`rtl/design/mig2`) is where bigger
+changes go first. On 2026-10-23 Mig1 took over the code of Mig2, which had started as its
+copy on 2026-10-19: typed ports and package types, a configuration struct, controls per
+part from decode, assertions, and the faster struct library (Wallace-tree multiplier,
+Kogge-Stone adders). The pipeline did not change: every program takes the same cycles.
 
 ## Files
 
 | File | What |
 |------|------|
-| `mig1_pkg.sv` | Mig1Pkg: widths, port and boundary structs, kind_t, decoded_t |
-| `mig1_config_pkg.sv` | Mig1ConfigPkg, generated from `cfg/mig1_config.yaml` |
+| `mig1_pkg.sv` | Mig1Pkg: constants and types: ports of Mig1Core, signals between the parts, decode controls, pipeline registers |
+| `mig1_config_pkg.sv` | Mig1ConfigPkg: struct `mig1_cfg_t` and its default `MIG1_CFG`, generated from `cfg/mig1_config.yaml` |
 | `mig1_fetch.sv`, `mig1_control.sv`, `mig1_decode.sv`, `mig1_regs.sv`, `mig1_forward.sv`, `mig1_alu.sv`, `mig1_branch.sv`, `mig1_lsu.sv`, `mig1_load_data.sv`, `mig1_csr.sv`, `mig1_muldiv.sv` | the parts |
-| `mig1_pipe.sv` | Mig1Pipe: the pipeline registers (ID/EX, EX/MEM) |
+| `mig1_pipe_reg.sv` | Mig1PipeReg: one pipeline register, `parameter type T` (the struct of its boundary) |
+| `mig1_pipe.sv` | Mig1Pipe: the pipeline registers ID/EX and EX/MEM (IF/ID is in Mig1Fetch) |
 | `mig1_core.sv` | Mig1Core: connects the parts, synthesizable, memories are outside |
 | `mig1_cpu.sv` | Mig1Cpu: Mig1Core with SimROM (imem) and SimRAM (dmem), for simulation |
 | `mig1.flist` | files in compile order |
@@ -70,7 +79,7 @@ is, so the same parts fit a 5-stage pipeline.
 |--------------|--------|------|
 | Mig1Fetch    | IF     | PC (PrgCounter), imem request; holds on stall, jumps on redirect and reset |
 | Mig1Control  | -      | run, stalls, flushes, load-use interlock, redirect, traps (cause, mtval), halt, resume; ex_done: the instruction completes |
-| Mig1Pipe     | -      | pipeline registers: bubble on reset or flush, hold on stall |
+| Mig1Pipe     | -      | pipeline registers (Mig1PipeReg): bubble on reset or flush (only valid is cleared), hold on stall |
 | Mig1Decode   | ID     | instruction -> decoded_t: kind, registers, funct3, alt, immediate, controls |
 | Mig1Regs     | ID     | x0..x31, 2 reads (ID) + 1 write (MEM/WB); the debug port owns read port 0 and the write port while halted |
 | Mig1Forward  | ID     | rs1/rs2 values: the youngest of EX result, MEM/WB result, register file |
@@ -82,10 +91,15 @@ is, so the same parts fit a 5-stage pipeline.
 | Mig1LoadData | MEM/WB | loaded value from the dmem word: bytes at the offset, sign/zero extension |
 
 Boundary structs are in Mig1Pkg, named by their producer: `fetch_t`, `fetch_ctrl_t`,
-`pipe_ctrl_t`, `decoded_t`, `branch_t`, `lsu_mem_t`; pipeline registers by their
-boundary: `id_ex_t`, `ex_mem_t`; memory and debug ports are `<group>_req_t`/`_rsp_t`.
-Decode gives controls (`rd_we`, `rd_src`, `uses_rs1`, `uses_rs2`); units derive their
-operation from `kind`, `funct3` and `alt` (RiscvPkg `F3_*` names the funct3 values).
+`pipe_ctrl_t`, `decoded_t`, `branch_t`, `trap_t`, `csr_t`, `lsu_mem_t`; pipeline
+registers by their boundary: `id_ex_t`, `ex_mem_t`; memory and debug ports are
+`<group>_req_t`/`_rsp_t`. Ports use package types (`word_t`, `insn_t`, `iaddr_t`,
+`reg_id_t`), not bit ranges.
+Decode computes the controls once (`rd_we`, `rd_src`, `uses_rs1`, `uses_rs2`, and one
+group per part: `alu`, `br`, `mem`, `sys`, `muldiv`); later stages read them and do not
+decode again. Where funct3 selects the operation (ALU operation, branch compare,
+load/store size, CSR operation) the part reads `funct3` and `alt` (RiscvPkg `F3_*` names
+the funct3 values).
 
 ## Pipeline timing
 
@@ -203,7 +217,7 @@ are 0. Unlike the other ports, its addresses are byte addresses, as in RVFI.
 | Field | Meaning |
 |---|---|
 | `valid`, `order` | an instruction retires; its index 0, 1, 2, ... |
-| `insn`, `trap` | the instruction; 1 when it faulted (it writes nothing, the core halts) |
+| `insn`, `trap` | the instruction; 1 when it faulted (it writes nothing, fetch continues at mtvec) |
 | `pc_rdata`, `pc_wdata` | its address and the address of the next instruction |
 | `rs1_addr`, `rs1_rdata`, `rs2_addr`, `rs2_rdata` | registers read and their values |
 | `rd_addr`, `rd_wdata` | register written and the value (0 for none and for x0) |
@@ -218,8 +232,10 @@ the trace to `<test>.<simulator>.trace`.
 ## Configuration
 
 `cfg/mig1_config.yaml`: reset address (0) and memory size (64 KiB each).
-`make config` generates `mig1_config_pkg.sv`, the linker script `sw/riscv/mig1.ld` and
-`sw/riscv/mig1_config.h`; test `design_mig1.config` fails when they are out of date.
+`make config` generates `mig1_config_pkg.sv` (struct `mig1_cfg_t` and its default
+`MIG1_CFG`; Mig1Cpu, Mig1Core and Mig1Fetch take it as parameter `CFG`), the linker
+script `sw/riscv/mig1.ld` and `sw/riscv/mig1_config.h`; test `design_mig1.config` fails
+when they are out of date.
 
 ## Testing
 
@@ -233,23 +249,26 @@ the trace to `<test>.<simulator>.trace`.
 | `trap` | mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap |
 | `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: a handler checks mcause, mepc, mtval; nothing written |
 | `rv32ui_*`, `rv32um_*`, `rv32mi_*` (labels `riscv-tests` and the suite) | riscv-tests with their standard environment `env/p`; end with a store to `tohost` |
+| `design_mig1.config` | generated files are up to date with `cfg/mig1_config.yaml` |
+| `design_mig1.sv2v` | Mig1Core converts with sv2v and elaborates: sv2v decides which SystemVerilog Mig1 can use |
 
 Not run from rv32ui: fence_i (writes code into memory, Mig1 fetches from a separate
 instruction memory) and ma_data (misaligned loads and stores, Mig1 traps on them).
 Not run from rv32mi: breakpoint (needs the trigger CSRs of Sdtrig) and pmpaddr (needs
 PMP); both are optional extensions Mig1 does not have.
 
-All run on the main simulator (Verilator by default). TbMig1 is built once; its
-plusargs (`+expect_regs`, `+resumes`, `+riscv_test`, ...) are explained
-at the top of `tb_mig1.sv`. Run: `make run R=mig1`, `make run L=riscv-tests`; `V=1` shows
-the paths of trace files.
+All run on the main simulator of the build (cmake option DARK_CIRCUIT_MAIN_SIMULATOR, by
+default Verilator when it is installed); Mig1 is tested with Verilator, only Verilator is
+guaranteed to work. TbMig1 is built once; its plusargs (`+expect_regs`, `+resumes`,
+`+riscv_test`, ...) are explained at the top of `tb_mig1.sv`. Run: `make run R=mig1`,
+`make run L=riscv-tests`; `V=1` shows the paths of trace files.
 
 ## CPI
 
-Cycles of every program at each step of the pipeline, measured with TbMig1 (Verilator;
-Icarus gives the same): instructions retired and cycles from reset to the halt (or the
-store to `tohost` of riscv-tests, environment startup included). CPI is cycles per
-instruction.
+Cycles of every program at each step of the pipeline, measured with TbMig1 (Verilator):
+instructions retired and cycles from reset to the halt (or the store to `tohost` of
+riscv-tests, environment startup included). CPI is cycles per instruction. The code taken
+over from Mig2 on 2026-10-23 has the cycles of the last column.
 
 - 2-stage: IF | EX, before the 5-stage work, 2026-10-18.
 - 3-stage (5a): IF | ID | EX with interlock, 2026-10-18. Redirects cost 2 bubbles
@@ -260,7 +279,7 @@ instruction.
 
 With forwarding the 4-stage core still needs more cycles than the 2-stage one: a taken
 branch costs 2 bubbles instead of 1, and the pipeline takes longer to fill. A deeper
-pipeline can only win with a faster clock, which is not measured yet (see Next).
+pipeline can only win with a faster clock, see Area and speed.
 
 | Programs | Count | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI | 4-stage + fwd cycles | CPI |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -355,15 +374,67 @@ pipeline can only win with a faster clock, which is not measured yet (see Next).
 
 </details>
 
+## Synthesis
+
+`make mig1_synth` converts Mig1Core with sv2v and synthesizes it with Yosys to generic
+gates (not a test, about 20 s). It uses the struct versions of the library, not the fast
+simulation models; Mig1Cpu is not synthesized (its memories are simulation models).
+Outputs in `test/design/mig1/design_mig1.synth/` of the build directory: netlist.v,
+stat.txt (cells of every module), yosys.log, synth.ys and tech.ys (the scripts that ran).
+It fails on a latch or a structural problem (multiple drivers, undriven inputs, loops).
+`make mig1_synth TECH=sky130` maps to sky130 cells and prints area and longest path
+(report.txt in `test/design/mig1/design_mig1.synth_sky130/`; about 15 s).
+
+## Area and speed (sky130)
+
+Mig1Core mapped to the SkyWater sky130 standard cells (sky130_fd_sc_hd, typical corner
+tt_025C_1v80) with Yosys 0.66 and ABC. Reproduce with `make mig1_synth TECH=sky130`.
+
+| Mig1Core | |
+|---|---|
+| Area | 157 415 µm² (0.157 mm²), 18 461 cells |
+| Longest logic path (ABC estimate) | 5.4 ns, about 186 MHz |
+
+The longest path is the forwarding loop: ID/EX register, an EX part (funct3 decoded in
+EX, then the multiplier or the ALU), EX result mux, forwarding mux into ID. Several paths
+of this loop are within a few tenths of a nanosecond of it.
+
+How the clock got there, 2026-10-21, measured on Mig2 before Mig1 took over its code
+(each row adds one change to the row above):
+
+| Change | Area (µm²) | Longest path (ns) |
+|---|---|---|
+| Struct library of 2026-10-20: carry-save array multiplier, ripple-carry adders | 146 248 | 24.1 |
+| Int32Mul: WallaceMultiplier (Wallace tree and KoggeStoneAdder) | 149 656 | 14.4 |
+| Alu1: KoggeStoneAdder | 153 223 | 10.9 |
+| Divider: KoggeStoneAdder | 157 690 | 7.4 |
+| Int32Mul: sign correction as three rows of one WallaceTree, one final adder | 157 004 | 5.6 |
+| Decode delivers the M controls, MulDiv no longer decodes funct3 | 157 415 | 5.4 |
+
+The delay is an estimate: ABC timing (stime) after buffering and gate sizing, without
+wires (no wire load), without clock-to-Q and setup of the flip-flops; the ports of
+Mig1Core count like flip-flops. Real timing (OpenSTA after placement) will differ; use
+these numbers to compare designs and changes, not as a guaranteed fmax.
+
+How: the liberty file from OpenROAD-flow-scripts commit bf3f9b3
+(flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib); input the sv2v output of
+Mig1Core with the struct library (the files of `make mig1_synth`); Yosys: read_liberty
+-lib, hierarchy -check, synth -flatten -noabc, dfflibmap -liberty, abc -liberty with
+script `strash; &get -n; &nf; &put; buffer; upsize; dnsize; topo; stime -p`, stat
+-liberty. ABC maps the logic as written. No restructuring (fraig, scorr, dc2, dch, nor
+synth's own ABC): it optimizes area and turns fast carry logic into chains, a 64-bit
+Kogge-Stone adder takes 7.8 ns with it and 1.4 ns without. Until 2026-10-21 the flow
+restructured; its numbers (the next section) can not be compared with these.
+
 ## Area and speed (sky130): 2-stage vs 4-stage
 
 These numbers come from the flow before 2026-10-21 (ABC restructured the logic) and the
 library of that day (carry-save array multiplier, ripple-carry adders): they compare the
-two pipelines with each other, not with the current numbers in the Mig2 README.
+two pipelines with each other, not with the current numbers above.
 
 Mig1 mapped to the SkyWater sky130 standard cells (sky130_fd_sc_hd, typical corner) with
-Yosys 0.66 and ABC, 2026-10-20, by hand, with the flow of the Mig2 README (section "Area
-and speed"). 2-stage: Mig1 of commit 6fcd97d, the last 2-stage version. 4-stage with
+Yosys 0.66 and ABC, 2026-10-20, by hand, with the flow of that day. 2-stage: Mig1 of
+commit 6fcd97d, the last 2-stage version. 4-stage with
 forwarding: measured as Mig2Core, an unchanged copy of it. "Black box": Int32Mul is left
 out (a black box), to time everything else.
 
@@ -402,11 +473,13 @@ Run time of all 79 programs, cycles (CPI table) x clock period:
 
 - Reset does not block a store of the instruction in EX or the register write of the
   one in MEM/WB in that cycle.
-- A load of memory outside the program image is X on Icarus (test fails) and 0 on Verilator.
+- A load of memory outside the program image reads 0 on Verilator (2-state); a 4-state
+  simulator gives X.
 
 ## Next
 
-Synthesis and timing (Yosys, OpenSTA): fmax of the 4-stage core, and where a 5th stage
-would help, if anywhere (more likely a split of EX than a WB stage). The commit point
-stays in EX, because nothing faults after it on Mig1; a later commit point (WB, store
-buffer) comes with Mig2 and its caches. Spike cosim (lockstep) starts with Mig2.
+Bigger changes go to Mig2 first: pipeline bubbles visible in the trace, a faster
+multiplier, Spike cosim (lockstep), a Zbb slice, a single memory instead of two. Mig1
+stays the simple core and takes changes that keep it simple. The commit point stays in
+EX, because nothing faults after it on Mig1; a later commit point (WB, store buffer)
+comes with caches.

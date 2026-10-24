@@ -160,8 +160,7 @@ This file has the rules that are not in README.md.
 
 ## Simulator traps (measured)
 
-Icarus means Icarus 13, the version the project uses (Mig1's comments still describe
-Icarus 11, which had more limits).
+Icarus means Icarus 13, the version the project uses.
 
 - Icarus and packages: a package must come before its first use in the file list;
   dc_parse_test_args() puts the flists before the testbench.
@@ -260,7 +259,6 @@ knobs can not disagree between modules.
   takes only its own sub-struct (`Cache #(.CFG(CFG.l1d))`), never the design's.
 - A variant (another configuration in a test) is a whole struct: a localparam that
   copies the default with changed fields, or a second YAML.
-- Mig1 keeps its loose parameters until Mig2 is copied to it.
 
 ## Assertions
 

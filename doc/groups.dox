@@ -24,6 +24,9 @@
 /** @defgroup sim Simulation models
  * Models for testbenches (rtl/lib/sim): clock, reset, memories, valid/ready source and sink.
  */
+/** @defgroup mig1 Mig1
+ * RISC-V CPU (rtl/design/mig1): RV32IM, Zicsr, Zicntr, 4-stage pipeline.
+ */
 /** @defgroup mig2 Mig2
- * RISC-V CPU (rtl/design/mig2): RV32IM, Zicsr, Zicntr, 4-stage pipeline.
+ * RISC-V CPU (rtl/design/mig2), where bigger changes of Mig1 go first.
  */
