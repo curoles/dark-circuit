@@ -49,6 +49,24 @@ package Mig2Pkg;
 
     /* verilator lint_on UNUSEDPARAM */
 
+    // Bubble: a pipeline slot without an instruction (valid=0), and why it is empty. The
+    // pipeline registers carry it, retire reports it: every cycle retires an instruction
+    // or a bubble, so the reasons add up to all cycles that retire nothing. Redirect
+    // classes are those of branch prediction; a return is a JALR whose rs1 is a link
+    // register (x1, x5), unless rd = rs1 (hint table of JAL/JALR, RISC-V unprivileged spec).
+    typedef enum logic [3:0] {
+        BUBBLE_NONE,        // not a bubble: an instruction
+        BUBBLE_FILL,        // the pipeline fills: after reset, after a halt (resume)
+        BUBBLE_COND_BRANCH, // taken conditional branch
+        BUBBLE_DIR_JUMP,    // JAL: target pc + imm (calls too)
+        BUBBLE_INDIR_JUMP,  // JALR that is not a return (indirect calls too)
+        BUBBLE_RET,         // JALR that is a return
+        BUBBLE_TRAP,        // fault, ECALL, EBREAK as a breakpoint: fetch goes to mtvec
+        BUBBLE_XRET,        // MRET: fetch goes to mepc
+        BUBBLE_LOAD_USE,    // the next instruction waits for load data
+        BUBBLE_DIV          // EX holds a division
+    } bubble_e;
+
     // Ports of Mig2Core
 
     // Instruction fetch: rsp.data is the word at req.addr 1 clock after req.en=1.
@@ -80,8 +98,10 @@ package Mig2Pkg;
     // memory field that the instruction does not use is 0. Memory is RVFI "aligned
     // memory": mem_addr is word aligned, masks select the bytes of mem_rdata/mem_wdata.
     // RVFI fields that are constant for Mig2 are not here: intr=0, mode=3 (M), ixl=1.
+    // bubble is not RVFI: with valid=0 it tells why nothing retires in this cycle.
     typedef struct packed {
         logic        valid;      // an instruction retires: it completes, or traps
+        bubble_e     bubble;     // valid=0: reason of the bubble that retires instead
         logic [63:0] order;      // index of the retired instruction: 0, 1, 2, ...
         insn_t       insn;
         logic        trap;       // the instruction faulted: no register or memory write
@@ -118,16 +138,18 @@ package Mig2Pkg;
 
     // IF -> ID: the instruction that arrives from imem in this cycle.
     typedef struct packed {
-        logic   valid;
-        iaddr_t pc;
+        logic    valid;
+        bubble_e bubble;    // valid=0: why there is no instruction
+        iaddr_t  pc;
     } fetch_t;
 
     // Control -> Fetch.
     typedef struct packed {
-        logic   run;      // 1: request the next instruction, 0: stop (fetch.valid drops)
-        logic   stall;    // 1: keep pc, imem output and fetch: the instruction in EX stays
-        logic   redirect; // 1: next request is at target; the request of this cycle is dropped
-        iaddr_t target;
+        logic    run;      // 1: request the next instruction, 0: stop (fetch.valid drops)
+        logic    stall;    // 1: keep pc, imem output and fetch: the instruction in EX stays
+        logic    redirect; // 1: next request is at target; the request of this cycle is dropped
+        bubble_e why;      // redirect: reason of the bubble of the dropped request
+        iaddr_t  target;
     } fetch_ctrl_t;
 
     // Branch -> Control: next pc of the instruction in EX, combinational.
@@ -210,6 +232,7 @@ package Mig2Pkg;
         logic   jump;       // JAL, JALR: always taken
         logic   branch;     // BRANCH: taken when the condition of funct3 holds
         logic   target_rs1; // target is rs1 + imm (JALR), else pc + imm
+        logic   ret;        // JALR that is a return (see bubble_e)
     } br_ctrl_t;
 
     typedef struct packed {
@@ -261,6 +284,7 @@ package Mig2Pkg;
     // ID -> EX: the instruction taken apart with its register values (Mig2Pipe).
     typedef struct packed {
         logic     valid;
+        bubble_e  bubble;       // valid=0: why there is no instruction
         iaddr_t   pc;
         insn_t    insn;
         decoded_t dec;
@@ -272,7 +296,8 @@ package Mig2Pkg;
     // instruction that leaves EX always completes in MEM/WB.
     typedef struct packed {
         logic              valid;   // completes or traps
-        retire_t           ret;     // RVFI entry built in EX; MEM/WB fills valid,
+        bubble_e           bubble;  // valid=0: why nothing completes in EX
+        retire_t           ret;     // RVFI entry built in EX; MEM/WB fills valid, bubble,
                                     // order, and rd_wdata and mem_rdata of loads
         logic              load;    // rd value comes from dmem
         RiscvPkg::funct3_t funct3;  // load size and sign
@@ -281,8 +306,9 @@ package Mig2Pkg;
 
     // Control -> Pipe, per boundary: keep the instruction (stall) or put a bubble (flush).
     typedef struct packed {
-        logic   ex_stall;   // EX keeps its instruction (division)
-        logic   ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
+        logic    ex_stall;   // EX keeps its instruction (division)
+        logic    ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
+        bubble_e ex_why;     // ex_flush: reason of the bubble
     } pipe_ctrl_t;
 
 endpackage

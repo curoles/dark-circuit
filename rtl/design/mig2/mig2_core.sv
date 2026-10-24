@@ -26,6 +26,8 @@
  * IF are dropped. Results are forwarded to ID (Mig2Forward); an instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
+ * Every slot without an instruction carries its reason (bubble_e); retire reports it
+ * (retire.bubble), so each cycle retires an instruction or a bubble.
  *
  * Mig2Cpu instantiates it, with simulation memories; synthesis (make mig2_synth) takes
  * Mig2Core as its top.
@@ -33,6 +35,9 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module Mig2Core import Mig2Pkg::*; #(
     parameter mig2_cfg_t CFG = MIG2_CFG    // configuration, see Mig2ConfigPkg
 )(
@@ -93,6 +98,7 @@ module Mig2Core import Mig2Pkg::*; #(
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
     word_t        ex_next_pc;       // byte address of the next instruction, for retire
     retire_t      ex_retire;        // RVFI entry built in EX, completed in MEM/WB
+    bubble_e      ex_bubble;        // nothing completes or traps in EX: why
     ex_mem_t      ex_mem_d;
     ex_mem_t      ex_mem_q;
 
@@ -137,6 +143,7 @@ module Mig2Core import Mig2Pkg::*; #(
         .rs1_data(id_rs1_data), .rs2_data(id_rs2_data));
 
     assign id_ex_d = '{valid:    id_fetch.valid,
+                       bubble:   id_fetch.bubble,
                        pc:       id_fetch.pc,
                        insn:     id_insn,
                        dec:      id_dec,
@@ -146,7 +153,7 @@ module Mig2Core import Mig2Pkg::*; #(
     Mig2Pipe u_mig2_pipe(.clk, .rst_n, .ctrl(pipe_ctrl), .id_ex_d, .id_ex_q, .ex_mem_d, .ex_mem_q);
 
     // EX
-    assign ex_fetch       = '{valid: id_ex_q.valid, pc: id_ex_q.pc};
+    assign ex_fetch       = '{valid: id_ex_q.valid, bubble: id_ex_q.bubble, pc: id_ex_q.pc};
     assign ex_insn        = id_ex_q.insn;
     assign ex_dec         = id_ex_q.dec;
     assign ex_rs1_data    = id_ex_q.rs1_data;
@@ -188,9 +195,10 @@ module Mig2Core import Mig2Pkg::*; #(
         endcase
 
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not
-    // use are 0. MEM/WB adds order, and the load data.
+    // use are 0. MEM/WB adds order, bubble and the load data.
     assign ex_next_pc = if_ctrl.redirect ? {if_ctrl.target, {IADDR_START{1'b0}}} : ex_link;
     assign ex_retire  = '{valid:     ex_done || ex_trap.valid,
+                          bubble:    BUBBLE_NONE,
                           order:     '0,
                           insn:      ex_insn,
                           trap:      ex_trap.valid,
@@ -208,7 +216,15 @@ module Mig2Core import Mig2Pkg::*; #(
                           mem_rdata: '0,
                           mem_wdata: ex_lsu_mem.wdata};
 
+    // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
+    // a division (the only way an instruction in EX neither completes nor traps).
+    assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
+                       !ex_fetch.valid ? ex_fetch.bubble : BUBBLE_DIV;
+
+    `DC_ASSERT(a_ex_bubble_div, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall)
+
     assign ex_mem_d = '{valid:  ex_retire.valid,
+                        bubble: ex_bubble,
                         ret:    ex_retire,
                         load:   ex_dec.rd_src == RD_LOAD,
                         funct3: ex_dec.funct3,
@@ -236,6 +252,7 @@ module Mig2Core import Mig2Pkg::*; #(
     always_comb begin
         retire           = mem_ret;
         retire.valid     = ex_mem_q.valid;
+        retire.bubble    = ex_mem_q.bubble;
         retire.order     = retire_order;
         retire.rd_wdata  = mem_rd_write ? mem_rd_data : '0;
         retire.mem_rdata = mem_ret.mem_rmask != '0 ? dmem_rsp.rd_data : '0;

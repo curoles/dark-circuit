@@ -113,11 +113,21 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    function automatic br_ctrl_t br_of(input kind_e kind);
+    // JALR is a return (pops the return-address stack) when rs1 is x1 or x5, unless rd = rs1.
+    function automatic logic is_return(input reg_id_t rd, input reg_id_t rs1);
+        logic rd_link;
+        logic rs1_link;
+        rd_link  = rd == 5'd1 || rd == 5'd5;
+        rs1_link = rs1 == 5'd1 || rs1 == 5'd5;
+        return rs1_link && !(rd_link && rd == rs1);
+    endfunction
+
+    function automatic br_ctrl_t br_of(input kind_e kind, input reg_id_t rd, input reg_id_t rs1);
         case (kind)
-            KIND_JAL:    return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b0};
-            KIND_JALR:   return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b1};
-            KIND_BRANCH: return '{jump: 1'b0, branch: 1'b1, target_rs1: 1'b0};
+            KIND_JAL:    return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b0, ret: 1'b0};
+            KIND_JALR:   return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b1,
+                                  ret: is_return(rd, rs1)};
+            KIND_BRANCH: return '{jump: 1'b0, branch: 1'b1, target_rs1: 1'b0, ret: 1'b0};
             default:     return '0;
         endcase
     endfunction
@@ -165,7 +175,7 @@ module TbMig2Decode;
             exp_kind = kind_e'(e[0][4:0]);
             #1;
             check(c, insn, "kind",   32'(dec.kind),   e[0]);
-            check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind)));
+            check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind, e[4][4:0], e[5][4:0])));
             check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));

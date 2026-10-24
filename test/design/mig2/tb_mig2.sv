@@ -50,6 +50,13 @@
  * Other plusargs: +trace=<file> writes every retired instruction, register write,
  * debug action and semihosting call into <file>, +trace alone prints them;
  * +max_cycles=<n> (default 100000).
+ * Bubbles: a cycle out of reset and not halted that retires no instruction retires a
+ * bubble; retire.bubble tells why (bubble_e, Mig2Pkg). The trace has a line per bubble,
+ * the end of the run counts them per reason. Checks: an instruction has no bubble reason,
+ * a bubble has one; a redirect bubble (branch, jump, return, trap, MRET) follows the
+ * instruction of that class that retired right before it, at most 2; a load-use bubble
+ * follows a load, and the next instruction reads its rd; division bubbles come right
+ * before a division; fill bubbles only before the first instruction after reset or resume.
  * Stops at the first failure with $fatal.
  *
  * @author    Igor Lesik
@@ -113,6 +120,16 @@ module TbMig2;
     // Access that the load or store in retire must make
     word_t       access_addr;           // byte address
     strb_t       access_mask;           // its bytes
+
+    // Bubbles
+    integer      core_cycles;           // cycles out of reset and not halted
+    integer      bubbles [1 << $bits(bubble_e)];    // bubbles[b]: bubbles of reason b
+    bubble_e     redirect_class;        // reason of the bubbles the last retired insn makes
+    integer      redirect_bubbles;      // bubbles since the last retired instruction
+    logic        filling;               // nothing retired since reset or resume
+    reg_id_t     load_rd;               // the last retired instruction loads rd, 0: none
+    reg_id_t     use_rd;                // after a load-use bubble: the next one reads it
+    logic        div_pending;           // after a division bubble: the next one divides
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
@@ -354,6 +371,94 @@ module TbMig2;
         return 1'b1;
     endfunction
 
+    // Bubbles
+
+    // Name of a bubble reason for the trace: BUBBLE_LOAD_USE gives load_use.
+    function automatic string bubble_name(input bubble_e b);
+        string s;
+        s = b.name();
+        s = s.substr(7, s.len() - 1);
+        return s.tolower();
+    endfunction
+
+    // JALR is a return (pops the return-address stack, RISC-V hints) when rs1 is x1 or
+    // x5, unless rd = rs1.
+    function automatic logic is_return(input insn_t insn);
+        insn_fmt_t f;
+        logic      rd_link;
+        logic      rs1_link;
+        f.word   = insn;
+        rd_link  = f.i.rd == 5'd1 || f.i.rd == 5'd5;
+        rs1_link = f.i.rs1 == 5'd1 || f.i.rs1 == 5'd5;
+        return rs1_link && (!rd_link || f.i.rd != f.i.rs1);
+    endfunction
+
+    // Reason of the bubbles that a retired instruction (trap: it trapped) makes when it
+    // redirects fetch; BUBBLE_NONE when it can not redirect.
+    function automatic bubble_e redirect_class_of(input logic trap, input insn_t insn);
+        if (trap)
+            return BUBBLE_TRAP;
+        casez (insn)
+            MRET:    return BUBBLE_XRET;
+            JAL:     return BUBBLE_DIR_JUMP;
+            JALR:    return is_return(insn) ? BUBBLE_RET : BUBBLE_INDIR_JUMP;
+            BEQ, BNE, BLT, BGE, BLTU, BGEU:
+                     return BUBBLE_COND_BRANCH;
+            default: return BUBBLE_NONE;
+        endcase
+    endfunction
+
+    function automatic logic is_div(input insn_t insn);
+        casez (insn)
+            DIV, DIVU, REM, REMU: return 1'b1;
+            default:              return 1'b0;
+        endcase
+    endfunction
+
+    // A bubble retires in this cycle: its reason must fit the instructions around it.
+    task automatic check_bubble(input bubble_e b);
+        case (b)
+            BUBBLE_NONE:
+                $fatal(1, "Mig2: cycle %0d: nothing retires and no bubble reason", cycle);
+            BUBBLE_FILL:
+                if (!filling)
+                    $fatal(1, "Mig2: cycle %0d: fill bubble after an instruction retired", cycle);
+            BUBBLE_LOAD_USE:
+                if (load_rd == 0)
+                    $fatal(1, "Mig2: cycle %0d: load-use bubble, no load retired before it", cycle);
+            BUBBLE_DIV: ;   // the next retired instruction must be a division
+            default:        // redirect classes
+                if (b != redirect_class || redirect_bubbles >= 2)
+                    $fatal(1, "Mig2: cycle %0d: %s bubble after pc %h (%s, %0d bubbles before)",
+                           cycle, bubble_name(b), prev_pc, bubble_name(redirect_class),
+                           redirect_bubbles);
+        endcase
+        if (div_pending && b != BUBBLE_DIV)
+            $fatal(1, "Mig2: cycle %0d: %s bubble between division bubbles and the division",
+                   cycle, bubble_name(b));
+    endtask
+
+    // End of the run: bubbles per reason; every counted cycle retired an instruction or a
+    // bubble.
+    task automatic report_bubbles;
+        string  s;
+        integer total;
+        total = 0;
+        s     = "";
+        for (int k = 0; k < (1 << $bits(bubble_e)); k++)
+            if (bubbles[k] != 0) begin
+                total = total + bubbles[k];
+                s     = {s, $sformatf(" %s %0d", bubble_name(bubble_e'(k)), bubbles[k])};
+            end
+        if (core_cycles != retired + total)
+            $fatal(1, "Mig2: %0d cycles, but %0d retired + %0d bubbles",
+                   core_cycles, retired, total);
+        $display("Mig2: %0d cycles = %0d retired + %0d bubbles:%s", core_cycles, retired, total, s);
+        if (trace_fd != 0)
+            $fdisplay(trace_fd, "%0d cycles = %0d retired + %0d bubbles:%s",
+                      core_cycles, retired, total, s);
+    endtask
+
     // Checks of every retired instruction
 
     // Register r read by the instruction in retire gave data: the shadow value, 0 for x0
@@ -384,7 +489,31 @@ module TbMig2;
 
     // Values of the cycle before the rising edge; also the register writes of the debugger.
     always @(posedge clk) begin
+        if (rst_n && !halt) begin
+            core_cycles <= core_cycles + 1;
+            if (!retire.valid) begin
+                check_bubble(retire.bubble);
+                if (trace_fd != 0)
+                    $fdisplay(trace_fd, "%8d bubble %s", cycle, bubble_name(retire.bubble));
+                bubbles[retire.bubble] <= bubbles[retire.bubble] + 1;
+                redirect_bubbles       <= redirect_bubbles + 1;
+                if (retire.bubble == BUBBLE_LOAD_USE)
+                    use_rd <= load_rd;
+                if (retire.bubble == BUBBLE_DIV)
+                    div_pending <= 1'b1;
+            end
+        end
+        if (halt && dbg_req.resume)
+            filling <= 1'b1;
         if (rst_n && retire.valid) begin
+            if (retire.bubble != BUBBLE_NONE)
+                $fatal(1, "Mig2: pc %h retires with bubble reason %s",
+                       retire_pc, bubble_name(retire.bubble));
+            if (use_rd != 0 && retire.rs1_addr != use_rd && retire.rs2_addr != use_rd)
+                $fatal(1, "Mig2: pc %h after a load-use bubble does not read x%0d",
+                       retire_pc, use_rd);
+            if (div_pending && !is_div(retire.insn))
+                $fatal(1, "Mig2: pc %h after division bubbles is not a division", retire_pc);
 `ifndef VERILATOR
             if ($isunknown(retire))
                 $fatal(1, "Mig2: X or Z in retire: %h", retire);
@@ -455,9 +584,15 @@ module TbMig2;
                 shadow[retire.rd_addr]  <= retire.rd_wdata;
                 written[retire.rd_addr] <= 1'b1;
             end
-            prev_pc       <= retire_pc;
-            prev_pc_wdata <= retire.pc_wdata;
-            retired       <= retired + 1;
+            prev_pc          <= retire_pc;
+            prev_pc_wdata    <= retire.pc_wdata;
+            retired          <= retired + 1;
+            redirect_class   <= redirect_class_of(retire.trap, retire.insn);
+            redirect_bubbles <= 0;
+            load_rd          <= retire.mem_rmask != 0 ? retire.rd_addr : '0;
+            use_rd           <= '0;
+            div_pending      <= 1'b0;
+            filling          <= 1'b0;
         end
         if (halt && dbg_req.reg_wr && dbg_req.reg_id != 0) begin
             if (trace_fd != 0)
@@ -488,6 +623,15 @@ module TbMig2;
         mret_retired   = 1'b0;
         tohost_in_body = 1'b0;
         tohost_value   = '0;
+        core_cycles      = 0;
+        foreach (bubbles[k])
+            bubbles[k] = 0;
+        redirect_class   = BUBBLE_NONE;
+        redirect_bubbles = 0;
+        filling          = 1'b1;
+        load_rd          = '0;
+        use_rd           = '0;
+        div_pending      = 1'b0;
 
         // Plusargs.
         expect_sequential    = $test$plusargs("expect_sequential");
@@ -585,6 +729,7 @@ module TbMig2;
         if (riscv_test && !tohost_in_body)
             $fatal(1, "Mig2: riscv-tests: tohost=%h before the test body (no MRET of the environment)",
                    tohost_value);
+        report_bubbles();
         if (riscv_test && tohost_value != 1)
             $fatal(1, "Mig2: riscv-tests: case %0d failed (tohost=%h)",
                    tohost_value >> 1, tohost_value);

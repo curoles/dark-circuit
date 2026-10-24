@@ -7,6 +7,8 @@
  * branch or jump) and drops the request of this cycle: its instruction comes with
  * fetch.valid=0. ctrl.stall=1 keeps everything: pc, the imem output (SimROM and SRAM
  * hold data while en=0) and fetch, so the instruction in ID stays for another cycle.
+ * A slot without an instruction carries its reason (bubble_e): ctrl.why for a dropped
+ * request, fill when fetch does not run (reset, halt).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -40,12 +42,14 @@ module Mig2Fetch import Mig2Pkg::*; #(
     assign imem_req.addr = pc;
 
     // IF/ID: the instruction comes from imem 1 clock after its request; valid=0 when
-    // fetch did not run or the request was dropped by a redirect.
+    // fetch did not run (a fill bubble) or the request was dropped by a redirect.
     fetch_t fetch_d;
-    assign fetch_d.valid = ctrl.run && !ctrl.redirect;
-    assign fetch_d.pc    = pc;
+    assign fetch_d = '{valid:  ctrl.run && !ctrl.redirect,
+                       bubble: ctrl.redirect ? ctrl.why : ctrl.run ? BUBBLE_NONE : BUBBLE_FILL,
+                       pc:     pc};
 
     Mig2PipeReg #(.T(fetch_t)) u_mig2_pipe_reg_if_id(
-        .clk, .rst_n, .stall(ctrl.stall), .flush(1'b0), .d(fetch_d), .q(fetch));
+        .clk, .rst_n, .stall(ctrl.stall), .flush(1'b0), .why(BUBBLE_NONE), .d(fetch_d),
+        .q(fetch));
 
 endmodule

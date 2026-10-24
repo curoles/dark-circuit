@@ -22,6 +22,9 @@
  * Interlock: results are forwarded to ID (Mig2Forward), except load data, which comes
  * in MEM/WB: the instruction in ID waits one cycle while it reads the rd of a load in
  * EX (load-use); EX gets a bubble meanwhile.
+ * Every bubble carries its reason (bubble_e, Mig2Pkg): the redirect class of the
+ * instruction in EX (conditional branch, JAL, JALR or return, trap, MRET), fill for
+ * resume and for the slot the halting EBREAK flushes, load-use for the interlock.
  * ex_done=1: the instruction in EX completes: CSR write and minstret now; it writes rd
  * and retires in MEM/WB, which it always reaches.
  *
@@ -39,9 +42,12 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   id_dec,      // instruction in ID taken apart
     /* verilator lint_on UNUSEDSIGNAL */
+    // Only valid and pc are used.
+    /* verilator lint_off UNUSEDSIGNAL */
     input  fetch_t                     ex_fetch,    // instruction in EX: valid and pc
+    /* verilator lint_on UNUSEDSIGNAL */
     input  insn_t                      ex_insn,     // for mtval of illegal instructions
-    // Only sys, mem, rd_we and rd are used.
+    // Only sys, mem, br, rd_we and rd are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   ex_dec,      // instruction in EX taken apart
     /* verilator lint_on UNUSEDSIGNAL */
@@ -76,6 +82,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       id_load_use; // ID reads the rd of a load in EX: its data comes in MEM/WB
     logic       id_hazard;   // the instruction in ID must wait
     logic       flush_id;    // the instruction in ID must not go on
+    bubble_e    redirect_why; // reason of the bubbles of a redirect
 
     assign ex_stop = ex_fetch.valid && ex_dec.sys.ebreak && ebreak_halt;
     assign ex_mret = ex_fetch.valid && ex_dec.sys.mret;
@@ -127,6 +134,17 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign redirect = ex_fault || ex_mret || (ex_fetch.valid && ex_branch.taken) || resuming;
     assign flush_id = redirect || ex_stop;
 
+    // Class of the redirect: a taken jump or branch in EX by its kind, a trap, MRET; a
+    // resume refills the pipeline.
+    always_comb
+        if (ex_fault)                   redirect_why = BUBBLE_TRAP;
+        else if (ex_mret)               redirect_why = BUBBLE_XRET;
+        else if (resuming)              redirect_why = BUBBLE_FILL;
+        else if (ex_dec.br.branch)      redirect_why = BUBBLE_COND_BRANCH;
+        else if (!ex_dec.br.target_rs1) redirect_why = BUBBLE_DIR_JUMP;
+        else if (ex_dec.br.ret)         redirect_why = BUBBLE_RET;
+        else                            redirect_why = BUBBLE_INDIR_JUMP;
+
     // Interlock: other results are forwarded to ID (Mig2Forward), but a load's data comes
     // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
     // load is in EX. The instruction in ID that reads the load's rd waits one cycle, EX gets
@@ -146,10 +164,12 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign fetch_ctrl.run      = rst_n && running && !ex_stop && !mem_halting;
     assign fetch_ctrl.stall    = (ex_stall || id_hazard) && !flush_id;
     assign fetch_ctrl.redirect = redirect;
+    assign fetch_ctrl.why      = redirect_why;
     assign fetch_ctrl.target   = ex_fault ? csr.mtvec : ex_mret ? csr.mepc :
                                  resuming ? halt_pc + 1'b1 : ex_branch.target;
     assign pipe_ctrl.ex_stall  = ex_stall;
     assign pipe_ctrl.ex_flush  = !ex_stall && (id_hazard || flush_id);
+    assign pipe_ctrl.ex_why    = redirect ? redirect_why : ex_stop ? BUBBLE_FILL : BUBBLE_LOAD_USE;
     assign halt                = !running;
 
     // Halted: nothing is in EX, so no redirect comes from EX (only resume redirects).

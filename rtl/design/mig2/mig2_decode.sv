@@ -64,6 +64,11 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         return m;
     endfunction
 
+    // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0).
+    function automatic logic is_link(reg_id_t r);
+        return r == 5'd1 || r == 5'd5;
+    endfunction
+
     always_comb begin
         // Fields at the same place in every format.
         dec.kind   = kind;
@@ -100,6 +105,8 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             KIND_JALR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_LINK;  dec.uses_rs1 = 1'b1;
                 dec.br.jump = 1'b1;  dec.br.target_rs1 = 1'b1;
+                // A return pops the return-address stack: rs1 is a link, rd is not rs1.
+                dec.br.ret = is_link(dec.rs1) && (!is_link(dec.rd) || dec.rd != dec.rs1);
             end
             KIND_BRANCH: begin
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.imm = imm_b_of(insn);
