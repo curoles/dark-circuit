@@ -35,18 +35,15 @@
  *   makes the test fail through tohost. An MRET must retire before the store: the
  *   environment enters the test body with MRET, and before that it reports a pass
  *   on its own when its XLEN check (a BLTZ) goes the wrong way, as on a broken core.
- * With +resumes=<n> the testbench is a debugger at the first n halts after EBREAK:
- * it reads a0 (x10) through the debug port (must equal the shadow), writes
- * a0 + 0x100, and resumes the core; the halt after that ends the run. The shadow registers
- * follow debug writes too.
- * Semihosting: an EBREAK between slli x0,x0,0x1f and srai x0,x0,7 is a semihosting
- * call (RISC-V semihosting spec). The testbench reads the operation (a0) and its
- * argument (a1) through the debug port, argument blocks and strings from dmem with
- * peek(), does it and resumes the core; these halts do not count for +resumes.
- * SYS_WRITEC and SYS_WRITE0 print to stdout; SYS_EXIT and SYS_EXIT_EXTENDED end the
- * run with an exit status. With +expect_exit=<n> the program must end with status n,
- * without it a semihosting exit must have status 0. Other operations fail.
+ * With +resumes=<n> the testbench is a debugger at the first n halts after EBREAK: it
+ * checks a0 (x10) against the shadow, changes it through the debug port and resumes the
+ * core; the halt after that ends the run. The shadow registers follow debug writes too.
+ * Semihosting: an EBREAK between slli x0,x0,0x1f and srai x0,x0,7 is a semihosting call
+ * (RISC-V semihosting spec), done by the testbench, which resumes the core; these halts
+ * do not count for +resumes. SYS_EXIT and SYS_EXIT_EXTENDED end the run with an exit
+ * status: with +expect_exit=<n> it must be n, without it 0.
  * +no_debugger: dbg_req.ebreak_halt=0 for the whole run, EBREAK traps.
+ * The debug port and the semihosting calls: TbMig2Debugger.
  * Other plusargs: +trace=<file> writes every retired instruction, register write,
  * debug action and semihosting call into <file>, +trace alone prints them;
  * +max_cycles=<n> (default 100000).
@@ -104,6 +101,7 @@ module TbMig2;
     logic [31:0] written;               // bit r: shadow[r] was written
     integer      traps;
     logic        ebreak_trapped;        // an EBREAK has trapped
+    logic        ebreak_halt;           // EBREAK halts the core, else it traps (dbg_req)
     logic        halted;
     integer      resumes;               // halts after EBREAK left to resume
     logic        done;
@@ -128,6 +126,8 @@ module TbMig2;
 
     TbMig2BubbleCheck u_bubble_check(
         .clk, .rst_n, .halt, .resume(dbg_req.resume), .retire, .cycle, .trace_fd);
+
+    TbMig2Debugger u_debugger(.clk, .halt, .ebreak_halt, .cycle, .trace_fd, .dbg_rsp, .dbg_req);
 
     assign retire_pc = retire.pc_rdata;
     assign halt_pc   = {dbg_rsp.halt_pc, {IADDR_START{1'b0}}};
@@ -216,103 +216,6 @@ module TbMig2;
             if (got !== value)
                 $fatal(1, "Mig2: x%0d is %h, expected %h", r, got, value);
         end
-    endtask
-
-    // Debugger and semihosting
-
-    // Value of register r, read through the debug port while halted.
-    task automatic dbg_read(input reg_id_t r, output word_t value);
-        dbg_req.reg_id = r;
-        #1;
-        value = dbg_rsp.reg_rdata;
-    endtask
-
-    // resume=1 for one clock; with must_run=1 the core must run after it.
-    task automatic resume_core(input logic must_run);
-        dbg_req.resume = 1'b1;
-        @(posedge clk); #1;
-        cycle = cycle + 1;
-        dbg_req.resume = 1'b0;
-        if (must_run && halt)
-            $fatal(1, "Mig2: resume at %h, the core is still halted", halt_pc);
-    endtask
-
-    // Semihosting call at pc: EBREAK between the entry and the exit no-op.
-    localparam insn_t SEMIHOST_ENTRY = 32'h01f0_1013;   // slli x0, x0, 0x1f
-    localparam insn_t SEMIHOST_NOP   = 32'h4070_5013;   // srai x0, x0, 7
-    localparam word_t ADP_STOPPED_APPLICATION_EXIT = 32'h0002_0026;
-
-    // Only the AW low bits of the addresses are used, see dmem_byte.
-    /* verilator lint_off UNUSEDSIGNAL */
-    function automatic logic semihost_call(input word_t pc);
-        word_t prev_addr;   // address of the instruction before the EBREAK
-        word_t next_addr;   // and after it
-        prev_addr = pc - 4;
-        next_addr = pc + 4;
-        return imem_word(pc[AW-1:0]) === INSN_EBREAK &&
-               imem_word(prev_addr[AW-1:0]) === SEMIHOST_ENTRY &&
-               imem_word(next_addr[AW-1:0]) === SEMIHOST_NOP;
-    endfunction
-    /* verilator lint_on UNUSEDSIGNAL */
-
-    // Do the semihosting call at halt_pc; resume the core unless it is an exit.
-    task automatic semihost;
-        word_t op;
-        word_t arg;
-        word_t a;
-        word_t reason;
-        dbg_read(5'd10, op);
-        dbg_read(5'd11, arg);
-        if (trace_fd != 0)
-            $fdisplay(trace_fd, "%8d semihost op %h arg %h", cycle, op, arg);
-        case (op)
-            32'h03:     // SYS_WRITEC: byte at arg
-                $write("%c", dmem_byte(arg));
-            32'h04: begin   // SYS_WRITE0: string at arg
-                a = arg;
-                while (dmem_byte(a) != 0) begin
-                    $write("%c", dmem_byte(a));
-                    a = a + 1;
-                end
-            end
-            32'h18: begin   // SYS_EXIT: on RV32 arg is the reason, no status
-                exited      = 1'b1;
-                exit_status = (arg == ADP_STOPPED_APPLICATION_EXIT) ? 0 : 1;
-            end
-            32'h20: begin   // SYS_EXIT_EXTENDED: block {reason, status}
-                a = arg + 4;
-                reason      = dmem_word(arg);
-                exited      = 1'b1;
-                exit_status = (reason == ADP_STOPPED_APPLICATION_EXIT) ? dmem_word(a) : 1;
-            end
-            default:
-                $fatal(1, "Mig2: semihosting operation %h at %h is not supported", op, halt_pc);
-        endcase
-        if (exited) begin
-            $display("Mig2: semihosting exit %0d", exit_status);
-            if (trace_fd != 0)
-                $fdisplay(trace_fd, "%8d semihost exit %0d", cycle, exit_status);
-        end else
-            resume_core(1'b1);
-    endtask
-
-    // Debugger at a halt after EBREAK: read a0, write a0 + 0x100, resume. One clock
-    // each for the write and the resume; the shadow follows the write in the always
-    // block. Not a0 + 1: that is what the EBREAK in EX computes (rs1 + imm, rs1 is
-    // read port 0 = x10), so a debug write that is lost would not be noticed.
-    task automatic debug_and_resume;
-        word_t a0;
-        if (imem_word(halt_pc[AW-1:0]) !== INSN_EBREAK)
-            $fatal(1, "Mig2: halted at %h, it is not EBREAK", halt_pc);
-        dbg_read(5'd10, a0);
-        if (written[10] && a0 !== shadow[10])
-            $fatal(1, "Mig2: debug read of x10 gave %h, expected %h", a0, shadow[10]);
-        dbg_req.reg_wdata = a0 + 32'h100;
-        dbg_req.reg_wr    = 1'b1;
-        @(posedge clk); #1;
-        cycle = cycle + 1;
-        dbg_req.reg_wr    = 1'b0;
-        resume_core(1'b1);
     endtask
 
     // Access that the load or store in retire must make
@@ -481,9 +384,15 @@ module TbMig2;
 
     // Run
 
+    // Cycles of the run: every rising edge out of reset until the run is done.
+    always @(posedge clk)
+        if (rst_n && !done)
+            cycle <= cycle + 1;
+
     initial begin
         // State of the run.
         cycle          = 0;
+        done           = 1'b0;
         retired        = 0;
         prev_pc        = '0;
         prev_pc_wdata  = '0;
@@ -512,8 +421,7 @@ module TbMig2;
         if (!$value$plusargs("resumes=%d", resumes))               resumes        = 0;
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles     = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
-        dbg_req             = '0;
-        dbg_req.ebreak_halt = !first_ebreak_traps && !no_debugger;
+        ebreak_halt = !first_ebreak_traps && !no_debugger;
 
         // +trace=<file> writes the trace into <file>, +trace alone prints it.
         if ($value$plusargs("trace=%s", trace_file)) begin
@@ -540,22 +448,20 @@ module TbMig2;
         end
 
         @(posedge rst_n);
-        done = 1'b0;
         while (!done) begin
             while (!halt && !tohost_written) begin
                 @(posedge clk); #1;
-                cycle = cycle + 1;
                 if (cycle > max_cycles)
                     $fatal(1, "Mig2: no halt after %0d cycles, %0d instructions retired",
                            max_cycles, retired);
                 if (ebreak_trapped && !no_debugger)
-                    dbg_req.ebreak_halt = 1'b1;
+                    ebreak_halt = 1'b1;
             end
             if (tohost_written)
                 done = 1'b1;    // riscv-tests: the environment loops, the core runs on
-            else if (semihost_call(halt_pc)) begin
+            else if (u_debugger.semihost_call(halt_pc)) begin
                 halted = 1'b1;
-                semihost();
+                u_debugger.semihost(exited, exit_status);
                 done   = exited;
                 halted = exited;
             end else if (resumes == 0) begin
@@ -563,7 +469,7 @@ module TbMig2;
                 done   = 1'b1;
             end else begin
                 halted = 1'b1;
-                debug_and_resume();
+                u_debugger.debug_and_resume(written[10], shadow[10]);
                 resumes = resumes - 1;
                 halted  = 1'b0;
             end

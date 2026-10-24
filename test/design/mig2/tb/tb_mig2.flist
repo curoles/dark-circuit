@@ -1,3 +1,4 @@
 tb_mig2_pkg.sv
 tb_mig2_pipe_view.sv
 tb_mig2_bubble_check.sv
+tb_mig2_debugger.sv
