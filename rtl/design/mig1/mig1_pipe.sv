@@ -1,32 +1,26 @@
-/* Mig1 pipeline registers: the instruction of each stage, between the stages.
+/* Mig1 pipeline registers: the instruction of each stage, between the stages
+ * (Mig1PipeReg: reset or flush puts a bubble, stall keeps the instruction).
  *
- * ID/EX: reset or flush puts a bubble (valid=0), stall keeps the instruction, else the
- * register takes what ID gives. EX/MEM has no stall or flush: it takes what EX gives
- * every cycle (valid=0 when EX has nothing that completes or traps), reset clears it.
- * Mig1Control makes the stalls and flushes. The IF/ID boundary is the instruction memory
- * itself (the instruction comes 1 clock after its request, see Mig1Fetch).
+ * ID/EX: Mig1Control stalls and flushes it. EX/MEM has no stall or flush: an
+ * instruction that leaves EX always completes in MEM/WB. The IF/ID register is in
+ * Mig1Fetch (the instruction comes from imem 1 clock after its request).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig1Pipe import Mig1Pkg::*; (
     input  wire        clk,
     input  wire        rst_n,       // synchronous reset, active low
-    input  pipe_ctrl_t ctrl,
+    input  pipe_ctrl_t ctrl,        // stall and flush of ID/EX, from Mig1Control
     input  id_ex_t     id_ex_d,     // from ID
     output id_ex_t     id_ex_q,     // to EX
     input  ex_mem_t    ex_mem_d,    // from EX
     output ex_mem_t    ex_mem_q     // to MEM/WB
 );
-    // Fields of ctrl with assign: Icarus does not support selects in always_ff.
-    logic ex_stall;
-    logic ex_flush;
-    assign ex_stall = ctrl.ex_stall;
-    assign ex_flush = ctrl.ex_flush;
+    Mig1PipeReg #(.T(id_ex_t)) u_mig1_pipe_reg_id_ex(
+        .clk, .rst_n, .stall(ctrl.ex_stall), .flush(ctrl.ex_flush), .d(id_ex_d), .q(id_ex_q));
 
-    always_ff @(posedge clk)
-        if (!rst_n || ex_flush) id_ex_q.valid <= 1'b0;
-        else if (!ex_stall)     id_ex_q       <= id_ex_d;
-
-    always_ff @(posedge clk)
-        if (!rst_n) ex_mem_q <= '0;
-        else        ex_mem_q <= ex_mem_d;
+    Mig1PipeReg #(.T(ex_mem_t)) u_mig1_pipe_reg_ex_mem(
+        .clk, .rst_n, .stall(1'b0), .flush(1'b0), .d(ex_mem_d), .q(ex_mem_q));
 
 endmodule

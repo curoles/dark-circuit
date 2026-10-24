@@ -10,6 +10,19 @@ set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/numeric/n
 # Files generated from cfg/mig1_config.yaml are up to date.
 dc_add_config_check(design_mig1 CONFIG ${MIG1}/cfg/mig1_config.yaml)
 
+# Hardware files of Mig1Core: struct versions of the library, built from generic gates
+# (not the fast simulation models). Mig1Cpu is not included: its memories are simulation models.
+set(SYNTH_FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
+                 ${LIB}/block/block_struct.flist ${LIB}/numeric/numeric_struct.flist
+                 ${LIB}/riscv/riscv.flist ${MIG1}/mig1.flist)
+
+# Mig1Core converts to Verilog-2005 with sv2v and elaborates: the syntax of Mig1 is what
+# sv2v supports.
+dc_add_sv2v_check(design_mig1 TOP Mig1Core FLISTS ${SYNTH_FLISTS})
+
+# Synthesis of Mig1Core: build target design_mig1.synth (make mig1_synth), not a test.
+dc_add_yosys_synth(design_mig1 TOP Mig1Core FLISTS ${SYNTH_FLISTS})
+
 # Mig1 runs on the main simulator only: DARK_CIRCUIT_MAIN_SIMULATOR, by default
 # Verilator when it is installed (see cmake/dark_circuit.cmake).
 if(NOT DARK_CIRCUIT_MAINSIM)

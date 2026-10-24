@@ -8,18 +8,23 @@
  * the instruction writes no register; x0 is never forwarded (reads 0). A load in EX has
  * no data yet: Mig1Control holds the instruction in ID for that cycle (load-use).
  * The values go into the ID/EX register, so EX and the retire trace see them.
+ *
+ * Mig1Core instantiates it in ID, after the register file read (Mig1Regs).
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig1Forward import Mig1Pkg::*; (
-    input  logic [REG_ADDR_WIDTH-1:0] rs1,          // reg_addr_t: registers read in ID
-    input  logic [REG_ADDR_WIDTH-1:0] rs2,
-    input  logic [WIDTH-1:0]          rf_rs1_data,  // word_t: register file values
-    input  logic [WIDTH-1:0]          rf_rs2_data,
-    input  logic [REG_ADDR_WIDTH-1:0] ex_rd,        // rd written by the instruction in EX, 0: none
-    input  logic [WIDTH-1:0]          ex_rd_data,
-    input  logic [REG_ADDR_WIDTH-1:0] mem_rd,       // rd written in MEM/WB, 0: none
-    input  logic [WIDTH-1:0]          mem_rd_data,
-    output logic [WIDTH-1:0]          rs1_data,
-    output logic [WIDTH-1:0]          rs2_data
+    input  reg_id_t rs1,          // registers read in ID
+    input  reg_id_t rs2,
+    input  word_t   rf_rs1_data,  // register file values
+    input  word_t   rf_rs2_data,
+    input  reg_id_t ex_rd,        // rd written by the instruction in EX, 0: none
+    input  word_t   ex_rd_data,
+    input  reg_id_t mem_rd,       // rd written in MEM/WB, 0: none
+    input  word_t   mem_rd_data,
+    output word_t   rs1_data,
+    output word_t   rs2_data
 );
     assign rs1_data = (rs1 != '0 && rs1 == ex_rd)  ? ex_rd_data  :
                       (rs1 != '0 && rs1 == mem_rd) ? mem_rd_data : rf_rs1_data;

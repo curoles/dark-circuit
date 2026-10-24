@@ -2,13 +2,16 @@
  *
  * load() puts the same hex image (objcopy -O verilog, see sw/riscv/mig1.ld) into
  * instruction memory (SimROM) and data memory (SimRAM): code is fetched from imem,
- * loads and stores go to dmem. Both have 1 << MEM_ADDR_WIDTH bytes; the core address
+ * loads and stores go to dmem. Both have 1 << CFG.mem_addr_width bytes; the core address
  * bits above them are ignored, so addresses wrap around.
  * The debug port of the core is a port of Mig1Cpu: the testbench (or a semihosting
  * service) reads and writes registers while halted and resumes the core.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig1Cpu import Mig1Pkg::*; #(
-    parameter MEM_ADDR_WIDTH = MIG1_MEM_ADDR_WIDTH  // memory size: 1 << MEM_ADDR_WIDTH bytes
+    parameter mig1_cfg_t CFG = MIG1_CFG     // configuration, see Mig1ConfigPkg
 )(
     input  wire      clk,
     input  wire      rst_n,          // synchronous reset, active low
@@ -17,6 +20,8 @@ module Mig1Cpu import Mig1Pkg::*; #(
     input  dbg_req_t dbg_req,        // debug, used while halted
     output dbg_rsp_t dbg_rsp
 );
+    localparam MEM_ADDR_WIDTH = CFG.mem_addr_width;   // memory size: 1 << MEM_ADDR_WIDTH bytes
+
     imem_rsp_t imem_rsp;
     dmem_rsp_t dmem_rsp;
     // Not fully used: address bits above MEM_ADDR_WIDTH (memories wrap around),
@@ -24,25 +29,22 @@ module Mig1Cpu import Mig1Pkg::*; #(
     /* verilator lint_off UNUSEDSIGNAL */
     imem_req_t imem_req;
     dmem_req_t dmem_req;
-    wire       dmem_rd_valid;
+    logic      dmem_rd_valid;
     /* verilator lint_on UNUSEDSIGNAL */
 
-    Mig1Core u_mig1_core(
-        .clk(clk), .rst_n(rst_n),
-        .imem_req(imem_req), .imem_rsp(imem_rsp),
-        .dmem_req(dmem_req), .dmem_rsp(dmem_rsp),
-        .halt(halt), .retire(retire),
-        .dbg_req(dbg_req), .dbg_rsp(dbg_rsp));
+    Mig1Core #(.CFG(CFG)) u_mig1_core(
+        .clk, .rst_n, .imem_req, .imem_rsp, .dmem_req, .dmem_rsp, .halt, .retire, .dbg_req,
+        .dbg_rsp);
 
     // Instruction memory, read only.
-    SimROM #(.DATA_SIZE(INSN_WIDTH / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_imem(
-        .clk(clk),
+    SimROM #(.DATA_SIZE($bits(insn_t) / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_imem(
+        .clk,
         .en(imem_req.en), .addr(imem_req.addr[MEM_ADDR_WIDTH-1:IADDR_START]),
         .data(imem_rsp.data));
 
     // Data memory.
     SimRAM #(.DATA_SIZE(STRB_WIDTH), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_dmem(
-        .clk(clk),
+        .clk,
         .rd_en(dmem_req.rd_en), .rd_addr(dmem_req.addr[MEM_ADDR_WIDTH-1:DADDR_START]),
         .wr_en(dmem_req.wr_en), .wr_addr(dmem_req.addr[MEM_ADDR_WIDTH-1:DADDR_START]),
         .wr_data(dmem_req.wr_data), .wr_strb(dmem_req.wr_strb),

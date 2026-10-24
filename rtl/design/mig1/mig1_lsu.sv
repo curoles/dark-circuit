@@ -8,28 +8,34 @@
  * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete.
  * mem describes the access for the retire trace (RVFI): bytes read or written; the word
  * read is added in MEM/WB.
+ *
+ * Mig1Core instantiates it in EX, for the instruction in EX. In: addr is the result of
+ * Mig1Alu, rs2_data comes from the ID/EX register. Out: dmem_req goes straight out of
+ * Mig1Core to data memory (SimRAM in Mig1Cpu); misaligned goes to Mig1Control, which
+ * makes it a misaligned load or store trap with mtval = addr; mem goes into the retire
+ * entry. The loaded word comes back from dmem in MEM/WB, where Mig1LoadData picks its
+ * bytes by the offset and funct3 that EX/MEM carries.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
     input  wire              valid,      // instruction in EX is valid
-    // Only kind and funct3 are used.
+    // Only mem and funct3 are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
     /* verilator lint_on UNUSEDSIGNAL */
-    input  logic [WIDTH-1:0] addr,       // word_t, see Mig1Pkg about ports
-    input  logic [WIDTH-1:0] rs2_data,   // store data
+    input  word_t            addr,
+    input  word_t            rs2_data,   // store data
     output dmem_req_t        dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
     output lsu_mem_t         mem         // access for the retire trace
 );
-    // Fields and bit selects with assign: Icarus warns about selects in always_comb.
-    kind_t                  kind;
-    logic [2:0]             funct3;
-    logic [DADDR_START-1:0] offset;     // byte in the word
+    // Parts of the address and of the store data.
+    byte_offset_t           offset;     // byte in the word
     logic                   odd;        // odd byte address
     logic [7:0]             rs2_b;
     logic [15:0]            rs2_h;
-    assign kind   = dec.kind;
-    assign funct3 = dec.funct3;
     assign offset = addr[DADDR_START-1:0];
     assign odd    = addr[0];
     assign rs2_b  = rs2_data[7:0];
@@ -45,11 +51,11 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
     assign strb_b = {{(STRB_WIDTH - 1){1'b0}}, 1'b1};
     assign strb_h = {{(STRB_WIDTH - 2){1'b0}}, 2'b11};
 
-    assign load  = valid && kind == KIND_LOAD;
-    assign store = valid && kind == KIND_STORE;
+    assign load  = valid && dec.mem.read;
+    assign store = valid && dec.mem.write;
 
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_H, F3_HU: unaligned = odd;
             F3_W:        unaligned = offset != '0;
             default:     unaligned = 1'b0;      // bytes
@@ -59,7 +65,7 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
 
     // Bytes of the access; loads and stores have the same funct3 sizes (B, H, W).
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_B, F3_BU: strb = strb_b << offset;
             F3_H, F3_HU: strb = strb_h << offset;
             default:     strb = '1;
@@ -67,7 +73,7 @@ module Mig1Lsu import Mig1Pkg::*, RiscvPkg::*; (
 
     // Store: bytes of rs2 repeated over the word, strobes select the bytes at offset.
     always_comb
-        case (funct3)
+        case (dec.funct3)
             F3_B:    wr_data = {STRB_WIDTH{rs2_b}};
             F3_H:    wr_data = {(STRB_WIDTH / 2){rs2_h}};
             default: wr_data = rs2_data;
