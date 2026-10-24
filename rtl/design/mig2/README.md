@@ -39,8 +39,8 @@ instruction in EX (Mig2Control), a slot that already was a bubble keeps its reas
 (Mig2PipeReg). Decode marks returns (`br.ret`). The classes are those of branch
 prediction: with a predictor, they count mispredictions.
 
-The trace of TbMig2 (`+trace`) has a line per bubble, in place, and the run ends with the
-count per reason; branch.S:
+The trace of TbMig2 (`+trace`, see Logs) has a line per bubble, in place, and the run
+ends with the count per reason; branch.S:
 
 ```
       21 pc=00000048 insn=00308463
@@ -67,13 +67,23 @@ viewer: a row per instruction, its stages IF, ID, EX, MEM over the cycles, stall
 longer stages, the instructions of the wrong path flushed; label: pc and instruction
 word, tooltip: the bubbles before the instruction.
 
-The log costs a file per test, so tests write it only on request:
+With `DARK_CIRCUIT_MIG2_KANATA` (see Logs) the tests write the log; open, for example,
+`test/design/mig2/design_mig2_branch.verilator.kanata` of the build directory in Konata
+(from Windows through `\\wsl.localhost\...`).
+
+## Logs
+
+Program tests write logs only on request, because every log is a file per test:
+
+| CMake option | Plusarg of TbMig2 | Log, in `test/design/mig2/` of the build directory |
+|---|---|---|
+| `DARK_CIRCUIT_MIG2_TRACE` | `+trace=<file>` | `<test>.verilator.trace`: retired instructions, bubbles, debugger and semihosting actions, the count per bubble reason |
+| `DARK_CIRCUIT_MIG2_KANATA` | `+kanata=<file>` | `<test>.verilator.kanata`: the pipeline view for Konata |
 
 ```
-make cmake D=mig2 CMAKE_ARGS=-DDARK_CIRCUIT_MIG2_KANATA=ON    # once, stays in the cache
+make cmake D=mig2 CMAKE_ARGS="-DDARK_CIRCUIT_MIG2_TRACE=ON -DDARK_CIRCUIT_MIG2_KANATA=ON"
 make run D=mig2 R=design_mig2_branch V=1
 ```
 
-then open `test/design/mig2/design_mig2_branch.verilator.kanata` of the build directory
-in Konata (from Windows through `\\wsl.localhost\...`). `-DDARK_CIRCUIT_MIG2_KANATA=OFF`
-turns it off again.
+The options stay in the CMake cache; `=OFF` turns a log off again. Without the trace, a
+failing test shows its `$fatal` message; run it again with the trace to see what led there.
