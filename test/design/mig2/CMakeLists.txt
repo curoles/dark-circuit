@@ -32,26 +32,26 @@ endif()
 set(SIM ${DARK_CIRCUIT_MAINSIM})
 
 # Registers and ALU: unit tests of Mig2Regs and Mig2Alu, no program.
-dc_add_mainsim_test(design_mig2_regs TOP TbMig2Regs TB tb_mig2_regs.sv FLISTS ${FLISTS})
-dc_add_mainsim_test(design_mig2_alu TOP TbMig2Alu TB tb_mig2_alu.sv FLISTS ${FLISTS})
+dc_add_mainsim_test(design_mig2_regs TOP TbMig2Regs TB tb/tb_mig2_regs.sv FLISTS ${FLISTS})
+dc_add_mainsim_test(design_mig2_alu TOP TbMig2Alu TB tb/tb_mig2_alu.sv FLISTS ${FLISTS})
 
 # Programs need the RISC-V toolchain.
 if(DARK_CIRCUIT_RISCV)
     # Mig2Cpu memories: load() of a program.
     dc_add_riscv_program(design_mig2_mem SOURCES mem.S LINK_FLAGS -T ${SW}/mig2.ld)
-    dc_add_mainsim_test(design_mig2_mem TOP TbMig2Mem TB tb_mig2_mem.sv
+    dc_add_mainsim_test(design_mig2_mem TOP TbMig2Mem TB tb/tb_mig2_mem.sv
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_mem.hex)
 
     # Decode: unit test of Mig2Decode with cases encoded by the assembler.
     dc_add_riscv_program(design_mig2_decode SOURCES decode.S ARCH rv32im LINK_FLAGS -T ${SW}/mig2.ld)
-    dc_add_mainsim_test(design_mig2_decode TOP TbMig2Decode TB tb_mig2_decode.sv
+    dc_add_mainsim_test(design_mig2_decode TOP TbMig2Decode TB tb/tb_mig2_decode.sv
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_decode.hex)
 
-    # Programs run on TbMig2, built once; tb_mig2.flist has the modules it instantiates.
-    cmake_language(CALL dc_add_${SIM}_build design_mig2_sim TOP TbMig2 TB tb_mig2.sv
-                   FLISTS ${FLISTS} ${CMAKE_CURRENT_SOURCE_DIR}/tb_mig2.flist)
+    # Programs run on TbMig2, built once; tb/tb_mig2.flist has the modules it instantiates.
+    cmake_language(CALL dc_add_${SIM}_build design_mig2_sim TOP TbMig2 TB tb/tb_mig2.sv
+                   FLISTS ${FLISTS} ${CMAKE_CURRENT_SOURCE_DIR}/tb/tb_mig2.flist)
 
     # Konata logs of the pipeline cost a file per test: written only with this option.
     option(DARK_CIRCUIT_MIG2_KANATA "Mig2 program tests write a Konata log (+kanata)" OFF)
