@@ -311,4 +311,18 @@ package Mig2Pkg;
         bubble_e ex_why;     // ex_flush: reason of the bubble
     } pipe_ctrl_t;
 
+    // Mig2Core -> testbench: the pipeline view (Konata): the slot of every stage in this
+    // cycle and how the slots move at the rising edge. The core only reports it.
+    typedef struct packed {
+        logic   if_req;     // IF requests the instruction at if_pc from imem
+        iaddr_t if_pc;
+        fetch_t id;         // slots: valid, bubble reason, pc
+        fetch_t ex;
+        fetch_t mem;        // MEM/WB
+        logic   redirect;   // the request of this cycle is dropped
+        logic   id_stall;   // IF and ID keep their instruction (load-use, division)
+        logic   ex_stall;   // EX keeps its instruction (division)
+        logic   ex_flush;   // EX gets a bubble; without id_stall the instruction in ID dies
+    } pipe_trace_t;
+
 endpackage

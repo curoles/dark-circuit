@@ -41,22 +41,23 @@
 module Mig2Core import Mig2Pkg::*; #(
     parameter mig2_cfg_t CFG = MIG2_CFG    // configuration, see Mig2ConfigPkg
 )(
-    input  wire       clk,
-    input  wire       rst_n,               // synchronous reset, active low
+    input  wire         clk,
+    input  wire         rst_n,             // synchronous reset, active low
 
     // Memories: requests out, read data back 1 clock later.
-    output imem_req_t imem_req,
-    input  imem_rsp_t imem_rsp,
-    output dmem_req_t dmem_req,
-    input  dmem_rsp_t dmem_rsp,
+    output imem_req_t   imem_req,
+    input  imem_rsp_t   imem_rsp,
+    output dmem_req_t   dmem_req,
+    input  dmem_rsp_t   dmem_rsp,
 
-    // Retire trace and halt.
-    output wire       halt,                // core halted at EBREAK, see dbg_req.ebreak_halt
-    output retire_t   retire,              // RVFI trace, see Mig2Pkg
+    // Retire trace, pipeline view and halt.
+    output wire         halt,              // core halted at EBREAK, see dbg_req.ebreak_halt
+    output retire_t     retire,            // RVFI trace, see Mig2Pkg
+    output pipe_trace_t pipe_trace,        // pipeline view for testbenches, see Mig2Pkg
 
     // Debug, used while halted.
-    input  dbg_req_t  dbg_req,
-    output dbg_rsp_t  dbg_rsp
+    input  dbg_req_t    dbg_req,
+    output dbg_rsp_t    dbg_rsp
 );
     // IF and control
     fetch_ctrl_t  if_ctrl;          // Control -> Fetch
@@ -257,6 +258,19 @@ module Mig2Core import Mig2Pkg::*; #(
         retire.rd_wdata  = mem_rd_write ? mem_rd_data : '0;
         retire.mem_rdata = mem_ret.mem_rmask != '0 ? dmem_rsp.rd_data : '0;
     end
+
+    // Pipeline view: the slots of the stages and their moves (pipe_trace_t, Mig2Pkg).
+    assign pipe_trace = '{if_req:   imem_req.en,
+                          if_pc:    imem_req.addr,
+                          id:       id_fetch,
+                          ex:       ex_fetch,
+                          mem:      '{valid:  ex_mem_q.valid,
+                                      bubble: ex_mem_q.bubble,
+                                      pc:     mem_ret.pc_rdata[WIDTH-1:IADDR_START]},
+                          redirect: if_ctrl.redirect,
+                          id_stall: if_ctrl.stall,
+                          ex_stall: pipe_ctrl.ex_stall,
+                          ex_flush: pipe_ctrl.ex_flush};
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;

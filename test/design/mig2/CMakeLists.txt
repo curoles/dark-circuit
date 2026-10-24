@@ -53,12 +53,16 @@ if(DARK_CIRCUIT_RISCV)
     cmake_language(CALL dc_add_${SIM}_build design_mig2_sim TOP TbMig2 TB tb_mig2.sv
                    FLISTS ${FLISTS})
 
+    # Konata logs of the pipeline cost a file per test: written only with this option.
+    option(DARK_CIRCUIT_MIG2_KANATA "Mig2 program tests write a Konata log (+kanata)" OFF)
+
     # mig2_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...]
     #                   [ARGS <arg>...] [LABELS <label>...] [OUTPUT <regex>])
     #
     # Build RISC-V program design_mig2_<name> and add test design_mig2_<name>.<sim>
     # that runs it on TbMig2 with the main simulator; ARGS get +hex=<program hex>,
-    # +symbols=<program symbols> and +trace=<test>.<sim>.trace in the build directory;
+    # +symbols=<program symbols> and +trace=<test>.<sim>.trace in the build directory,
+    # with DARK_CIRCUIT_MIG2_KANATA also +kanata=<test>.<sim>.kanata;
     # ARCH is -march of the program (default rv32i);
     # LABELS are added to the tests;
     # with OUTPUT the output (semihosting console) must match <regex>.
@@ -70,11 +74,15 @@ if(DARK_CIRCUIT_RISCV)
         set(prog design_mig2_${NAME})
         dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} ARCH ${P_ARCH} FLAGS ${P_FLAGS}
                              LINK_FLAGS -T ${SW}/mig2.ld)
+        set(kanata)
+        if(DARK_CIRCUIT_MIG2_KANATA)
+            set(kanata +kanata=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.kanata)
+        endif()
         cmake_language(CALL dc_add_${SIM}_run ${prog} BUILD design_mig2_sim
                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
                             +symbols=${CMAKE_CURRENT_BINARY_DIR}/${prog}.sym
                             +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.trace
-                            ${P_ARGS}
+                            ${kanata} ${P_ARGS}
                        LABELS ${P_LABELS} OUTPUT ${P_OUTPUT})
     endfunction()
 

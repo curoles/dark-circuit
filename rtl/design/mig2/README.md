@@ -5,14 +5,14 @@ Mig2 is where bigger changes of the Mig CPUs go first. It started as a copy of M
 two are the same design: RV32IM, Zicsr, Zicntr, machine-mode traps, 4-stage pipeline
 IF | ID | EX | MEM/WB with forwarding. See Mig1's README for how it works, its tests,
 synthesis (`make mig2_synth` here) and its area and speed; this file describes what Mig2
-changes from Mig1: bubbles carry their reason.
+changes from Mig1: bubbles carry their reason, and a pipeline view for Konata.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
 DARK_CIRCUIT_MAIN_SIMULATOR, by default Verilator when it is installed). Mig2 is tested
 with Verilator; only Verilator is guaranteed to work.
 
-Planned: pipeline view in Konata, a faster multiplier, Spike cosim (lockstep), a Zbb
-slice, a single memory instead of two.
+Planned: a faster multiplier, Spike cosim (lockstep), a Zbb slice, a single memory
+instead of two.
 
 ## Bubbles
 
@@ -55,3 +55,25 @@ TbMig2 checks every bubble against the instructions around it: a redirect bubble
 an instruction of its class, at most two; a load-use bubble sits between a load and an
 instruction that reads its rd; division bubbles come right before a division; fill
 bubbles only before the first instruction after reset or resume.
+
+## Pipeline view (Konata)
+
+Mig2Core reports its pipeline in `pipe_trace` (`pipe_trace_t` in Mig2Pkg): the slot of
+every stage (valid, bubble reason, pc) and how the slots move at the rising edge
+(redirect, stalls, flush). TbMig2 follows every instruction through the stages and checks
+its view against the slots in every cycle of every program test. With `+kanata=<file>` it
+writes the view as a log for [Konata](https://github.com/shioyadan/Konata), a pipeline
+viewer: a row per instruction, its stages IF, ID, EX, MEM over the cycles, stalls as
+longer stages, the instructions of the wrong path flushed; label: pc and instruction
+word, tooltip: the bubbles before the instruction.
+
+The log costs a file per test, so tests write it only on request:
+
+```
+make cmake D=mig2 CMAKE_ARGS=-DDARK_CIRCUIT_MIG2_KANATA=ON    # once, stays in the cache
+make run D=mig2 R=design_mig2_branch V=1
+```
+
+then open `test/design/mig2/design_mig2_branch.verilator.kanata` of the build directory
+in Konata (from Windows through `\\wsl.localhost\...`). `-DDARK_CIRCUIT_MIG2_KANATA=OFF`
+turns it off again.

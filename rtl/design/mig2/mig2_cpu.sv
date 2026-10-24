@@ -13,12 +13,13 @@
 module Mig2Cpu import Mig2Pkg::*; #(
     parameter mig2_cfg_t CFG = MIG2_CFG     // configuration, see Mig2ConfigPkg
 )(
-    input  wire      clk,
-    input  wire      rst_n,          // synchronous reset, active low
-    output wire      halt,           // core halted at EBREAK, see Mig2Core
-    output retire_t  retire,         // for trace in testbench
-    input  dbg_req_t dbg_req,        // debug, used while halted
-    output dbg_rsp_t dbg_rsp
+    input  wire         clk,
+    input  wire         rst_n,          // synchronous reset, active low
+    output wire         halt,           // core halted at EBREAK, see Mig2Core
+    output retire_t     retire,         // for trace in testbench
+    output pipe_trace_t pipe_trace,     // pipeline view for testbench
+    input  dbg_req_t    dbg_req,        // debug, used while halted
+    output dbg_rsp_t    dbg_rsp
 );
     localparam MEM_ADDR_WIDTH = CFG.mem_addr_width;   // memory size: 1 << MEM_ADDR_WIDTH bytes
 
@@ -33,8 +34,8 @@ module Mig2Cpu import Mig2Pkg::*; #(
     /* verilator lint_on UNUSEDSIGNAL */
 
     Mig2Core #(.CFG(CFG)) u_mig2_core(
-        .clk, .rst_n, .imem_req, .imem_rsp, .dmem_req, .dmem_rsp, .halt, .retire, .dbg_req,
-        .dbg_rsp);
+        .clk, .rst_n, .imem_req, .imem_rsp, .dmem_req, .dmem_rsp, .halt, .retire, .pipe_trace,
+        .dbg_req, .dbg_rsp);
 
     // Instruction memory, read only.
     SimROM #(.DATA_SIZE($bits(insn_t) / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH)) u_imem(
