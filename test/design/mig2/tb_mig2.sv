@@ -57,11 +57,8 @@
  * instruction of that class that retired right before it, at most 2; a load-use bubble
  * follows a load, and the next instruction reads its rd; division bubbles come right
  * before a division; fill bubbles only before the first instruction after reset or resume.
- * Pipeline view: pipe_trace (Mig2Pkg) has the slot of every stage and how the slots move;
- * the testbench follows every instruction through the stages and checks its stages
- * against the slots in every cycle. +kanata=<file> writes the view as a Konata log
- * (Kanata format 0004): a row per instruction, stages IF ID EX MEM, the instructions of
- * the wrong path flushed; label: pc and instruction word, tooltip: the bubbles before it.
+ * Pipeline view, checked against pipe_trace, and its Konata log (+kanata=<file>):
+ * TbMig2PipeView.
  * Stops at the first failure with $fatal.
  *
  * @author    Igor Lesik
@@ -71,6 +68,7 @@ module TbMig2;
     import Mig2Pkg::*;
     import RiscvPkg::*;
     import RiscvInstrPkg::*;
+    import TbMig2Pkg::*;
 
     localparam AW = MIG2_CFG.mem_addr_width;
 
@@ -88,8 +86,6 @@ module TbMig2;
     string       hex;
     string       trace_file;
     integer      trace_fd;              // 0: no trace
-    string       kanata_file;
-    integer      kanata_fd;             // 0: no Konata log
     logic        expect_sequential;
     logic        expect_trap;
     logic        first_ebreak_traps;
@@ -139,17 +135,12 @@ module TbMig2;
     reg_id_t     use_rd;                // after a load-use bubble: the next one reads it
     logic        div_pending;           // after a division bubble: the next one divides
 
-    // Pipeline view: the instruction in each stage, followed through pipe_trace
-    localparam S_IF = 0, S_ID = 1, S_EX = 2, S_MEM = 3;
-    integer      stage_id [4];          // instruction in IF, ID, EX, MEM/WB; -1: none
-    iaddr_t      stage_pc [4];
-    integer      view_next_id;          // id of the next instruction IF requests
-    integer      view_bubbles [1 << $bits(bubble_e)];   // bubbles since the last retire
-
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
     Mig2Cpu u_mig2_cpu(.clk, .rst_n, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
+
+    TbMig2PipeView u_pipe_view(.clk, .rst_n, .halt, .retire, .pipe_trace);
 
     assign retire_pc = retire.pc_rdata;
     assign halt_pc   = {dbg_rsp.halt_pc, {IADDR_START{1'b0}}};
@@ -388,14 +379,6 @@ module TbMig2;
 
     // Bubbles
 
-    // Name of a bubble reason for the trace: BUBBLE_LOAD_USE gives load_use.
-    function automatic string bubble_name(input bubble_e b);
-        string s;
-        s = b.name();
-        s = s.substr(7, s.len() - 1);
-        return s.tolower();
-    endfunction
-
     // JALR is a return (pops the return-address stack, RISC-V hints) when rs1 is x1 or
     // x5, unless rd = rs1.
     function automatic logic is_return(input insn_t insn);
@@ -473,142 +456,6 @@ module TbMig2;
             $fdisplay(trace_fd, "%0d cycles = %0d retired + %0d bubbles:%s",
                       core_cycles, retired, total, s);
     endtask
-
-    // Pipeline view
-
-    function automatic string stage_name(input integer s);
-        case (s)
-            S_IF:    return "IF";
-            S_ID:    return "ID";
-            S_EX:    return "EX";
-            default: return "MEM";
-        endcase
-    endfunction
-
-    // The tracked instruction of stage s against the slot pipe_trace reports for it (an
-    // instruction at pc, or a bubble).
-    task automatic check_slot(input integer s, input logic valid, input iaddr_t pc);
-        if ((stage_id[s] >= 0) !== valid || (valid && stage_pc[s] !== pc))
-            $fatal(1, "Mig2: cycle %0d: %s has %s, pipe_trace reports %s", cycle,
-                   stage_name(s),
-                   stage_id[s] >= 0 ? $sformatf("pc %h", {stage_pc[s], 2'b00}) : "none",
-                   valid ? $sformatf("pc %h", {pc, 2'b00}) : "a bubble");
-    endtask
-
-    // Konata log (Kanata format 0004, tab separated): stage s starts for instruction id;
-    // instruction id ends, retired or flushed. Nothing without +kanata.
-    task automatic kanata_stage(input integer id, input integer s);
-        if (kanata_fd != 0)
-            $fdisplay(kanata_fd, "S\t%0d\t0\t%s", id, stage_name(s));
-    endtask
-
-    task automatic kanata_flush(input integer id);
-        if (kanata_fd != 0)
-            $fdisplay(kanata_fd, "R\t%0d\t0\t1", id);
-    endtask
-
-    // The instruction in MEM/WB retires: its word into the label, the bubbles before it
-    // into the tooltip.
-    task automatic view_retire(input integer id);
-        string s;
-        if (kanata_fd != 0) begin
-            s = "";
-            for (int k = 0; k < (1 << $bits(bubble_e)); k++)
-                if (view_bubbles[k] != 0)
-                    s = {s, $sformatf(" %s %0d", bubble_name(bubble_e'(k)), view_bubbles[k])};
-            $fdisplay(kanata_fd, "L\t%0d\t0\t: %h", id, retire.insn);
-            if (retire.trap)
-                $fdisplay(kanata_fd, "L\t%0d\t0\t trap", id);
-            if (s.len() != 0)
-                $fdisplay(kanata_fd, "L\t%0d\t1\tbubbles before:%s", id, s);
-            $fdisplay(kanata_fd, "R\t%0d\t%0d\t0", id, retire.order[31:0]);
-        end
-        foreach (view_bubbles[k])
-            view_bubbles[k] = 0;
-    endtask
-
-    // One cycle of the view, at its rising edge: check the tracked stages against the
-    // slots, log a request of this cycle, then move the instructions as pipe_trace tells.
-    task automatic view_step;
-        integer old_if;
-        integer old_id;
-        integer old_ex;
-        iaddr_t old_if_pc;
-        iaddr_t old_id_pc;
-        iaddr_t old_ex_pc;
-        logic   id_to_ex;   // the instruction in ID goes to EX
-        check_slot(S_ID, pipe_trace.id.valid, pipe_trace.id.pc);
-        check_slot(S_EX, pipe_trace.ex.valid, pipe_trace.ex.pc);
-        check_slot(S_MEM, pipe_trace.mem.valid, pipe_trace.mem.pc);
-        if (!pipe_trace.mem.valid && !halt)
-            view_bubbles[pipe_trace.mem.bubble] = view_bubbles[pipe_trace.mem.bubble] + 1;
-        stage_id[S_IF] = -1;
-        if (pipe_trace.if_req) begin
-            stage_id[S_IF] = view_next_id;
-            stage_pc[S_IF] = pipe_trace.if_pc;
-            view_next_id   = view_next_id + 1;
-            if (kanata_fd != 0) begin
-                $fdisplay(kanata_fd, "I\t%0d\t%0d\t0", stage_id[S_IF], stage_id[S_IF]);
-                $fdisplay(kanata_fd, "L\t%0d\t0\t%h", stage_id[S_IF], {pipe_trace.if_pc, 2'b00});
-            end
-            kanata_stage(stage_id[S_IF], S_IF);
-        end
-        if (kanata_fd != 0)
-            $fdisplay(kanata_fd, "C\t1");
-
-        // Moves at the rising edge, MEM/WB first.
-        old_if    = stage_id[S_IF];
-        old_id    = stage_id[S_ID];
-        old_ex    = stage_id[S_EX];
-        old_if_pc = stage_pc[S_IF];
-        old_id_pc = stage_pc[S_ID];
-        old_ex_pc = stage_pc[S_EX];
-        id_to_ex  = !pipe_trace.ex_stall && !pipe_trace.ex_flush;
-        if (id_to_ex && pipe_trace.id_stall)
-            $fatal(1, "Mig2: cycle %0d: pipe_trace: ID both goes to EX and stalls", cycle);
-        if (old_if >= 0 && pipe_trace.id_stall)
-            $fatal(1, "Mig2: cycle %0d: pipe_trace: IF requests while ID stalls", cycle);
-        // MEM/WB retires; EX goes to MEM/WB unless it stalls.
-        if (stage_id[S_MEM] >= 0)
-            view_retire(stage_id[S_MEM]);
-        stage_id[S_MEM] = pipe_trace.ex_stall ? -1 : old_ex;
-        stage_pc[S_MEM] = old_ex_pc;
-        if (stage_id[S_MEM] >= 0)
-            kanata_stage(old_ex, S_MEM);
-        // EX keeps its instruction (stall), takes ID's, or gets a bubble (flush).
-        if (!pipe_trace.ex_stall) begin
-            stage_id[S_EX] = id_to_ex ? old_id : -1;
-            stage_pc[S_EX] = old_id_pc;
-            if (stage_id[S_EX] >= 0)
-                kanata_stage(old_id, S_EX);
-        end
-        // ID keeps its instruction (stall), takes the request of IF, or gets a bubble; an
-        // instruction of ID that neither stays nor goes to EX is flushed (wrong path), so
-        // is a request that a redirect drops.
-        if (old_id >= 0 && !id_to_ex && !pipe_trace.id_stall)
-            kanata_flush(old_id);
-        if (!pipe_trace.id_stall) begin
-            stage_id[S_ID] = pipe_trace.redirect ? -1 : old_if;
-            stage_pc[S_ID] = old_if_pc;
-            if (stage_id[S_ID] >= 0)
-                kanata_stage(old_if, S_ID);
-        end
-        if (old_if >= 0 && pipe_trace.redirect)
-            kanata_flush(old_if);
-    endtask
-
-    // End of the run: instructions still in the pipeline end as flushed (Konata needs an
-    // end for every instruction).
-    task automatic kanata_close;
-        for (int s = S_IF; s <= S_MEM; s++)
-            if (stage_id[s] >= 0 && s != S_IF)
-                kanata_flush(stage_id[s]);
-        $fclose(kanata_fd);
-    endtask
-
-    always @(posedge clk)
-        if (rst_n)
-            view_step();
 
     // Checks of every retired instruction
 
@@ -783,11 +630,6 @@ module TbMig2;
         load_rd          = '0;
         use_rd           = '0;
         div_pending      = 1'b0;
-        foreach (stage_id[s])
-            stage_id[s] = -1;
-        view_next_id     = 0;
-        foreach (view_bubbles[k])
-            view_bubbles[k] = 0;
 
         // Plusargs.
         expect_sequential    = $test$plusargs("expect_sequential");
@@ -815,17 +657,6 @@ module TbMig2;
             trace_fd = 32'h8000_0001;   // stdout
         else
             trace_fd = 0;
-
-        // +kanata=<file> writes the pipeline view as a Konata log.
-        if ($value$plusargs("kanata=%s", kanata_file)) begin
-            kanata_fd = $fopen(kanata_file, "w");
-            if (kanata_fd == 0)
-                $fatal(1, "Mig2: can not open Konata log %s", kanata_file);
-            $fdisplay(kanata_fd, "Kanata\t0004");
-            $fdisplay(kanata_fd, "C=\t0");
-            $display("Mig2: Konata log in %s", kanata_file);
-        end else
-            kanata_fd = 0;
 
         if (!$value$plusargs("hex=%s", hex))
             $fatal(1, "Mig2: plusarg +hex=<file> is missing");
@@ -908,8 +739,6 @@ module TbMig2;
                      retired, cycle, halt_pc);
         if (trace_file.len() != 0)
             $fclose(trace_fd);
-        if (kanata_fd != 0)
-            kanata_close();
         $finish;
     end
 endmodule

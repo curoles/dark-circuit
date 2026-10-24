@@ -49,9 +49,9 @@ if(DARK_CIRCUIT_RISCV)
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_decode.hex)
 
-    # Programs run on TbMig2, built once.
+    # Programs run on TbMig2, built once; tb_mig2.flist has the modules it instantiates.
     cmake_language(CALL dc_add_${SIM}_build design_mig2_sim TOP TbMig2 TB tb_mig2.sv
-                   FLISTS ${FLISTS})
+                   FLISTS ${FLISTS} ${CMAKE_CURRENT_SOURCE_DIR}/tb_mig2.flist)
 
     # Konata logs of the pipeline cost a file per test: written only with this option.
     option(DARK_CIRCUIT_MIG2_KANATA "Mig2 program tests write a Konata log (+kanata)" OFF)
