@@ -11,16 +11,17 @@
 module Mig1Pipe import Mig1Pkg::*; (
     input  wire        clk,
     input  wire        rst_n,       // synchronous reset, active low
-    input  pipe_ctrl_t ctrl,        // stall and flush of ID/EX, from Mig1Control
+    input  pipe_ctrl_t ctrl,        // stall, flush and bubble reason of ID/EX, from Mig1Control
     input  id_ex_t     id_ex_d,     // from ID
     output id_ex_t     id_ex_q,     // to EX
     input  ex_mem_t    ex_mem_d,    // from EX
     output ex_mem_t    ex_mem_q     // to MEM/WB
 );
     Mig1PipeReg #(.T(id_ex_t)) u_mig1_pipe_reg_id_ex(
-        .clk, .rst_n, .stall(ctrl.ex_stall), .flush(ctrl.ex_flush), .d(id_ex_d), .q(id_ex_q));
+        .clk, .rst_n, .stall(ctrl.ex_stall), .flush(ctrl.ex_flush), .why(ctrl.ex_why),
+        .d(id_ex_d), .q(id_ex_q));
 
     Mig1PipeReg #(.T(ex_mem_t)) u_mig1_pipe_reg_ex_mem(
-        .clk, .rst_n, .stall(1'b0), .flush(1'b0), .d(ex_mem_d), .q(ex_mem_q));
+        .clk, .rst_n, .stall(1'b0), .flush(1'b0), .why(BUBBLE_NONE), .d(ex_mem_d), .q(ex_mem_q));
 
 endmodule

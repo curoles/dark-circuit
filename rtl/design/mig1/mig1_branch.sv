@@ -52,7 +52,7 @@ module Mig1Branch import Mig1Pkg::*, RiscvPkg::*; (
 
     assign branch.taken      = dec.br.jump || (dec.br.branch && cond);
     assign branch.target     = target[WIDTH-1:IADDR_START];
-    assign branch.misaligned = target[1];
+    assign branch.misaligned = target_misaligned(target);
 
     assign link = {pc + 1'b1, {IADDR_START{1'b0}}};
 

@@ -16,12 +16,18 @@
  * halt=1 comes the cycle after EBREAK retired in MEM/WB; halt_pc is its address, nothing
  * is in flight; resume=1 runs again from halt_pc + 4 (a redirect: IF has fetched beyond
  * EBREAK).
- * A redirect (taken jump or branch, trap, MRET in EX; resume) drops the instructions in
- * ID and IF (two bubbles). ex_muldiv_stall (division not done) keeps the instruction in
- * EX: ID and IF hold.
+ * A redirect from EX (taken branch, JALR, trap, MRET; resume) drops the instructions in
+ * ID and IF (two bubbles). JAL is resolved in ID: it is always taken and its target is
+ * pc + imm, so ID redirects fetch when the JAL leaves ID and only the instruction in IF
+ * is dropped (one bubble); EX does not redirect again. A JAL behind a redirect or halt in
+ * EX is dropped with ID; a JAL to a misaligned target traps in EX. ex_muldiv_stall
+ * (division not done) keeps the instruction in EX: ID and IF hold.
  * Interlock: results are forwarded to ID (Mig1Forward), except load data, which comes
  * in MEM/WB: the instruction in ID waits one cycle while it reads the rd of a load in
  * EX (load-use); EX gets a bubble meanwhile.
+ * Every bubble carries its reason (bubble_e, Mig1Pkg): the redirect class (JAL from ID;
+ * conditional branch, JALR or return, trap, MRET from EX), fill for resume and for the
+ * slot the halting EBREAK flushes, load-use for the interlock.
  * ex_done=1: the instruction in EX completes: CSR write and minstret now; it writes rd
  * and retires in MEM/WB, which it always reaches.
  *
@@ -34,14 +40,20 @@
 module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     input  wire                        clk,
     input  wire                        rst_n,       // synchronous reset, active low
-    input  wire                        id_valid,    // an instruction is in ID
-    // Only uses_rs1, uses_rs2, rs1 and rs2 are used.
+    // Only valid and pc are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  fetch_t                     id_fetch,    // instruction in ID: valid and pc
+    /* verilator lint_on UNUSEDSIGNAL */
+    // Only uses_rs1, uses_rs2, rs1, rs2, br and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   id_dec,      // instruction in ID taken apart
     /* verilator lint_on UNUSEDSIGNAL */
+    // Only valid and pc are used.
+    /* verilator lint_off UNUSEDSIGNAL */
     input  fetch_t                     ex_fetch,    // instruction in EX: valid and pc
+    /* verilator lint_on UNUSEDSIGNAL */
     input  insn_t                      ex_insn,     // for mtval of illegal instructions
-    // Only sys, mem, rd_we and rd are used.
+    // Only sys, mem, br, rd_we and rd are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   ex_dec,      // instruction in EX taken apart
     /* verilator lint_on UNUSEDSIGNAL */
@@ -57,6 +69,7 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     output pipe_ctrl_t                 pipe_ctrl,
     output wire                        ex_done,
     output trap_t                      ex_trap,
+    output iaddr_t                     ex_next_pc,  // next pc of the instruction in EX (retire)
     output wire                        halt,
     output iaddr_t                     halt_pc
 );
@@ -70,12 +83,18 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     excp_code_t ex_cause;
     word_t      ex_tval;
     logic       resuming;    // resume while halted
-    logic       redirect;
+    logic       ex_redirect; // EX (or resume) redirects fetch: ID and IF are dropped
+    logic       ex_jal;      // JAL in EX: EX does not redirect it, ID did (a misaligned one traps)
+    logic       id_jal;      // JAL in ID
+    word_t      id_jal_target; // its target, byte address
+    logic       id_moves;    // the instruction in ID goes to EX at the rising edge
+    logic       id_redirect; // ID redirects fetch: the JAL leaves ID
     logic       ex_writes;   // the instruction in EX writes a register at the end of its cycle
     logic       mem_halting; // the EBREAK that halts the core is in MEM/WB, it retires now
     logic       id_load_use; // ID reads the rd of a load in EX: its data comes in MEM/WB
     logic       id_hazard;   // the instruction in ID must wait
     logic       flush_id;    // the instruction in ID must not go on
+    bubble_e    redirect_why; // reason of the bubbles of a redirect
 
     assign ex_stop = ex_fetch.valid && ex_dec.sys.ebreak && ebreak_halt;
     assign ex_mret = ex_fetch.valid && ex_dec.sys.mret;
@@ -124,8 +143,32 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
         if (ex_stop) halt_pc <= ex_fetch.pc;
 
     assign resuming = halt && resume;
-    assign redirect = ex_fault || ex_mret || (ex_fetch.valid && ex_branch.taken) || resuming;
-    assign flush_id = redirect || ex_stop;
+    assign ex_jal      = ex_dec.br.jump && !ex_dec.br.target_rs1;
+    assign ex_redirect = ex_fault || ex_mret || (ex_fetch.valid && ex_branch.taken && !ex_jal) ||
+                         resuming;
+    assign flush_id    = ex_redirect || ex_stop;
+
+    // Class of a redirect from EX: a taken branch or JALR by its kind, a trap, MRET; a
+    // resume refills the pipeline.
+    always_comb
+        if (ex_fault)              redirect_why = BUBBLE_TRAP;
+        else if (ex_mret)          redirect_why = BUBBLE_XRET;
+        else if (resuming)         redirect_why = BUBBLE_FILL;
+        else if (ex_dec.br.branch) redirect_why = BUBBLE_COND_BRANCH;
+        else if (ex_dec.br.ret)    redirect_why = BUBBLE_RET;
+        else                       redirect_why = BUBBLE_INDIR_JUMP;
+
+    // ID acts (redirects now; pushes to a return stack, shifts a history later) only for an
+    // instruction that goes on to EX: once per instruction, never on the wrong path. It
+    // stays while EX holds a division or it waits for load data; it is dropped when an
+    // older instruction in EX redirects or halts.
+    assign id_moves = id_fetch.valid && !ex_stall && !id_hazard && !flush_id;
+
+    // JAL is resolved in ID: always taken, target pc + imm; ID redirects fetch when the JAL
+    // goes to EX. A target not divisible by 4 is a fault: EX traps, ID does not redirect.
+    assign id_jal        = id_fetch.valid && id_dec.br.jump && !id_dec.br.target_rs1;
+    assign id_jal_target = {id_fetch.pc, {IADDR_START{1'b0}}} + id_dec.imm;
+    assign id_redirect   = id_jal && !target_misaligned(id_jal_target) && id_moves;
 
     // Interlock: other results are forwarded to ID (Mig1Forward), but a load's data comes
     // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
@@ -140,16 +183,26 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
     assign id_reads_ex_rd = (id_dec.uses_rs1 && id_dec.rs1 == ex_dec.rd) ||
                             (id_dec.uses_rs2 && id_dec.rs2 == ex_dec.rd);
     assign id_load_use    = ex_load && id_reads_ex_rd;
-    assign id_hazard   = id_valid && id_load_use;
+    assign id_hazard   = id_fetch.valid && id_load_use;
 
     assign ex_done             = ex_fetch.valid && !ex_fault && !ex_stall;
     assign fetch_ctrl.run      = rst_n && running && !ex_stop && !mem_halting;
     assign fetch_ctrl.stall    = (ex_stall || id_hazard) && !flush_id;
-    assign fetch_ctrl.redirect = redirect;
+    assign fetch_ctrl.redirect = ex_redirect || id_redirect;
+    assign fetch_ctrl.why      = ex_redirect ? redirect_why : BUBBLE_DIR_JUMP;
     assign fetch_ctrl.target   = ex_fault ? csr.mtvec : ex_mret ? csr.mepc :
-                                 resuming ? halt_pc + 1'b1 : ex_branch.target;
+                                 resuming ? halt_pc + 1'b1 :
+                                 ex_redirect ? ex_branch.target :
+                                 id_jal_target[WIDTH-1:IADDR_START];
     assign pipe_ctrl.ex_stall  = ex_stall;
     assign pipe_ctrl.ex_flush  = !ex_stall && (id_hazard || flush_id);
+    assign pipe_ctrl.ex_why    = ex_redirect ? redirect_why :
+                                 ex_stop ? BUBBLE_FILL : BUBBLE_LOAD_USE;
+
+    // Next pc of the instruction in EX, for retire: where EX redirects, the target of a JAL
+    // (redirected from ID) or of a taken branch, else the next instruction.
+    assign ex_next_pc = ex_redirect ? fetch_ctrl.target :
+                        ex_branch.taken ? ex_branch.target : ex_fetch.pc + 1'b1;
     assign halt                = !running;
 
     // Halted: nothing is in EX, so no redirect comes from EX (only resume redirects).
@@ -161,5 +214,11 @@ module Mig1Control import Mig1Pkg::*, RiscvPkg::*; (
                          ex_branch.taken && ex_branch.misaligned, ex_lsu_misaligned}))
     // A stalled instruction stays in EX for the next cycle.
     `DC_ASSERT_NEXT(a_ex_held, ex_stall, ex_fetch.valid && $stable(ex_fetch.pc))
+    // ID redirects only for an instruction that moves to EX in this cycle.
+    `DC_ASSERT(a_id_redirect_moves, !id_redirect || (!pipe_ctrl.ex_stall && !pipe_ctrl.ex_flush))
+    // Fetch is never told to redirect and to stall in the same cycle.
+    `DC_ASSERT(a_redirect_no_stall, !(fetch_ctrl.redirect && fetch_ctrl.stall))
+    // A JAL in EX does not redirect from EX, unless it traps (misaligned target).
+    `DC_ASSERT(a_ex_jal_no_redirect, !(ex_fetch.valid && ex_jal && ex_redirect) || ex_fault)
 
 endmodule

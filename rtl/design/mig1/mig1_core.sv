@@ -22,10 +22,13 @@
  * happen there, loads send their read; MEM/WB gets load data, writes rd and retires.
  * An instruction that leaves EX always completes. Signals of a stage have its prefix:
  * if_, id_, ex_, mem_.
- * A taken branch or jump, a trap and MRET cost two bubbles: the instructions in ID and
- * IF are dropped. Results are forwarded to ID (Mig1Forward); an instruction that reads
+ * A taken branch, JALR, a trap and MRET cost two bubbles: the instructions in ID and IF
+ * are dropped; JAL costs one: ID redirects fetch to its target. Results are forwarded to
+ * ID (Mig1Forward); an instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
+ * Every slot without an instruction carries its reason (bubble_e); retire reports it
+ * (retire.bubble), so each cycle retires an instruction or a bubble.
  *
  * Mig1Cpu instantiates it, with simulation memories; synthesis (make mig1_synth) takes
  * Mig1Core as its top.
@@ -33,25 +36,29 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module Mig1Core import Mig1Pkg::*; #(
     parameter mig1_cfg_t CFG = MIG1_CFG    // configuration, see Mig1ConfigPkg
 )(
-    input  wire       clk,
-    input  wire       rst_n,               // synchronous reset, active low
+    input  wire         clk,
+    input  wire         rst_n,             // synchronous reset, active low
 
     // Memories: requests out, read data back 1 clock later.
-    output imem_req_t imem_req,
-    input  imem_rsp_t imem_rsp,
-    output dmem_req_t dmem_req,
-    input  dmem_rsp_t dmem_rsp,
+    output imem_req_t   imem_req,
+    input  imem_rsp_t   imem_rsp,
+    output dmem_req_t   dmem_req,
+    input  dmem_rsp_t   dmem_rsp,
 
-    // Retire trace and halt.
-    output wire       halt,                // core halted at EBREAK, see dbg_req.ebreak_halt
-    output retire_t   retire,              // RVFI trace, see Mig1Pkg
+    // Retire trace, pipeline view and halt.
+    output wire         halt,              // core halted at EBREAK, see dbg_req.ebreak_halt
+    output retire_t     retire,            // RVFI trace, see Mig1Pkg
+    output pipe_trace_t pipe_trace,        // pipeline view for testbenches, see Mig1Pkg
 
     // Debug, used while halted.
-    input  dbg_req_t  dbg_req,
-    output dbg_rsp_t  dbg_rsp
+    input  dbg_req_t    dbg_req,
+    output dbg_rsp_t    dbg_rsp
 );
     // IF and control
     fetch_ctrl_t  if_ctrl;          // Control -> Fetch
@@ -91,8 +98,9 @@ module Mig1Core import Mig1Pkg::*; #(
     logic         ex_rd_write;      // instruction in EX will write rd (not x0)
     reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
-    word_t        ex_next_pc;       // byte address of the next instruction, for retire
+    iaddr_t       ex_next_pc;       // next instruction, for retire (Mig1Control)
     retire_t      ex_retire;        // RVFI entry built in EX, completed in MEM/WB
+    bubble_e      ex_bubble;        // nothing completes or traps in EX: why
     ex_mem_t      ex_mem_d;
     ex_mem_t      ex_mem_q;
 
@@ -113,10 +121,10 @@ module Mig1Core import Mig1Pkg::*; #(
         .clk, .rst_n, .ctrl(if_ctrl), .imem_req, .fetch(id_fetch));
 
     Mig1Control u_mig1_control(
-        .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex_fetch, .ex_insn, .ex_dec,
+        .clk, .rst_n, .id_fetch, .id_dec, .ex_fetch, .ex_insn, .ex_dec,
         .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned, .ex_csr_illegal,
         .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
-        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap,
+        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap, .ex_next_pc,
         .halt, .halt_pc);
 
     // ID
@@ -137,6 +145,7 @@ module Mig1Core import Mig1Pkg::*; #(
         .rs1_data(id_rs1_data), .rs2_data(id_rs2_data));
 
     assign id_ex_d = '{valid:    id_fetch.valid,
+                       bubble:   id_fetch.bubble,
                        pc:       id_fetch.pc,
                        insn:     id_insn,
                        dec:      id_dec,
@@ -146,7 +155,7 @@ module Mig1Core import Mig1Pkg::*; #(
     Mig1Pipe u_mig1_pipe(.clk, .rst_n, .ctrl(pipe_ctrl), .id_ex_d, .id_ex_q, .ex_mem_d, .ex_mem_q);
 
     // EX
-    assign ex_fetch       = '{valid: id_ex_q.valid, pc: id_ex_q.pc};
+    assign ex_fetch       = '{valid: id_ex_q.valid, bubble: id_ex_q.bubble, pc: id_ex_q.pc};
     assign ex_insn        = id_ex_q.insn;
     assign ex_dec         = id_ex_q.dec;
     assign ex_rs1_data    = id_ex_q.rs1_data;
@@ -188,14 +197,14 @@ module Mig1Core import Mig1Pkg::*; #(
         endcase
 
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not
-    // use are 0. MEM/WB adds order, and the load data.
-    assign ex_next_pc = if_ctrl.redirect ? {if_ctrl.target, {IADDR_START{1'b0}}} : ex_link;
+    // use are 0. MEM/WB adds order, bubble and the load data.
     assign ex_retire  = '{valid:     ex_done || ex_trap.valid,
+                          bubble:    BUBBLE_NONE,
                           order:     '0,
                           insn:      ex_insn,
                           trap:      ex_trap.valid,
                           pc_rdata:  {ex_fetch.pc, {IADDR_START{1'b0}}},
-                          pc_wdata:  ex_next_pc,
+                          pc_wdata:  {ex_next_pc, {IADDR_START{1'b0}}},
                           rs1_addr:  ex_dec.uses_rs1 ? ex_dec.rs1 : '0,
                           rs1_rdata: ex_dec.uses_rs1 ? ex_rs1_data : '0,
                           rs2_addr:  ex_dec.uses_rs2 ? ex_dec.rs2 : '0,
@@ -208,7 +217,15 @@ module Mig1Core import Mig1Pkg::*; #(
                           mem_rdata: '0,
                           mem_wdata: ex_lsu_mem.wdata};
 
+    // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
+    // a division (the only way an instruction in EX neither completes nor traps).
+    assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
+                       !ex_fetch.valid ? ex_fetch.bubble : BUBBLE_DIV;
+
+    `DC_ASSERT(a_ex_bubble_div, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall)
+
     assign ex_mem_d = '{valid:  ex_retire.valid,
+                        bubble: ex_bubble,
                         ret:    ex_retire,
                         load:   ex_dec.rd_src == RD_LOAD,
                         funct3: ex_dec.funct3,
@@ -236,10 +253,24 @@ module Mig1Core import Mig1Pkg::*; #(
     always_comb begin
         retire           = mem_ret;
         retire.valid     = ex_mem_q.valid;
+        retire.bubble    = ex_mem_q.bubble;
         retire.order     = retire_order;
         retire.rd_wdata  = mem_rd_write ? mem_rd_data : '0;
         retire.mem_rdata = mem_ret.mem_rmask != '0 ? dmem_rsp.rd_data : '0;
     end
+
+    // Pipeline view: the slots of the stages and their moves (pipe_trace_t, Mig1Pkg).
+    assign pipe_trace = '{if_req:   imem_req.en,
+                          if_pc:    imem_req.addr,
+                          id:       id_fetch,
+                          ex:       ex_fetch,
+                          mem:      '{valid:  ex_mem_q.valid,
+                                      bubble: ex_mem_q.bubble,
+                                      pc:     mem_ret.pc_rdata[WIDTH-1:IADDR_START]},
+                          redirect: if_ctrl.redirect,
+                          id_stall: if_ctrl.stall,
+                          ex_stall: pipe_ctrl.ex_stall,
+                          ex_flush: pipe_ctrl.ex_flush};
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;

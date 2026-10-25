@@ -168,7 +168,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // goes to EX. A target not divisible by 4 is a fault: EX traps, ID does not redirect.
     assign id_jal        = id_fetch.valid && id_dec.br.jump && !id_dec.br.target_rs1;
     assign id_jal_target = {id_fetch.pc, {IADDR_START{1'b0}}} + id_dec.imm;
-    assign id_redirect   = id_jal && id_jal_target[1:0] == 2'b00 && id_moves;
+    assign id_redirect   = id_jal && !target_misaligned(id_jal_target) && id_moves;
 
     // Interlock: other results are forwarded to ID (Mig2Forward), but a load's data comes
     // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the

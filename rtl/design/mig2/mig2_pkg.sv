@@ -44,6 +44,15 @@ package Mig2Pkg;
         word_t lo;      // lower word
     } dword_t;
 
+    // A jump or branch target is not a legal instruction address: bit 1 is set (bit 0 is 0
+    // for JAL and branches, JALR ignores it). With the C extension it never is.
+    // Only bit 1 of the target is used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic logic target_misaligned(word_t target);
+        return target[1];
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
     // Instructions with fixed encoding.
     localparam insn_t INSN_EBREAK = 32'h0010_0073;
 

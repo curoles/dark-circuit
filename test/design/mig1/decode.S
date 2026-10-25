@@ -183,10 +183,13 @@ cases:
     JAL_   0,  1048574
     JAL_   31, 4
 
-    /*     rd  rs1 imm */
+    /*     rd  rs1 imm      returns (rs1 is x1 or x5, rd is not rs1): 0,1  0,5  5,1 */
     JALR_  0,  1,  0
     JALR_  5,  31, -2048
     JALR_  1,  1,  2047
+    JALR_  0,  5,  0
+    JALR_  5,  1,  4
+    JALR_  0,  6,  -4
 
     /*     op      funct3 rd  rs1 rs2 */
     MULDIV mul,    0,     1,  2,  3

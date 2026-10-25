@@ -32,33 +32,38 @@ endif()
 set(SIM ${DARK_CIRCUIT_MAINSIM})
 
 # Registers and ALU: unit tests of Mig1Regs and Mig1Alu, no program.
-dc_add_mainsim_test(design_mig1_regs TOP TbMig1Regs TB tb_mig1_regs.sv FLISTS ${FLISTS})
-dc_add_mainsim_test(design_mig1_alu TOP TbMig1Alu TB tb_mig1_alu.sv FLISTS ${FLISTS})
+dc_add_mainsim_test(design_mig1_regs TOP TbMig1Regs TB tb/tb_mig1_regs.sv FLISTS ${FLISTS})
+dc_add_mainsim_test(design_mig1_alu TOP TbMig1Alu TB tb/tb_mig1_alu.sv FLISTS ${FLISTS})
 
 # Programs need the RISC-V toolchain.
 if(DARK_CIRCUIT_RISCV)
     # Mig1Cpu memories: load() of a program.
     dc_add_riscv_program(design_mig1_mem SOURCES mem.S LINK_FLAGS -T ${SW}/mig1.ld)
-    dc_add_mainsim_test(design_mig1_mem TOP TbMig1Mem TB tb_mig1_mem.sv
+    dc_add_mainsim_test(design_mig1_mem TOP TbMig1Mem TB tb/tb_mig1_mem.sv
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_mem.hex)
 
     # Decode: unit test of Mig1Decode with cases encoded by the assembler.
     dc_add_riscv_program(design_mig1_decode SOURCES decode.S ARCH rv32im LINK_FLAGS -T ${SW}/mig1.ld)
-    dc_add_mainsim_test(design_mig1_decode TOP TbMig1Decode TB tb_mig1_decode.sv
+    dc_add_mainsim_test(design_mig1_decode TOP TbMig1Decode TB tb/tb_mig1_decode.sv
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig1_decode.hex)
 
-    # Programs run on TbMig1, built once.
-    cmake_language(CALL dc_add_${SIM}_build design_mig1_sim TOP TbMig1 TB tb_mig1.sv
-                   FLISTS ${FLISTS})
+    # Programs run on TbMig1, built once; tb/tb_mig1.flist has the modules it instantiates.
+    cmake_language(CALL dc_add_${SIM}_build design_mig1_sim TOP TbMig1 TB tb/tb_mig1.sv
+                   FLISTS ${FLISTS} ${CMAKE_CURRENT_SOURCE_DIR}/tb/tb_mig1.flist)
+
+    # Logs cost a file per test: written only with these options.
+    option(DARK_CIRCUIT_MIG1_TRACE "Mig1 program tests write a trace (+trace)" OFF)
+    option(DARK_CIRCUIT_MIG1_KANATA "Mig1 program tests write a Konata log (+kanata)" OFF)
 
     # mig1_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...]
     #                   [ARGS <arg>...] [LABELS <label>...] [OUTPUT <regex>])
     #
     # Build RISC-V program design_mig1_<name> and add test design_mig1_<name>.<sim>
-    # that runs it on TbMig1 with the main simulator; ARGS get +hex=<program hex>,
-    # +symbols=<program symbols> and +trace=<test>.<sim>.trace in the build directory;
+    # that runs it on TbMig1 with the main simulator; ARGS get +hex=<program hex> and
+    # +symbols=<program symbols>, with DARK_CIRCUIT_MIG1_TRACE +trace=<test>.<sim>.trace,
+    # with DARK_CIRCUIT_MIG1_KANATA +kanata=<test>.<sim>.kanata, all in the build directory;
     # ARCH is -march of the program (default rv32i);
     # LABELS are added to the tests;
     # with OUTPUT the output (semihosting console) must match <regex>.
@@ -70,11 +75,17 @@ if(DARK_CIRCUIT_RISCV)
         set(prog design_mig1_${NAME})
         dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} ARCH ${P_ARCH} FLAGS ${P_FLAGS}
                              LINK_FLAGS -T ${SW}/mig1.ld)
+        set(logs)
+        if(DARK_CIRCUIT_MIG1_TRACE)
+            list(APPEND logs +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.trace)
+        endif()
+        if(DARK_CIRCUIT_MIG1_KANATA)
+            list(APPEND logs +kanata=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.kanata)
+        endif()
         cmake_language(CALL dc_add_${SIM}_run ${prog} BUILD design_mig1_sim
                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex
                             +symbols=${CMAKE_CURRENT_BINARY_DIR}/${prog}.sym
-                            +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.trace
-                            ${P_ARGS}
+                            ${logs} ${P_ARGS}
                        LABELS ${P_LABELS} OUTPUT ${P_OUTPUT})
     endfunction()
 
@@ -120,6 +131,11 @@ if(DARK_CIRCUIT_RISCV)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig1_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
+
+    # JAL in the corners of the pipeline: on the wrong path, behind a division, to a
+    # misaligned target, after a halting EBREAK, back to back, its link used right away.
+    mig1_program_test(jal_id SOURCES jal_id.S ARCH rv32im
+                      ARGS +expect_trap +resumes=1 +expect_regs)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig1 too; crt0.S and the semihosting library of sw/riscv.

@@ -22,6 +22,7 @@ module TbMig1Mem;
     /* verilator lint_off UNUSEDSIGNAL */
     logic          halt;
     retire_t       retire;
+    pipe_trace_t   pipe_trace;
     dbg_rsp_t      dbg_rsp;
     /* verilator lint_on UNUSEDSIGNAL */
 
@@ -35,7 +36,7 @@ module TbMig1Mem;
 
     assign dbg_req = '0;
 
-    Mig1Cpu u_mig1_cpu(.clk, .rst_n, .halt, .retire, .dbg_req, .dbg_rsp);
+    Mig1Cpu u_mig1_cpu(.clk, .rst_n, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
 
     // Word at byte address a of instruction or data memory, little-endian.
     function automatic word_t imem_word(input logic [AW-1:0] a);
