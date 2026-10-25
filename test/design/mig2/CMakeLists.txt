@@ -132,6 +132,11 @@ if(DARK_CIRCUIT_RISCV)
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig2_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
 
+    # JAL in the corners of the pipeline: on the wrong path, behind a division, to a
+    # misaligned target, after a halting EBREAK, back to back, its link used right away.
+    mig2_program_test(jal_id SOURCES jal_id.S ARCH rv32im
+                      ARGS +expect_trap +resumes=1 +expect_regs)
+
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
     mig2_program_test(semihosting
