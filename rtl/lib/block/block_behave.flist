@@ -18,3 +18,4 @@
 -F wallace_tree/behave/wallace_tree.flist
 -F wallace_multiplier/behave/wallace_multiplier.flist
 -F divider/behave/divider.flist
+-F gshare_branch_predictor/behave/gshare_branch_predictor.flist
