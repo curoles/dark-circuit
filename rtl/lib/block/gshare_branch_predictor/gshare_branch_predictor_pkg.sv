@@ -20,7 +20,7 @@ package GshareBranchPredictorPkg;
     } counter_e;
 
     // Prediction of a counter: taken in the two taken states.
-    function automatic logic predict_taken(input counter_e counter);
+    function automatic logic counter_taken(input counter_e counter);
         return counter == CNT_WEAK_TAKEN || counter == CNT_STRONG_TAKEN;
     endfunction
 
