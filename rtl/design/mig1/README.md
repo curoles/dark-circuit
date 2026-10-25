@@ -7,13 +7,16 @@ their standard environment; the other tests need features Mig1 does not have, se
 
 - 4-stage pipeline: IF (fetch) | ID (decode, register read, forwarding) | EX (execute;
   branches, traps, CSRs, stores) | MEM/WB (load data, register write, retire). Results
-  are forwarded to ID; a load whose rd the next instruction uses costs 1 cycle.
+  are forwarded to ID; a load whose rd the next instruction uses costs 1 cycle, a JAL 1
+  (redirect from ID), a taken branch, JALR, trap or MRET 2 (redirect from EX).
 - Harvard: instruction memory and data memory, both with 1 clock read latency
   (like SRAM and FPGA block RAM). Mig1Cpu loads the same program image into both.
 - Faults trap to mtvec (machine mode), MRET returns. With a debugger attached, EBREAK
   halts the core and the debugger resumes it.
 - Runs C programs with semihosting (print, exit code): the same binary code as on QEMU.
 - Retire trace of every retired instruction in RVFI form (riscv-formal), for testbenches.
+- Every pipeline slot without an instruction carries the reason why it is empty, and the
+  core reports its pipeline for the Konata viewer (see Bubbles, Pipeline view).
 - Synthesizable: Mig1Core converts with sv2v and maps with Yosys, 5.3 ns in sky130 (see
   Area and speed).
 
@@ -23,7 +26,9 @@ Mig1 is the small, simple core of the project; Mig2 (`rtl/design/mig2`) is where
 changes go first. On 2026-10-23 Mig1 took over the code of Mig2, which had started as its
 copy on 2026-10-19: typed ports and package types, a configuration struct, controls per
 part from decode, assertions, and the faster struct library (Wallace-tree multiplier,
-Kogge-Stone adders). The pipeline did not change: every program takes the same cycles.
+Kogge-Stone adders); the pipeline did not change. On 2026-10-24 it took over Mig2's code
+again: bubble reasons, the pipeline view, JAL redirected from ID (one cycle less per JAL),
+and the modular testbench (TbMig1 and its checkers in `test/design/mig1/tb/`).
 
 ## Files
 
@@ -78,7 +83,7 @@ is, so the same parts fit a 5-stage pipeline.
 | Part         | Stage  | Does |
 |--------------|--------|------|
 | Mig1Fetch    | IF     | PC (PrgCounter), imem request; holds on stall, jumps on redirect and reset |
-| Mig1Control  | -      | run, stalls, flushes, load-use interlock, redirect, traps (cause, mtval), halt, resume; ex_done: the instruction completes |
+| Mig1Control  | -      | run, stalls, flushes, load-use interlock, redirect (JAL from ID, the rest from EX), traps (cause, mtval), halt, resume; ex_done: the instruction completes |
 | Mig1Pipe     | -      | pipeline registers (Mig1PipeReg): bubble on reset or flush (only valid is cleared), hold on stall |
 | Mig1Decode   | ID     | instruction -> decoded_t: kind, registers, funct3, alt, immediate, controls |
 | Mig1Regs     | ID     | x0..x31, 2 reads (ID) + 1 write (MEM/WB); the debug port owns read port 0 and the write port while halted |
@@ -107,14 +112,15 @@ Every instruction takes one cycle in each stage, plus:
 
 | Case | Extra cycles | Why |
 |------|--------------|-----|
-| taken branch, JAL, JALR; trap, MRET | 2 | decided in EX; the instructions in ID and IF are dropped |
+| taken branch, JALR; trap, MRET | 2 | decided in EX; the instructions in ID and IF are dropped |
+| JAL | 1 | decided in ID: the instruction in IF is dropped (see JAL from ID) |
 | load whose rd the next instruction uses | 1 | load-use: the data arrives in MEM/WB, then it is forwarded |
 | other uses of a result | 0 | forwarded to ID from EX or MEM/WB |
 | load, store | 0 | the read is sent / the store written in EX; load data in MEM/WB |
 | multiply | 0 | Int32Mul is combinational |
 | divide, remainder | 33 | Int32Div takes 32 clocks; start, 32 steps, then the result |
 
-Measured: branch.S retires 58 instructions in 99 cycles, load_store.S 43 in 48.
+Measured: branch.S retires 58 instructions in 95 cycles, load_store.S 43 in 48.
 
 ```
 straight-line (also with forwarded results)   load L, U uses rd of L
@@ -135,7 +141,7 @@ MEM/WB                B   -    -
 
 - Redirect: Mig1Branch decides in EX; Mig1Control redirects fetch to the target, flushes
   ID (EX gets a bubble) and the instruction requested in the same cycle comes back with
-  `fetch.valid=0`.
+  `fetch.valid=0`. A JAL redirects from ID, see JAL from ID.
 - Stall: while a division waits in EX, Mig1Pipe keeps it and fetch holds everything
   (PC, imem output, fetch); MEM/WB gets bubbles.
 - Forwarding: Mig1Forward gives ID the value of the youngest instruction that writes the
@@ -148,6 +154,62 @@ MEM/WB                B   -    -
   MEM/WB, where Mig1LoadData takes the loaded value.
 - Halt: EBREAK decides in EX: fetch stops, ID is flushed; `halt=1` comes the cycle after
   it retired in MEM/WB; resume redirects fetch to `halt_pc + 4`.
+
+## JAL from ID
+
+JAL is always taken and its target, pc + imm, is known as soon as ID decodes it. ID
+redirects fetch when the JAL leaves ID (Mig1Control), so only the instruction requested in
+the same cycle is dropped: one bubble instead of two. The JAL goes on to EX and retires as
+before; EX does not redirect again. ID does not redirect when an older instruction in EX
+redirects or halts the core (the JAL is dropped with ID), while EX holds a division (the
+JAL waits in ID and redirects when it leaves), or when the target is not divisible by 4
+(EX traps: misaligned fetch); `test/design/mig1/jal_id.S` runs these cases. All program
+tests: 114 JALs, 24 389 cycles before, 24 275 after. This is the redirect path that branch
+prediction will use; JALR stays in EX (its rs1 can still be on its way from a load).
+
+
+## Bubbles
+
+A bubble is a pipeline slot without an instruction. Every pipeline register (IF/ID, ID/EX,
+EX/MEM) carries, with valid=0, the reason of its bubble (`bubble_e` in Mig1Pkg), and the
+retire port reports it (`retire.bubble`, not part of RVFI): every cycle out of reset and
+not halted retires an instruction or a bubble, so the reasons add up to all cycles that
+retire nothing.
+
+| Reason | Bubbles | Made by |
+|---|---|---|
+| `BUBBLE_FILL` | 3 | the pipeline fills: after reset, after resume |
+| `BUBBLE_COND_BRANCH` | 2 | taken conditional branch in EX |
+| `BUBBLE_DIR_JUMP` | 1 | JAL in ID (calls too), see JAL from ID |
+| `BUBBLE_INDIR_JUMP` | 2 | JALR in EX that is not a return (indirect calls too) |
+| `BUBBLE_RET` | 2 | JALR return in EX: rs1 is x1 or x5, rd is not rs1 (RISC-V hint table) |
+| `BUBBLE_TRAP` | 2 | trap in EX: fetch goes to mtvec |
+| `BUBBLE_XRET` | 2 | MRET in EX: fetch goes to mepc |
+| `BUBBLE_LOAD_USE` | 1 | the next instruction reads the rd of a load |
+| `BUBBLE_DIV` | 33 | EX holds a division |
+
+A redirect drops the instructions in ID and IF; both bubbles get the class of the
+instruction in EX (Mig1Control), a slot that already was a bubble keeps its reason
+(Mig1PipeReg). Decode marks returns (`br.ret`). The classes are those of branch
+prediction: with a predictor, they count mispredictions.
+
+The trace of TbMig1 (`+trace`, see Logs) has a line per bubble, in place, and the run
+ends with the count per reason; branch.S:
+
+```
+      21 pc=00000048 insn=00308463
+      22 bubble cond_branch
+      23 bubble cond_branch
+      24 pc=00000050 insn=00209463
+...
+95 cycles = 58 retired + 37 bubbles: fill 3 cond_branch 24 dir_jump 4 indir_jump 6
+```
+
+TbMig1 checks every bubble against the instructions around it: a redirect bubble follows
+an instruction of its class, at most two; a load-use bubble sits between a load and an
+instruction that reads its rd; division bubbles come right before a division; fill
+bubbles only before the first instruction after reset or resume.
+
 
 ## CSRs
 
@@ -222,12 +284,13 @@ are 0. Unlike the other ports, its addresses are byte addresses, as in RVFI.
 | `rs1_addr`, `rs1_rdata`, `rs2_addr`, `rs2_rdata` | registers read and their values |
 | `rd_addr`, `rd_wdata` | register written and the value (0 for none and for x0) |
 | `mem_addr`, `mem_rmask`, `mem_wmask`, `mem_rdata`, `mem_wdata` | load/store: word address, bytes read/written, data words ("aligned memory" of RVFI) |
+| `bubble` | not RVFI: with `valid`=0, why nothing retires (see Bubbles) |
 
 Not in the struct, constant for Mig1: `intr`=0, `mode`=3 (machine), `ixl`=1 (32-bit).
 TbMig1 checks every entry against the program and its own copy of the registers:
 instruction words, control flow (`pc_wdata` of one is `pc_rdata` of the next), registers
-read, the address and bytes of loads and stores, memory after stores, traps; and writes
-the trace to `<test>.<simulator>.trace`.
+read, the address and bytes of loads and stores, memory after stores, traps; with the
+trace on (see Logs) it writes `<test>.<simulator>.trace`.
 
 ## Configuration
 
@@ -247,6 +310,7 @@ when they are out of date.
 | `csr` | CSR instructions on mscratch, read-only CSRs, counters |
 | `muldiv` | M results used right away, division and branches, a division in a dropped slot, cycles and minstret of a division |
 | `trap` | mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap |
+| `jal_id` | JAL in the corners of the pipeline: on the wrong path, behind a division, to a misaligned target, after a halting EBREAK, back to back, its link used right away |
 | `misaligned_{jalr,lw,sh}`, `illegal_{ecall,zero,ones,csr_unknown,csr_readonly}` | faults: a handler checks mcause, mepc, mtval; nothing written |
 | `rv32ui_*`, `rv32um_*`, `rv32mi_*` (labels `riscv-tests` and the suite) | riscv-tests with their standard environment `env/p`; end with a store to `tohost` |
 | `design_mig1.config` | generated files are up to date with `cfg/mig1_config.yaml` |
@@ -259,16 +323,56 @@ PMP); both are optional extensions Mig1 does not have.
 
 All run on the main simulator of the build (cmake option DARK_CIRCUIT_MAIN_SIMULATOR, by
 default Verilator when it is installed); Mig1 is tested with Verilator, only Verilator is
-guaranteed to work. TbMig1 is built once; its plusargs (`+expect_regs`, `+resumes`,
-`+riscv_test`, ...) are explained at the top of `tb_mig1.sv`. Run: `make run R=mig1`,
-`make run L=riscv-tests`; `V=1` shows the paths of trace files.
+guaranteed to work. Run: `make run R=mig1`, `make run L=riscv-tests`; with the trace on
+(see Logs), `V=1` shows the paths of trace files.
+
+The testbench of the programs is TbMig1 (`test/design/mig1/tb/tb_mig1.sv`), built once.
+It runs a program: plusargs (`+expect_regs`, `+resumes`, `+riscv_test`, ..., explained at
+its top), load, reset, the run, the checks at the end. Modules of their own, connected by
+ports, do the rest: TbMig1RetireCheck (every retired instruction, the shadow registers,
+the retire lines of the trace), TbMig1BubbleCheck (every bubble and its reason, the count
+per reason), TbMig1PipeView (the pipeline against `pipe_trace`, the Konata log),
+TbMig1Debugger (the debug port and semihosting).
+
+## Pipeline view (Konata)
+
+Mig1Core reports its pipeline in `pipe_trace` (`pipe_trace_t` in Mig1Pkg): the slot of
+every stage (valid, bubble reason, pc) and how the slots move at the rising edge
+(redirect, stalls, flush). TbMig1 follows every instruction through the stages and checks
+its view against the slots in every cycle of every program test. With `+kanata=<file>` it
+writes the view as a log for [Konata](https://github.com/shioyadan/Konata), a pipeline
+viewer: a row per instruction, its stages IF, ID, EX, MEM over the cycles, stalls as
+longer stages, the instructions of the wrong path flushed; label: pc and instruction
+word, tooltip: the bubbles before the instruction.
+
+With `DARK_CIRCUIT_MIG1_KANATA` (see Logs) the tests write the log; open, for example,
+`test/design/mig1/design_mig1_branch.verilator.kanata` of the build directory in Konata
+(from Windows through `\\wsl.localhost\...`).
+
+
+## Logs
+
+Program tests write logs only on request, because every log is a file per test:
+
+| CMake option | Plusarg of TbMig1 | Log, in `test/design/mig1/` of the build directory |
+|---|---|---|
+| `DARK_CIRCUIT_MIG1_TRACE` | `+trace=<file>` | `<test>.verilator.trace`: retired instructions, bubbles, debugger and semihosting actions, the count per bubble reason |
+| `DARK_CIRCUIT_MIG1_KANATA` | `+kanata=<file>` | `<test>.verilator.kanata`: the pipeline view for Konata |
+
+```
+make cmake D=mig1 CMAKE_ARGS="-DDARK_CIRCUIT_MIG1_TRACE=ON -DDARK_CIRCUIT_MIG1_KANATA=ON"
+make run D=mig1 R=design_mig1_branch V=1
+```
+
+The options stay in the CMake cache; `=OFF` turns a log off again. Without the trace, a
+failing test shows its `$fatal` message; run it again with the trace to see what led there.
 
 ## CPI
 
 Cycles of every program at each step of the pipeline, measured with TbMig1 (Verilator):
 instructions retired and cycles from reset to the halt (or the store to `tohost` of
-riscv-tests, environment startup included). CPI is cycles per instruction. The code taken
-over from Mig2 on 2026-10-23 has the cycles of the last column.
+riscv-tests, environment startup included). CPI is cycles per instruction. The code of
+today has the cycles of the last column.
 
 - 2-stage: IF | EX, before the 5-stage work, 2026-10-18.
 - 3-stage (5a): IF | ID | EX with interlock, 2026-10-18. Redirects cost 2 bubbles
@@ -276,101 +380,104 @@ over from Mig2 on 2026-10-23 has the cycles of the last column.
 - 4-stage (5b): IF | ID | EX | MEM/WB, 2026-10-19. Loads lose their extra cycle; using
   the rd of the instruction before costs 2, of the one 2 before 1.
 - 4-stage with forwarding: 2026-10-19. Results forwarded to ID, load-use 1 bubble.
+- JAL from ID: 2026-10-24. A JAL costs 1 bubble instead of 2 (`jal_id` is new, not in the
+  sums).
 
 With forwarding the 4-stage core still needs more cycles than the 2-stage one: a taken
 branch costs 2 bubbles instead of 1, and the pipeline takes longer to fill. A deeper
 pipeline can only win with a faster clock, see Area and speed.
 
-| Programs | Count | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI | 4-stage + fwd cycles | CPI |
-|---|---|---|---|---|---|---|---|---|---|---|
-| own programs (`test/design/mig1/*.S`, semihosting) | 17 | 421 | 655 | 1.56 | 822 | 1.95 | 926 | 2.20 | 724 | 1.72 |
-| riscv-tests rv32ui | 40 | 14722 | 16111 | 1.09 | 21758 | 1.48 | 26246 | 1.78 | 16806 | 1.14 |
-| riscv-tests rv32um | 8 | 2549 | 3885 | 1.52 | 4778 | 1.87 | 5563 | 2.18 | 4049 | 1.59 |
-| riscv-tests rv32mi | 14 | 2112 | 2373 | 1.12 | 3305 | 1.56 | 3976 | 1.88 | 2645 | 1.25 |
+| Programs | Count | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI | 4-stage + fwd cycles | CPI | JAL from ID cycles | CPI |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| own programs (`test/design/mig1/*.S`, semihosting) | 17 | 421 | 655 | 1.56 | 822 | 1.95 | 926 | 2.20 | 724 | 1.72 | 712 | 1.69 |
+| riscv-tests rv32ui | 40 | 14722 | 16111 | 1.09 | 21758 | 1.48 | 26246 | 1.78 | 16806 | 1.14 | 16738 | 1.14 |
+| riscv-tests rv32um | 8 | 2549 | 3885 | 1.52 | 4778 | 1.87 | 5563 | 2.18 | 4049 | 1.59 | 4041 | 1.59 |
+| riscv-tests rv32mi | 14 | 2112 | 2373 | 1.12 | 3305 | 1.56 | 3976 | 1.88 | 2645 | 1.25 | 2624 | 1.24 |
 
 <details><summary>Every program</summary>
 
-| Program | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI | 4-stage + fwd cycles | CPI |
-|---|---|---|---|---|---|---|---|---|---|
-| `alu_prog` | 28 | 29 | 1.04 | 32 | 1.14 | 35 | 1.25 | 31 | 1.11 |
-| `branch` | 58 | 78 | 1.34 | 111 | 1.91 | 130 | 2.24 | 99 | 1.71 |
-| `csr` | 39 | 40 | 1.03 | 52 | 1.33 | 64 | 1.64 | 42 | 1.08 |
-| `fetch` | 5 | 6 | 1.20 | 9 | 1.80 | 12 | 2.40 | 8 | 1.60 |
-| `illegal_csr_readonly` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 |
-| `illegal_csr_unknown` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 |
-| `illegal_ecall` | 11 | 13 | 1.18 | 18 | 1.64 | 22 | 2.00 | 16 | 1.45 |
-| `illegal_ones` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 |
-| `illegal_zero` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 |
-| `load_store` | 43 | 64 | 1.49 | 71 | 1.65 | 59 | 1.37 | 48 | 1.12 |
-| `misaligned_jalr` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 | 18 | 1.38 |
-| `misaligned_lw` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 | 18 | 1.38 |
-| `misaligned_sh` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 | 18 | 1.38 |
-| `muldiv` | 21 | 156 | 7.43 | 164 | 7.81 | 170 | 8.10 | 160 | 7.62 |
-| `resume` | 6 | 13 | 2.17 | 16 | 2.67 | 19 | 3.17 | 19 | 3.17 |
-| `rv32mi_csr` | 168 | 180 | 1.07 | 251 | 1.49 | 310 | 1.85 | 194 | 1.15 |
-| `rv32mi_illegal` | 120 | 137 | 1.14 | 194 | 1.62 | 234 | 1.95 | 156 | 1.30 |
-| `rv32mi_instret_overflow` | 108 | 120 | 1.11 | 162 | 1.50 | 192 | 1.78 | 134 | 1.24 |
-| `rv32mi_lh-misaligned` | 117 | 132 | 1.13 | 182 | 1.56 | 217 | 1.85 | 147 | 1.26 |
-| `rv32mi_lw-misaligned` | 175 | 196 | 1.12 | 280 | 1.60 | 343 | 1.96 | 217 | 1.24 |
-| `rv32mi_ma_addr` | 316 | 372 | 1.18 | 524 | 1.66 | 620 | 1.96 | 421 | 1.33 |
-| `rv32mi_ma_fetch` | 237 | 267 | 1.13 | 385 | 1.62 | 473 | 2.00 | 299 | 1.26 |
-| `rv32mi_mcsr` | 101 | 112 | 1.11 | 151 | 1.50 | 179 | 1.77 | 125 | 1.24 |
-| `rv32mi_sbreak` | 109 | 123 | 1.13 | 170 | 1.56 | 203 | 1.86 | 139 | 1.28 |
-| `rv32mi_scall` | 98 | 109 | 1.11 | 152 | 1.55 | 184 | 1.88 | 122 | 1.24 |
-| `rv32mi_sh-misaligned` | 125 | 141 | 1.13 | 194 | 1.55 | 231 | 1.85 | 157 | 1.26 |
-| `rv32mi_shamt` | 109 | 122 | 1.12 | 168 | 1.54 | 201 | 1.84 | 137 | 1.26 |
-| `rv32mi_sw-misaligned` | 179 | 201 | 1.12 | 280 | 1.56 | 337 | 1.88 | 223 | 1.25 |
-| `rv32mi_zicntr` | 150 | 161 | 1.07 | 212 | 1.41 | 252 | 1.68 | 174 | 1.16 |
-| `rv32ui_add` | 506 | 532 | 1.05 | 700 | 1.38 | 852 | 1.68 | 560 | 1.11 |
-| `rv32ui_addi` | 283 | 300 | 1.06 | 411 | 1.45 | 509 | 1.80 | 319 | 1.13 |
-| `rv32ui_and` | 526 | 552 | 1.05 | 784 | 1.49 | 1000 | 1.90 | 580 | 1.10 |
-| `rv32ui_andi` | 239 | 256 | 1.07 | 356 | 1.49 | 443 | 1.85 | 275 | 1.15 |
-| `rv32ui_auipc` | 99 | 112 | 1.13 | 153 | 1.55 | 181 | 1.83 | 127 | 1.28 |
-| `rv32ui_beq` | 332 | 369 | 1.11 | 473 | 1.42 | 548 | 1.65 | 408 | 1.23 |
-| `rv32ui_bge` | 350 | 396 | 1.13 | 513 | 1.47 | 592 | 1.69 | 444 | 1.27 |
-| `rv32ui_bgeu` | 375 | 421 | 1.12 | 563 | 1.50 | 667 | 1.78 | 469 | 1.25 |
-| `rv32ui_blt` | 332 | 369 | 1.11 | 474 | 1.43 | 550 | 1.66 | 408 | 1.23 |
-| `rv32ui_bltu` | 357 | 394 | 1.10 | 524 | 1.47 | 625 | 1.75 | 433 | 1.21 |
-| `rv32ui_bne` | 332 | 371 | 1.12 | 478 | 1.44 | 554 | 1.67 | 412 | 1.24 |
-| `rv32ui_jal` | 96 | 109 | 1.14 | 148 | 1.54 | 174 | 1.81 | 124 | 1.29 |
-| `rv32ui_jalr` | 156 | 179 | 1.15 | 251 | 1.61 | 302 | 1.94 | 204 | 1.31 |
-| `rv32ui_lb` | 270 | 311 | 1.15 | 410 | 1.52 | 472 | 1.75 | 308 | 1.14 |
-| `rv32ui_lbu` | 270 | 311 | 1.15 | 410 | 1.52 | 472 | 1.75 | 308 | 1.14 |
-| `rv32ui_ld_st` | 1005 | 1209 | 1.20 | 1681 | 1.67 | 1949 | 1.94 | 1173 | 1.17 |
-| `rv32ui_lh` | 286 | 327 | 1.14 | 442 | 1.55 | 520 | 1.82 | 324 | 1.13 |
-| `rv32ui_lhu` | 295 | 336 | 1.14 | 460 | 1.56 | 547 | 1.85 | 333 | 1.13 |
-| `rv32ui_lui` | 106 | 117 | 1.10 | 158 | 1.49 | 188 | 1.77 | 130 | 1.23 |
-| `rv32ui_lw` | 300 | 341 | 1.14 | 470 | 1.57 | 562 | 1.87 | 338 | 1.13 |
-| `rv32ui_or` | 529 | 555 | 1.05 | 790 | 1.49 | 1009 | 1.91 | 583 | 1.10 |
-| `rv32ui_ori` | 246 | 263 | 1.07 | 370 | 1.50 | 464 | 1.89 | 282 | 1.15 |
-| `rv32ui_sb` | 459 | 524 | 1.14 | 663 | 1.44 | 745 | 1.62 | 523 | 1.14 |
-| `rv32ui_sh` | 512 | 577 | 1.13 | 769 | 1.50 | 904 | 1.77 | 576 | 1.12 |
-| `rv32ui_simple` | 82 | 92 | 1.12 | 124 | 1.51 | 146 | 1.78 | 104 | 1.27 |
-| `rv32ui_sll` | 534 | 560 | 1.05 | 740 | 1.39 | 904 | 1.69 | 588 | 1.10 |
-| `rv32ui_slli` | 282 | 299 | 1.06 | 409 | 1.45 | 506 | 1.79 | 318 | 1.13 |
-| `rv32ui_slt` | 500 | 526 | 1.05 | 688 | 1.38 | 834 | 1.67 | 554 | 1.11 |
-| `rv32ui_slti` | 278 | 295 | 1.06 | 401 | 1.44 | 494 | 1.78 | 314 | 1.13 |
-| `rv32ui_sltiu` | 278 | 295 | 1.06 | 401 | 1.44 | 494 | 1.78 | 314 | 1.13 |
-| `rv32ui_sltu` | 500 | 526 | 1.05 | 688 | 1.38 | 834 | 1.67 | 554 | 1.11 |
-| `rv32ui_sra` | 553 | 579 | 1.05 | 774 | 1.40 | 953 | 1.72 | 607 | 1.10 |
-| `rv32ui_srai` | 297 | 314 | 1.06 | 439 | 1.48 | 551 | 1.86 | 333 | 1.12 |
-| `rv32ui_srl` | 547 | 573 | 1.05 | 762 | 1.39 | 935 | 1.71 | 601 | 1.10 |
-| `rv32ui_srli` | 291 | 308 | 1.06 | 427 | 1.47 | 533 | 1.83 | 327 | 1.12 |
-| `rv32ui_st_ld` | 525 | 585 | 1.11 | 817 | 1.56 | 989 | 1.88 | 549 | 1.05 |
-| `rv32ui_sub` | 498 | 524 | 1.05 | 688 | 1.38 | 836 | 1.68 | 552 | 1.11 |
-| `rv32ui_sw` | 520 | 585 | 1.12 | 787 | 1.51 | 932 | 1.79 | 584 | 1.12 |
-| `rv32ui_xor` | 528 | 554 | 1.05 | 788 | 1.49 | 1006 | 1.91 | 582 | 1.10 |
-| `rv32ui_xori` | 248 | 265 | 1.07 | 374 | 1.51 | 470 | 1.90 | 284 | 1.15 |
-| `rv32um_div` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 | 458 | 3.34 |
-| `rv32um_divu` | 138 | 446 | 3.23 | 498 | 3.61 | 539 | 3.91 | 459 | 3.33 |
-| `rv32um_mul` | 500 | 526 | 1.05 | 692 | 1.38 | 842 | 1.68 | 554 | 1.11 |
-| `rv32um_mulh` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 | 554 | 1.11 |
-| `rv32um_mulhsu` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 | 554 | 1.11 |
-| `rv32um_mulhu` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 | 554 | 1.11 |
-| `rv32um_rem` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 | 458 | 3.34 |
-| `rv32um_remu` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 | 458 | 3.34 |
-| `semihosting` | 76 | 99 | 1.30 | 123 | 1.62 | 135 | 1.78 | 121 | 1.59 |
-| `trap` | 43 | 48 | 1.12 | 68 | 1.58 | 84 | 1.95 | 54 | 1.26 |
+| Program | Instructions | 2-stage cycles | CPI | 3-stage cycles | CPI | 4-stage cycles | CPI | 4-stage + fwd cycles | CPI | JAL from ID cycles | CPI |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `alu_prog` | 28 | 29 | 1.04 | 32 | 1.14 | 35 | 1.25 | 31 | 1.11 | 31 | 1.11 |
+| `branch` | 58 | 78 | 1.34 | 111 | 1.91 | 130 | 2.24 | 99 | 1.71 | 95 | 1.64 |
+| `csr` | 39 | 40 | 1.03 | 52 | 1.33 | 64 | 1.64 | 42 | 1.08 | 42 | 1.08 |
+| `fetch` | 5 | 6 | 1.20 | 9 | 1.80 | 12 | 2.40 | 8 | 1.60 | 8 | 1.60 |
+| `illegal_csr_readonly` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `illegal_csr_unknown` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `illegal_ecall` | 11 | 13 | 1.18 | 18 | 1.64 | 22 | 2.00 | 16 | 1.45 | 16 | 1.45 |
+| `illegal_ones` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `illegal_zero` | 13 | 16 | 1.23 | 23 | 1.77 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `jal_id` | 48 | - | - | - | - | - | - | - | - | 108 | 2.25 |
+| `load_store` | 43 | 64 | 1.49 | 71 | 1.65 | 59 | 1.37 | 48 | 1.12 | 48 | 1.12 |
+| `misaligned_jalr` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `misaligned_lw` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `misaligned_sh` | 13 | 15 | 1.15 | 22 | 1.69 | 28 | 2.15 | 18 | 1.38 | 18 | 1.38 |
+| `muldiv` | 21 | 156 | 7.43 | 164 | 7.81 | 170 | 8.10 | 160 | 7.62 | 159 | 7.57 |
+| `resume` | 6 | 13 | 2.17 | 16 | 2.67 | 19 | 3.17 | 19 | 3.17 | 19 | 3.17 |
+| `rv32mi_csr` | 168 | 180 | 1.07 | 251 | 1.49 | 310 | 1.85 | 194 | 1.15 | 193 | 1.15 |
+| `rv32mi_illegal` | 120 | 137 | 1.14 | 194 | 1.62 | 234 | 1.95 | 156 | 1.30 | 154 | 1.28 |
+| `rv32mi_instret_overflow` | 108 | 120 | 1.11 | 162 | 1.50 | 192 | 1.78 | 134 | 1.24 | 133 | 1.23 |
+| `rv32mi_lh-misaligned` | 117 | 132 | 1.13 | 182 | 1.56 | 217 | 1.85 | 147 | 1.26 | 146 | 1.25 |
+| `rv32mi_lw-misaligned` | 175 | 196 | 1.12 | 280 | 1.60 | 343 | 1.96 | 217 | 1.24 | 216 | 1.23 |
+| `rv32mi_ma_addr` | 316 | 372 | 1.18 | 524 | 1.66 | 620 | 1.96 | 421 | 1.33 | 420 | 1.33 |
+| `rv32mi_ma_fetch` | 237 | 267 | 1.13 | 385 | 1.62 | 473 | 2.00 | 299 | 1.26 | 296 | 1.25 |
+| `rv32mi_mcsr` | 101 | 112 | 1.11 | 151 | 1.50 | 179 | 1.77 | 125 | 1.24 | 124 | 1.23 |
+| `rv32mi_sbreak` | 109 | 123 | 1.13 | 170 | 1.56 | 203 | 1.86 | 139 | 1.28 | 137 | 1.26 |
+| `rv32mi_scall` | 98 | 109 | 1.11 | 152 | 1.55 | 184 | 1.88 | 122 | 1.24 | 121 | 1.23 |
+| `rv32mi_sh-misaligned` | 125 | 141 | 1.13 | 194 | 1.55 | 231 | 1.85 | 157 | 1.26 | 155 | 1.24 |
+| `rv32mi_shamt` | 109 | 122 | 1.12 | 168 | 1.54 | 201 | 1.84 | 137 | 1.26 | 135 | 1.24 |
+| `rv32mi_sw-misaligned` | 179 | 201 | 1.12 | 280 | 1.56 | 337 | 1.88 | 223 | 1.25 | 221 | 1.23 |
+| `rv32mi_zicntr` | 150 | 161 | 1.07 | 212 | 1.41 | 252 | 1.68 | 174 | 1.16 | 173 | 1.15 |
+| `rv32ui_add` | 506 | 532 | 1.05 | 700 | 1.38 | 852 | 1.68 | 560 | 1.11 | 559 | 1.10 |
+| `rv32ui_addi` | 283 | 300 | 1.06 | 411 | 1.45 | 509 | 1.80 | 319 | 1.13 | 318 | 1.12 |
+| `rv32ui_and` | 526 | 552 | 1.05 | 784 | 1.49 | 1000 | 1.90 | 580 | 1.10 | 579 | 1.10 |
+| `rv32ui_andi` | 239 | 256 | 1.07 | 356 | 1.49 | 443 | 1.85 | 275 | 1.15 | 274 | 1.15 |
+| `rv32ui_auipc` | 99 | 112 | 1.13 | 153 | 1.55 | 181 | 1.83 | 127 | 1.28 | 124 | 1.25 |
+| `rv32ui_beq` | 332 | 369 | 1.11 | 473 | 1.42 | 548 | 1.65 | 408 | 1.23 | 407 | 1.23 |
+| `rv32ui_bge` | 350 | 396 | 1.13 | 513 | 1.47 | 592 | 1.69 | 444 | 1.27 | 443 | 1.27 |
+| `rv32ui_bgeu` | 375 | 421 | 1.12 | 563 | 1.50 | 667 | 1.78 | 469 | 1.25 | 468 | 1.25 |
+| `rv32ui_blt` | 332 | 369 | 1.11 | 474 | 1.43 | 550 | 1.66 | 408 | 1.23 | 407 | 1.23 |
+| `rv32ui_bltu` | 357 | 394 | 1.10 | 524 | 1.47 | 625 | 1.75 | 433 | 1.21 | 432 | 1.21 |
+| `rv32ui_bne` | 332 | 371 | 1.12 | 478 | 1.44 | 554 | 1.67 | 412 | 1.24 | 411 | 1.24 |
+| `rv32ui_jal` | 96 | 109 | 1.14 | 148 | 1.54 | 174 | 1.81 | 124 | 1.29 | 121 | 1.26 |
+| `rv32ui_jalr` | 156 | 179 | 1.15 | 251 | 1.61 | 302 | 1.94 | 204 | 1.31 | 203 | 1.30 |
+| `rv32ui_lb` | 270 | 311 | 1.15 | 410 | 1.52 | 472 | 1.75 | 308 | 1.14 | 307 | 1.14 |
+| `rv32ui_lbu` | 270 | 311 | 1.15 | 410 | 1.52 | 472 | 1.75 | 308 | 1.14 | 307 | 1.14 |
+| `rv32ui_ld_st` | 1005 | 1209 | 1.20 | 1681 | 1.67 | 1949 | 1.94 | 1173 | 1.17 | 1172 | 1.17 |
+| `rv32ui_lh` | 286 | 327 | 1.14 | 442 | 1.55 | 520 | 1.82 | 324 | 1.13 | 323 | 1.13 |
+| `rv32ui_lhu` | 295 | 336 | 1.14 | 460 | 1.56 | 547 | 1.85 | 333 | 1.13 | 332 | 1.13 |
+| `rv32ui_lui` | 106 | 117 | 1.10 | 158 | 1.49 | 188 | 1.77 | 130 | 1.23 | 129 | 1.22 |
+| `rv32ui_lw` | 300 | 341 | 1.14 | 470 | 1.57 | 562 | 1.87 | 338 | 1.13 | 337 | 1.12 |
+| `rv32ui_or` | 529 | 555 | 1.05 | 790 | 1.49 | 1009 | 1.91 | 583 | 1.10 | 582 | 1.10 |
+| `rv32ui_ori` | 246 | 263 | 1.07 | 370 | 1.50 | 464 | 1.89 | 282 | 1.15 | 281 | 1.14 |
+| `rv32ui_sb` | 459 | 524 | 1.14 | 663 | 1.44 | 745 | 1.62 | 523 | 1.14 | 514 | 1.12 |
+| `rv32ui_sh` | 512 | 577 | 1.13 | 769 | 1.50 | 904 | 1.77 | 576 | 1.12 | 567 | 1.11 |
+| `rv32ui_simple` | 82 | 92 | 1.12 | 124 | 1.51 | 146 | 1.78 | 104 | 1.27 | 103 | 1.26 |
+| `rv32ui_sll` | 534 | 560 | 1.05 | 740 | 1.39 | 904 | 1.69 | 588 | 1.10 | 587 | 1.10 |
+| `rv32ui_slli` | 282 | 299 | 1.06 | 409 | 1.45 | 506 | 1.79 | 318 | 1.13 | 317 | 1.12 |
+| `rv32ui_slt` | 500 | 526 | 1.05 | 688 | 1.38 | 834 | 1.67 | 554 | 1.11 | 553 | 1.11 |
+| `rv32ui_slti` | 278 | 295 | 1.06 | 401 | 1.44 | 494 | 1.78 | 314 | 1.13 | 313 | 1.13 |
+| `rv32ui_sltiu` | 278 | 295 | 1.06 | 401 | 1.44 | 494 | 1.78 | 314 | 1.13 | 313 | 1.13 |
+| `rv32ui_sltu` | 500 | 526 | 1.05 | 688 | 1.38 | 834 | 1.67 | 554 | 1.11 | 553 | 1.11 |
+| `rv32ui_sra` | 553 | 579 | 1.05 | 774 | 1.40 | 953 | 1.72 | 607 | 1.10 | 606 | 1.10 |
+| `rv32ui_srai` | 297 | 314 | 1.06 | 439 | 1.48 | 551 | 1.86 | 333 | 1.12 | 332 | 1.12 |
+| `rv32ui_srl` | 547 | 573 | 1.05 | 762 | 1.39 | 935 | 1.71 | 601 | 1.10 | 600 | 1.10 |
+| `rv32ui_srli` | 291 | 308 | 1.06 | 427 | 1.47 | 533 | 1.83 | 327 | 1.12 | 326 | 1.12 |
+| `rv32ui_st_ld` | 525 | 585 | 1.11 | 817 | 1.56 | 989 | 1.88 | 549 | 1.05 | 548 | 1.04 |
+| `rv32ui_sub` | 498 | 524 | 1.05 | 688 | 1.38 | 836 | 1.68 | 552 | 1.11 | 551 | 1.11 |
+| `rv32ui_sw` | 520 | 585 | 1.12 | 787 | 1.51 | 932 | 1.79 | 584 | 1.12 | 575 | 1.11 |
+| `rv32ui_xor` | 528 | 554 | 1.05 | 788 | 1.49 | 1006 | 1.91 | 582 | 1.10 | 581 | 1.10 |
+| `rv32ui_xori` | 248 | 265 | 1.07 | 374 | 1.51 | 470 | 1.90 | 284 | 1.15 | 283 | 1.14 |
+| `rv32um_div` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 | 458 | 3.34 | 457 | 3.34 |
+| `rv32um_divu` | 138 | 446 | 3.23 | 498 | 3.61 | 539 | 3.91 | 459 | 3.33 | 458 | 3.32 |
+| `rv32um_mul` | 500 | 526 | 1.05 | 692 | 1.38 | 842 | 1.68 | 554 | 1.11 | 553 | 1.11 |
+| `rv32um_mulh` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 | 554 | 1.11 | 553 | 1.11 |
+| `rv32um_mulhsu` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 | 554 | 1.11 | 553 | 1.11 |
+| `rv32um_mulhu` | 500 | 526 | 1.05 | 700 | 1.40 | 858 | 1.72 | 554 | 1.11 | 553 | 1.11 |
+| `rv32um_rem` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 | 458 | 3.34 | 457 | 3.34 |
+| `rv32um_remu` | 137 | 445 | 3.25 | 496 | 3.62 | 536 | 3.91 | 458 | 3.34 | 457 | 3.34 |
+| `semihosting` | 76 | 99 | 1.30 | 123 | 1.62 | 135 | 1.78 | 121 | 1.59 | 114 | 1.50 |
+| `trap` | 43 | 48 | 1.12 | 68 | 1.58 | 84 | 1.95 | 54 | 1.26 | 54 | 1.26 |
 
 </details>
 
@@ -388,20 +495,20 @@ It fails on a latch or a structural problem (multiple drivers, undriven inputs, 
 ## Area and speed (sky130)
 
 Mig1Core mapped to the SkyWater sky130 standard cells (sky130_fd_sc_hd, typical corner
-tt_025C_1v80) with Yosys 0.66 and ABC, 2026-10-23. Reproduce with
+tt_025C_1v80) with Yosys 0.66 and ABC, 2026-10-24. Reproduce with
 `make mig1_synth TECH=sky130`.
 
 | Mig1Core | |
 |---|---|
-| Area | 157 621 µm² (0.158 mm²), 18 311 cells |
-| Longest logic path (ABC estimate) | 5.3 ns, about 188 MHz |
+| Area | 158 926 µm² (0.159 mm²), 18 937 cells |
+| Longest logic path (ABC estimate) | 5.3 ns, about 187 MHz |
 
 The longest path is the forwarding loop: ID/EX register, an EX part (funct3 decoded in
 EX, then the multiplier or the ALU), EX result mux, forwarding mux into ID. Several paths
 of this loop are within a few tenths of a nanosecond of it.
 
-How the clock got there, 2026-10-21 to 2026-10-23, measured on Mig2 until Mig1 took over its
-code (each row adds one change to the row above):
+How the clock got there, 2026-10-21 to 2026-10-24, measured on Mig2 before Mig1 took over
+its code (each row adds one change to the row above):
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -412,6 +519,9 @@ code (each row adds one change to the row above):
 | Int32Mul: sign correction as three rows of one WallaceTree, one final adder | 157 004 | 5.6 |
 | Decode delivers the M controls, MulDiv no longer decodes funct3 | 157 415 | 5.4 |
 | Line-by-line cleanup of 2026-10-22/23, measured as Mig1Core | 157 621 | 5.3 |
+| Bubble reasons in the pipeline registers and in retire | 157 980 | 5.4 |
+| Pipeline view port `pipe_trace` | 157 682 | 5.4 |
+| JAL from ID | 158 926 | 5.3 |
 
 The delay is an estimate: ABC timing (stime) after buffering and gate sizing, without
 wires (no wire load), without clock-to-Q and setup of the flip-flops; the ports of
@@ -480,8 +590,9 @@ Run time of all 79 programs, cycles (CPI table) x clock period:
 
 ## Next
 
-Bigger changes go to Mig2 first: pipeline bubbles visible in the trace, a faster
-multiplier, Spike cosim (lockstep), a Zbb slice, a single memory instead of two. Mig1
-stays the simple core and takes changes that keep it simple. The commit point stays in
-EX, because nothing faults after it on Mig1; a later commit point (WB, store buffer)
-comes with caches.
+Bigger changes go to Mig2 first: branch prediction in ID (a static guess, then the GShare
+predictor of `rtl/lib/block/gshare_branch_predictor`), a faster multiplier, Spike cosim
+(lockstep), a Zbb slice, a single memory instead of two. Mig1 stays the simple core and
+takes changes that keep it simple, like JAL from ID. The commit point stays in EX,
+because nothing faults after it on Mig1; a later commit point (WB, store buffer) comes
+with caches.
