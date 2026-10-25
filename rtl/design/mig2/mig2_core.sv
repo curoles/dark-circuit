@@ -22,8 +22,9 @@
  * happen there, loads send their read; MEM/WB gets load data, writes rd and retires.
  * An instruction that leaves EX always completes. Signals of a stage have its prefix:
  * if_, id_, ex_, mem_.
- * A taken branch or jump, a trap and MRET cost two bubbles: the instructions in ID and
- * IF are dropped. Results are forwarded to ID (Mig2Forward); an instruction that reads
+ * A taken branch, JALR, a trap and MRET cost two bubbles: the instructions in ID and IF
+ * are dropped; JAL costs one: ID redirects fetch to its target. Results are forwarded to
+ * ID (Mig2Forward); an instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
  * Every slot without an instruction carries its reason (bubble_e); retire reports it
@@ -97,7 +98,7 @@ module Mig2Core import Mig2Pkg::*; #(
     logic         ex_rd_write;      // instruction in EX will write rd (not x0)
     reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
-    word_t        ex_next_pc;       // byte address of the next instruction, for retire
+    iaddr_t       ex_next_pc;       // next instruction, for retire (Mig2Control)
     retire_t      ex_retire;        // RVFI entry built in EX, completed in MEM/WB
     bubble_e      ex_bubble;        // nothing completes or traps in EX: why
     ex_mem_t      ex_mem_d;
@@ -120,10 +121,10 @@ module Mig2Core import Mig2Pkg::*; #(
         .clk, .rst_n, .ctrl(if_ctrl), .imem_req, .fetch(id_fetch));
 
     Mig2Control u_mig2_control(
-        .clk, .rst_n, .id_valid(id_fetch.valid), .id_dec, .ex_fetch, .ex_insn, .ex_dec,
+        .clk, .rst_n, .id_fetch, .id_dec, .ex_fetch, .ex_insn, .ex_dec,
         .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned, .ex_csr_illegal,
         .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
-        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap,
+        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap, .ex_next_pc,
         .halt, .halt_pc);
 
     // ID
@@ -197,14 +198,13 @@ module Mig2Core import Mig2Pkg::*; #(
 
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not
     // use are 0. MEM/WB adds order, bubble and the load data.
-    assign ex_next_pc = if_ctrl.redirect ? {if_ctrl.target, {IADDR_START{1'b0}}} : ex_link;
     assign ex_retire  = '{valid:     ex_done || ex_trap.valid,
                           bubble:    BUBBLE_NONE,
                           order:     '0,
                           insn:      ex_insn,
                           trap:      ex_trap.valid,
                           pc_rdata:  {ex_fetch.pc, {IADDR_START{1'b0}}},
-                          pc_wdata:  ex_next_pc,
+                          pc_wdata:  {ex_next_pc, {IADDR_START{1'b0}}},
                           rs1_addr:  ex_dec.uses_rs1 ? ex_dec.rs1 : '0,
                           rs1_rdata: ex_dec.uses_rs1 ? ex_rs1_data : '0,
                           rs2_addr:  ex_dec.uses_rs2 ? ex_dec.rs2 : '0,

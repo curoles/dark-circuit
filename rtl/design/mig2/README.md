@@ -1,11 +1,11 @@
 # Mig2: RISC-V CPU
 
 Mig2 is where bigger changes of the Mig CPUs go first. It started as a copy of Mig1
-(`rtl/design/mig1`) on 2026-10-19; on 2026-10-23 Mig1 took over its code, so today the
-two are the same design: RV32IM, Zicsr, Zicntr, machine-mode traps, 4-stage pipeline
-IF | ID | EX | MEM/WB with forwarding. See Mig1's README for how it works, its tests,
-synthesis (`make mig2_synth` here) and its area and speed; this file describes what Mig2
-changes from Mig1: bubbles carry their reason, and a pipeline view for Konata.
+(`rtl/design/mig1`) on 2026-10-19; on 2026-10-23 Mig1 took over its code. Both are RV32IM,
+Zicsr, Zicntr, machine-mode traps, 4-stage pipeline IF | ID | EX | MEM/WB with forwarding.
+See Mig1's README for how it works, its tests, synthesis (`make mig2_synth` here) and its
+area and speed; this file describes what Mig2 changes from Mig1: JAL redirects fetch from
+ID, bubbles carry their reason, and a pipeline view for Konata.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
 DARK_CIRCUIT_MAIN_SIMULATOR, by default Verilator when it is installed). Mig2 is tested
@@ -13,6 +13,18 @@ with Verilator; only Verilator is guaranteed to work.
 
 Planned: a faster multiplier, Spike cosim (lockstep), a Zbb slice, a single memory
 instead of two.
+
+## JAL from ID
+
+JAL is always taken and its target, pc + imm, is known as soon as ID decodes it. ID
+redirects fetch when the JAL leaves ID (Mig2Control), so only the instruction requested in
+the same cycle is dropped: one bubble instead of two. The JAL goes on to EX and retires as
+before; EX does not redirect again. ID does not redirect when an older instruction in EX
+redirects or halts the core (the JAL is dropped with ID), while EX holds a division (the
+JAL waits in ID and redirects when it leaves), or when the target is not divisible by 4
+(EX traps: misaligned fetch); `test/design/mig2/jal_id.S` runs these cases. All program
+tests: 114 JALs, 24 389 cycles before, 24 275 after. This is the redirect path that branch
+prediction will use; JALR stays in EX (its rs1 can still be on its way from a load).
 
 ## Bubbles
 
@@ -26,7 +38,7 @@ retire nothing.
 |---|---|---|
 | `BUBBLE_FILL` | 3 | the pipeline fills: after reset, after resume |
 | `BUBBLE_COND_BRANCH` | 2 | taken conditional branch in EX |
-| `BUBBLE_DIR_JUMP` | 2 | JAL in EX (calls too) |
+| `BUBBLE_DIR_JUMP` | 1 | JAL in ID (calls too), see JAL from ID |
 | `BUBBLE_INDIR_JUMP` | 2 | JALR in EX that is not a return (indirect calls too) |
 | `BUBBLE_RET` | 2 | JALR return in EX: rs1 is x1 or x5, rd is not rs1 (RISC-V hint table) |
 | `BUBBLE_TRAP` | 2 | trap in EX: fetch goes to mtvec |
