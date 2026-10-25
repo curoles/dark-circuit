@@ -36,7 +36,8 @@ test/numeric/<format>/<op>/ testbench of a numeric unit
 test/sim/        testbenches of simulation models
 test/design/mig1/ tests of Mig1
 test/design/mig2/ tests of Mig2
-sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/
+sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/, bench/
+                 (support of the riscv-tests benchmarks)
 test/sw/         tests of software, run on QEMU
 old2020/         old 2020 code, kept for reference
 ```

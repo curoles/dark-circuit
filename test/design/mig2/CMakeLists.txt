@@ -174,6 +174,26 @@ if(DARK_CIRCUIT_RISCV)
                               LABELS riscv-tests rv32mi)
         endforeach()
 
+        # Benchmarks, with DARK_CIRCUIT_BENCHMARKS only (not regular testing). Dhrystone of
+        # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
+        # calls, to measure cycles (its own results are not printed). One run of bench_main
+        # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator.
+        if(DARK_CIRCUIT_BENCHMARKS)
+            set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
+            mig2_program_test(dhrystone
+                              SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                                      ${SW}/bench/bench.c ${DHRY}/dhrystone.c
+                                      ${DHRY}/dhrystone_main.c
+                              ARCH rv32im
+                              FLAGS -O2 -ffreestanding -fno-builtin-printf
+                                    -include ${SW}/bench/bench_main.h -DBENCH_REPEAT=6
+                                    -Wno-implicit-int -Wno-implicit-function-declaration
+                                    -I${SW}/bench/include -I${SW}/semihosting -I${DHRY}
+                                    -I${RISCV_TESTS}/benchmarks/common -I${RISCV_TESTS}/env
+                              ARGS +expect_exit=0 +max_cycles=100000000
+                              LABELS benchmark)
+        endif()
+
         # rv32um: multiply and divide.
         foreach(test IN ITEMS mul mulh mulhsu mulhu div divu rem remu)
             mig2_program_test(rv32um_${test} SOURCES ${RISCV_TESTS}/isa/rv32um/${test}.S
