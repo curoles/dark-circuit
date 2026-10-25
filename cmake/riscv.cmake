@@ -37,7 +37,8 @@ dc_use_tool(RISCV RISCV_GCC=${DARK_CIRCUIT_RISCV_PREFIX}gcc
 #   FLAGS      more gcc options, for example -I<dir> or -D<macro>
 # Every source is compiled into <name>.objs/<n>_<source>.o with a dependency file
 # (gcc -MD), so the program is rebuilt when a source or a header it includes changes;
-# a linker script given as -T <file> in LINK_FLAGS is a dependency of the link.
+# a linker script given as -T <file> in LINK_FLAGS is a dependency of the link, and so are
+# the options: a change of ARCH, ABI, LINK_FLAGS, FLAGS or of the toolchain rebuilds it.
 # Does nothing if the RISC-V toolchain is not used.
 function(dc_add_riscv_program NAME)
     if(NOT DARK_CIRCUIT_RISCV)
@@ -63,10 +64,17 @@ function(dc_add_riscv_program NAME)
     set(base ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
     set(arch -march=${P_ARCH} -mabi=${P_ABI})
 
+    # The command lines are a dependency too: the Makefile generator does not compare the
+    # commands of custom commands. file(CONFIGURE) writes the file only when its content
+    # changes, so it is newer than the objects only after a change of the options.
+    file(MAKE_DIRECTORY ${base}.objs)
+    set(options ${base}.objs/options.txt)
+    file(CONFIGURE OUTPUT ${options}
+         CONTENT "${RISCV_GCC_BIN} ${arch} ${P_FLAGS}\n${P_LINK_FLAGS}\n" @ONLY)
+
     # Compile every source with its dependency file; object names start with
     # the source number, so sources with the same name in different directories
     # do not collide.
-    file(MAKE_DIRECTORY ${base}.objs)
     set(objs)
     set(n 0)
     foreach(source IN LISTS P_SOURCES)
@@ -76,7 +84,7 @@ function(dc_add_riscv_program NAME)
         add_custom_command(
             OUTPUT ${obj}
             COMMAND ${RISCV_GCC_BIN} ${arch} ${P_FLAGS} -MD -MF ${obj}.d -c -o ${obj} ${source}
-            DEPENDS ${source}
+            DEPENDS ${source} ${options}
             DEPFILE ${obj}.d
             COMMENT "RISC-V: compiling ${source_name} of ${NAME}"
             VERBATIM
@@ -107,7 +115,7 @@ function(dc_add_riscv_program NAME)
         COMMAND ${RISCV_OBJCOPY_BIN} -O verilog ${base}.elf ${base}.hex
         COMMAND ${RISCV_OBJDUMP_BIN} -d ${base}.elf > ${base}.dis
         COMMAND ${RISCV_NM_BIN} ${base}.elf > ${base}.sym
-        DEPENDS ${objs} ${link_deps}
+        DEPENDS ${objs} ${link_deps} ${options}
         COMMENT "RISC-V: linking ${NAME}.elf, making ${NAME}.hex"
         VERBATIM
     )
