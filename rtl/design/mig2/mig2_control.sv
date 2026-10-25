@@ -87,6 +87,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       ex_jal;      // JAL in EX: EX does not redirect it, ID did (a misaligned one traps)
     logic       id_jal;      // JAL in ID
     word_t      id_jal_target; // its target, byte address
+    logic       id_moves;    // the instruction in ID goes to EX at the rising edge
     logic       id_redirect; // ID redirects fetch: the JAL leaves ID
     logic       ex_writes;   // the instruction in EX writes a register at the end of its cycle
     logic       mem_halting; // the EBREAK that halts the core is in MEM/WB, it retires now
@@ -157,13 +158,17 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
         else if (ex_dec.br.ret)    redirect_why = BUBBLE_RET;
         else                       redirect_why = BUBBLE_INDIR_JUMP;
 
-    // JAL is resolved in ID: always taken, target pc + imm. ID redirects fetch when the JAL
-    // leaves ID: not while EX holds a division (it would redirect in every cycle of the
-    // stall), not when an older instruction in EX redirects or halts (the JAL is dropped).
-    // A target not divisible by 4 is a fault: EX traps, ID does not redirect.
+    // ID acts (redirects now; pushes to a return stack, shifts a history later) only for an
+    // instruction that goes on to EX: once per instruction, never on the wrong path. It
+    // stays while EX holds a division or it waits for load data; it is dropped when an
+    // older instruction in EX redirects or halts.
+    assign id_moves = id_fetch.valid && !ex_stall && !id_hazard && !flush_id;
+
+    // JAL is resolved in ID: always taken, target pc + imm; ID redirects fetch when the JAL
+    // goes to EX. A target not divisible by 4 is a fault: EX traps, ID does not redirect.
     assign id_jal        = id_fetch.valid && id_dec.br.jump && !id_dec.br.target_rs1;
     assign id_jal_target = {id_fetch.pc, {IADDR_START{1'b0}}} + id_dec.imm;
-    assign id_redirect   = id_jal && id_jal_target[1:0] == 2'b00 && !flush_id && !ex_stall;
+    assign id_redirect   = id_jal && id_jal_target[1:0] == 2'b00 && id_moves;
 
     // Interlock: other results are forwarded to ID (Mig2Forward), but a load's data comes
     // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
@@ -209,5 +214,11 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
                          ex_branch.taken && ex_branch.misaligned, ex_lsu_misaligned}))
     // A stalled instruction stays in EX for the next cycle.
     `DC_ASSERT_NEXT(a_ex_held, ex_stall, ex_fetch.valid && $stable(ex_fetch.pc))
+    // ID redirects only for an instruction that moves to EX in this cycle.
+    `DC_ASSERT(a_id_redirect_moves, !id_redirect || (!pipe_ctrl.ex_stall && !pipe_ctrl.ex_flush))
+    // Fetch is never told to redirect and to stall in the same cycle.
+    `DC_ASSERT(a_redirect_no_stall, !(fetch_ctrl.redirect && fetch_ctrl.stall))
+    // A JAL in EX does not redirect from EX, unless it traps (misaligned target).
+    `DC_ASSERT(a_ex_jal_no_redirect, !(ex_fetch.valid && ex_jal && ex_redirect) || ex_fault)
 
 endmodule
