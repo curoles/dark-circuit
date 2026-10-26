@@ -85,10 +85,9 @@ module BranchTargetBuffer import BranchCounterPkg::*; #(
     // entry, and a new entry could only evict one that saves cycles.
     assign update_write = update_en && (update_hit || update_taken);
     // The tag check: by now the entry may belong to another branch (an update came in
-    // between), which must stay. The update of the same entry wins: it comes from an older
-    // instruction and writes an entry that is right.
-    assign inval_clear  = inval_en && tag[inval_index] == inval_pc[PC_WIDTH-1:INDEX_WIDTH] &&
-                          !(update_write && update_index == inval_index);
+    // between), which must stay. An update of the same entry in the same cycle wins over the
+    // invalidate by the order of the valid writes below.
+    assign inval_clear  = inval_en && tag[inval_index] == inval_pc[PC_WIDTH-1:INDEX_WIDTH];
 
     // The whole entry, tag and target also on a hit: the carried hit can be stale (another
     // branch with the same index took the entry between the lookup and the update of this
@@ -108,8 +107,16 @@ module BranchTargetBuffer import BranchCounterPkg::*; #(
         if (!rst_n)
             valid <= '0;
         else begin
-            if (update_write) valid[update_index] <= 1'b1;
+            // =====================================================================
+            // !!! ORDER MATTERS: CLEAR FIRST, SET LAST. DO NOT SWAP THESE LINES !!!
+            // =====================================================================
+            // An update and an invalidate of the same entry in the same cycle both
+            // write valid[i]; the last nonblocking assignment wins, and the update
+            // must win: it comes from an older instruction and writes an entry that
+            // is right, while the invalidate judged the entry before the update.
+            // The struct version has the same order in gates: (valid & ~clear) | set.
             if (inval_clear)  valid[inval_index]  <= 1'b0;
+            if (update_write) valid[update_index] <= 1'b1;
         end
 
 endmodule

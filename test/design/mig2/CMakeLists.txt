@@ -181,25 +181,46 @@ if(DARK_CIRCUIT_RISCV)
                               LABELS riscv-tests rv32mi)
         endforeach()
 
-        # Benchmarks, with DARK_CIRCUIT_BENCHMARKS only (not regular testing). Dhrystone of
+        # Benchmarks, with DARK_CIRCUIT_BENCHMARKS only (not regular testing): programs of
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
-        # calls, to measure cycles (its own results are not printed). One run of bench_main
-        # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator. +max_cycles is a
-        # cycle ceiling (Mig2 README): lower it when a change makes the benchmark faster.
+        # calls, to measure cycles (their own results are not printed; the exit status is
+        # their own check). DIR is the directory of the benchmark, REPEAT the runs of its
+        # main (BENCH_REPEAT), MAX_CYCLES a cycle ceiling (Mig2 README): lower it when a
+        # change makes the benchmark faster.
         if(DARK_CIRCUIT_BENCHMARKS)
+            function(mig2_bench_test NAME)
+                cmake_parse_arguments(P "" "DIR;REPEAT;MAX_CYCLES" "SOURCES;FLAGS" ${ARGN})
+                mig2_program_test(${NAME}
+                                  SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                                          ${SW}/bench/bench.c ${P_SOURCES}
+                                  ARCH rv32im
+                                  FLAGS -O2 -ffreestanding -fno-builtin-printf
+                                        -include ${SW}/bench/bench_main.h
+                                        -DBENCH_REPEAT=${P_REPEAT}
+                                        -I${SW}/bench/include -I${SW}/semihosting -I${P_DIR}
+                                        -I${RISCV_TESTS}/benchmarks/common
+                                        -I${RISCV_TESTS}/env ${P_FLAGS}
+                                  ARGS +expect_exit=0 +max_cycles=${P_MAX_CYCLES}
+                                  LABELS benchmark)
+            endfunction()
+
+            # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
-            mig2_program_test(dhrystone
-                              SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
-                                      ${SW}/bench/bench.c ${DHRY}/dhrystone.c
-                                      ${DHRY}/dhrystone_main.c
-                              ARCH rv32im
-                              FLAGS -O2 -ffreestanding -fno-builtin-printf
-                                    -include ${SW}/bench/bench_main.h -DBENCH_REPEAT=6
-                                    -Wno-implicit-int -Wno-implicit-function-declaration
-                                    -I${SW}/bench/include -I${SW}/semihosting -I${DHRY}
-                                    -I${RISCV_TESTS}/benchmarks/common -I${RISCV_TESTS}/env
-                              ARGS +expect_exit=0 +max_cycles=2134141
-                              LABELS benchmark)
+            mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6 MAX_CYCLES 2134146
+                            SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
+                            FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
+
+            # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
+            # sort is in place, a second run would sort sorted numbers.
+            set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
+            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 MAX_CYCLES 182700
+                            SOURCES ${QSORT}/qsort_main.c)
+
+            # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
+            # sets up the towers again.
+            set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
+            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 MAX_CYCLES 273674
+                            SOURCES ${TOWERS}/towers_main.c)
         endif()
 
         # rv32um: multiply and divide.

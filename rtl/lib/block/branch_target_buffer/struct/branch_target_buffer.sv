@@ -134,12 +134,21 @@ module BranchTargetBuffer import BranchCounterPkg::*; #(
                                       .eq(inval_tag_eq));
     And2  #(1) u_and2_inval(.in1(inval_en), .in2(inval_tag_eq), .out(inval_clear));
 
-    // Valid bits: clear, then set, so that an update of the entry the invalidate clears wins.
+    // Valid bits: one-hot lines of the entry the update sets and the entry the invalidate
+    // clears.
     Decoder #(.SIZE(INDEX_WIDTH)) u_decoder_set  (.in(update_index), .en(update_write),
                                                   .out(set_line));
     Decoder #(.SIZE(INDEX_WIDTH)) u_decoder_clear(.in(inval_index), .en(inval_clear),
                                                   .out(clear_line));
     Inv  #(ENTRIES) u_inv_clear(.in(clear_line), .out(clear_line_n));
+    // =========================================================================
+    // !!! ORDER MATTERS: CLEAR FIRST (And2), SET LAST (Or2). DO NOT SWAP THEM !!!
+    // =========================================================================
+    // An update and an invalidate of the same entry in the same cycle both change
+    // valid[i]; (valid & ~clear) | set lets the set win, and the update must win:
+    // it comes from an older instruction and writes an entry that is right, while
+    // the invalidate judged the entry before the update. The behave version has
+    // the same order in its two valid writes.
     And2 #(ENTRIES) u_and2_kept(.in1(valid), .in2(clear_line_n), .out(valid_kept));
     Or2  #(ENTRIES) u_or2_set  (.in1(valid_kept), .in2(set_line), .out(valid_next));
 

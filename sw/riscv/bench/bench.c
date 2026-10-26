@@ -5,8 +5,9 @@
  * stores) to measure its cycles; their own results are not wanted: printf and setStats do
  * nothing. Their sources are compiled unchanged, their main as bench_main (-include
  * bench_main.h); main here runs it BENCH_REPEAT times (-DBENCH_REPEAT=<n>, default 1), so
- * the run is as long as wanted. The run ends with the exit of crt0.S (semihosting):
- * status 0.
+ * the run is as long as wanted. The run ends with the exit of crt0.S (semihosting): the
+ * status of the first run whose own check fails (the verify of most benchmarks), or 0;
+ * so a benchmark also tests the CPU.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -79,7 +80,10 @@ int strcmp(const char* a, const char* b)
 
 int main(void)
 {
-    for (int k = 0; k < BENCH_REPEAT; k++)
-        bench_main(0, (char**)0);
+    for (int k = 0; k < BENCH_REPEAT; k++) {
+        int status = bench_main(0, (char**)0);
+        if (status != 0)
+            return status;
+    }
     return 0;
 }

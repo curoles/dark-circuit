@@ -198,7 +198,7 @@ if(DARK_CIRCUIT_RISCV)
                                     -Wno-implicit-int -Wno-implicit-function-declaration
                                     -I${SW}/bench/include -I${SW}/semihosting -I${DHRY}
                                     -I${RISCV_TESTS}/benchmarks/common -I${RISCV_TESTS}/env
-                              ARGS +expect_exit=0 +max_cycles=2134141
+                              ARGS +expect_exit=0 +max_cycles=2134146
                               LABELS benchmark)
         endif()
 
