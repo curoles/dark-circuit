@@ -144,6 +144,12 @@ if(DARK_CIRCUIT_RISCV)
     mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im
                       ARGS +expect_trap +expect_regs +max_cycles=180)
 
+    # Jumps and conditional branches that a BTB learns, in the corners of the pipeline:
+    # loops, calls, branches taken every time and every other time, two branches sharing an
+    # entry, waiting in ID (load-use, division), back to back, a loop of two instructions, on
+    # the wrong path, to a misaligned target.
+    mig2_program_test(btb_if SOURCES btb_if.S ARCH rv32im ARGS +expect_trap +expect_regs)
+
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
     mig2_program_test(semihosting
