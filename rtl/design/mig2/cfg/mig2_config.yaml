@@ -1,6 +1,8 @@
 # Mig2 configuration. After a change run: make config
-rst_addr:       0x00000000   # PC after reset, byte address
-mem_addr_width: 16           # imem and dmem: 1 << 16 = 64 KiB each
+rst_addr:        0x00000000   # PC after reset, byte address
+mem_addr_width:  16           # imem and dmem: 1 << 16 = 64 KiB each
+btb_index_width: 4            # BTB in IF: 1 << 4 = 16 entries
+btb_tag_width:   10           # BTB tag: index + tag = 14 bits, the word address of 64 KiB
 
 # Generated files: template in this directory -> output relative to repository root.
 generate:

@@ -68,6 +68,8 @@ package Mig2Pkg;
         BUBBLE_FILL,        // the pipeline fills: after reset, after a halt (resume)
         BUBBLE_COND_BRANCH, // conditional branch guessed wrong: EX corrects the guess
         BUBBLE_PRED_TAKEN,  // conditional branch guessed taken: ID redirects
+        BUBBLE_BTB_FIX,     // the BTB sent fetch where the instruction does not go: ID
+                            // corrects it (two pcs share an entry; not with a full tag)
         BUBBLE_DIR_JUMP,    // JAL: target pc + imm (calls too)
         BUBBLE_INDIR_JUMP,  // JALR that is not a return (indirect calls too)
         BUBBLE_RET,         // JALR that is a return
@@ -161,6 +163,35 @@ package Mig2Pkg;
         bubble_e why;      // redirect: reason of the bubble of the dropped request
         iaddr_t  target;
     } fetch_ctrl_t;
+
+    // BTB (BranchTargetBuffer in Mig2Fetch): IF looks up the pc it requests; a hit predicted
+    // taken sends fetch to the target in the same cycle, without a bubble.
+
+    // Fetch -> ID -> EX: what the BTB said for the instruction in IF; it goes with the
+    // instruction, so that EX updates the entry without reading it again.
+    typedef struct packed {
+        logic                       hit;
+        logic                       taken;      // hit with a counter that says taken: IF
+                                                // went to the target
+        BranchCounterPkg::counter_e counter;
+    } btb_pred_t;
+
+    // Control -> Fetch: a conditional branch or a JAL completed in EX: the BTB learns it.
+    typedef struct packed {
+        logic                       en;
+        iaddr_t                     pc;
+        logic                       hit;        // hit and counter of its lookup (btb_pred_t)
+        BranchCounterPkg::counter_e counter;
+        logic                       taken;
+        iaddr_t                     target;     // also when not taken
+    } btb_update_t;
+
+    // Control -> Fetch: the BTB sent fetch where the instruction in ID does not go: its
+    // entry is cleared.
+    typedef struct packed {
+        logic   en;
+        iaddr_t pc;
+    } btb_inval_t;
 
     // Branch -> Control: next pc of the instruction in EX, combinational.
     typedef struct packed {
