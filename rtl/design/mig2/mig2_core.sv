@@ -68,6 +68,10 @@ module Mig2Core import Mig2Pkg::*; #(
 
     // ID
     fetch_t       id_fetch;         // instruction in ID: valid, pc; arrives from imem
+    // Not used yet: Mig2Control will check it in ID and carry it to EX.
+    /* verilator lint_off UNUSEDSIGNAL */
+    btb_pred_t    id_btb;           // what the BTB said in IF for the instruction in ID
+    /* verilator lint_on UNUSEDSIGNAL */
     insn_t        id_insn;
     decoded_t     id_dec;           // instruction in ID taken apart
     logic         id_pred_taken;    // conditional branch in ID guessed taken
@@ -120,8 +124,10 @@ module Mig2Core import Mig2Pkg::*; #(
     word_t        dbg_reg_rdata;
 
     // IF
+    // The BTB does not learn yet (no update, no invalidate): it never hits.
     Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(
-        .clk, .rst_n, .ctrl(if_ctrl), .imem_req, .fetch(id_fetch));
+        .clk, .rst_n, .ctrl(if_ctrl), .btb_update('0), .btb_inval('0), .imem_req,
+        .fetch(id_fetch), .btb_pred(id_btb));
 
     Mig2Control u_mig2_control(
         .clk, .rst_n, .id_fetch, .id_dec, .id_pred_taken, .ex_fetch, .ex_insn, .ex_dec,
