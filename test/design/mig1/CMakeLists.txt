@@ -137,6 +137,13 @@ if(DARK_CIRCUIT_RISCV)
     mig1_program_test(jal_id SOURCES jal_id.S ARCH rv32im
                       ARGS +expect_trap +resumes=1 +expect_regs)
 
+    # Conditional branches in the corners of the pipeline: every pair of guess and outcome
+    # of a static guess, waiting in ID (load-use, division), on the wrong path, back to back,
+    # to misaligned targets. +max_cycles is a cycle ceiling (Mig1 README): lower it when a
+    # change makes the test faster.
+    mig1_program_test(branch_id SOURCES branch_id.S ARCH rv32im
+                      ARGS +expect_trap +expect_regs +max_cycles=180)
+
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig1 too; crt0.S and the semihosting library of sw/riscv.
     mig1_program_test(semihosting
@@ -173,6 +180,27 @@ if(DARK_CIRCUIT_RISCV)
                               FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
                               LABELS riscv-tests rv32mi)
         endforeach()
+
+        # Benchmarks, with DARK_CIRCUIT_BENCHMARKS only (not regular testing). Dhrystone of
+        # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
+        # calls, to measure cycles (its own results are not printed). One run of bench_main
+        # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator. +max_cycles is a
+        # cycle ceiling (Mig1 README): lower it when a change makes the benchmark faster.
+        if(DARK_CIRCUIT_BENCHMARKS)
+            set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
+            mig1_program_test(dhrystone
+                              SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                                      ${SW}/bench/bench.c ${DHRY}/dhrystone.c
+                                      ${DHRY}/dhrystone_main.c
+                              ARCH rv32im
+                              FLAGS -O2 -ffreestanding -fno-builtin-printf
+                                    -include ${SW}/bench/bench_main.h -DBENCH_REPEAT=6
+                                    -Wno-implicit-int -Wno-implicit-function-declaration
+                                    -I${SW}/bench/include -I${SW}/semihosting -I${DHRY}
+                                    -I${RISCV_TESTS}/benchmarks/common -I${RISCV_TESTS}/env
+                              ARGS +expect_exit=0 +max_cycles=2134141
+                              LABELS benchmark)
+        endif()
 
         # rv32um: multiply and divide.
         foreach(test IN ITEMS mul mulh mulhsu mulhu div divu rem remu)

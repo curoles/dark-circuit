@@ -8,6 +8,7 @@ mig1_regs.sv
 mig1_forward.sv
 mig1_alu.sv
 mig1_branch.sv
+mig1_branch_predict.sv
 mig1_lsu.sv
 mig1_load_data.sv
 mig1_csr.sv

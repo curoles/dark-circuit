@@ -260,7 +260,7 @@ module TbMig2;
             while (!halt && !tohost_written) begin
                 @(posedge clk); #1;
                 if (cycle > max_cycles)
-                    $fatal(1, "Mig2: no halt after %0d cycles, %0d instructions retired",
+                    $fatal(1, "Mig2: no end after %0d cycles (+max_cycles), %0d instructions retired",
                            max_cycles, retired);
                 if (ebreak_trapped && !no_debugger)
                     ebreak_halt = 1'b1;

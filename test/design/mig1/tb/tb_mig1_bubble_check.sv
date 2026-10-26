@@ -4,7 +4,8 @@
  * A cycle out of reset and not halted retires an instruction or a bubble: retire.bubble
  * tells why (bubble_e, Mig1Pkg). Checks: an instruction has no bubble reason, a bubble has
  * one; a redirect bubble (branch, jump, return, trap, MRET) follows the instruction of that
- * class that retired right before it, at most 2; a load-use bubble follows a load, and the
+ * class that retired right before it, at most 2 (a branch guessed taken: first pred_taken,
+ * then cond_branch when guessed wrong); a load-use bubble follows a load, and the
  * next instruction reads its rd; division bubbles come right before a division; fill
  * bubbles only before the first instruction after reset or resume. The trace gets a line
  * per bubble; report() at the end of the run prints the count per reason and checks that
@@ -88,6 +89,10 @@ module TbMig1BubbleCheck import Mig1Pkg::*, RiscvPkg::*, TbMig1Pkg::*; (
                 if (load_rd == 0)
                     $fatal(1, "Mig1: cycle %0d: load-use bubble, no load retired before it", cycle);
             BUBBLE_DIV: ;   // the next retired instruction must be a division
+            BUBBLE_PRED_TAKEN:  // a branch guessed taken: first, right after it
+                if (redirect_class != BUBBLE_COND_BRANCH || redirect_bubbles != 0)
+                    $fatal(1, "Mig1: cycle %0d: pred_taken bubble after pc %h (%s, %0d bubbles before)",
+                           cycle, prev_pc, bubble_name(redirect_class), redirect_bubbles);
             default:        // redirect classes
                 if (b != redirect_class || redirect_bubbles >= 2)
                     $fatal(1, "Mig1: cycle %0d: %s bubble after pc %h (%s, %0d bubbles before)",

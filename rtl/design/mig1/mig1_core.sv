@@ -22,9 +22,10 @@
  * happen there, loads send their read; MEM/WB gets load data, writes rd and retires.
  * An instruction that leaves EX always completes. Signals of a stage have its prefix:
  * if_, id_, ex_, mem_.
- * A taken branch, JALR, a trap and MRET cost two bubbles: the instructions in ID and IF
- * are dropped; JAL costs one: ID redirects fetch to its target. Results are forwarded to
- * ID (Mig1Forward); an instruction that reads
+ * A branch guessed wrong, JALR, a trap and MRET cost two bubbles: the instructions in ID
+ * and IF are dropped; JAL and a branch guessed taken (Mig1BranchPredict) cost one: ID
+ * redirects fetch to the target. Results are forwarded to ID (Mig1Forward); an
+ * instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
  * Every slot without an instruction carries its reason (bubble_e); retire reports it
@@ -69,6 +70,8 @@ module Mig1Core import Mig1Pkg::*; #(
     fetch_t       id_fetch;         // instruction in ID: valid, pc; arrives from imem
     insn_t        id_insn;
     decoded_t     id_dec;           // instruction in ID taken apart
+    logic         id_pred_taken;    // conditional branch in ID guessed taken
+    logic         id_redirect;      // ID redirects fetch for the instruction in ID
     word_t        id_rf_rs1_data;   // register file values; id_rs1_data has forwarding
     word_t        id_rf_rs2_data;
     word_t        id_rs1_data;
@@ -121,16 +124,18 @@ module Mig1Core import Mig1Pkg::*; #(
         .clk, .rst_n, .ctrl(if_ctrl), .imem_req, .fetch(id_fetch));
 
     Mig1Control u_mig1_control(
-        .clk, .rst_n, .id_fetch, .id_dec, .ex_fetch, .ex_insn, .ex_dec,
-        .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned, .ex_csr_illegal,
-        .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
-        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .ex_done, .ex_trap, .ex_next_pc,
-        .halt, .halt_pc);
+        .clk, .rst_n, .id_fetch, .id_dec, .id_pred_taken, .ex_fetch, .ex_insn, .ex_dec,
+        .ex_redirected(id_ex_q.redirected), .ex_addr(ex_alu_result), .ex_branch,
+        .ex_lsu_misaligned, .ex_csr_illegal, .ex_muldiv_stall, .csr,
+        .ebreak_halt(dbg_req.ebreak_halt), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
+        .pipe_ctrl, .id_redirect, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
 
     // ID
     assign id_insn = imem_rsp.data;
 
     Mig1Decode u_mig1_decode(.insn(id_insn), .dec(id_dec));
+
+    Mig1BranchPredict u_mig1_branch_predict(.dec(id_dec), .taken(id_pred_taken));
 
     Mig1Regs u_mig1_regs(
         .clk, .halt,
@@ -144,13 +149,14 @@ module Mig1Core import Mig1Pkg::*; #(
         .rf_rs2_data(id_rf_rs2_data), .ex_rd, .ex_rd_data, .mem_rd, .mem_rd_data,
         .rs1_data(id_rs1_data), .rs2_data(id_rs2_data));
 
-    assign id_ex_d = '{valid:    id_fetch.valid,
-                       bubble:   id_fetch.bubble,
-                       pc:       id_fetch.pc,
-                       insn:     id_insn,
-                       dec:      id_dec,
-                       rs1_data: id_rs1_data,
-                       rs2_data: id_rs2_data};
+    assign id_ex_d = '{valid:      id_fetch.valid,
+                       bubble:     id_fetch.bubble,
+                       pc:         id_fetch.pc,
+                       insn:       id_insn,
+                       dec:        id_dec,
+                       redirected: id_redirect,
+                       rs1_data:   id_rs1_data,
+                       rs2_data:   id_rs2_data};
 
     Mig1Pipe u_mig1_pipe(.clk, .rst_n, .ctrl(pipe_ctrl), .id_ex_d, .id_ex_q, .ex_mem_d, .ex_mem_q);
 

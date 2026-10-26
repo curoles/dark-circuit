@@ -139,8 +139,10 @@ if(DARK_CIRCUIT_RISCV)
 
     # Conditional branches in the corners of the pipeline: every pair of guess and outcome
     # of a static guess, waiting in ID (load-use, division), on the wrong path, back to back,
-    # to misaligned targets.
-    mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im ARGS +expect_trap +expect_regs)
+    # to misaligned targets. +max_cycles is a cycle ceiling (Mig2 README): lower it when a
+    # change makes the test faster.
+    mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im
+                      ARGS +expect_trap +expect_regs +max_cycles=180)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
@@ -182,7 +184,8 @@ if(DARK_CIRCUIT_RISCV)
         # Benchmarks, with DARK_CIRCUIT_BENCHMARKS only (not regular testing). Dhrystone of
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
         # calls, to measure cycles (its own results are not printed). One run of bench_main
-        # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator.
+        # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator. +max_cycles is a
+        # cycle ceiling (Mig2 README): lower it when a change makes the benchmark faster.
         if(DARK_CIRCUIT_BENCHMARKS)
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
             mig2_program_test(dhrystone
@@ -195,7 +198,7 @@ if(DARK_CIRCUIT_RISCV)
                                     -Wno-implicit-int -Wno-implicit-function-declaration
                                     -I${SW}/bench/include -I${SW}/semihosting -I${DHRY}
                                     -I${RISCV_TESTS}/benchmarks/common -I${RISCV_TESTS}/env
-                              ARGS +expect_exit=0 +max_cycles=100000000
+                              ARGS +expect_exit=0 +max_cycles=2134141
                               LABELS benchmark)
         endif()
 
