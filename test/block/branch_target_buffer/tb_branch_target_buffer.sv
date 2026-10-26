@@ -11,9 +11,9 @@
  * clears the entries and keeps their content. In the end the test checks that every case
  * happened: hits taken and not taken, stale hits, not taken misses, invalidates that clear,
  * that find another tag, that lose to an update of the same entry.
- * Runs with two sizes, Mig2's (16 entries, tag 10, target 30) and a small one (4 entries,
- * tag 2, target 8): 20000 clocks on Verilator, 2000 on Icarus. Stops at the first mismatch
- * with $fatal.
+ * Verilator runs two sizes, Mig2's (16 entries, tag 10, target 30) and a small one (4
+ * entries, tag 2, target 8), with 20000 random clocks; Icarus, slow on the gates of the
+ * struct version, the small one with 2000. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -246,16 +246,25 @@ module TbBtbCheck import BranchCounterPkg::*; #(
 endmodule
 
 module TbBranchTargetBuffer;
+`ifdef VERILATOR
+    localparam bit WIDE = 1'b1;     // also Mig2's size
+`else
+    localparam bit WIDE = 1'b0;
+`endif
     wire clk;
     wire done_mig2;
     wire done_small;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
-    TbBtbCheck #(.INDEX_WIDTH(4), .TAG_WIDTH(10), .TARGET_WIDTH(30)) u_check_mig2(
-        .clk, .done(done_mig2));
     TbBtbCheck #(.INDEX_WIDTH(2), .TAG_WIDTH(2), .TARGET_WIDTH(8)) u_check_small(
         .clk, .done(done_small));
+    if (WIDE) begin: g_wide
+        TbBtbCheck #(.INDEX_WIDTH(4), .TAG_WIDTH(10), .TARGET_WIDTH(30)) u_check_mig2(
+            .clk, .done(done_mig2));
+    end else begin: g_narrow
+        assign done_mig2 = 1'b1;
+    end
 
     initial begin
         wait (done_mig2 && done_small);

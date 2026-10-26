@@ -20,3 +20,4 @@
 -F divider/struct/divider.flist
 -F branch_counter/branch_counter.flist
 -F gshare_branch_predictor/struct/gshare_branch_predictor.flist
+-F branch_target_buffer/struct/branch_target_buffer.flist
