@@ -1,4 +1,7 @@
-/* Test of GshareBranchPredictor, behave version.
+/* Test of GshareBranchPredictor, both versions (the same testbench).
+ *
+ * The table has no reset (the struct table starts unknown): first the test writes every
+ * entry strongly not taken, with updates during reset, which keep the history 0.
  *
  * 1. Random: random predictions (pc, enable) and updates of earlier predictions with
  *    random outcomes, the way a pipeline uses the block: index and counter of a
@@ -7,24 +10,28 @@
  *    count that saturates at 0 and 3) checks every output after every clock, also the
  *    hold while predict_en=0 and a read of the entry that is written in the same cycle.
  *    One reset in the middle clears the history and keeps the table.
- * 2. Loop: one branch taken 7 times, then not taken, repeated. With 8 bits of history
- *    the predictor knows where in the loop it is: after 4 rounds of learning it predicts
- *    every outcome right.
- * Runs with INDEX_WIDTH 4 (many entries shared, random only) and 8. Stops at the first
+ * 2. Loop: one branch taken INDEX_WIDTH-1 times, then not taken, repeated. With
+ *    INDEX_WIDTH bits of history the predictor knows where in the loop it is: after 4
+ *    rounds of learning it predicts every outcome right.
+ * Verilator runs INDEX_WIDTH 4 (many entries shared) and 8 with 20000 random clocks; Icarus,
+ * slow on the gates of the struct table, INDEX_WIDTH 4 with 2000. Stops at the first
  * mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
 module TbGshareCheck import GshareBranchPredictorPkg::*; #(
-    parameter INDEX_WIDTH = 4,
-    parameter LOOP_TEST   = 0       // 1: also the loop test (needs INDEX_WIDTH >= 8)
+    parameter INDEX_WIDTH = 4
 )(
     input  wire  clk,
     output logic done
 );
     localparam ENTRIES  = 1 << INDEX_WIDTH;
+`ifdef VERILATOR
     localparam N_RANDOM = 20000;    // clocks of the random test
+`else
+    localparam N_RANDOM = 2000;
+`endif
     localparam DEPTH    = 3;        // predictions in flight at most
 
     logic                   rst_n;
@@ -135,17 +142,17 @@ module TbGshareCheck import GshareBranchPredictorPkg::*; #(
         idle();
     endtask
 
-    // 2. Loop branch at one pc: predict, then update with the outcome, 16 rounds of 8.
+    // 2. Loop branch at one pc: predict, then update with the outcome, 16 rounds.
     task automatic loop_test;
         logic taken;
         wrong = 0;
-        for (int k = 0; k < 16 * 8; k++) begin
-            taken      = (k % 8) != 7;
+        for (int k = 0; k < 16 * INDEX_WIDTH; k++) begin
+            taken      = (k % INDEX_WIDTH) != INDEX_WIDTH - 1;
             predict_en = 1'b1;
             predict_pc = INDEX_WIDTH'(42);
             update_en  = 1'b0;
             clock("loop predict");
-            if (k >= 4 * 8 && predict_taken !== taken)
+            if (k >= 4 * INDEX_WIDTH && predict_taken !== taken)
                 wrong = wrong + 1;
             predict_en     = 1'b0;
             update_en      = 1'b1;
@@ -163,7 +170,7 @@ module TbGshareCheck import GshareBranchPredictorPkg::*; #(
         done = 1'b0;
         seed = INDEX_WIDTH;
         for (int i = 0; i < ENTRIES; i++)
-            m_pht[i] = 0;               // the behave model starts strongly not taken
+            m_pht[i] = 0;               // written strongly not taken below
         m_history = 0;
         m_index   = 0;
         m_counter = 0;
@@ -173,30 +180,45 @@ module TbGshareCheck import GshareBranchPredictorPkg::*; #(
         update_index   = '0;
         update_counter = CNT_STRONG_NOT_TAKEN;
         update_taken   = 1'b0;
-        // Reset, and a first prediction so that the outputs are defined.
+        // Reset, the table written, and a first prediction so that the outputs are defined.
         @(negedge clk);
         model_edge();
         @(negedge clk);
+        update_en = 1'b1;
+        for (int i = 0; i < ENTRIES; i++) begin
+            update_index = INDEX_WIDTH'(i);
+            model_edge();
+            @(negedge clk);
+        end
+        update_en  = 1'b0;
         rst_n      = 1'b1;
         predict_en = 1'b1;
         clock("first prediction");
         idle();
         random_test();
-        if (LOOP_TEST)
-            loop_test();
+        loop_test();
         done = 1'b1;
     end
 endmodule
 
 module TbGshareBranchPredictor;
+`ifdef VERILATOR
+    localparam bit WIDE = 1'b1;     // also INDEX_WIDTH 8
+`else
+    localparam bit WIDE = 1'b0;
+`endif
     wire clk;
     wire done4;
     wire done8;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
-    TbGshareCheck #(.INDEX_WIDTH(4))                u_check_4(.clk, .done(done4));
-    TbGshareCheck #(.INDEX_WIDTH(8), .LOOP_TEST(1)) u_check_8(.clk, .done(done8));
+    TbGshareCheck #(.INDEX_WIDTH(4)) u_check_4(.clk, .done(done4));
+    if (WIDE) begin: g_wide
+        TbGshareCheck #(.INDEX_WIDTH(8)) u_check_8(.clk, .done(done8));
+    end else begin: g_narrow
+        assign done8 = 1'b1;
+    end
 
     initial begin
         wait (done4 && done8);

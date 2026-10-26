@@ -18,3 +18,4 @@
 -F wallace_tree/struct/wallace_tree.flist
 -F wallace_multiplier/struct/wallace_multiplier.flist
 -F divider/struct/divider.flist
+-F gshare_branch_predictor/struct/gshare_branch_predictor.flist
