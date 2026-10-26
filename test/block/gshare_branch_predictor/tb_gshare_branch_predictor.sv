@@ -20,7 +20,7 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module TbGshareCheck import GshareBranchPredictorPkg::*; #(
+module TbGshareCheck import BranchCounterPkg::*; #(
     parameter INDEX_WIDTH = 4
 )(
     input  wire  clk,

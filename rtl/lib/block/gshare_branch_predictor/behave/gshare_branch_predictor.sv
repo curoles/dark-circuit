@@ -7,7 +7,7 @@
  * predict_index and predict_counter come out (a 1-clock read, like an instruction memory)
  * and hold while predict_en=0. The user carries index and counter with the branch to its
  * update: update_en with the outcome writes the counter one step towards it
- * (GshareBranchPredictorPkg::update) at update_index, and shifts the outcome into the
+ * (BranchCounterPkg::update) at update_index, and shifts the outcome into the
  * history. A read and a write of the same entry in one cycle read the old counter.
  * The table has no reset (in hardware it is a memory): it starts with garbage, which
  * only costs mispredictions; this model starts with every counter strongly not taken.
@@ -16,7 +16,7 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module GshareBranchPredictor import GshareBranchPredictorPkg::*; #(
+module GshareBranchPredictor import BranchCounterPkg::*; #(
     parameter INDEX_WIDTH = 8               // table of 1 << INDEX_WIDTH counters
 )(
     input  wire                    clk,

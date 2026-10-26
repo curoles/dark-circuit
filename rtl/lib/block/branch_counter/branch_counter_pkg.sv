@@ -1,5 +1,5 @@
-/* Counters of GshareBranchPredictor, shared by its versions: 2-bit saturating counters
- * of the pattern history table.
+/* 2-bit saturating counters of the branch predictors, shared by the blocks and their
+ * versions: the pattern history table of GshareBranchPredictor, one counter per BTB entry.
  *
  * A counter says how sure the predictor is that a branch is taken. It moves one step
  * towards the outcome of every resolved branch and saturates at both ends, so a single
@@ -9,7 +9,7 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-package GshareBranchPredictorPkg;
+package BranchCounterPkg;
 
     // 2-bit saturating counter, from strongly not taken to strongly taken.
     typedef enum logic [1:0] {

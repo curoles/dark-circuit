@@ -10,7 +10,7 @@
  * data_out (predict_counter), which holds while predict_en=0; predict_index is Mux2 and
  * Dff with the same hold. predict_taken is the high bit of the counter (the two taken
  * states of counter_e). Update: the counter one step towards the outcome t, saturating
- * (GshareBranchPredictorPkg::update), bit by bit, with c1 c0 the bits of update_counter:
+ * (BranchCounterPkg::update), bit by bit, with c1 c0 the bits of update_counter:
  *   new c1 = Maj3(c1,  c0, t): taken c1 | c0,  not taken c1 & c0
  *   new c0 = Maj3(c1, ~c0, t): taken c1 | ~c0, not taken c1 & ~c0
  * The history is DffSyncRstEn: update_en shifts the outcome into bit 0.
@@ -18,7 +18,7 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module GshareBranchPredictor import GshareBranchPredictorPkg::*; #(
+module GshareBranchPredictor import BranchCounterPkg::*; #(
     parameter INDEX_WIDTH = 8               // table of 1 << INDEX_WIDTH counters
 )(
     input  wire                    clk,
