@@ -66,7 +66,8 @@ package Mig2Pkg;
     typedef enum logic [3:0] {
         BUBBLE_NONE,        // not a bubble: an instruction
         BUBBLE_FILL,        // the pipeline fills: after reset, after a halt (resume)
-        BUBBLE_COND_BRANCH, // taken conditional branch
+        BUBBLE_COND_BRANCH, // conditional branch guessed wrong: EX corrects the guess
+        BUBBLE_PRED_TAKEN,  // conditional branch guessed taken: ID redirects
         BUBBLE_DIR_JUMP,    // JAL: target pc + imm (calls too)
         BUBBLE_INDIR_JUMP,  // JALR that is not a return (indirect calls too)
         BUBBLE_RET,         // JALR that is a return
@@ -297,6 +298,7 @@ package Mig2Pkg;
         iaddr_t   pc;
         insn_t    insn;
         decoded_t dec;
+        logic     redirected;   // ID redirected fetch to the target (JAL, branch guessed taken)
         word_t    rs1_data;     // read in ID; no older instruction writes rs1 (interlock)
         word_t    rs2_data;
     } id_ex_t;

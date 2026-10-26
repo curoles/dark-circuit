@@ -137,6 +137,11 @@ if(DARK_CIRCUIT_RISCV)
     mig2_program_test(jal_id SOURCES jal_id.S ARCH rv32im
                       ARGS +expect_trap +resumes=1 +expect_regs)
 
+    # Conditional branches in the corners of the pipeline: every pair of guess and outcome
+    # of a static guess, waiting in ID (load-use, division), on the wrong path, back to back,
+    # to misaligned targets.
+    mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im ARGS +expect_trap +expect_regs)
+
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
     mig2_program_test(semihosting
