@@ -142,13 +142,14 @@ if(DARK_CIRCUIT_RISCV)
     # to misaligned targets. +max_cycles is a cycle ceiling (Mig2 README): lower it when a
     # change makes the test faster.
     mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=180)
+                      ARGS +expect_trap +expect_regs +max_cycles=172)
 
     # Jumps and conditional branches that a BTB learns, in the corners of the pipeline:
     # loops, calls, branches taken every time and every other time, two branches sharing an
     # entry, waiting in ID (load-use, division), back to back, a loop of two instructions, on
-    # the wrong path, to a misaligned target.
-    mig2_program_test(btb_if SOURCES btb_if.S ARCH rv32im ARGS +expect_trap +expect_regs)
+    # the wrong path, to a misaligned target. With a cycle ceiling (Mig2 README).
+    mig2_program_test(btb_if SOURCES btb_if.S ARCH rv32im
+                      ARGS +expect_trap +expect_regs +max_cycles=537)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
@@ -212,20 +213,20 @@ if(DARK_CIRCUIT_RISCV)
 
             # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
-            mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6 MAX_CYCLES 2134146
+            mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6 MAX_CYCLES 1978237
                             SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
                             FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
 
             # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
             # sort is in place, a second run would sort sorted numbers.
             set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
-            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 MAX_CYCLES 182700
+            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 MAX_CYCLES 160151
                             SOURCES ${QSORT}/qsort_main.c)
 
             # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
             # sets up the towers again.
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
-            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 MAX_CYCLES 273674
+            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 MAX_CYCLES 267871
                             SOURCES ${TOWERS}/towers_main.c)
         endif()
 

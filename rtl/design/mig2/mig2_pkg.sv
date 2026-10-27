@@ -324,14 +324,16 @@ package Mig2Pkg;
 
     // ID -> EX: the instruction taken apart with its register values (Mig2Pipe).
     typedef struct packed {
-        logic     valid;
-        bubble_e  bubble;       // valid=0: why there is no instruction
-        iaddr_t   pc;
-        insn_t    insn;
-        decoded_t dec;
-        logic     redirected;   // ID redirected fetch to the target (JAL, branch guessed taken)
-        word_t    rs1_data;     // read in ID; no older instruction writes rs1 (interlock)
-        word_t    rs2_data;
+        logic      valid;
+        bubble_e   bubble;      // valid=0: why there is no instruction
+        iaddr_t    pc;
+        insn_t     insn;
+        decoded_t  dec;
+        logic      redirected;  // fetch went to the target: the BTB in IF, or ID (JAL,
+                                // branch guessed taken)
+        btb_pred_t btb;         // what the BTB said in IF: hit and counter, for its update
+        word_t     rs1_data;    // read in ID; no older instruction writes rs1 (interlock)
+        word_t     rs2_data;
     } id_ex_t;
 
     // EX -> MEM/WB: the instruction after EX (Mig2Pipe). No stall or flush: an

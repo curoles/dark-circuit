@@ -13,8 +13,9 @@
  * - Predicted branches back to back: a branch at the target of a predicted branch.
  * - A loop of two instructions: its branch comes again before its update.
  * - A predicted branch on the wrong path: right after a branch that goes the other way.
- * - A taken branch to an address not divisible by 4, twice: it traps both times (it never
- *   gets an entry); the handler adds up mtval - mepc and continues after the branch.
+ * - A branch to an address not divisible by 4, taken twice, then not taken: it traps when
+ *   taken and must not get an entry (else the third time IF would follow it: two bubbles
+ *   more); the handler adds up mtval - mepc and continues after the branch.
  * Instructions that must not retire set bits in x17 (expect 0); every case counts its
  * rounds in a register of its own. Anything unexpected ends at `fail`, an EBREAK without a
  * register table: the run fails. After the halting EBREAK: number of expected registers,
@@ -169,10 +170,12 @@ alias_b:
     addi  x20, x20, -1
     bnez  x20, 1b
 
-    # A taken branch to an address not divisible by 4, twice: misaligned fetch traps.
-    addi  x20, x0, 2
+    # A branch to an address not divisible by 4, taken twice (misaligned fetch traps),
+    # then not taken.
+    addi  x20, x0, 3
+    addi  x21, x0, 2
 mis:
-    beq   x0, x0, mis + 6
+    bge   x20, x21, mis + 6
     addi  x20, x20, -1
     bnez  x20, mis
 

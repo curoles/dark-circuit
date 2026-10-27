@@ -24,7 +24,8 @@
  * if_, id_, ex_, mem_.
  * A branch guessed wrong, JALR, a trap and MRET cost two bubbles: the instructions in ID
  * and IF are dropped; JAL and a branch guessed taken (Mig2BranchPredict) cost one: ID
- * redirects fetch to the target. Results are forwarded to ID (Mig2Forward); an
+ * redirects fetch to the target; none when the BTB of Mig2Fetch has them and sends fetch
+ * to the target in IF already. Results are forwarded to ID (Mig2Forward); an
  * instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
@@ -68,14 +69,13 @@ module Mig2Core import Mig2Pkg::*; #(
 
     // ID
     fetch_t       id_fetch;         // instruction in ID: valid, pc; arrives from imem
-    // Not used yet: Mig2Control will check it in ID and carry it to EX.
-    /* verilator lint_off UNUSEDSIGNAL */
     btb_pred_t    id_btb;           // what the BTB said in IF for the instruction in ID
-    /* verilator lint_on UNUSEDSIGNAL */
+    btb_update_t  btb_update;       // Control -> Fetch: a branch or JAL completed in EX
+    btb_inval_t   btb_inval;        // Control -> Fetch: the BTB was wrong for the insn in ID
     insn_t        id_insn;
     decoded_t     id_dec;           // instruction in ID taken apart
     logic         id_pred_taken;    // conditional branch in ID guessed taken
-    logic         id_redirect;      // ID redirects fetch for the instruction in ID
+    logic         id_redirected;    // fetch went to the target of the insn in ID (IF or ID)
     word_t        id_rf_rs1_data;   // register file values; id_rs1_data has forwarding
     word_t        id_rf_rs2_data;
     word_t        id_rs1_data;
@@ -124,17 +124,17 @@ module Mig2Core import Mig2Pkg::*; #(
     word_t        dbg_reg_rdata;
 
     // IF
-    // The BTB does not learn yet (no update, no invalidate): it never hits.
     Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(
-        .clk, .rst_n, .ctrl(if_ctrl), .btb_update('0), .btb_inval('0), .imem_req,
-        .fetch(id_fetch), .btb_pred(id_btb));
+        .clk, .rst_n, .ctrl(if_ctrl), .btb_update, .btb_inval, .imem_req, .fetch(id_fetch),
+        .btb_pred(id_btb));
 
     Mig2Control u_mig2_control(
-        .clk, .rst_n, .id_fetch, .id_dec, .id_pred_taken, .ex_fetch, .ex_insn, .ex_dec,
-        .ex_redirected(id_ex_q.redirected), .ex_addr(ex_alu_result), .ex_branch,
-        .ex_lsu_misaligned, .ex_csr_illegal, .ex_muldiv_stall, .csr,
-        .ebreak_halt(dbg_req.ebreak_halt), .resume(dbg_req.resume), .fetch_ctrl(if_ctrl),
-        .pipe_ctrl, .id_redirect, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
+        .clk, .rst_n, .if_pc(imem_req.addr), .id_fetch, .id_dec, .id_pred_taken, .id_btb,
+        .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
+        .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
+        .ex_csr_illegal, .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
+        .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
+        .id_redirected, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
 
     // ID
     assign id_insn = imem_rsp.data;
@@ -160,7 +160,8 @@ module Mig2Core import Mig2Pkg::*; #(
                        pc:         id_fetch.pc,
                        insn:       id_insn,
                        dec:        id_dec,
-                       redirected: id_redirect,
+                       redirected: id_redirected,
+                       btb:        id_btb,
                        rs1_data:   id_rs1_data,
                        rs2_data:   id_rs2_data};
 

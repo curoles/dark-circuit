@@ -48,9 +48,9 @@ module Mig2Fetch import Mig2Pkg::*; #(
 
     assign rst     = !rst_n;
     assign advance = ctrl.run && !ctrl.stall;
-    // A redirect drops the request of this cycle, and with it what the BTB said about it;
-    // a stall keeps pc, so the same lookup comes again.
-    assign predict = advance && !ctrl.redirect && btb_d.taken;
+    // A stall keeps pc, so the same lookup comes again. A redirect drops the request of
+    // this cycle, and with it what the BTB said about it: jump_pc takes ctrl.target first.
+    assign predict = advance && btb_d.taken;
     assign jump    = rst || ctrl.redirect || predict;
     assign jump_pc = rst ? RST_PC : ctrl.redirect ? ctrl.target : btb_target;
 
