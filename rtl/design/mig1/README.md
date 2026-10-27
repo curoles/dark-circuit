@@ -427,7 +427,7 @@ make cmake D=mig1 CMAKE_ARGS=-DDARK_CIRCUIT_BENCHMARKS=ON
 make run D=mig1 L=benchmark
 ```
 
-2026-10-25, with the static branch guess: 1 643 630 instructions in 2 134 141 cycles, CPI
+2026-10-26, with the static branch guess: 1 643 635 instructions in 2 134 146 cycles, CPI
 1.30 (6 runs of 500 loops); most bubbles: correct taken guesses (the redirect from ID),
 divisions, returns, calls, wrong guesses.
 
@@ -658,9 +658,9 @@ Run time of all 79 programs, cycles (CPI table) x clock period:
 
 ## Next
 
-Bigger changes go to Mig2 first: the GShare predictor of
-`rtl/lib/block/gshare_branch_predictor` in place of the static guess and a second
-benchmark, a return stack and a BTB, a faster multiplier, Spike cosim (lockstep), a Zbb
+Bigger changes go to Mig2 first: a BTB in IF (in Mig2 since 2026-10-26, see its README;
+Mig1 does not take it), then a return stack, the GShare predictor of
+`rtl/lib/block/gshare_branch_predictor`, a faster multiplier, Spike cosim (lockstep), a Zbb
 slice, a single memory instead of two. Mig1 stays the simple core and takes changes that
 keep it simple, like JAL from ID and the static branch guess. The commit point stays in EX,
 because nothing faults after it on Mig1; a later commit point (WB, store buffer) comes
