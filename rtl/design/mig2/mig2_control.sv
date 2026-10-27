@@ -113,6 +113,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       ex_jal;      // JAL in EX
     logic       id_jal;      // JAL in ID
     logic       id_taken;    // ID sends fetch to the target: JAL, branch guessed taken
+    logic       id_at_target; // IF requests pc + imm of the instruction in ID now
     logic       id_btb_ok;   // the BTB hit fits the instruction in ID: ID trusts it
     logic       id_btb_fix;  // the BTB hit does not fit: ID corrects fetch, clears the entry
     logic       id_redirect; // ID redirects fetch when the instruction moves
@@ -204,6 +205,13 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign id_taken    = (id_jal || (id_fetch.valid && id_pred_taken)) &&
                          !target_misaligned(id_target);
 
+    // Fetch went to pc + imm: IF requests it now (the address holds while ID waits). AddCmp,
+    // not the adder of id_target and a compare: it has no carry chain, and this check is on
+    // the path of ID's redirect. Word addresses: the offset of a branch or JAL is even, so
+    // imm[1] + 0 does not carry into bit 2 (a misaligned target traps anyway).
+    AddCmp #(.WIDTH($bits(iaddr_t))) u_add_cmp(
+        .a(id_fetch.pc), .b(id_dec.imm[WIDTH-1:IADDR_START]), .c(if_pc), .eq(id_at_target));
+
     // What the BTB said in IF: a hit fits when the instruction is a branch or a JAL and
     // fetch went where it says: to pc + imm (the address IF requests now; it holds while ID
     // waits) when taken; a JAL must be taken. ID trusts a hit that fits, also its direction
@@ -211,9 +219,8 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // pcs share an entry; never when the tag covers imem) is corrected as if the BTB had
     // missed, and its entry is cleared. Without a hit, ID decides as before.
     assign id_btb_ok  = id_btb.hit &&
-                        ((id_dec.br.branch &&
-                          (!id_btb.taken || if_pc == id_target[WIDTH-1:IADDR_START])) ||
-                         (id_jal && id_btb.taken && if_pc == id_target[WIDTH-1:IADDR_START]));
+                        ((id_dec.br.branch && (!id_btb.taken || id_at_target)) ||
+                         (id_jal && id_btb.taken && id_at_target));
     assign id_btb_fix = id_fetch.valid && id_btb.hit && !id_btb_ok;
 
     // ID redirects when it moves: without a hit for its target; for a hit that does not fit,
@@ -293,5 +300,8 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // The BTB predicts taken only on a hit; ID does not redirect again after a hit that fits.
     `DC_ASSERT(a_btb_taken_hit, !id_fetch.valid || !id_btb.taken || id_btb.hit)
     `DC_ASSERT(a_btb_trusted, !(id_btb_ok && id_redirect))
+    // AddCmp on word addresses gives the compare of the target for a branch or JAL.
+    `DC_ASSERT(a_at_target, !(id_dec.br.branch || id_jal) ||
+               id_at_target == (if_pc == id_target[WIDTH-1:IADDR_START]))
 
 endmodule
