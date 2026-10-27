@@ -151,6 +151,12 @@ if(DARK_CIRCUIT_RISCV)
     mig2_program_test(btb_if SOURCES btb_if.S ARCH rv32im
                       ARGS +expect_trap +expect_regs +max_cycles=537)
 
+    # Calls and returns in the corners of the pipeline, for the return-address stack: deep
+    # recursion (the stack wraps), an empty function, a return waiting in ID (load-use,
+    # division), an indirect call, a swap (coroutine), a return to a changed ra, a call on the
+    # wrong path, calls in a trap handler.
+    mig2_program_test(ras_id SOURCES ras_id.S ARCH rv32im ARGS +expect_trap +expect_regs)
+
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
     mig2_program_test(semihosting
