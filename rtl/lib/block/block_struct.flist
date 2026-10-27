@@ -21,3 +21,7 @@
 -F branch_counter/branch_counter.flist
 -F gshare_branch_predictor/struct/gshare_branch_predictor.flist
 -F branch_target_buffer/struct/branch_target_buffer.flist
+-F cache/cache_valid_ram/struct/cache_valid_ram.flist
+-F cache/cache_tag_ram/struct/cache_tag_ram.flist
+-F cache/cache_data_ram/struct/cache_data_ram.flist
+-F cache/direct_cache_rd_only/struct/direct_cache_rd_only.flist

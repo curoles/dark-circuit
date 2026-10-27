@@ -11,7 +11,8 @@
  * evict a line, misses on a line an invalidate cleared, ignored requests, both memory
  * latencies (1 clock, more).
  * Verilator runs two sizes, 64 sets with 32-bit addresses and 8 sets with 12-bit addresses,
- * 20000 clocks each; Icarus the same with 2000. Stops at the first mismatch with $fatal.
+ * 20000 clocks each; Icarus, slow on the gates of the struct RAMs, the small size with 2000.
+ * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -260,16 +261,25 @@ module TbCacheCheck #(
 endmodule
 
 module TbDirectCacheRdOnly;
+`ifdef VERILATOR
+    localparam bit WIDE = 1'b1;     // also 64 sets with 32-bit addresses
+`else
+    localparam bit WIDE = 1'b0;
+`endif
     wire clk;
     wire done_64;
     wire done_8;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
-    TbCacheCheck #(.ADDR_WIDTH(32), .SETS_WIDTH(6), .SETS_OFFSET(2)) u_check_64(
-        .clk, .done(done_64));
     TbCacheCheck #(.ADDR_WIDTH(12), .SETS_WIDTH(3), .SETS_OFFSET(2)) u_check_8(
         .clk, .done(done_8));
+    if (WIDE) begin: g_wide
+        TbCacheCheck #(.ADDR_WIDTH(32), .SETS_WIDTH(6), .SETS_OFFSET(2)) u_check_64(
+            .clk, .done(done_64));
+    end else begin: g_narrow
+        assign done_64 = 1'b1;
+    end
 
     initial begin
         wait (done_64 && done_8);
