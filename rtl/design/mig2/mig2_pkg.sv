@@ -72,7 +72,8 @@ package Mig2Pkg;
                             // corrects it (two pcs share an entry; not with a full tag)
         BUBBLE_DIR_JUMP,    // JAL: target pc + imm (calls too)
         BUBBLE_INDIR_JUMP,  // JALR that is not a return (indirect calls too)
-        BUBBLE_RET,         // JALR that is a return
+        BUBBLE_RET,         // JALR that is a return: not predicted, or predicted wrong (EX)
+        BUBBLE_PRED_RET,    // return predicted by the return-address stack: ID redirects
         BUBBLE_TRAP,        // fault, ECALL, EBREAK as a breakpoint: fetch goes to mtvec
         BUBBLE_XRET,        // MRET: fetch goes to mepc
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
@@ -192,6 +193,16 @@ package Mig2Pkg;
         logic   en;
         iaddr_t pc;
     } btb_inval_t;
+
+    // Return-address stack (ReturnAddressStack in Mig2Core), used in ID.
+
+    // Control -> stack: a call that leaves ID pushes its return address, a return pops; both
+    // for a swap (a coroutine: the top is replaced).
+    typedef struct packed {
+        logic   push;
+        logic   pop;
+        iaddr_t push_addr;  // the address after the call
+    } ras_ctrl_t;
 
     // Branch -> Control: next pc of the instruction in EX, combinational.
     typedef struct packed {
@@ -333,6 +344,7 @@ package Mig2Pkg;
         logic      redirected;  // fetch went to the target: the BTB in IF, or ID (JAL,
                                 // branch guessed taken)
         btb_pred_t btb;         // what the BTB said in IF: hit and counter, for its update
+        iaddr_t    ras_target;  // where ID sent a return: the top of the return stack
         word_t     rs1_data;    // read in ID; no older instruction writes rs1 (interlock)
         word_t     rs2_data;
     } id_ex_t;

@@ -25,7 +25,8 @@
  * A branch guessed wrong, JALR, a trap and MRET cost two bubbles: the instructions in ID
  * and IF are dropped; JAL and a branch guessed taken (Mig2BranchPredict) cost one: ID
  * redirects fetch to the target; none when the BTB of Mig2Fetch has them and sends fetch
- * to the target in IF already. Results are forwarded to ID (Mig2Forward); an
+ * to the target in IF already. A return costs one when the return-address stack
+ * (ReturnAddressStack) predicts it. Results are forwarded to ID (Mig2Forward); an
  * instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
  * A division stays 34 cycles in EX.
@@ -72,6 +73,8 @@ module Mig2Core import Mig2Pkg::*; #(
     btb_pred_t    id_btb;           // what the BTB said in IF for the instruction in ID
     btb_update_t  btb_update;       // Control -> Fetch: a branch or JAL completed in EX
     btb_inval_t   btb_inval;        // Control -> Fetch: the BTB was wrong for the insn in ID
+    ras_ctrl_t    ras_ctrl;         // Control -> return stack: push for a call, pop for a return
+    iaddr_t       id_ras_top;       // top of the return stack: where a return in ID goes
     insn_t        id_insn;
     decoded_t     id_dec;           // instruction in ID taken apart
     logic         id_pred_taken;    // conditional branch in ID guessed taken
@@ -130,10 +133,12 @@ module Mig2Core import Mig2Pkg::*; #(
 
     Mig2Control u_mig2_control(
         .clk, .rst_n, .if_pc(imem_req.addr), .id_fetch, .id_dec, .id_pred_taken, .id_btb,
+        .id_ras_top, .ex_ras_target(id_ex_q.ras_target),
         .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
         .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
         .ex_csr_illegal, .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
+        .ras_ctrl,
         .id_redirected, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
 
     // ID
@@ -142,6 +147,13 @@ module Mig2Core import Mig2Pkg::*; #(
     Mig2Decode u_mig2_decode(.insn(id_insn), .dec(id_dec));
 
     Mig2BranchPredict u_mig2_branch_predict(.dec(id_dec), .taken(id_pred_taken));
+
+    // Return-address stack: Control pushes the calls and pops the returns that leave ID.
+    // @kb: rtl/design/mig2/control_blocks_outside
+    ReturnAddressStack #(.ADDR_WIDTH(CFG.ras_addr_width), .DATA_WIDTH($bits(iaddr_t)))
+        u_return_address_stack(.clk, .rst_n, .push(ras_ctrl.push),
+                               .push_addr(ras_ctrl.push_addr), .pop(ras_ctrl.pop),
+                               .top_addr(id_ras_top));
 
     Mig2Regs u_mig2_regs(
         .clk, .halt,
@@ -162,6 +174,7 @@ module Mig2Core import Mig2Pkg::*; #(
                        dec:        id_dec,
                        redirected: id_redirected,
                        btb:        id_btb,
+                       ras_target: id_ras_top,
                        rs1_data:   id_rs1_data,
                        rs2_data:   id_rs2_data};
 

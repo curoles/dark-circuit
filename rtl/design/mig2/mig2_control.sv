@@ -23,10 +23,12 @@
  * BUBBLE_BTB_FIX; two pcs share an entry) and clears its entry. Without a hit, ID
  * redirects fetch to pc + imm for a JAL (always taken) and for a conditional branch
  * guessed taken (Mig2BranchPredict) when the instruction leaves ID: only the instruction
- * in IF is dropped (one bubble). EX redirects when the outcome differs from where fetch
+ * in IF is dropped (one bubble). A return goes from ID to the top of the return-address
+ * stack (in Mig2Core), which Control pushes for every call and pops for every return that
+ * leaves ID. EX redirects when the outcome differs from where fetch
  * went: a taken branch that fetch did not follow goes to its target, one that fetch
- * followed but is not taken to the next instruction; EX updates the BTB with every branch
- * and JAL that completes. An
+ * followed but is not taken to the next instruction, a return that ID sent elsewhere to
+ * its target; EX updates the BTB with every branch and JAL that completes. An
  * instruction behind a redirect or halt in EX is dropped with ID; a jump or branch to a
  * misaligned target traps in EX. ex_muldiv_stall (division not done) keeps the
  * instruction in EX: ID and IF hold.
@@ -34,8 +36,8 @@
  * in MEM/WB: the instruction in ID waits one cycle while it reads the rd of a load in
  * EX (load-use); EX gets a bubble meanwhile.
  * Every bubble carries its reason (bubble_e, Mig2Pkg): the redirect class (JAL, branch
- * guessed taken, BTB corrected from ID; branch guessed wrong, JALR or return, trap, MRET
- * from EX), fill
+ * guessed taken, return, BTB corrected from ID; branch guessed wrong, JALR or return (not
+ * predicted, predicted wrong), trap, MRET from EX), fill
  * for resume and for the slot the halting EBREAK flushes, load-use for the interlock.
  * ex_done=1: the instruction in EX completes: CSR write and minstret now; it writes rd
  * and retires in MEM/WB, which it always reaches.
@@ -46,6 +48,7 @@
 
 `include "dark_circuit_assert.svh"
 
+// @kb: rtl/design/mig2/control_blocks_outside
 module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     input  wire                        clk,
     input  wire                        rst_n,       // synchronous reset, active low
@@ -63,6 +66,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  btb_pred_t                  id_btb,      // what the BTB said in IF for it
     /* verilator lint_on UNUSEDSIGNAL */
+    input  iaddr_t                     id_ras_top,  // top of the return stack: a return goes there
     // Only valid and pc are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  fetch_t                     ex_fetch,    // instruction in EX: valid and pc
@@ -77,6 +81,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  btb_pred_t                  ex_btb,      // what the BTB said in IF for it
     /* verilator lint_on UNUSEDSIGNAL */
+    input  iaddr_t                     ex_ras_target, // where ID sent the return in EX
     input  word_t                      ex_addr,     // load/store address, for mtval
     input  branch_t                    ex_branch,   // next pc of the instruction in EX
     input  wire                        ex_lsu_misaligned, // load/store address not aligned: a fault
@@ -89,6 +94,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     output pipe_ctrl_t                 pipe_ctrl,
     output btb_update_t                btb_update,  // a branch or JAL completes in EX
     output btb_inval_t                 btb_inval,   // the BTB was wrong for the insn in ID
+    output ras_ctrl_t                  ras_ctrl,    // push and pop of the return stack
     output wire                        id_redirected, // fetch went to the target of the
                                                     // insn in ID; carried to EX
     output wire                        ex_done,
@@ -116,6 +122,9 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       id_at_target; // IF requests pc + imm of the instruction in ID now
     logic       id_btb_ok;   // the BTB hit fits the instruction in ID: ID trusts it
     logic       id_btb_fix;  // the BTB hit does not fit: ID corrects fetch, clears the entry
+    logic       id_ret;      // a return in ID: it goes to the top of the return stack
+    logic       id_go;       // ID sends fetch to a target: JAL, branch guessed taken, return
+    logic       ex_ras_wrong; // the return in EX does not go where ID sent it
     logic       id_redirect; // ID redirects fetch when the instruction moves
     iaddr_t     id_redirect_pc; // where ID sends fetch: the target or the next instruction
     word_t      id_target;   // target of the instruction in ID: pc + imm, byte address
@@ -174,10 +183,13 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
         if (ex_stop) halt_pc <= ex_fetch.pc;
 
     assign resuming = halt && resume;
-    // EX redirects when a jump or branch does not go where ID sent fetch: taken, but ID did
-    // not redirect (guessed not taken, JALR), or ID redirected (guessed taken) but not taken.
+    // EX redirects when a jump or branch does not go where fetch went: taken, but fetch did
+    // not follow it (guessed not taken, JALR), or fetch followed it (guessed taken) but it is
+    // not taken, or a return that ID sent to the top of the return stack goes elsewhere (only
+    // returns go to a target that ID does not compute itself).
     assign ex_jal       = ex_dec.br.jump && !ex_dec.br.target_rs1;
-    assign ex_wrong     = ex_fetch.valid && ex_branch.taken != ex_redirected;
+    assign ex_ras_wrong = ex_redirected && ex_dec.br.ret && ex_branch.target != ex_ras_target;
+    assign ex_wrong     = ex_fetch.valid && (ex_branch.taken != ex_redirected || ex_ras_wrong);
     assign ex_branch_pc = ex_branch.taken ? ex_branch.target : ex_fetch.pc + 1'b1;
     assign ex_redirect  = ex_fault || ex_mret || ex_wrong || resuming;
     assign flush_id     = ex_redirect || ex_stop;
@@ -226,14 +238,30 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
                          (id_jal && id_btb.taken && id_at_target));
     assign id_btb_fix = id_fetch.valid && id_btb.hit && !id_btb_ok;
 
-    // ID redirects when it moves: without a hit for its target; for a hit that does not fit,
-    // when fetch must go to the target or went to a wrong one (else fetch went on to the
-    // next instruction, which is right).
-    assign id_redirect    = id_moves && (id_btb.hit ? id_btb_fix && (id_taken || id_btb.taken)
-                                                    : id_taken);
-    assign id_redirect_pc = id_taken ? id_target[WIDTH-1:IADDR_START] : id_fetch.pc + 1'b1;
+    // Returns: ID sends a return to the top of the return-address stack (in Mig2Core), and
+    // tells the stack what leaves ID: a call pushes the address after it, a return pops, a
+    // swap does both (the top is replaced). Only on id_moves: an instruction that leaves ID
+    // is on the correct path and leaves once, so the stack never needs repair.
+    // @kb: rtl/design/mig2/ras_in_id
+    assign id_ret             = id_fetch.valid && id_dec.br.ret;
+    assign ras_ctrl.push      = id_moves && id_dec.br.call;
+    assign ras_ctrl.pop       = id_moves && id_dec.br.ret;
+    assign ras_ctrl.push_addr = id_fetch.pc + 1'b1;
+
+    // ID sends fetch to a target: pc + imm for a JAL or a branch guessed taken, the top of the
+    // return stack for a return. It redirects when the instruction moves: without a hit for
+    // its target; for a hit that does not fit, when fetch must go to a target or went to a
+    // wrong one (else fetch went on to the next instruction, which is right).
+    assign id_go          = id_taken || id_ret;
+    assign id_redirect    = id_moves && (id_btb.hit ? id_btb_fix && (id_go || id_btb.taken)
+                                                    : id_go);
+    // The target from the adder comes last (decode, then pc + imm): it enters the last mux;
+    // the top of the return stack and pc + 1 are ready early (id_taken and id_ret never hold
+    // together).
+    assign id_redirect_pc = id_taken ? id_target[WIDTH-1:IADDR_START] :
+                            id_ret   ? id_ras_top : id_fetch.pc + 1'b1;
     // Fetch went to the target: by the BTB in IF (a hit that fits), else by ID.
-    assign id_redirected  = id_btb_ok ? id_btb.taken : id_taken;
+    assign id_redirected  = id_btb_ok ? id_btb.taken : id_go;
 
     // The BTB learns every branch and JAL that completes in EX (not one that traps), with
     // what it said in IF; ID clears an entry that did not fit, once (when it moves).
@@ -265,7 +293,8 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign fetch_ctrl.stall    = (ex_stall || id_hazard) && !flush_id;
     assign fetch_ctrl.redirect = ex_redirect || id_redirect;
     assign fetch_ctrl.why      = ex_redirect ? redirect_why : id_btb_fix ? BUBBLE_BTB_FIX :
-                                 id_jal ? BUBBLE_DIR_JUMP : BUBBLE_PRED_TAKEN;
+                                 id_jal ? BUBBLE_DIR_JUMP : id_ret ? BUBBLE_PRED_RET :
+                                 BUBBLE_PRED_TAKEN;
     assign fetch_ctrl.target   = ex_fault ? csr.mtvec : ex_mret ? csr.mepc :
                                  resuming ? halt_pc + 1'b1 :
                                  ex_redirect ? ex_branch_pc : id_redirect_pc;
@@ -303,6 +332,12 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // The BTB predicts taken only on a hit; ID does not redirect again after a hit that fits.
     `DC_ASSERT(a_btb_taken_hit, !id_fetch.valid || !id_btb.taken || id_btb.hit)
     `DC_ASSERT(a_btb_trusted, !(id_btb_ok && id_redirect))
+    // An instruction that leaves ID is in EX at the next edge (it is not dropped on the way):
+    // what the return stack relies on.
+    `DC_ASSERT_NEXT(a_id_moves_ex, id_moves, ex_fetch.valid && ex_fetch.pc == $past(id_fetch.pc))
+    // ID sends a JALR to a target only when it is a return (to the top of the return stack).
+    `DC_ASSERT(a_jalr_redirected_ret,
+               !(ex_fetch.valid && ex_dec.br.target_rs1 && ex_redirected) || ex_dec.br.ret)
     // AddCmp on word addresses gives the compare of the target for a branch or JAL.
     `DC_ASSERT(a_at_target, !(id_dec.br.branch || id_jal) ||
                id_at_target == (if_pc == id_target[WIDTH-1:IADDR_START]))

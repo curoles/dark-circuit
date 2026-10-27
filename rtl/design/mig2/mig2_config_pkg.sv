@@ -12,13 +12,15 @@ package Mig2ConfigPkg;
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
         int unsigned btb_tag_width;    // BTB tag; with the index it should cover the word
                                        // address of imem: then no two pcs share an entry
+        int unsigned ras_addr_width;   // return-address stack: 1 << ras_addr_width entries
     } mig2_cfg_t;
 
     localparam mig2_cfg_t MIG2_CFG = '{
         rst_addr:        32'h0000_0000,
         mem_addr_width:  16,   // 65536 bytes each
         btb_index_width: 4,    // 16 entries
-        btb_tag_width:   10
+        btb_tag_width:   10,
+        ras_addr_width:  3     // 8 entries
     };
 
 endpackage

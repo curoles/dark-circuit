@@ -1,0 +1,21 @@
+type: decision
+title: Mig2Control is control logic; blocks that can live outside it stay outside
+date: 2026-10-27
+question: >
+  The predictors keep state (the BTB, the return-address stack) and Control decides what to
+  do with them. Where do such blocks go?
+decision: >
+  Outside Mig2Control: the BTB in Mig2Fetch (it is looked up and used in IF), the
+  return-address stack in Mig2Core with the other parts of ID. Control computes their
+  commands and sends them as structs (btb_update, btb_inval, ras_ctrl), and gets their
+  outputs as inputs (id_btb, id_ras_top). A small combinational helper inside Control is
+  fine (AddCmp, a comparator).
+why: >
+  Control stays readable as the decisions of the pipeline, without storage mixed in; the
+  blocks stay library blocks with their own tests, connected by Mig2Core (user, 2026-10-27:
+  "we just should not drop blocks inside Control that can leave outside to avoid the mess").
+code:
+  - rtl/design/mig2/mig2_control.sv#ras_ctrl
+  - rtl/design/mig2/mig2_control.sv#btb_update
+  - rtl/design/mig2/mig2_core.sv#u_return_address_stack
+  - rtl/design/mig2/mig2_fetch.sv#u_branch_target_buffer

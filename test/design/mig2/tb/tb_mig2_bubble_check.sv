@@ -5,7 +5,8 @@
  * tells why (bubble_e, Mig2Pkg). Checks: an instruction has no bubble reason, a bubble has
  * one; a redirect bubble (branch, jump, return, trap, MRET) follows the instruction of that
  * class that retired right before it, at most 2 (a branch guessed taken: first pred_taken,
- * then cond_branch when guessed wrong); a btb_fix bubble (ID corrects the BTB) is an error
+ * then cond_branch when guessed wrong; a return predicted by the return stack: first
+ * pred_ret, then ret when predicted wrong); a btb_fix bubble (ID corrects the BTB) is an error
  * while the BTB tag covers the word address of imem (Mig2ConfigPkg: then no two pcs share
  * an entry), else it comes first after the instruction; a load-use bubble follows a load,
  * and the next instruction reads its rd; division bubbles come right before a division;
@@ -49,6 +50,8 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
     reg_id_t load_rd;               // the last retired instruction loads rd, 0: none
     reg_id_t use_rd;                // after a load-use bubble: the next one reads it
     logic    div_pending;           // after a division bubble: the next one divides
+    logic    prev_ret;              // the last retired instruction is a return (also one that
+                                    // trapped: ID predicted it all the same)
 
     // JALR is a return (pops the return-address stack, RISC-V hints) when rs1 is x1 or
     // x5, unless rd = rs1.
@@ -74,6 +77,13 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
             BEQ, BNE, BLT, BGE, BLTU, BGEU:
                      return BUBBLE_COND_BRANCH;
             default: return BUBBLE_NONE;
+        endcase
+    endfunction
+
+    function automatic logic is_ret(input insn_t insn);
+        casez (insn)
+            JALR:    return is_return(insn);
+            default: return 1'b0;
         endcase
     endfunction
 
@@ -103,6 +113,10 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
                 else if (redirect_bubbles != 0)
                     $fatal(1, "Mig2: cycle %0d: btb_fix bubble after pc %h, %0d bubbles before",
                            cycle, prev_pc, redirect_bubbles);
+            BUBBLE_PRED_RET:    // a return predicted by the return stack: first, right after it
+                if (!prev_ret || redirect_bubbles != 0)
+                    $fatal(1, "Mig2: cycle %0d: pred_ret bubble after pc %h (%s, %0d bubbles before)",
+                           cycle, prev_pc, bubble_name(redirect_class), redirect_bubbles);
             BUBBLE_PRED_TAKEN:  // a branch guessed taken: first, right after it
                 if (redirect_class != BUBBLE_COND_BRANCH || redirect_bubbles != 0)
                     $fatal(1, "Mig2: cycle %0d: pred_taken bubble after pc %h (%s, %0d bubbles before)",
@@ -169,6 +183,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
             prev_pc          <= retire.pc_rdata;
             retired          <= retired + 1;
             redirect_class   <= redirect_class_of(retire.trap, retire.insn);
+            prev_ret         <= is_ret(retire.insn);
             redirect_bubbles <= 0;
             load_rd          <= retire.mem_rmask != 0 ? retire.rd_addr : '0;
             use_rd           <= '0;
@@ -189,6 +204,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
         load_rd          = '0;
         use_rd           = '0;
         div_pending      = 1'b0;
+        prev_ret         = 1'b0;
     end
 
 endmodule

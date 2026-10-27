@@ -1,0 +1,44 @@
+type: decision
+title: A return-address stack in ID, pushed and popped only by instructions that leave ID
+date: 2026-10-27
+question: >
+  With the BTB in IF, returns were the biggest branch cost left on Dhrystone (4.6 % of its
+  cycles, two bubbles each: EX redirects every JALR). Where does a return-address stack go,
+  and how does it stay right after mispredictions?
+decision: >
+  A ReturnAddressStack (Stack with OVERWRITE: the newest addresses stay) of 8 entries in
+  Mig2Core. Control pushes the address after a call (JAL or JALR with rd x1 or x5) and pops
+  for a return (JALR with rs1 x1 or x5, rd not rs1), both for a swap, only when the
+  instruction leaves ID (id_moves). ID sends a return to the top of the stack (one bubble,
+  BUBBLE_PRED_RET); the prediction goes with the return to EX (id_ex_t.ras_target), and EX
+  redirects when the real target differs (BUBBLE_RET, two bubbles as before).
+why: >
+  An instruction that leaves ID is on the correct path and leaves once (the invariant
+  id_moves_correct_path), so the stack only ever sees calls and returns that execute: it
+  never needs repair after a misprediction. A trace model over the benchmarks chose the
+  depth: with 8 entries every return of Dhrystone and towers is predicted right (towers
+  nests 9 deep and needs 8; with 4 it predicts 92.6 %), about 2.1 % of the cycles of
+  Dhrystone and 1.2 % of towers.
+rejected:
+  - choice: A return-address stack in IF, driven by the BTB (returns at no bubble)
+    why_not: >
+      IF works ahead of branches not decided yet: its pushes and pops on a wrong path need a
+      checkpoint and a repair of the stack, and the BTB would have to hold returns.
+  - choice: 4 entries
+    why_not: Towers nests 9 deep, so 92.6 % right instead of 100 %.
+  - choice: Tracking an empty stack
+    why_not: The stack predicts its top also when empty; EX checks every prediction anyway.
+evidence: >
+  Mig2 runs exactly the modeled cycles (2026-10-27): Dhrystone 1 978 237 -> 1 932 864 (-2.3 %,
+  all 45 373 returns predicted right), towers 267 871 -> 264 471 (-1.3 %), qsort 160 151 ->
+  160 147. Mutants of the integration: 9 of 10 caught (the tenth, a return with a BTB hit,
+  needs two pcs in one BTB entry, which the full tag rules out).
+code:
+  - rtl/design/mig2/mig2_control.sv#ras_ctrl
+  - rtl/design/mig2/mig2_control.sv#ex_ras_wrong
+  - rtl/design/mig2/mig2_core.sv#u_return_address_stack
+  - rtl/lib/block/return_address_stack
+  - rtl/lib/block/stack
+  - test/design/mig2/ras_id.S
+relies_on:
+  - rtl/design/mig2/id_moves_correct_path

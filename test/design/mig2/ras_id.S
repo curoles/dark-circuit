@@ -7,12 +7,15 @@
  * - The usual epilogue, lw ra then ret: the return waits in ID for the load data.
  * - A return behind a division: it waits in ID while EX holds the division.
  * - An indirect call (JALR with rd = ra): it pushes like a JAL.
- * - A swap, JALR x5, 0(x1) (pop, then push): a coroutine goes back to its caller and is
- *   resumed with JALR x0, 0(x5).
  * - A return to a changed ra (like longjmp): the prediction is wrong; the instruction after
  *   the call must not retire.
- * - A call on the wrong path, right after a branch that goes the other way: it must not
- *   push (the next return must still find its own address).
+ * - A call on the wrong path, right after a branch that goes the other way, in a function:
+ *   it must not push (the return of the function must find its caller's address).
+ * - Calls that wait in ID, in a function: a JAL behind a division, a JALR waiting for load
+ *   data: each must push once (the return of the function must find its caller's address).
+ * - A swap, JALR x5, 0(x1) (pop, then push): a coroutine goes back to its caller, is
+ *   resumed with JALR x0, 0(x5) and leaves with a plain jump; the return of its caller must
+ *   find the caller's own address on top (the swap popped the coroutine's).
  * - Calls in a trap handler (ECALL), with link register x5.
  * Instructions that must not retire set bits in x17 (expect 0); every case counts its runs
  * in a register of its own. Anything unexpected ends at `fail`, an EBREAK without a register
@@ -44,7 +47,6 @@ start:
     addi  x13, x0, 0
     addi  x14, x0, 0
     addi  x15, x0, 0
-    addi  x16, x0, 0
     addi  x17, x0, 0
     addi  x18, x0, 0
     addi  x19, x0, 0
@@ -85,32 +87,25 @@ start:
     addi  x20, x20, -1
     bnez  x20, 1b
 
-    # A swap: co goes back here with JALR x5, 0(x1), and is resumed with JALR x0, 0(x5).
-    li    x21, 0
-    jal   ra, co
-co_back:
-    addi  x16, x16, 1           # twice: after the swap, after the return of co
-    bnez  x21, 2f
-    li    x21, 1
-    jalr  x0, 0(x5)
-2:
-
     # A return to a changed ra.
     jal   ra, f_jmp
     ori   x17, x17, 0x01
 landed:
     addi  x18, x18, 1
 
-    # A call on the wrong path.
-    li    x20, 4
+    # A call on the wrong path, in a function.
+    li    x20, 2
 1:
-    beq   x0, x0, 2f            # forward taken: the static guess says not taken
-    jal   ra, f_never           # on the wrong path the first time
-2:
-    jal   ra, empty
+    jal   ra, f_wp
     addi  x19, x19, 1
     addi  x20, x20, -1
     bnez  x20, 1b
+
+    # Calls that wait in ID, in a function.
+    jal   ra, f_wait
+
+    # A swap whose popped address must be gone.
+    jal   ra, g_swap
 
     # Calls in a trap handler.
     li    x20, 2
@@ -129,11 +124,11 @@ expect:
     EXPECT_REG 13, 3
     EXPECT_REG 14, 2
     EXPECT_REG 15, 2
-    EXPECT_REG 16, 3
     EXPECT_REG 17, 0
     EXPECT_REG 18, 1
-    EXPECT_REG 19, 4
+    EXPECT_REG 19, 2
     EXPECT_REG 20, 0
+    EXPECT_REG 22, 1
     EXPECT_REG 23, 2
     EXPECT_REG 26, 14
     EXPECT_REG 28, 2
@@ -187,11 +182,6 @@ f_ind:
     addi  x15, x15, 1
     ret
 
-co:
-    jalr  x5, 0(x1)             # swap: back to co_back, x5 = the next instruction
-    addi  x16, x16, 1           # resumed
-    ret                         # to co_back again
-
 f_jmp:
     la    ra, landed
     ret                         # predicted: after the call; really: landed
@@ -200,10 +190,40 @@ f_never:
     ori   x17, x17, 0x02
     ret
 
+f_wp:
+    beq   x0, x0, 2f            # forward taken: the static guess says not taken (first time)
+    jal   ra, f_never           # on the wrong path the first time: must not push
+2:
+    ret                         # pops the address after jal ra, f_wp
+
+f_wait:
+    sw    ra, 4(x8)
+    div   x26, x24, x25
+    jal   ra, empty             # in ID while EX holds the division: pushes once
+    la    x7, empty
+    sw    x7, 8(x8)
+    lw    x7, 8(x8)
+    jalr  ra, 0(x7)             # waits in ID for the load data: pushes once
+    lw    ra, 4(x8)
+    ret                         # pops the address after jal ra, f_wait
+
+g_swap:
+    sw    ra, 4(x8)
+    jal   ra, co2               # co2 swaps back here
+    jalr  x0, 0(x5)             # resume co2 (a return through x5)
+g_swap_end:
+    lw    ra, 4(x8)
+    ret                         # pops the address after jal ra, g_swap: the swap popped co2's
+
+co2:
+    jalr  x5, 0(x1)             # swap: back into g_swap
+    addi  x22, x22, 1           # resumed
+    j     g_swap_end            # a plain jump, not a return
+
     .data
     .align 4
 save_slot:
-    .word 0
+    .space 12
 stack:
     .space 256
 stack_top:

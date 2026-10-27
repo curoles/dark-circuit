@@ -11,12 +11,14 @@ why: >
   same clock in which the instruction in ID would move; when it redirects (or halts),
   flush_id=1 and id_moves=0, and the instruction in ID is dropped. ex_stall and id_hazard
   keep it in ID until it moves. So ID actions that must not happen on a wrong path or twice
-  use id_moves: the redirect from ID, the invalidate of a wrong BTB entry, and (planned) the
-  push and pop of a return stack, which therefore never needs repair after a misprediction.
+  use id_moves: the redirect from ID, the invalidate of a wrong BTB entry, and the push and
+  pop of the return-address stack, which therefore never needs repair after a misprediction.
 evidence: >
-  No assertion checks the invariant itself; a_id_redirect_moves checks that ID redirects only
-  for an instruction that moves.
+  a_id_moves_ex checks that an instruction that leaves ID is in EX at the next edge (an
+  instruction in EX always completes or traps); a_id_redirect_moves checks that ID
+  redirects only for an instruction that moves.
 checked_by:
+  - rtl/design/mig2/mig2_control.sv#a_id_moves_ex
   - rtl/design/mig2/mig2_control.sv#a_id_redirect_moves
 code:
   - rtl/design/mig2/mig2_control.sv#id_moves
