@@ -3,7 +3,8 @@
  *
  * Same handshake as Divider: start=1 while busy=0 takes the operands, busy=1 for 32
  * clocks, done=1 in the last; outputs are valid after that clock (busy=0 again) until
- * the next start.
+ * the next start. EARLY_START=1: busy only for the significant bits of the magnitude of
+ * the dividend (at least 1 clock; 32 for a divisor of 0), see Divider.
  * signed_op=1: two's complement operands, the quotient is rounded toward zero, the
  * remainder has the sign of the dividend (dividend = quotient * divisor + remainder),
  * as in C and RISC-V. Divider works on magnitudes; the signs are taken at start and
@@ -15,7 +16,9 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module Int32Div (
+module Int32Div #(
+    parameter EARLY_START = 0   // 1: Divider skips the leading zeros of the dividend's magnitude
+)(
     input  wire        clk,
     input  wire        rst_n,       // synchronous reset, active low
     input  wire        start,
@@ -43,7 +46,7 @@ module Int32Div (
     assign a_mag = a_neg ? -dividend : dividend;
     assign b_mag = b_neg ? -divisor  : divisor;
 
-    Divider #(.WIDTH(32)) u_divider(
+    Divider #(.WIDTH(32), .EARLY_START(EARLY_START)) u_divider(
         .clk, .rst_n, .start, .dividend(a_mag), .divisor(b_mag), .busy, .done,
         .quotient(u_quotient), .remainder(u_remainder));
 

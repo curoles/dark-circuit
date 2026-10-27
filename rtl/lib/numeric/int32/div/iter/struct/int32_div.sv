@@ -10,7 +10,9 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module Int32Div (
+module Int32Div #(
+    parameter EARLY_START = 0   // 1: Divider skips the leading zeros of the dividend's magnitude
+)(
     input  wire        clk,
     input  wire        rst_n,       // synchronous reset, active low
     input  wire        start,
@@ -67,7 +69,7 @@ module Int32Div (
     Mux2 #(32) u_mux2_a_mag(.in0(dividend), .in1(a_minus), .sel(a_neg), .out(a_mag));
     Mux2 #(32) u_mux2_b_mag(.in0(divisor), .in1(b_minus), .sel(b_neg), .out(b_mag));
 
-    Divider #(.WIDTH(32)) u_divider(
+    Divider #(.WIDTH(32), .EARLY_START(EARLY_START)) u_divider(
         .clk, .rst_n, .start, .dividend(a_mag), .divisor(b_mag), .busy, .done,
         .quotient(u_quotient), .remainder(u_remainder));
 

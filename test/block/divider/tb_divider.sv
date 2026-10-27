@@ -3,18 +3,21 @@
  * WIDTH=4: every dividend and divisor, divisor 0 too. WIDTH=32: edge values (0, 1,
  * all ones, top bit, top bit clear, 2, alternating bits) and random operands; on
  * Verilator every pair of edge values and many random, on Icarus each edge value with
- * the next one (operands differ) and a few random. Expected: x / y and x % y, and for
- * y = 0 quotient all ones and remainder x. Every division also checks the handshake:
- * busy for exactly WIDTH clocks, done in the last of them, results that stay after
- * done, and a start while busy that is ignored (the first division wins).
+ * the next one (operands differ) and a few random, and without the 32-bit EARLY_START
+ * divider (time). Expected: x / y and x % y, and for y = 0 quotient all ones and
+ * remainder x. Every division also checks the handshake:
+ * busy for exactly WIDTH clocks (with EARLY_START, the significant bits of x, at least 1;
+ * WIDTH for y = 0), done in the last of them, results that stay after done, and a start
+ * while busy that is ignored (the first division wins). Runs both EARLY_START settings.
  * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
 module TbDividerWidth #(
-    parameter WIDTH  = 4,
-    parameter RANDOM = 0
+    parameter WIDTH       = 4,
+    parameter RANDOM      = 0,
+    parameter EARLY_START = 0
 )(
     input  wire clk,
     input  wire rst_n,
@@ -43,8 +46,21 @@ module TbDividerWidth #(
     integer          j;
     integer          seed;
 
-    Divider #(.WIDTH(WIDTH)) u_divider(.clk, .rst_n, .start, .dividend, .divisor, .busy, .done,
-                                       .quotient, .remainder);
+    Divider #(.WIDTH(WIDTH), .EARLY_START(EARLY_START)) u_divider(
+        .clk, .rst_n, .start, .dividend, .divisor, .busy, .done, .quotient, .remainder);
+
+    // Clocks of a division: WIDTH, or with EARLY_START the significant bits of x (at least
+    // 1), unless y is 0.
+    function automatic integer clocks_of(input [WIDTH-1:0] x, input [WIDTH-1:0] y);
+        integer n;
+        if (EARLY_START == 0 || y == 0)
+            return WIDTH;
+        n = 1;
+        for (int k = 0; k < WIDTH; k++)
+            if (x[k])
+                n = k + 1;
+        return n;
+    endfunction
 
     // Divide x by y; in the middle of the division start again with other operands,
     // which must be ignored.
@@ -52,8 +68,10 @@ module TbDividerWidth #(
         logic [WIDTH-1:0] exp_q;
         logic [WIDTH-1:0] exp_r;
         integer           clocks;
+        integer           exp_clocks;
         exp_q = (y == 0) ? {WIDTH{1'b1}} : x / y;
         exp_r = (y == 0) ? x : x % y;
+        exp_clocks = clocks_of(x, y);
         @(negedge clk);
         if (busy)
             $fatal(1, "Divider %0d: busy before start", WIDTH);
@@ -65,19 +83,20 @@ module TbDividerWidth #(
         clocks   = 0;
         while (busy) begin
             clocks = clocks + 1;
-            if (clocks == WIDTH / 2) begin
+            if (clocks == (exp_clocks + 1) / 2) begin
                 dividend = ~x;
                 divisor  = ~y;
                 start    = 1;
             end else
                 start    = 0;
-            if (done !== (clocks == WIDTH))
+            if (done !== (clocks == exp_clocks))
                 $fatal(1, "Divider %0d: done=%b in busy clock %0d", WIDTH, done, clocks);
             @(negedge clk);
         end
         start = 0;
-        if (clocks != WIDTH)
-            $fatal(1, "Divider %0d: busy for %0d clocks, expected %0d", WIDTH, clocks, WIDTH);
+        if (clocks != exp_clocks)
+            $fatal(1, "Divider %0d: %h / %h busy for %0d clocks, expected %0d", WIDTH, x, y,
+                   clocks, exp_clocks);
         repeat (2) begin
             if (quotient !== exp_q || remainder !== exp_r)
                 $fatal(1, "Divider %0d: %h / %h gave %h rem %h, expected %h rem %h",
@@ -130,15 +149,28 @@ module TbDivider;
     wire rst_n;
     wire finished4;
     wire finished32;
+    wire finished4e;
+    wire finished32e;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(2))      u_sim_rst_gen(.clk, .rst_n);
 
-    TbDividerWidth #(.WIDTH(4))                    u_tb_divider_4 (.clk, .rst_n, .finished(finished4));
-    TbDividerWidth #(.WIDTH(32), .RANDOM(RANDOM))  u_tb_divider_32(.clk, .rst_n, .finished(finished32));
+    TbDividerWidth #(.WIDTH(4)) u_tb_divider_4(.clk, .rst_n, .finished(finished4));
+    TbDividerWidth #(.WIDTH(32), .RANDOM(RANDOM)) u_tb_divider_32(
+        .clk, .rst_n, .finished(finished32));
+    TbDividerWidth #(.WIDTH(4), .EARLY_START(1)) u_tb_divider_4e(
+        .clk, .rst_n, .finished(finished4e));
+`ifdef VERILATOR
+    TbDividerWidth #(.WIDTH(32), .RANDOM(RANDOM), .EARLY_START(1)) u_tb_divider_32e(
+        .clk, .rst_n, .finished(finished32e));
+`else
+    // Icarus: a second 32-bit struct divider doubles the time (> 1 s); the 4-bit one checks
+    // the early start exhaustively.
+    assign finished32e = 1'b1;
+`endif
 
     initial begin
-        wait (finished4 && finished32);
+        wait (finished4 && finished32 && finished4e && finished32e);
         $display("PASS");
         $finish;
     end
