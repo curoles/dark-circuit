@@ -178,12 +178,14 @@ cases:
     UPPER  auipc, K_AUIPC, 31, 0xfffff
     UPPER  auipc, K_AUIPC, 1,  1
 
-    /*     rd  offset */
+    /*     rd  offset       calls (rd is x1 or x5): 1, 5 */
     JAL_   1,  -1048576
     JAL_   0,  1048574
     JAL_   31, 4
+    JAL_   5,  2048
 
-    /*     rd  rs1 imm      returns (rs1 is x1 or x5, rd is not rs1): 0,1  0,5  5,1 */
+    /*     rd  rs1 imm      returns (rs1 is x1 or x5, rd is not rs1): 0,1  0,5  5,1;
+                            calls (rd is x1 or x5): 5,31  1,1  5,1 */
     JALR_  0,  1,  0
     JALR_  5,  31, -2048
     JALR_  1,  1,  2047

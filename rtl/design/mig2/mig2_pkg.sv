@@ -273,7 +273,8 @@ package Mig2Pkg;
         logic   jump;       // JAL, JALR: always taken
         logic   branch;     // BRANCH: taken when the condition of funct3 holds
         logic   target_rs1; // target is rs1 + imm (JALR), else pc + imm
-        logic   ret;        // JALR that is a return (see bubble_e)
+        logic   ret;        // JALR that is a return (see bubble_e): pops the return stack
+        logic   call;       // JAL, JALR whose rd is a link register: pushes the return stack
     } br_ctrl_t;
 
     typedef struct packed {

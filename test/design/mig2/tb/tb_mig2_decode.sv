@@ -122,12 +122,19 @@ module TbMig2Decode;
         return rs1_link && !(rd_link && rd == rs1);
     endfunction
 
+    // JAL or JALR is a call (pushes the return-address stack) when rd is x1 or x5.
+    function automatic logic is_call(input reg_id_t rd);
+        return rd == 5'd1 || rd == 5'd5;
+    endfunction
+
     function automatic br_ctrl_t br_of(input kind_e kind, input reg_id_t rd, input reg_id_t rs1);
         case (kind)
-            KIND_JAL:    return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b0, ret: 1'b0};
+            KIND_JAL:    return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b0, ret: 1'b0,
+                                  call: is_call(rd)};
             KIND_JALR:   return '{jump: 1'b1, branch: 1'b0, target_rs1: 1'b1,
-                                  ret: is_return(rd, rs1)};
-            KIND_BRANCH: return '{jump: 1'b0, branch: 1'b1, target_rs1: 1'b0, ret: 1'b0};
+                                  ret: is_return(rd, rs1), call: is_call(rd)};
+            KIND_BRANCH: return '{jump: 1'b0, branch: 1'b1, target_rs1: 1'b0, ret: 1'b0,
+                                  call: 1'b0};
             default:     return '0;
         endcase
     endfunction
