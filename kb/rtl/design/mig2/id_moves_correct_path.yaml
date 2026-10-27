@@ -1,0 +1,23 @@
+type: invariant
+title: An instruction that leaves ID is on the correct path, and it leaves ID once
+date: 2026-10-24
+statement: >
+  When id_moves=1, the instruction in ID goes to EX at the rising edge, and it completes (it
+  retires, or traps). It is never an instruction of a wrong path, and id_moves is 1 for it in
+  exactly one clock, also when it waits in ID first (load-use, a division in EX).
+why: >
+  The commit point of Mig2 is EX: an instruction that leaves EX always completes. So the only
+  older instruction that can still redirect fetch is the one in EX, and it decides in the
+  same clock in which the instruction in ID would move; when it redirects (or halts),
+  flush_id=1 and id_moves=0, and the instruction in ID is dropped. ex_stall and id_hazard
+  keep it in ID until it moves. So ID actions that must not happen on a wrong path or twice
+  use id_moves: the redirect from ID, the invalidate of a wrong BTB entry, and (planned) the
+  push and pop of a return stack, which therefore never needs repair after a misprediction.
+evidence: >
+  No assertion checks the invariant itself; a_id_redirect_moves checks that ID redirects only
+  for an instruction that moves.
+checked_by:
+  - rtl/design/mig2/mig2_control.sv#a_id_redirect_moves
+code:
+  - rtl/design/mig2/mig2_control.sv#id_moves
+  - rtl/design/mig2/mig2_control.sv#flush_id

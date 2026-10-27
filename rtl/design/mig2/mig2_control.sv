@@ -196,6 +196,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // instruction that goes on to EX: once per instruction, never on the wrong path. It
     // stays while EX holds a division or it waits for load data; it is dropped when an
     // older instruction in EX redirects or halts.
+    // @kb: rtl/design/mig2/id_moves_correct_path
     assign id_moves = id_fetch.valid && !ex_stall && !id_hazard && !flush_id;
 
     // ID sends fetch to pc + imm for a JAL (always taken) and for a conditional branch
@@ -209,6 +210,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // not the adder of id_target and a compare: it has no carry chain, and this check is on
     // the path of ID's redirect. Word addresses: the offset of a branch or JAL is even, so
     // imm[1] + 0 does not carry into bit 2 (a misaligned target traps anyway).
+    // @kb: rtl/design/mig2/addcmp_id_check
     AddCmp #(.WIDTH($bits(iaddr_t))) u_add_cmp(
         .a(id_fetch.pc), .b(id_dec.imm[WIDTH-1:IADDR_START]), .c(if_pc), .eq(id_at_target));
 
@@ -218,6 +220,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // (no static guess on top: the counter knows the branch). A hit that does not fit (two
     // pcs share an entry; never when the tag covers imem) is corrected as if the BTB had
     // missed, and its entry is cleared. Without a hit, ID decides as before.
+    // @kb: rtl/design/mig2/btb_in_if
     assign id_btb_ok  = id_btb.hit &&
                         ((id_dec.br.branch && (!id_btb.taken || id_at_target)) ||
                          (id_jal && id_btb.taken && id_at_target));

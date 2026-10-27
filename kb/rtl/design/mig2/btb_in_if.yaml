@@ -1,0 +1,45 @@
+type: decision
+title: A BTB in IF predicts taken branches and JALs, without the bubble of a redirect from ID
+date: 2026-10-26
+question: >
+  After the static guess in ID, how does Mig2 remove the bubble that a taken branch or a JAL
+  still costs (the redirect from ID), and what does the BTB look like?
+decision: >
+  A branch target buffer in IF (BranchTargetBuffer in Mig2Fetch): 16 entries, direct-mapped,
+  each valid, tag, target and a 2-bit counter; a new entry starts weakly taken. The tag (10
+  bits) with the index covers the word address of the 64 KiB imem, so no two pcs share an
+  entry. ID trusts a hit that fits the instruction, also its direction (no static guess on
+  top), corrects one that does not (BUBBLE_BTB_FIX, the entry is cleared); EX updates the
+  BTB with every branch and JAL that completes. Mig2 only: Mig1 stays the small core.
+why: >
+  On Dhrystone the redirects from ID (pred_taken, dir_jump) were 10.6 % of the cycles, the
+  wrong guesses (what a better direction predictor like GShare removes) at most 2.5 %. A
+  trace model of the BTB over the retire traces of the benchmarks chose the size: 16 entries
+  save 7.3 % of the cycles of Dhrystone, 12.3 % of qsort, 2.1 % of towers; Mig2 runs exactly
+  the modeled cycles. A tag that covers imem makes aliasing impossible, where a per-entry
+  confidence counter could not tell two aliasing pcs apart.
+rejected:
+  - choice: GShare (direction predictor) first
+    why_not: At most 2.5 % of Dhrystone; the BTB removes up to 10.6 %.
+  - choice: 4 entries
+    why_not: Dhrystone alone gains almost as much (7.0 %), but qsort and towers need 16.
+  - choice: A confidence counter per entry against aliasing
+    why_not: >
+      The counter belongs to the entry, not the pc, so it can only switch the entry off for
+      both aliasing pcs; a full tag is exact.
+  - choice: The static guess of ID on top of a hit that says not taken
+    why_not: >
+      The model made qsort slower (CPI 1.223 instead of 1.188), the same elsewhere.
+  - choice: The BTB in Mig1 too
+    why_not: Mig1 stays the small core (user, 2026-10-26).
+evidence: >
+  rtl/design/mig2/README.md, BTB in IF and Benchmarks. sky130: 185 460 um2 and 5.6 ns, against
+  159 076 um2 and 5.3 ns with the static guess only; Dhrystone runs 2.1 % faster in time.
+code:
+  - rtl/design/mig2/mig2_fetch.sv#u_branch_target_buffer
+  - rtl/design/mig2/mig2_control.sv#id_btb_ok
+  - rtl/design/mig2/cfg/mig2_config.yaml#btb_tag_width
+  - rtl/lib/block/branch_target_buffer
+  - test/design/mig2/btb_if.S
+relies_on:
+  - rtl/design/mig2/id_moves_correct_path

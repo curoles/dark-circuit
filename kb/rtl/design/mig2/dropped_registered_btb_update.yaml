@@ -1,0 +1,17 @@
+type: dropped
+title: The BTB update from EX registered, written one cycle later
+date: 2026-10-26
+tried: >
+  A register on btb_update in Mig2Fetch, so that the late branch decision of EX does not
+  drive the write enables of the BTB table (struct RegFile: a hold mux per bit).
+result: >
+  sky130 longest path 5.6 -> 5.5 ns (with the next pc without PrgCounter), 5.7 ns without
+  it; qsort 14 cycles slower (160 165 instead of 160 151), btb_if one; Mig2 no longer ran
+  exactly the cycles of the trace model.
+why_dropped: >
+  A gain within the error of the estimate, for cycles, flops and the exact match with the
+  model, which was the best proof that the BTB integration is right.
+code:
+  - rtl/design/mig2/mig2_fetch.sv#btb_update
+relies_on:
+  - rtl/design/mig2/dropped_next_pc_without_prg_counter

@@ -11,6 +11,7 @@
 #   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
 #   make config  - generate files from design configurations
+#   make kb      - check the knowledge base kb/: records, links to the code
 #   make <design>_synth [TECH=sky130] - synthesis of one design with Yosys, like make mig2_synth
 #   make doc     - documentation of the RTL with Doxygen
 #   make test D=mig1 - the same in the build tree of one design (D=full, D=lib, D=<design>)
@@ -56,7 +57,7 @@ CONFIGS := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_config.yaml)
 # Plain `make` without a target shows help.
 .DEFAULT_GOAL := help
 
-.PHONY: cmake build test test_gates test_parts test_blocks run list config doc help
+.PHONY: cmake build test test_gates test_parts test_blocks run list config kb doc help
 
 cmake:
 	$(CONFIGURE)
@@ -114,6 +115,11 @@ config:
 	    python3 $(SOURCE_DIR)/tools/config_gen.py --root $(SOURCE_DIR) $$cfg || exit 1; \
 	done
 
+# Check the knowledge base kb/ (kb/README.md): records, anchors in the code, @kb: tags; run
+# after a change that adds records, or moves, renames or deletes code with an @kb: tag.
+kb:
+	@python3 $(SOURCE_DIR)/tools/kb_check.py --root $(SOURCE_DIR)
+
 # Help text: define ... endef is a multiline variable (like a shell here-document <<EOF),
 # export puts it into the environment of the recipe, echo "$$HELP" keeps its lines.
 define HELP
@@ -130,6 +136,8 @@ Targets:
   make run          configure if needed, build and run tests selected by R and L
   make list         configure if needed and list tests: name and labels of every test
   make config       generate files from design configurations: rtl/design/*/cfg/*_config.yaml
+  make kb           check the knowledge base kb/ (why the code is as it is): records, links
+                    to the code (kb/README.md)
   make <design>_synth  synthesis of one design with Yosys (sv2v, then Yosys), like
                        make mig2_synth: netlist, cell counts, log in the build directory;
                        with TECH=sky130 mapped to sky130 cells, prints area and longest path

@@ -194,6 +194,7 @@ if(DARK_CIRCUIT_RISCV)
         # their own check). DIR is the directory of the benchmark, REPEAT the runs of its
         # main (BENCH_REPEAT), MAX_CYCLES a cycle ceiling (Mig2 README): lower it when a
         # change makes the benchmark faster.
+        # @kb: test/design/mig2/benchmarks
         if(DARK_CIRCUIT_BENCHMARKS)
             function(mig2_bench_test NAME)
                 cmake_parse_arguments(P "" "DIR;REPEAT;MAX_CYCLES" "SOURCES;FLAGS" ${ARGN})

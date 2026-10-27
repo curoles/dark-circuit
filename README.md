@@ -149,7 +149,7 @@ on the main simulator, so both versions must behave the same.
 
 ## Build and test
 
-`Makefile` wraps `cmake` and `ctest`, it has 10 targets:
+`Makefile` wraps `cmake` and `ctest`, it has 11 targets:
 
 - `make help`: explain targets and variables, also plain `make`
 - `make cmake`: configure build directory
@@ -163,6 +163,8 @@ on the main simulator, so both versions must behave the same.
 - `make list`: configure if needed and list tests, name and labels of every test
 - `make config`: generate files from design configurations,
   see [Design configuration](#design-configuration)
+- `make kb`: check the knowledge base `kb/`: why the code is as it is, decisions and
+  attempts that were dropped, linked to the code (see `kb/README.md`)
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.

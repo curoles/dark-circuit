@@ -1,0 +1,26 @@
+type: decision
+title: ID checks the BTB target with AddCmp, not with the adder of pc + imm and a compare
+date: 2026-10-26
+question: >
+  ID checks that fetch went to pc + imm for a BTB hit (the address IF requests now); how,
+  without making ID's redirect slower?
+decision: >
+  AddCmp (rtl/lib/block/add_cmp: a + b == c without a carry chain, carry save) on word
+  addresses: pc + imm[31:2] == if_pc. The adder of pc + imm stays for the redirect target
+  (the data of the next-pc mux, not its select).
+why: >
+  With the adder and a 30-bit compare after it on the select of ID's redirect, the longest
+  path grew from 5.3 to 6.7 ns (sky130, ABC estimate); with AddCmp 5.6 ns. Word addresses are
+  enough: the offset of a branch or JAL is even, so imm[1] does not carry into bit 2;
+  a_at_target checks the equivalence in every simulation.
+rejected:
+  - choice: No target check, no correction of the BTB (require a tag that covers imem)
+    why_not: Simpler and faster, but gives up the safety net for a Mig2Core with more memory.
+  - choice: Check the target in EX
+    why_not: Moves the compare onto the redirect path of EX, likely just as critical.
+code:
+  - rtl/design/mig2/mig2_control.sv#u_add_cmp
+  - rtl/design/mig2/mig2_control.sv#a_at_target
+  - rtl/lib/block/add_cmp
+relies_on:
+  - rtl/design/mig2/btb_in_if

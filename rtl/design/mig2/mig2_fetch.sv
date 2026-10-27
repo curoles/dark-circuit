@@ -54,9 +54,12 @@ module Mig2Fetch import Mig2Pkg::*; #(
     assign jump    = rst || ctrl.redirect || predict;
     assign jump_pc = rst ? RST_PC : ctrl.redirect ? ctrl.target : btb_target;
 
+    // @kb: rtl/design/mig2/dropped_next_pc_without_prg_counter
     PrgCounter #(.ADDR_WIDTH(WIDTH), .INSN_SIZE($bits(insn_t) / 8)) u_prg_counter(
         .clk, .en(advance), .jump, .jump_addr(jump_pc), .pc);
 
+    // @kb: rtl/design/mig2/btb_in_if
+    // @kb: rtl/design/mig2/dropped_registered_btb_update
     BranchTargetBuffer #(.INDEX_WIDTH(CFG.btb_index_width), .TAG_WIDTH(CFG.btb_tag_width),
                          .TARGET_WIDTH($bits(iaddr_t))) u_branch_target_buffer(
         .clk, .rst_n,

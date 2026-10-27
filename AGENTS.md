@@ -313,6 +313,22 @@ document intent and stop the simulation in the cycle a rule breaks.
 - Generated files start with "THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!":
   change their source instead, they are committed.
 
+## Knowledge base
+
+`kb/` keeps why the code is as it is: decisions with the options rejected, invariants,
+measurements, attempts that were dropped (`kb/README.md`); its paths mirror the repository.
+
+- Before changing code with an `@kb:` tag, read its record.
+- Never delete or move code with an `@kb:` tag, or the tag itself, without deciding what
+  happens to its record: update the record and its anchors; move it with the code (its path
+  mirrors the code); or, when the decision itself is undone, turn the record into a
+  `dropped` record that says why. Never delete a record silently: the knowledge is lost.
+- Keep the knowledge base in mind while working. When a change decides something the code
+  does not explain (a choice between options, an invariant other code relies on, a
+  measurement, an attempt that is dropped), write the record and put `@kb: <id>` at the
+  code, in the same change, and show it with the code.
+- Run `make kb` after adding records, or moving, renaming or deleting tagged code.
+
 ## Repository
 
 - `old2020/` is the old code, kept for reference; port from it, do not edit it.

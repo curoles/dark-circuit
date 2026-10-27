@@ -1,0 +1,19 @@
+type: dropped
+title: The next pc of Mig2Fetch without PrgCounter, so that the redirect selects last
+date: 2026-10-26
+tried: >
+  The next pc computed in Mig2Fetch instead of PrgCounter: the BTB choice early (seq_pc), the
+  late redirect selecting last in one 2-input mux, so that it drives one 30-bit select
+  instead of two.
+result: >
+  sky130 longest path (ABC estimate): 5.6 ns with and without it; 5.5 ns together with the
+  registered BTB update, 5.7 ns with the registered update alone.
+why_dropped: >
+  Differences of a tenth or two of a nanosecond are within the error of an estimate without
+  wires, and it replaced a library block (PrgCounter) with code of its own. Only timing fixes
+  that do not depend on the technology (like removing a carry chain, AddCmp) are worth code;
+  real timing work needs placement and routing.
+code:
+  - rtl/design/mig2/mig2_fetch.sv#u_prg_counter
+relies_on:
+  - rtl/design/mig2/addcmp_id_check
