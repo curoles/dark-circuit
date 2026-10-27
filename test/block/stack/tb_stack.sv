@@ -8,8 +8,9 @@
  * OVERWRITE=1 overwriting the oldest), full and empty reached. One reset in the middle
  * empties the stack.
  * Runs three stacks: 8 entries without OVERWRITE, 8 of 30 bits with OVERWRITE (the size of
- * the return-address stack of Mig2), 2 entries with OVERWRITE; 20000 clocks on Verilator,
- * 2000 on Icarus. Stops at the first mismatch with $fatal.
+ * the return-address stack of Mig2), 2 entries with OVERWRITE; 20000 clocks on Verilator.
+ * Icarus, slow on the gates of the struct version, runs 2000 clocks without the 30-bit one.
+ * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -165,6 +166,11 @@ module TbStackCheck #(
 endmodule
 
 module TbStack;
+`ifdef VERILATOR
+    localparam bit WIDE = 1'b1;     // also the 30-bit stack
+`else
+    localparam bit WIDE = 1'b0;
+`endif
     wire clk;
     wire done_8;
     wire done_8w;
@@ -174,8 +180,12 @@ module TbStack;
 
     TbStackCheck #(.ADDR_WIDTH(3), .DATA_WIDTH(8), .OVERWRITE(0)) u_check_8(
         .clk, .done(done_8));
-    TbStackCheck #(.ADDR_WIDTH(3), .DATA_WIDTH(30), .OVERWRITE(1)) u_check_8w(
-        .clk, .done(done_8w));
+    if (WIDE) begin: g_wide
+        TbStackCheck #(.ADDR_WIDTH(3), .DATA_WIDTH(30), .OVERWRITE(1)) u_check_8w(
+            .clk, .done(done_8w));
+    end else begin: g_narrow
+        assign done_8w = 1'b1;
+    end
     TbStackCheck #(.ADDR_WIDTH(1), .DATA_WIDTH(8), .OVERWRITE(1)) u_check_2w(
         .clk, .done(done_2w));
 
