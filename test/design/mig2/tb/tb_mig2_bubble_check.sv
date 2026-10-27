@@ -5,12 +5,14 @@
  * tells why (bubble_e, Mig2Pkg). Checks: an instruction has no bubble reason, a bubble has
  * one; a redirect bubble (branch, jump, return, trap, MRET) follows the instruction of that
  * class that retired right before it, at most 2 (a branch guessed taken: first pred_taken,
- * then cond_branch when guessed wrong); a load-use bubble follows a load, and the
- * next instruction reads its rd; division bubbles come right before a division; fill
- * bubbles only before the first instruction after reset or resume. The trace gets a line
- * per bubble; report() at the end of the run prints the count per reason and checks that
- * every counted cycle retired an instruction or a bubble. Stops at the first failure with
- * $fatal.
+ * then cond_branch when guessed wrong); a btb_fix bubble (ID corrects the BTB) is an error
+ * while the BTB tag covers the word address of imem (Mig2ConfigPkg: then no two pcs share
+ * an entry), else it comes first after the instruction; a load-use bubble follows a load,
+ * and the next instruction reads its rd; division bubbles come right before a division;
+ * fill bubbles only before the first instruction after reset or resume. The trace gets a
+ * line per bubble; report() at the end of the run prints the count per reason and checks
+ * that every counted cycle retired an instruction or a bubble. Stops at the first failure
+ * with $fatal.
  *
  * TbMig2 instantiates it; it reads its ports, and TbMig2 calls report().
  *
@@ -31,6 +33,11 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
     input  integer  trace_fd        // trace file of TbMig2, 0: no trace
 );
     import RiscvInstrPkg::*;
+
+    // The BTB tag with the index covers the word address of imem: no two pcs share an entry,
+    // so ID never corrects the BTB.
+    localparam logic BTB_FULL_TAG = MIG2_CFG.btb_index_width + MIG2_CFG.btb_tag_width >=
+                                    MIG2_CFG.mem_addr_width - IADDR_START;
 
     integer  core_cycles;           // cycles out of reset and not halted
     integer  retired;
@@ -89,6 +96,13 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
                 if (load_rd == 0)
                     $fatal(1, "Mig2: cycle %0d: load-use bubble, no load retired before it", cycle);
             BUBBLE_DIV: ;   // the next retired instruction must be a division
+            BUBBLE_BTB_FIX:     // ID corrects the BTB: first, right after the instruction
+                if (BTB_FULL_TAG)
+                    $fatal(1, "Mig2: cycle %0d: btb_fix bubble after pc %h, but the BTB tag covers imem",
+                           cycle, prev_pc);
+                else if (redirect_bubbles != 0)
+                    $fatal(1, "Mig2: cycle %0d: btb_fix bubble after pc %h, %0d bubbles before",
+                           cycle, prev_pc, redirect_bubbles);
             BUBBLE_PRED_TAKEN:  // a branch guessed taken: first, right after it
                 if (redirect_class != BUBBLE_COND_BRANCH || redirect_bubbles != 0)
                     $fatal(1, "Mig2: cycle %0d: pred_taken bubble after pc %h (%s, %0d bubbles before)",
