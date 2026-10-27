@@ -1,0 +1,24 @@
+type: decision
+title: ID's redirect target puts the late pc + imm into the last mux
+date: 2026-10-27
+question: >
+  ID's redirect target is pc + imm (a JAL, a branch guessed taken), the top of the
+  return-address stack (a return) or pc + 1; in which order are they muxed?
+decision: >
+  id_taken ? pc + imm : (id_ret ? top of the stack : pc + 1): pc + imm, which comes last
+  (decode builds the immediate, then a 30-bit adder), goes through one mux; the two early
+  inputs are muxed before it arrives. id_taken and id_ret never hold together.
+why: >
+  With the return stack written as id_go ? (id_ret ? top : pc + imm) : pc + 1, pc + imm went
+  through two muxes and ID's redirect target became the longest path: 5.9 ns instead of 5.6
+  (sky130, ABC estimate). In the order above it is 5.7 ns, and the longest path is the
+  redirect from EX again. The flow maps the logic as written (no restructuring), so the
+  order in the RTL matters; a late input entering the last mux does not depend on the
+  technology.
+rejected:
+  - choice: "id_go ? (id_ret ? top : pc + imm) : pc + 1, the first version"
+    why_not: pc + imm through two muxes, 5.9 ns.
+code:
+  - rtl/design/mig2/mig2_control.sv#id_redirect_pc
+relies_on:
+  - rtl/design/mig2/ras_in_id

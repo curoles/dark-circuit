@@ -1,0 +1,32 @@
+type: decision
+title: The credit barrier releases at sum >= amount, with the credit that reaches it
+date: 2026-10-27
+question: >
+  When does CreditBarrier release, and what happens to credits around the release (the last
+  one that crosses the amount, and any that come after)?
+decision: >
+  It releases when the credits taken since arming reach the amount (sum >= amount); an
+  amount of 0 releases at once. The release is decided with the credit that reaches the
+  amount (sum + credit, not the registered sum), so credit_ready drops the next clock and no
+  credit is taken after the barrier is satisfied; what the last credit brings beyond the
+  amount is not kept. One credit port: participants are merged outside (an arbiter). One
+  WIDTH for credits and amounts, the sum WIDTH+1 bits.
+why: >
+  Waiting for N means N credits are enough. The sum is below the amount before the last
+  credit, so with it below 2 * 2^WIDTH: WIDTH+1 bits never overflow, no padding parameter
+  and no second width needed. One port keeps the block simple; merging participants is the
+  job of an arbiter, which can be any policy.
+rejected:
+  - choice: Strictly greater (sum > amount), the advice of an agent in the sketch
+    why_not: Waiting for N would need N+1 credits.
+  - choice: Compare the registered sum
+    why_not: >
+      The release comes one clock late, and in that clock credit_ready is still 1: one more
+      credit is taken and lost.
+  - choice: ACCUM_PAD and a separate THRESHOLD_WIDTH
+    why_not: With the release on the reaching credit, one more bit is always enough.
+  - choice: Several credit ports summed inside
+    why_not: Not needed for a sketch; the arbiter outside decides who sends when.
+code:
+  - rtl/lib/block/credit_barrier/behave/credit_barrier.sv#sum_next
+  - test/block/credit_barrier/tb_credit_barrier.sv
