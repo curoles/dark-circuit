@@ -6,7 +6,9 @@ Mig2 is where bigger changes of the Mig CPUs go first. It started as a copy of M
 bubbles, pipeline view, tests, logs (here `DARK_CIRCUIT_MIG2_TRACE` and
 `DARK_CIRCUIT_MIG2_KANATA`), benchmark and cycle ceilings, synthesis (`make mig2_synth`
 here); this file describes what Mig2 changes from Mig1: a BTB in IF and two more
-benchmarks (2026-10-26). Mig1 does not take the BTB: it stays the small core.
+benchmarks (2026-10-26), a return-address stack in ID (2026-10-27). Mig1 does not take
+them: it stays the small core. Why the design is as it is, with the options rejected:
+`kb/rtl/design/mig2/`.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
 DARK_CIRCUIT_MAIN_SIMULATOR, by default Verilator when it is installed). Mig2 is tested
@@ -52,6 +54,33 @@ as with 16 (7.0 % against 7.3 % fewer cycles), but qsort and towers need 16; the
 the counter hardly matters; the static guess on top makes qsort slower. Mig2 runs exactly
 the cycles the model predicted.
 
+## Return-address stack in ID
+
+A return (JALR with rs1 x1 or x5, rd not rs1) goes back to the last call that has not
+returned yet. Mig2Core has a return-address stack of 8 entries (ReturnAddressStack, a
+Stack with OVERWRITE: when calls nest deeper, the oldest addresses go); Mig2Control pushes
+the address after a call (JAL or JALR with rd x1 or x5) and pops for a return, both for a
+swap (a coroutine), only when the instruction leaves ID (id_moves). ID sends a return to
+the top of the stack: one bubble (`BUBBLE_PRED_RET`) instead of two. The prediction goes
+with the return to EX (`id_ex_t.ras_target`); EX redirects when the real target differs
+(`BUBBLE_RET`, two bubbles as before).
+
+- No repair: an instruction that leaves ID is on the correct path and leaves once (the
+  redirect of the only older instruction that can still redirect, in EX, comes in the same
+  clock and stops it), so the stack only sees calls and returns that execute
+  (`a_id_moves_ex` checks that an instruction that leaves ID reaches EX).
+- The stack is outside Mig2Control, like the BTB: Control sends its commands (`ras_ctrl`)
+  and gets its top (`id_ras_top`).
+- Size, in `cfg/mig2_config.yaml`: `ras_addr_width` 3 (8 entries). A trace model chose
+  it: with 8 every return of Dhrystone and towers is predicted right; towers nests 9 deep,
+  with 4 entries 92.6 %.
+
+`test/design/mig2/ras_id.S` runs the corners: recursion 12 deep (the stack wraps), an
+empty function, returns waiting in ID (load-use, division), an indirect call, a return to
+a changed ra (predicted wrong), a call on the wrong path and calls waiting in ID inside a
+function (each must push once), a swap whose popped address must be gone, calls in a trap
+handler.
+
 ## Benchmarks
 
 Besides Dhrystone (see Mig1's README), Mig2 runs qsort and towers of riscv-tests
@@ -64,30 +93,33 @@ Besides Dhrystone (see Mig1's README), Mig2 runs qsort and towers of riscv-tests
 The exit status of a benchmark is its own check (`verify` of riscv-tests), so a benchmark
 also tests the CPU. Each has a cycle ceiling.
 
-| Benchmark | Instructions | Static guess: cycles | CPI | BTB: cycles | CPI | Fewer cycles |
-|---|---|---|---|---|---|---|
-| Dhrystone | 1 643 635 | 2 134 146 | 1.298 | 1 978 237 | 1.204 | 7.3 % |
-| qsort | 134 800 | 182 700 | 1.355 | 160 151 | 1.188 | 12.3 % |
-| towers | 252 245 | 273 674 | 1.085 | 267 871 | 1.062 | 2.1 % |
+| Benchmark | Instructions | Static guess: cycles | CPI | BTB: cycles | CPI | + return stack: cycles | CPI |
+|---|---|---|---|---|---|---|---|
+| Dhrystone | 1 643 635 | 2 134 146 | 1.298 | 1 978 237 | 1.204 | 1 932 864 | 1.176 |
+| qsort | 134 800 | 182 700 | 1.355 | 160 151 | 1.188 | 160 147 | 1.188 |
+| towers | 252 245 | 273 674 | 1.085 | 267 871 | 1.062 | 264 471 | 1.048 |
 
-The short tests hardly change: they run their code once, and the BTB knows a branch only
-after it was taken (own programs 710 → 709 cycles, riscv-tests rv32ui and rv32um the same,
-rv32mi 2 718 → 2 706).
+The BTB saves 7.3 %, 12.3 % and 2.1 % of the cycles, the return stack 2.3 % and 1.3 % more
+(qsort hardly calls). The short tests hardly change: they run their code once, and the BTB
+knows a branch only after it was taken (with the BTB: own programs 710 → 709 cycles,
+riscv-tests rv32ui and rv32um the same, rv32mi 2 718 → 2 706).
 
 ## Area and speed (sky130)
 
-Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-26:
+Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-27:
 
 | Mig2Core | |
 |---|---|
-| Area | 185 460 µm² (0.185 mm²), 21 330 cells |
-| Longest logic path (ABC estimate) | 5.6 ns, about 179 MHz |
+| Area | 196 308 µm² (0.196 mm²), 21 995 cells |
+| Longest logic path (ABC estimate) | 5.7 ns, about 176 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
 | Static branch guess in ID, as Mig1 | 159 076 | 5.3 |
 | BTB in IF | 185 009 | 6.7 |
 | ID's check with AddCmp | 185 460 | 5.6 |
+| Return-address stack in ID | 194 763 | 5.9 |
+| ID's target: pc + imm into the last mux | 196 308 | 5.7 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -98,12 +130,16 @@ and a BTB update written one cycle later (14 cycles more on qsort); with both 5.
 the second alone 5.7 ns. Differences of a tenth or two of a nanosecond are within the error
 of an estimate without wires; real timing needs placement and routing.
 
-Time of a run (cycles × longest path): Dhrystone 11.31 → 11.08 ms (2.1 % faster), qsort
-0.968 → 0.897 ms (7.4 % faster), towers 1.450 → 1.500 ms (3.4 % slower). The cycles do not
-depend on the technology, and a deeper pipeline, where a taken branch costs more bubbles,
-gains more from the BTB.
+Time of a run (cycles × longest path) with the BTB: Dhrystone 11.31 → 11.08 ms (2.1 %
+faster), qsort 0.968 → 0.897 ms (7.4 % faster), towers 1.450 → 1.500 ms (3.4 % slower).
+The return stack added 5.8 % of area (240 flops with their hold muxes, the read mux, the
+prediction carried to EX, its comparator); its first longest path was ID's target, where
+pc + imm went through two muxes (5.9 ns); with pc + imm in the last mux 5.7 ns, the
+redirect from EX is the longest path again. With it: Dhrystone 11.02 ms (0.5 % faster),
+towers 1.508 ms (0.5 % slower). The cycles do not depend on the technology, and a deeper
+pipeline, where taken branches and returns cost more bubbles, gains more from both.
 
-Planned: a return stack for returns (4.3 % of the cycles of Dhrystone are return bubbles);
-the GShare predictor of `rtl/lib/block/gshare_branch_predictor` (struct version, its table
-in Sram1R1W) for the direction; a faster multiplier, Spike cosim (lockstep), a Zbb slice,
-a single memory instead of two.
+Planned: the GShare predictor of `rtl/lib/block/gshare_branch_predictor` (struct version,
+its table in Sram1R1W) for the direction (wrong directions are 3.4 % of the cycles of
+Dhrystone); a faster divider (division bubbles are 5.1 %); a faster multiplier, Spike
+cosim (lockstep), a Zbb slice, a single memory instead of two.
