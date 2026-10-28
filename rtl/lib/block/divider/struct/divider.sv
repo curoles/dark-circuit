@@ -64,6 +64,7 @@ module Divider #(
     Or2  #(1) u_or2_en(.in1(load), .in2(busy), .out(en));
 
     // Early start (see the behave version for why the leading zeros can be skipped).
+    // @kb: rtl/lib/block/divider/early_start
     if (EARLY_START != 0) begin: g_early
         localparam SIZE = $clog2(WIDTH);
         wire [SIZE-1:0] hi;             // highest set bit of the dividend, 0 if none

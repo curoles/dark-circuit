@@ -1,0 +1,45 @@
+type: decision
+title: The divider skips the leading zeros of the dividend (early start), Mig2 uses it
+date: 2026-10-27
+question: >
+  A division held Mig2's EX for 34 cycles (start, 32 steps, the result): 5.1 % of the
+  cycles of Dhrystone were division bubbles, and its dividends are small (3 000 of its
+  3 012 divisions are 9 / 7). How can a division take fewer steps, keeping the restoring
+  divider of one bit per clock?
+decision: >
+  Divider has a parameter EARLY_START (default 0: 32 steps, as before). With 1 a division
+  takes one step per significant bit of the dividend (at least one), and q starts with the
+  dividend shifted left by its leading zeros; with a divisor of 0 all WIDTH steps run.
+  Int32Div passes it on (its Divider works on magnitudes). Mig2MulDiv sets 1; Mig1 keeps 0.
+  The leading zeros are counted (PriorityEncoder) and shifted out (BarrelShifter) in the
+  start cycle, in EX.
+why: >
+  A leading zero of the dividend shifts 0 into the partial remainder, which stays 0, and a
+  divisor that is not 0 never fits 0: such a step only makes a quotient bit 0, and the
+  zeros that the shift brings in at the bottom of q become those quotient bits. A divisor
+  of 0 fits every step (the quotient must be all ones), so then nothing is skipped. A
+  dividend of 0 still takes one step, so that done comes (Mig2MulDiv waits for it).
+rejected:
+  - choice: Also skip by the divisor (steps = bits of the dividend - bits of the divisor + 1)
+    why_not: >
+      A second leading-zero count and an aligned divisor, for 6 156 more cycles of
+      Dhrystone (90 252 saved instead of 84 096); the dividend alone is a small change of
+      the Divider.
+  - choice: Count the leading zeros in ID, a cycle earlier
+    why_not: >
+      ID's operand comes through the forwarding mux, the critical loop of the pipeline; in
+      EX's start cycle only the division's own registers take the count.
+evidence: >
+  Mig2, measured 2026-10-27: Dhrystone 1 932 864 -> 1 848 768 cycles (-4.4 %, CPI 1.176 ->
+  1.125), exactly the saving modeled from the operands of its divisions (84 096: per
+  division 32 minus the bits of the dividend's magnitude); qsort and towers do not divide;
+  rv32um div 457 -> 349 cycles. The unit tests of Divider and Int32Div check the clocks of
+  every division with both settings (18 of 18 mutants caught); Mig2's muldiv.S checks
+  the cycles of a 32-bit and of a 4-bit division.
+code:
+  - rtl/lib/block/divider/behave/divider.sv#steps_of
+  - rtl/lib/block/divider/struct/divider.sv#g_early
+  - rtl/lib/numeric/int32/div/iter/behave/int32_div.sv#EARLY_START
+  - rtl/design/mig2/mig2_muldiv.sv#u_int32_div
+  - test/block/divider/tb_divider.sv#clocks_of
+  - test/design/mig2/muldiv.S

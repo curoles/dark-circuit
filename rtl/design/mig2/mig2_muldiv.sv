@@ -1,12 +1,14 @@
 /* Mig2 multiply and divide unit (M extension), EX.
  *
  * MUL, MULH, MULHSU, MULHU: Int32Mul, combinational, one cycle. DIV, DIVU, REM, REMU:
- * Int32Div, 32 clocks: in the first cycle of the instruction in EX the division starts,
- * and stall=1 keeps the instruction in EX until the result is there (34 cycles in EX:
- * start, 32 steps, then the result). The instruction and its registers do not change
- * meanwhile, so rs1_data is still the dividend at the end. Results of the special cases
- * as RISC-V M defines them (no traps): divide by 0 gives quotient all ones and remainder
- * the dividend; signed overflow (-2^31 / -1) gives quotient -2^31 and remainder 0.
+ * Int32Div with early start, one step per significant bit of the dividend's magnitude (at
+ * least 1; 32 for a divisor of 0): in the first cycle of the instruction in EX the division
+ * starts, and stall=1 keeps the instruction in EX until the result is there (2 + steps
+ * cycles in EX: start, the steps, then the result; 34 for a 32-bit dividend, 6 for 9 / 7).
+ * The instruction and its registers do not change meanwhile, so rs1_data is still the
+ * dividend at the end. Results of the special cases as RISC-V M defines them (no traps):
+ * divide by 0 gives quotient all ones and remainder the dividend; signed overflow
+ * (-2^31 / -1) gives quotient -2^31 and remainder 0.
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. stall goes to Mig2Control,
  * which keeps the instruction in EX and holds ID and IF; result is rd's value (rd_src
@@ -49,7 +51,10 @@ module Mig2MulDiv import Mig2Pkg::*; (
     Int32Mul u_int32_mul(.a(rs1_data), .b(rs2_data), .a_signed(dec.muldiv.a_signed),
                          .b_signed(dec.muldiv.b_signed), .product);
 
-    Int32Div u_int32_div(
+    // Early start: most dividends are small (Dhrystone divides 9 by 7), and every step
+    // saved is a bubble saved.
+    // @kb: rtl/lib/block/divider/early_start
+    Int32Div #(.EARLY_START(1)) u_int32_div(
         .clk, .rst_n, .start, .dividend(rs1_data), .divisor(rs2_data),
         .signed_op(dec.muldiv.div_signed),
         .busy, .done, .quotient, .remainder, .div_by_zero, .overflow);

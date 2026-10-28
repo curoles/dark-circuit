@@ -50,6 +50,7 @@ module Divider #(
     logic [CW-1:0]    steps;    // steps of the division that starts
     logic [WIDTH-1:0] q_start;  // the dividend, with the leading zeros it skips shifted out
 
+    // @kb: rtl/lib/block/divider/early_start
     // Early start: a leading zero of the dividend brings 0 into r, which stays 0, and nothing
     // fits it when the divisor is not 0: the step only makes a quotient bit 0. So the
     // division starts at the highest set bit: that many steps (at least one, for a dividend

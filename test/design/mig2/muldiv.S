@@ -3,7 +3,9 @@
  * What riscv-tests rv32um does not check: a division result used by the very next
  * instruction; a division right before a taken branch; a division in the dropped slot
  * after a jump (its rd must not change); minstret counts a division once; the cost of a
- * division in cycles (34 in EX, from mcycle); MULH, MULHSU, MULHU with a negative operand.
+ * division in cycles, from mcycle (2 + steps in EX: 34 for a 32-bit dividend, 6 for 9 / 7,
+ * whose 4 bits take 4 steps with the early start); MULH, MULHSU, MULHU with a negative
+ * operand.
  * After the halting EBREAK: number of expected registers, then pairs register, value.
  */
     .macro EXPECT_REG r, value
@@ -37,6 +39,12 @@ _start:
     mulhsu x16, x1, x2          # high of -7 * 2 (rs1 signed): -1
     mulhu  x17, x1, x2          # high of 0xfffffff9 * 2: 1
     mul    x18, x1, x2          # -14
+    li     x21, 9
+    li     x22, 7
+    rdcycle x19
+    divu   x23, x21, x22        # 1: a dividend of 4 bits, 4 steps
+    rdcycle x20
+    sub    x20, x20, x19        # 1 + 6
     ebreak
 
     .word (expect_end - expect) / 8
@@ -53,4 +61,6 @@ expect:
     EXPECT_REG 16, -1
     EXPECT_REG 17, 1
     EXPECT_REG 18, -14
+    EXPECT_REG 20, 7
+    EXPECT_REG 23, 1
 expect_end:

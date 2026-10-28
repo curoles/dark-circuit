@@ -6,8 +6,9 @@ Mig2 is where bigger changes of the Mig CPUs go first. It started as a copy of M
 bubbles, pipeline view, tests, logs (here `DARK_CIRCUIT_MIG2_TRACE` and
 `DARK_CIRCUIT_MIG2_KANATA`), benchmark and cycle ceilings, synthesis (`make mig2_synth`
 here); this file describes what Mig2 changes from Mig1: a BTB in IF and two more
-benchmarks (2026-10-26), a return-address stack in ID (2026-10-27). Mig1 does not take
-them: it stays the small core. Why the design is as it is, with the options rejected:
+benchmarks (2026-10-26), a return-address stack in ID and a division that skips the
+leading zeros of the dividend (2026-10-27). Mig1 does not take them: it stays the small
+core. Why the design is as it is, with the options rejected:
 `kb/rtl/design/mig2/`.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
@@ -81,6 +82,17 @@ a changed ra (predicted wrong), a call on the wrong path and calls waiting in ID
 function (each must push once), a swap whose popped address must be gone, calls in a trap
 handler.
 
+## Division with early start
+
+Mig2MulDiv divides with `Int32Div #(.EARLY_START(1))`: its Divider takes one step per
+significant bit of the dividend's magnitude instead of 32 (at least one; all 32 for a
+divisor of 0, which fits every step). A leading zero of the dividend would shift 0 into the
+partial remainder, and a divisor that is not 0 never fits 0: the step would only make a
+quotient bit 0. A division holds EX 2 + steps cycles: 34 for a 32-bit dividend, 6 for
+9 / 7. The leading zeros are counted (PriorityEncoder) and shifted out (BarrelShifter) in
+the start cycle, in EX, not in ID, where the operand comes through the forwarding mux.
+`test/design/mig2/muldiv.S` checks the cycles of a 32-bit and of a 4-bit division.
+
 ## Benchmarks
 
 Besides Dhrystone (see Mig1's README), Mig2 runs qsort and towers of riscv-tests
@@ -93,16 +105,19 @@ Besides Dhrystone (see Mig1's README), Mig2 runs qsort and towers of riscv-tests
 The exit status of a benchmark is its own check (`verify` of riscv-tests), so a benchmark
 also tests the CPU. Each has a cycle ceiling.
 
-| Benchmark | Instructions | Static guess: cycles | CPI | BTB: cycles | CPI | + return stack: cycles | CPI |
-|---|---|---|---|---|---|---|---|
-| Dhrystone | 1 643 635 | 2 134 146 | 1.298 | 1 978 237 | 1.204 | 1 932 864 | 1.176 |
-| qsort | 134 800 | 182 700 | 1.355 | 160 151 | 1.188 | 160 147 | 1.188 |
-| towers | 252 245 | 273 674 | 1.085 | 267 871 | 1.062 | 264 471 | 1.048 |
+| Benchmark | Instructions | Static guess: cycles | CPI | BTB: cycles | CPI | + return stack: cycles | CPI | + early division: cycles | CPI |
+|---|---|---|---|---|---|---|---|---|---|
+| Dhrystone | 1 643 635 | 2 134 146 | 1.298 | 1 978 237 | 1.204 | 1 932 864 | 1.176 | 1 848 768 | 1.125 |
+| qsort | 134 800 | 182 700 | 1.355 | 160 151 | 1.188 | 160 147 | 1.188 | 160 147 | 1.188 |
+| towers | 252 245 | 273 674 | 1.085 | 267 871 | 1.062 | 264 471 | 1.048 | 264 471 | 1.048 |
 
 The BTB saves 7.3 %, 12.3 % and 2.1 % of the cycles, the return stack 2.3 % and 1.3 % more
 (qsort hardly calls). The short tests hardly change: they run their code once, and the BTB
 knows a branch only after it was taken (with the BTB: own programs 710 → 709 cycles,
-riscv-tests rv32ui and rv32um the same, rv32mi 2 718 → 2 706).
+riscv-tests rv32ui and rv32um the same, rv32mi 2 718 → 2 706). The early division saves
+4.4 % of Dhrystone (3 000 of its 3 012 divisions are 9 / 7: 4 steps instead of 32); qsort
+and towers do not divide; rv32um div and rem 457 → 349 cycles, divu and remu 458 → 404 and
+457 → 403.
 
 ## Area and speed (sky130)
 
@@ -141,5 +156,5 @@ pipeline, where taken branches and returns cost more bubbles, gains more from bo
 
 Planned: the GShare predictor of `rtl/lib/block/gshare_branch_predictor` (struct version,
 its table in Sram1R1W) for the direction (wrong directions are 3.4 % of the cycles of
-Dhrystone); a faster divider (division bubbles are 5.1 %); a faster multiplier, Spike
-cosim (lockstep), a Zbb slice, a single memory instead of two.
+Dhrystone); a faster multiplier, Spike cosim (lockstep), a Zbb slice, a single memory
+instead of two.
