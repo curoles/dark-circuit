@@ -192,6 +192,12 @@ Icarus means Icarus 13, the version the project uses.
 - A variable with an initializer in a static function is initialized once at time 0;
   Icarus silently returns wrong values, Verilator refuses. Hence `automatic` everywhere.
 - Only `$fatal` makes `vvp` exit with an error; `$error` does not fail a test.
+- Icarus elaboration tasks (`$fatal` in a generate block) take one plain string: no
+  format arguments (`"WAYS=%0d", WAYS` does not compile), and the finish number must be
+  given (`$fatal(1, "...")`).
+- Icarus cannot read a function's own name as a variable inside the function
+  (`stamp[f]` in function f): it compiles, then vvp stops with "unresolved functor
+  reference". Use a local variable and `return` it.
 
 ## Valid/ready channels
 
@@ -271,6 +277,11 @@ document intent and stop the simulation in the cycle a rule breaks.
     Verilator and Icarus.
   - `DC_ASSERT_NEXT(a_name, cause, effect)`: cause at a clock edge implies effect at
     the next one; concurrent SVA, only with DARK_CIRCUIT_USE_SVA (Verilator builds).
+  - `DC_STATIC_ASSERT(a_name, cond)`: a check of parameters at elaboration (cond is a
+    constant expression): a false cond stops the build on Verilator and Icarus and stops
+    synthesis. At module level, no clk needed. Use it for parameter legality (a power of
+    2, a minimum size) instead of `initial if (...) $fatal`, which fires only when a
+    simulation starts and which synthesis ignores.
   Both need clk and rst_n in scope; no semicolon after them; a failure is $fatal;
   synthesis never sees them (sv2v removes them).
 - What to assert:
