@@ -4,18 +4,23 @@
  * bits of set index, the rest is the tag. Each set holds one line of 1 << SETS_OFFSET bytes
  * (CacheValidRam, CacheTagRam, CacheDataRam, read 1 clock after the address).
  *
- * CPU side: a request (req_en, req_addr) is taken when req_ready=1; while req_ready=0 a
- * request is ignored and the user holds it. One clock after the request the cache knows
- * whether it hits. Hit: rsp_valid=1 with the line (rsp_data), req_ready=1: a request every
- * clock while they hit. Miss: mem_req_en=1 for that clock with the address of the line
- * (offset 0), req_ready=0; the memory answers with mem_rsp_valid=1 and the line one or more
- * clocks later; in that clock rsp_valid=1 with the line from memory and the cache writes
- * valid, tag and data; req_ready=1 the clock after. invalidate=1 makes every line invalid
- * (FENCE.I); allowed while no miss is served. Reset makes every line invalid.
+ * CPU side: requests on a valid/ready channel (AGENTS.md): a request (req_valid, req_addr)
+ * is taken at a rising edge with req_ready=1; one clock later the cache knows whether it
+ * hits. Hit: rsp_valid=1 with the line (rsp_data), req_ready=1: a request every clock while
+ * they hit. Miss: req_ready=0; the cache asks memory for the line on a valid/ready channel
+ * (mem_req_valid with the address of the line, offset 0, held until mem_req_ready); memory
+ * answers with mem_rsp_valid=1 and the line one or more clocks after it took the request
+ * (no ready: the cache always takes the answer); in that clock rsp_valid=1 with the line
+ * from memory and the cache writes valid, tag and data; req_ready=1 the clock after.
+ * invalidate=1 makes every line invalid (FENCE.I); allowed while no miss is served. Reset
+ * makes every line invalid.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+
+`include "dark_circuit_assert.svh"
+
 module DirectCacheRdOnly #(
     parameter  ADDR_WIDTH  = 32,            // byte address
     parameter  SETS_WIDTH  = 6,             // 1 << SETS_WIDTH sets
@@ -28,7 +33,7 @@ module DirectCacheRdOnly #(
     input  wire                  invalidate,    // all lines invalid
 
     // CPU side
-    input  wire                  req_en,
+    input  wire                  req_valid,
     // The offset in the line is not used: the cache answers whole lines.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire [ADDR_WIDTH-1:0] req_addr,
@@ -38,7 +43,8 @@ module DirectCacheRdOnly #(
     output wire [DATA_WIDTH-1:0] rsp_data,
 
     // Memory side
-    output wire                  mem_req_en,
+    output wire                  mem_req_valid,
+    input  wire                  mem_req_ready,
     output wire [ADDR_WIDTH-1:0] mem_req_addr,  // address of the line (offset 0)
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
@@ -48,6 +54,7 @@ module DirectCacheRdOnly #(
     logic [ADDR_WIDTH-1:SETS_OFFSET] look_line;  // its address without the offset in the line
     logic                  hit;
     logic                  miss;
+    logic                  held;        // memory does not take the miss's read: it stays
     logic                  waiting;     // a miss is served: the memory has not answered yet
     logic                  valid;       // of the set of look_line, read in the clock before
     logic [TAG_WIDTH-1:0]  tag;
@@ -56,11 +63,11 @@ module DirectCacheRdOnly #(
 
     // A request is taken only when nothing waits: neither a miss found now nor one served.
     assign req_ready = !waiting && !miss;
-    assign accept    = req_en && req_ready;
+    assign accept    = req_valid && req_ready;
 
     always_ff @(posedge clk)
         if (!rst_n) look <= 1'b0;
-        else        look <= accept;
+        else        look <= accept || held;
 
     always_ff @(posedge clk)
         if (accept)
@@ -86,17 +93,24 @@ module DirectCacheRdOnly #(
     assign hit  = look && valid && tag == look_line[ADDR_WIDTH-1 -: TAG_WIDTH];
     assign miss = look && !hit;
 
-    // A miss asks memory for its line once, in the clock it is found; the cache waits for the
-    // answer, which it passes on and writes (look_line holds: no request is taken meanwhile).
-    always_ff @(posedge clk)
-        if (!rst_n)             waiting <= 1'b0;
-        else if (miss)          waiting <= 1'b1;
-        else if (mem_rsp_valid) waiting <= 1'b0;
+    // A miss asks memory for its line and holds the request, with its lookup, until memory
+    // takes it; then the cache waits for the answer, which it passes on and writes (look_line
+    // holds: no request is taken meanwhile).
+    assign held = miss && !mem_req_ready;
 
-    assign refill       = waiting && mem_rsp_valid;
-    assign mem_req_en   = miss;
-    assign mem_req_addr = {look_line, {SETS_OFFSET{1'b0}}};
-    assign rsp_valid    = hit || refill;
-    assign rsp_data     = waiting ? mem_rsp_data : data;
+    always_ff @(posedge clk)
+        if (!rst_n)                     waiting <= 1'b0;
+        else if (miss && mem_req_ready) waiting <= 1'b1;
+        else if (mem_rsp_valid)         waiting <= 1'b0;
+
+    // A lookup ends when memory takes its read, and no request is taken while the miss is
+    // served: so the refill writes the set of look_line.
+    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
+
+    assign refill        = waiting && mem_rsp_valid;
+    assign mem_req_valid = miss;
+    assign mem_req_addr  = {look_line, {SETS_OFFSET{1'b0}}};
+    assign rsp_valid     = hit || refill;
+    assign rsp_data      = waiting ? mem_rsp_data : data;
 
 endmodule

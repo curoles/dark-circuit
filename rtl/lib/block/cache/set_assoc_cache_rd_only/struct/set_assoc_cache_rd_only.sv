@@ -6,7 +6,8 @@
  * refill). Control as in the struct DirectCacheRdOnly, plus:
  *   hit      = OrReduce(hits)                hit_way = PriorityEncoder(hits), hits one-hot
  *   hit_data = per bit OrReduce over the ways of (line AND hit of the way)
- *   fill_way = Dff with a hold Mux2 (miss) of CacheReplacement's victim_way
+ *   fill_way = Dff with a hold Mux2 (miss AND mem_req_ready) of CacheReplacement's
+ *              victim_way
  *   touch    = hit OR refill                 touch_way = Mux2(hit_way, fill_way, refill)
  *
  * @author    Igor Lesik
@@ -30,7 +31,7 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     input  wire                  invalidate,    // all lines invalid
 
     // CPU side
-    input  wire                  req_en,
+    input  wire                  req_valid,
     // The offset in the line is not used: the cache answers whole lines.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire [ADDR_WIDTH-1:0] req_addr,
@@ -40,7 +41,8 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     output wire [DATA_WIDTH-1:0] rsp_data,
 
     // Memory side
-    output wire                  mem_req_en,
+    output wire                  mem_req_valid,
+    input  wire                  mem_req_ready,
     output wire [ADDR_WIDTH-1:0] mem_req_addr,  // address of the line (offset 0)
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
@@ -57,6 +59,10 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     wire                  hit;
     wire                  hit_n;
     wire                  miss;
+    wire                  held;         // memory does not take the miss's read: it stays
+    wire                  mem_ready_n;
+    wire                  look_next;
+    wire                  wait_start;   // memory takes the read of the miss
     // Bits no way reaches when WAYS is not a power of 2; valid of the encoder (hit says it).
     /* verilator lint_off UNUSEDSIGNAL */
     wire [WAYS_POW2-1:0]  way_wr_en;    // one-hot: the way refill writes
@@ -78,9 +84,10 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     wire                  refill;       // the line from memory comes: write it
 
     Nor2 #(1) u_nor2_ready (.in1(waiting), .in2(miss), .out(req_ready));
-    And2 #(1) u_and2_accept(.in1(req_en), .in2(req_ready), .out(accept));
+    And2 #(1) u_and2_accept(.in1(req_valid), .in2(req_ready), .out(accept));
 
-    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(accept), .out(look));
+    Or2  #(1) u_or2_look   (.in1(accept), .in2(held), .out(look_next));
+    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(look_next), .out(look));
     Mux2 #(LINE_WIDTH) u_mux2_line(.in0(look_line), .in1(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
                                    .sel(accept), .out(look_line_next));
     Dff  #(LINE_WIDTH) u_dff_line (.clk, .in(look_line_next), .out(look_line));
@@ -148,14 +155,18 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
             .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]),
             .touch, .touch_way, .valid, .victim_way);
 
-    // The victim is taken in the clock the miss is found: the random way changes every clock.
-    Mux2 #(WAY_WIDTH) u_mux2_fill(.in0(fill_way), .in1(victim_way), .sel(miss),
+    // The victim is taken when memory takes the read: the random way changes every clock,
+    // also while the miss is held.
+    Mux2 #(WAY_WIDTH) u_mux2_fill(.in0(fill_way), .in1(victim_way), .sel(wait_start),
                                   .out(fill_way_next));
     Dff  #(WAY_WIDTH) u_dff_fill (.clk, .in(fill_way_next), .out(fill_way));
 
     Inv  #(1) u_inv_rsp   (.in(mem_rsp_valid), .out(mem_rsp_n));
     And2 #(1) u_and2_kept (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
-    Or2  #(1) u_or2_wait  (.in1(miss), .in2(waiting_kept), .out(waiting_next));
+    Inv  #(1) u_inv_mem_ready  (.in(mem_req_ready), .out(mem_ready_n));
+    And2 #(1) u_and2_held      (.in1(miss), .in2(mem_ready_n), .out(held));
+    And2 #(1) u_and2_wait_start(.in1(miss), .in2(mem_req_ready), .out(wait_start));
+    Or2  #(1) u_or2_wait  (.in1(wait_start), .in2(waiting_kept), .out(waiting_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_wait(.clk, .rst_n, .in(waiting_next), .out(waiting));
 
     And2 #(1)          u_and2_refill(.in1(waiting), .in2(mem_rsp_valid), .out(refill));
@@ -163,7 +174,10 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     Mux2 #(DATA_WIDTH) u_mux2_data  (.in0(hit_data), .in1(mem_rsp_data), .sel(waiting),
                                      .out(rsp_data));
 
-    assign mem_req_en   = miss;
-    assign mem_req_addr = {look_line, {SETS_OFFSET{1'b0}}};
+    // See the behave version.
+    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
+
+    assign mem_req_valid = miss;
+    assign mem_req_addr  = {look_line, {SETS_OFFSET{1'b0}}};
 
 endmodule
