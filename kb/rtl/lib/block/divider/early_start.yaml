@@ -36,6 +36,8 @@ evidence: >
   rv32um div 457 -> 349 cycles. The unit tests of Divider and Int32Div check the clocks of
   every division with both settings (18 of 18 mutants caught); Mig2's muldiv.S checks
   the cycles of a 32-bit and of a 4-bit division.
+  sky130 (make mig2_synth, 2026-10-27): 199 474 um2 (+1.6 %, 22 353 cells) and 5.7 ns as
+  before; Dhrystone in time 11.02 -> 10.54 ms.
 code:
   - rtl/lib/block/divider/behave/divider.sv#steps_of
   - rtl/lib/block/divider/struct/divider.sv#g_early

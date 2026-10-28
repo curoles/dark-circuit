@@ -125,7 +125,7 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 
 | Mig2Core | |
 |---|---|
-| Area | 196 308 µm² (0.196 mm²), 21 995 cells |
+| Area | 199 474 µm² (0.199 mm²), 22 353 cells |
 | Longest logic path (ABC estimate) | 5.7 ns, about 176 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
@@ -135,6 +135,7 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 | ID's check with AddCmp | 185 460 | 5.6 |
 | Return-address stack in ID | 194 763 | 5.9 |
 | ID's target: pc + imm into the last mux | 196 308 | 5.7 |
+| Division with early start | 199 474 | 5.7 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -153,6 +154,9 @@ pc + imm went through two muxes (5.9 ns); with pc + imm in the last mux 5.7 ns, 
 redirect from EX is the longest path again. With it: Dhrystone 11.02 ms (0.5 % faster),
 towers 1.508 ms (0.5 % slower). The cycles do not depend on the technology, and a deeper
 pipeline, where taken branches and returns cost more bubbles, gains more from both.
+The early division added 1.6 % of area (3 166 µm², 358 cells: the priority encoder, the
+32-bit barrel shifter, the step count and its muxes); the longest path stays 5.7 ns.
+Dhrystone 11.02 → 10.54 ms (4.4 % faster); qsort and towers do not divide.
 
 Planned: the GShare predictor of `rtl/lib/block/gshare_branch_predictor` (struct version,
 its table in Sram1R1W) for the direction (wrong directions are 3.4 % of the cycles of
