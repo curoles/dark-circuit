@@ -4,7 +4,7 @@
  * The bits of the set (lru, WAYS * (WAYS - 1) / 2, see AgeMatrix) live in the user's RAM, one
  * entry per set: the user reads them with the set, gives them here, and writes lru_next back.
  * touch=1 (a hit or a fill of touch_way) makes the way the most recently used; lru_next = lru
- * while touch=0. victim_way, the way a fill replaces: the lowest invalid way when one is
+ * while touch=0. victim_way, the way a fill replaces: the highest invalid way when one is
  * invalid, else the least recently used way.
  *
  * Invalid ways first, so the RAM needs no reset: a way becomes valid only by a fill, which
@@ -27,7 +27,7 @@ module BitMatrixLru #(
     output wire [LRU_WIDTH-1:0] lru_next,           // back into the RAM
 
     input  wire [WAYS-1:0]      valid,              // ways of the set that hold a line
-    output wire [WAY_WIDTH-1:0] victim_way          // lowest invalid way, else the LRU way
+    output wire [WAY_WIDTH-1:0] victim_way          // highest invalid way, else the LRU way
 );
     wire [WAYS-1:0] lru_way;    // one-hot: the least recently used way
 
@@ -43,14 +43,15 @@ module BitMatrixLru #(
                 index_of = index_of | WAY_WIDTH'(w);
     endfunction
 
-    // Lowest way that is not valid; 0 when every way is valid (not used then).
-    function automatic [WAY_WIDTH-1:0] lowest_invalid(input [WAYS-1:0] v);
-        lowest_invalid = '0;
-        for (int w = WAYS - 1; w >= 0; w--)
+    // Highest way that is not valid (as PriorityEncoder in the struct version); 0 when every
+    // way is valid (not used then).
+    function automatic [WAY_WIDTH-1:0] highest_invalid(input [WAYS-1:0] v);
+        highest_invalid = '0;
+        for (int w = 0; w < WAYS; w++)
             if (!v[w])
-                lowest_invalid = WAY_WIDTH'(w);     // a lower way wins
+                highest_invalid = WAY_WIDTH'(w);    // a higher way wins
     endfunction
 
-    assign victim_way = (&valid) ? index_of(lru_way) : lowest_invalid(valid);
+    assign victim_way = (&valid) ? index_of(lru_way) : highest_invalid(valid);
 
 endmodule

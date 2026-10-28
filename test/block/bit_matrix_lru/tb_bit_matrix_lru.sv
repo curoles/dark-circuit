@@ -5,8 +5,8 @@
  * every clock either hits a random valid way (touch) or fills the victim way (touch, valid);
  * now and then it makes every way invalid, half of the times with new garbage in lru. A
  * model of its own, the time of the last touch of every way, checks victim_way every clock:
- * the lowest invalid way when one is invalid, else the way touched longest ago. In the end
- * the test checks that every case happened: a victim invalid with ways below it valid, the
+ * the highest invalid way when one is invalid, else the way touched longest ago. In the end
+ * the test checks that every case happened: a victim invalid with ways above it valid, the
  * LRU way as victim, a fill of it, a hit of the LRU way, garbage. Runs with WAYS 2, 3, 4 and 8;
  * 20000 clocks on Verilator, 600 on Icarus. Stops at the first mismatch with $fatal.
  *
@@ -39,7 +39,7 @@ module TbBitMatrixLruCheck #(
     integer seed;
     integer exp_victim;
     integer w;
-    integer n_invalid_above;    // coverage
+    integer n_invalid_below;    // coverage
     integer n_victim_lru;
     integer n_fill_lru;
     integer n_hit_lru;
@@ -48,11 +48,11 @@ module TbBitMatrixLruCheck #(
     BitMatrixLru #(.WAYS(WAYS)) u_bit_matrix_lru(
         .lru, .touch, .touch_way, .lru_next, .valid, .victim_way);
 
-    // The victim of the model: the lowest invalid way, else the way touched longest ago.
+    // The victim of the model: the highest invalid way, else the way touched longest ago.
     // A local k, not the function's name: Icarus 13 cannot read the name in the function.
     function automatic integer model_victim();
         integer k;
-        for (int i = 0; i < WAYS; i++)
+        for (int i = WAYS - 1; i >= 0; i--)
             if (!valid[i])
                 return i;
         k = 0;
@@ -83,7 +83,7 @@ module TbBitMatrixLruCheck #(
         done            = 1'b0;
         seed            = WAYS;
         now             = 0;
-        n_invalid_above = 0;
+        n_invalid_below = 0;
         n_victim_lru    = 0;
         n_fill_lru      = 0;
         n_hit_lru       = 0;
@@ -104,8 +104,8 @@ module TbBitMatrixLruCheck #(
                        n, valid, victim_way, exp_victim);
             if (&valid)
                 n_victim_lru = n_victim_lru + 1;
-            else if (exp_victim > 0)
-                n_invalid_above = n_invalid_above + 1;
+            else if (exp_victim < WAYS - 1)
+                n_invalid_below = n_invalid_below + 1;
             if ($unsigned($random(seed)) % 50 == 0) begin
                 // Every way invalid (no touch), half of the times with garbage in lru.
                 valid = '0;
@@ -129,10 +129,10 @@ module TbBitMatrixLruCheck #(
             #1;
             lru = lru_next;
         end
-        if (n_invalid_above == 0 || n_victim_lru == 0 || n_fill_lru == 0 || n_hit_lru == 0 ||
+        if (n_invalid_below == 0 || n_victim_lru == 0 || n_fill_lru == 0 || n_hit_lru == 0 ||
             n_garbage < 2)
-            $fatal(1, "BitMatrixLru %0d: a case did not happen: invalid above %0d, victim lru %0d, fill lru %0d, hit lru %0d, garbage %0d",
-                   WAYS, n_invalid_above, n_victim_lru, n_fill_lru, n_hit_lru, n_garbage);
+            $fatal(1, "BitMatrixLru %0d: a case did not happen: invalid below %0d, victim lru %0d, fill lru %0d, hit lru %0d, garbage %0d",
+                   WAYS, n_invalid_below, n_victim_lru, n_fill_lru, n_hit_lru, n_garbage);
         done = 1'b1;
     end
 endmodule

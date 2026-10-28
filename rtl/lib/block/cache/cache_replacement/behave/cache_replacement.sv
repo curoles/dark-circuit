@@ -2,8 +2,8 @@
  *
  * The cache reads the state of a set with each request (rd_en, rd_set, like its tag RAMs)
  * and, in the clock after, looks the request up: it gives the valid bits of the set's ways
- * (valid) and gets victim_way, the way a fill would replace: the lowest invalid way when one
- * is invalid, else the way POLICY picks. touch=1 (a hit, or the fill of a miss, any clock
+ * (valid) and gets victim_way, the way a fill would replace: the highest invalid way when
+ * one is invalid, else the way POLICY picks. touch=1 (a hit, or the fill of a miss, any clock
  * until the next read) tells which way of the set of the last read was used.
  *
  * POLICY (CachePkg):
@@ -41,7 +41,7 @@ module CacheReplacement import CachePkg::*; #(
     /* verilator lint_on UNUSEDSIGNAL */
 
     input  wire [WAYS-1:0]       valid,         // ways of the set of the last read holding a line
-    output wire [WAY_WIDTH-1:0]  victim_way     // lowest invalid way, else POLICY's way
+    output wire [WAY_WIDTH-1:0]  victim_way     // highest invalid way, else POLICY's way
 );
     `DC_STATIC_ASSERT(a_ways_at_least_2, WAYS >= 2)
     `DC_STATIC_ASSERT(a_policy_known, POLICY == REPL_LRU || POLICY == REPL_RANDOM)
@@ -91,15 +91,16 @@ module CacheReplacement import CachePkg::*; #(
 
         Lfsr #(.WIDTH(8)) u_lfsr(.clk, .rst_n, .q);
 
-        // Lowest way that is not valid; 0 when every way is valid (not used then).
-        function automatic [WAY_WIDTH-1:0] lowest_invalid(input [WAYS-1:0] v);
-            lowest_invalid = '0;
-            for (int w = WAYS - 1; w >= 0; w--)
+        // Highest way that is not valid (as PriorityEncoder in the struct version); 0 when every
+        // way is valid (not used then).
+        function automatic [WAY_WIDTH-1:0] highest_invalid(input [WAYS-1:0] v);
+            highest_invalid = '0;
+            for (int w = 0; w < WAYS; w++)
                 if (!v[w])
-                    lowest_invalid = WAY_WIDTH'(w);     // a lower way wins
+                    highest_invalid = WAY_WIDTH'(w);    // a higher way wins
         endfunction
 
-        assign victim_way = (&valid) ? q[WAY_WIDTH-1:0] : lowest_invalid(valid);
+        assign victim_way = (&valid) ? q[WAY_WIDTH-1:0] : highest_invalid(valid);
     end
 
 endmodule

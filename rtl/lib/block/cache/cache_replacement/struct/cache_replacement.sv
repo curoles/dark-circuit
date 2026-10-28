@@ -5,9 +5,9 @@
  * REPL_LRU: the state RAM is the struct Sram1R1W; set_q and the bits of the last touch
  * (wr_bits) are flops with a hold Mux2; stale = DffSyncRst(rd_en ? touch AND (set_q ==
  * rd_set) : touch OR stale); lru = Mux2(ram_bits, wr_bits, stale) into BitMatrixLru.
- * REPL_RANDOM: the struct Lfsr; the lowest invalid way is the highest invalid one of the
- * valid bits in reverse order (PriorityEncoder), inverted (WAYS is a power of 2); its valid
- * output says some way is invalid, and Mux2 takes the Lfsr's low bits otherwise.
+ * REPL_RANDOM: the struct Lfsr; PriorityEncoder of the inverted valid bits gives the highest
+ * invalid way, its valid output says some way is invalid, and Mux2 takes the Lfsr's low bits
+ * otherwise.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -33,7 +33,7 @@ module CacheReplacement import CachePkg::*; #(
     /* verilator lint_on UNUSEDSIGNAL */
 
     input  wire [WAYS-1:0]       valid,         // ways of the set of the last read holding a line
-    output wire [WAY_WIDTH-1:0]  victim_way     // lowest invalid way, else POLICY's way
+    output wire [WAY_WIDTH-1:0]  victim_way     // highest invalid way, else POLICY's way
 );
     `DC_STATIC_ASSERT(a_ways_at_least_2, WAYS >= 2)
     `DC_STATIC_ASSERT(a_policy_known, POLICY == REPL_LRU || POLICY == REPL_RANDOM)
@@ -87,21 +87,15 @@ module CacheReplacement import CachePkg::*; #(
         wire [7:0]           q;
         /* verilator lint_on UNUSEDSIGNAL */
         wire [WAYS-1:0]      invalid;
-        wire [WAYS-1:0]      invalid_rev;   // invalid in reverse order: way 0 is the top bit
-        wire [WAY_WIDTH-1:0] top_rev;       // highest bit of invalid_rev
-        wire [WAY_WIDTH-1:0] lowest;        // lowest invalid way: WAYS-1 - top_rev
+        wire [WAY_WIDTH-1:0] highest;       // highest invalid way
         wire                 any_invalid;
 
         Lfsr #(.WIDTH(8)) u_lfsr(.clk, .rst_n, .q);
 
         Inv #(WAYS) u_inv_valid(.in(valid), .out(invalid));
-        for (genvar w = 0; w < WAYS; w++) begin: g_rev
-            assign invalid_rev[w] = invalid[WAYS-1-w];
-        end
         PriorityEncoder #(.SIZE(WAY_WIDTH)) u_priority_encoder(
-            .in(invalid_rev), .out(top_rev), .valid(any_invalid));
-        Inv  #(WAY_WIDTH) u_inv_top (.in(top_rev), .out(lowest));
-        Mux2 #(WAY_WIDTH) u_mux2_way(.in0(q[WAY_WIDTH-1:0]), .in1(lowest), .sel(any_invalid),
+            .in(invalid), .out(highest), .valid(any_invalid));
+        Mux2 #(WAY_WIDTH) u_mux2_way(.in0(q[WAY_WIDTH-1:0]), .in1(highest), .sel(any_invalid),
                                      .out(victim_way));
     end
 

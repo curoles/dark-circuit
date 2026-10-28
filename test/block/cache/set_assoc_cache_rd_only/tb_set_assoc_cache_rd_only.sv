@@ -8,7 +8,7 @@
  * which the memory has new content (a line kept valid by mistake answers old data). A model
  * of its own (valid, tag, line and time of the last touch per way) checks in every clock
  * req_ready, mem_req_en with the line address, rsp_valid and rsp_data, against the hit or
- * miss it computes; its victim is the lowest invalid way of the set as read with the
+ * miss it computes; its victim is the highest invalid way of the set as read with the
  * request, else the way touched longest ago (REPL_LRU) or the low bits of an Lfsr like the
  * cache's, reset with it (REPL_RANDOM): so the model knows every line the cache keeps. In
  * the end the test checks that every case happened: hits, back-to-back hits, back-to-back
@@ -142,11 +142,11 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         return !waiting && !(look && !look_hit);
     endfunction
 
-    // The way a miss of set s replaces: the lowest invalid way as read with the request,
+    // The way a miss of set s replaces: the highest invalid way as read with the request,
     // else the policy's way.
     function automatic integer model_victim(input set_t s);
         integer k;
-        for (int w = 0; w < WAYS; w++)
+        for (int w = WAYS - 1; w >= 0; w--)
             if (!look_valid[w])
                 return w;
         if (REPLACEMENT == REPL_RANDOM)
