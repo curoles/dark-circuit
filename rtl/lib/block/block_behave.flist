@@ -29,3 +29,4 @@
 -F return_address_stack/behave/return_address_stack.flist
 -F credit_barrier/behave/credit_barrier.flist
 -F age_matrix/behave/age_matrix.flist
+-F bit_matrix_lru/behave/bit_matrix_lru.flist
