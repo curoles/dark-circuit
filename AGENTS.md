@@ -315,6 +315,14 @@ document intent and stop the simulation in the cycle a rule breaks.
 - Block: `rtl/lib/block/<b>/{behave,struct}/` with `<b>.flist` each, a `-F` line in
   `block_behave.flist` and `block_struct.flist`, a test in `test/block/<b>/`,
   the block name in the README layout.
+- Order for a block: the behave version first, with its test (the test is the spec both
+  versions must meet), then the struct version against the same test. Writing the struct
+  version is a review of the design: look for simplifications (a cheaper state, a shared
+  block such as PriorityEncoder, events that exclude each other and need no priority) and
+  take one that helps back into the behave version and the test, so that both versions
+  stay one design and the struct version does not drift into a different one. Examples:
+  BitMatrixLru's victim became the highest invalid way, so that both versions use
+  PriorityEncoder; CreditBarrier keeps what is still missing instead of a sum.
 - Design: every design has `rtl/design/<d>/README.md`: what it is, parts, timing,
   limits, tests. Update it in the same change as the design.
 - Design configuration: edit `rtl/design/<d>/cfg/<d>_config.yaml` or a template,

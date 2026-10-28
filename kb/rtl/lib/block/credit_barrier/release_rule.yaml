@@ -10,12 +10,14 @@ decision: >
   amount (sum + credit, not the registered sum), so credit_ready drops the next clock and no
   credit is taken after the barrier is satisfied; what the last credit brings beyond the
   amount is not kept. One credit port: participants are merged outside (an arbiter). One
-  WIDTH for credits and amounts, the sum WIDTH+1 bits.
+  WIDTH for credits and amounts; the barrier keeps what is still missing (remaining: the
+  amount, minus each credit), and a credit at least remaining reaches the amount.
 why: >
-  Waiting for N means N credits are enough. The sum is below the amount before the last
-  credit, so with it below 2 * 2^WIDTH: WIDTH+1 bits never overflow, no padding parameter
-  and no second width needed. One port keeps the block simple; merging participants is the
-  job of an arbiter, which can be any policy.
+  Waiting for N means N credits are enough. remaining needs WIDTH bits: after the release
+  no credit is taken, so it never goes below 0; no padding parameter, no second width, and
+  one WIDTH-bit subtracter in the struct version (instead of a WIDTH+1-bit sum and a
+  compare). One port keeps the block simple; merging participants is the job of an arbiter,
+  which can be any policy.
 rejected:
   - choice: Strictly greater (sum > amount), the advice of an agent in the sketch
     why_not: Waiting for N would need N+1 credits.
@@ -24,9 +26,17 @@ rejected:
       The release comes one clock late, and in that clock credit_ready is still 1: one more
       credit is taken and lost.
   - choice: ACCUM_PAD and a separate THRESHOLD_WIDTH
-    why_not: With the release on the reaching credit, one more bit is always enough.
+    why_not: With the release on the reaching credit, no wider sum is needed at all.
+  - choice: A sum of the credits compared with the amount (the first behave version)
+    why_not: >
+      Two registers and a WIDTH+1-bit sum; the struct version showed that what is still
+      missing does the same with one register and one subtracter (2026-10-28).
   - choice: Several credit ports summed inside
     why_not: Not needed for a sketch; the arbiter outside decides who sends when.
+evidence: >
+  The struct version (2026-10-28) finds the reaching credit as a borrow of remaining -
+  credit, or a difference of 0; both versions pass the same test.
 code:
-  - rtl/lib/block/credit_barrier/behave/credit_barrier.sv#sum_next
+  - rtl/lib/block/credit_barrier/behave/credit_barrier.sv#remaining
+  - rtl/lib/block/credit_barrier/struct/credit_barrier.sv#remaining
   - test/block/credit_barrier/tb_credit_barrier.sv

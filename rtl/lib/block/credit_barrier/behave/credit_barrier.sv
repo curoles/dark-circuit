@@ -10,8 +10,9 @@
  * brings beyond the amount is not kept. An amount of 0 releases at once (the clock after
  * arming). The manager acknowledges with clear_released while released: the barrier is not
  * armed any more (cfg_ready=1); clear_released at other times is ignored.
- * The sum has WIDTH+1 bits: before the last credit it is below the amount, so with the last
- * credit it is below 2 * 2^WIDTH, it never overflows.
+ * The barrier keeps what is still missing (remaining): the amount when armed, minus each
+ * credit taken; a credit that is at least remaining reaches the amount. WIDTH bits are
+ * enough: after the release no credit is taken, so remaining never goes below 0.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -36,9 +37,8 @@ module CreditBarrier #(
     output wire             barrier_released,
     input  wire             clear_released      // the manager saw the release: disarm
 );
-    logic [WIDTH-1:0] target;       // the amount to wait for
-    logic [WIDTH:0]   sum;          // credits taken since arming
-    logic [WIDTH:0]   sum_next;     // with the credit taken now
+    logic [WIDTH-1:0] remaining;    // what the credits still have to bring, while armed
+    logic             reach;        // the credit offered now reaches the amount
     logic             armed;
     logic             released;
     logic             take_cfg;
@@ -49,11 +49,12 @@ module CreditBarrier #(
     assign barrier_released = released;
     assign take_cfg         = cfg_valid && cfg_ready;
     assign take_credit      = credit_valid && credit_ready;
-    assign sum_next         = sum + {1'b0, credit_amount};
+    assign reach            = credit_amount >= remaining;
 
     // @kb: rtl/lib/block/credit_barrier/release_rule
-    // The release comes with the credit that reaches the amount (sum_next, not sum), so
-    // credit_ready drops at once and no credit is taken after the barrier is satisfied.
+    // The release comes with the credit that reaches the amount (credit >= remaining, before
+    // remaining is lowered), so credit_ready drops at once and no credit is taken after the
+    // barrier is satisfied.
     always_ff @(posedge clk)
         if (!rst_n) begin
             armed    <= 1'b0;
@@ -62,19 +63,17 @@ module CreditBarrier #(
             armed    <= 1'b1;
             released <= cfg_waiting_amount == '0;
         end else if (take_credit) begin
-            released <= sum_next >= {1'b0, target};
+            released <= reach;
         end else if (released && clear_released) begin
             armed    <= 1'b0;
             released <= 1'b0;
         end
 
-    // Amount and sum mean something only while armed: no reset.
+    // remaining means something only while armed: no reset.
     always_ff @(posedge clk)
-        if (take_cfg) begin
-            target <= cfg_waiting_amount;
-            sum    <= '0;
-        end else if (take_credit) begin
-            sum <= sum_next;
-        end
+        if (take_cfg)
+            remaining <= cfg_waiting_amount;
+        else if (take_credit)
+            remaining <= remaining - credit_amount;
 
 endmodule
