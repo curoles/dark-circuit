@@ -25,6 +25,7 @@
 -F cache/cache_tag_ram/struct/cache_tag_ram.flist
 -F cache/cache_data_ram/struct/cache_data_ram.flist
 -F cache/direct_cache_rd_only/struct/direct_cache_rd_only.flist
+-F cache/direct_cache/struct/direct_cache.flist
 -F stack/struct/stack.flist
 -F return_address_stack/struct/return_address_stack.flist
 -F age_matrix/struct/age_matrix.flist
