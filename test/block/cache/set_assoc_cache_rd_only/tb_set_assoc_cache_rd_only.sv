@@ -16,8 +16,8 @@
  * invalidate cleared, ignored requests, both memory latencies.
  * Verilator runs 2, 3 and 4 ways with LRU and 4 ways random on 8 sets with 12-bit addresses
  * and 4 ways with LRU on 64 sets with 32-bit addresses, 20000 clocks each; Icarus 2 and 4
- * ways with LRU and 4 ways random on 8 sets, 1500 clocks. Stops at the first mismatch with
- * $fatal.
+ * ways with LRU and 4 ways random on 8 sets, 600 clocks (the struct version is slow
+ * there). Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -39,7 +39,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
 `ifdef VERILATOR
     localparam N_CLOCKS    = 20000;
 `else
-    localparam N_CLOCKS    = 1500;  // about 1 s at most for a library test
+    localparam N_CLOCKS    = 600;   // about 1 s at most for a library test (struct)
 `endif
     localparam TAGS        = WAYS + 1;  // tags of the addresses: lines are evicted, come back
     localparam MAX_LATENCY = 4;     // clocks from a line request to the answer of memory
