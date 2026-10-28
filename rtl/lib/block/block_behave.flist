@@ -25,6 +25,7 @@
 -F cache/cache_tag_ram/behave/cache_tag_ram.flist
 -F cache/cache_data_ram/behave/cache_data_ram.flist
 -F cache/direct_cache_rd_only/behave/direct_cache_rd_only.flist
+-F cache/direct_cache/behave/direct_cache.flist
 -F stack/behave/stack.flist
 -F return_address_stack/behave/return_address_stack.flist
 -F credit_barrier/behave/credit_barrier.flist
