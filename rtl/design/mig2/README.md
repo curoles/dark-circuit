@@ -158,7 +158,10 @@ The early division added 1.6 % of area (3 166 µm², 358 cells: the priority enc
 32-bit barrel shifter, the step count and its muxes); the longest path stays 5.7 ns.
 Dhrystone 11.02 → 10.54 ms (4.4 % faster); qsort and towers do not divide.
 
-Planned: the GShare predictor of `rtl/lib/block/gshare_branch_predictor` (struct version,
-its table in Sram1R1W) for the direction (wrong directions are 3.4 % of the cycles of
-Dhrystone); a faster multiplier, Spike cosim (lockstep), a Zbb slice, a single memory
-instead of two.
+Not planned for now: the GShare predictor of `rtl/lib/block/gshare_branch_predictor`. A
+trace model on top of the BTB and the return stack gives at most 1.9 % of Dhrystone
+(perfect directions would give 2.3 %), nothing on qsort (its branches compare random
+numbers) and 1.2 % on towers, for a table of flops (`kb/rtl/design/mig2/no_gshare.yaml`).
+
+Planned: a faster multiplier, Spike cosim (lockstep), a Zbb slice, a single memory instead
+of two.

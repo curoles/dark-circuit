@@ -1,0 +1,33 @@
+type: decision
+title: No GShare in Mig2 for now, the direction bubbles left do not pay for a table of flops
+date: 2026-10-27
+question: >
+  With the BTB in IF (16 entries, 2-bit counters), the return stack and the early division,
+  does a GShare direction predictor in ID (rtl/lib/block/gshare_branch_predictor) pay for its
+  table, which is flops in our flow (no SRAM macro)?
+decision: >
+  Not for now (user, 2026-10-27; the threshold was about 2 % of Dhrystone). The block stays in
+  the library.
+why: >
+  A trace model of today's Mig2, which gives the measured cond_branch, pred_taken and dir_jump
+  bubbles exactly, with GShare as the block works (read when IF fetches the branch, update in
+  EX with the counter carried, the branches of the 2 instructions before not in the history):
+  perfect directions in ID would save only 2.27 % of the cycles of Dhrystone, 6.45 % of qsort
+  and 1.47 % of towers. GShare of 256 entries and history 8 deciding on a BTB miss: 1.62,
+  -0.15 and 0.00 %; deciding every branch: 1.29, -6.95 and 0.92 %; 1024 entries and history
+  10 deciding every branch: 1.94, -6.76 and 1.19 %. 256 entries are 512 flops; the BTB with
+  688 flops added 16 % of area.
+rejected:
+  - choice: A longer history (16 to 64 branches)
+    why_not: >
+      Even without aliasing, a history of 64 gets 2.23 % of Dhrystone and 1.32 % of towers,
+      and qsort loses 11.9 %: its branches compare random numbers, so every history pattern
+      is new and its counter untrained. On Dhrystone 256 counters without history get the
+      same 1.6 % as GShare: the gain comes from more counters than the BTB's 16, not from
+      patterns.
+evidence: >
+  Dhrystone loses more to JAL misses in the 16-entry BTB (dir_jump, 42 400 bubbles, 2.3 % of
+  its cycles) than a GShare could save.
+code:
+  - rtl/lib/block/gshare_branch_predictor
+  - rtl/design/mig2/README.md
