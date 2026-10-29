@@ -3,13 +3,15 @@
  * decode.S lists instructions encoded by the assembler, each with its expected
  * decode (see decode.S). For every case the instruction goes to Mig2Decode and the
  * fields that mean something for its kind are compared: kind always; the control
- * groups br, mem, sys and muldiv always and alu for kinds that use the ALU, each
- * against a model of its own in this file; for legal instructions rd_we, uses_rs1 and
+ * groups br, mem, sys, muldiv and bitmanip always and alu for kinds that use the ALU,
+ * each against a model of its own in this file; for legal instructions rd_we, uses_rs1 and
  * uses_rs2, then rd and rd_src when rd_we (rd_src expected from the kind: LINK for JAL
- * and JALR, LOAD for loads, CSR for CSR instructions, MULDIV for M, else ALU), rs1
+ * and JALR, LOAD for loads, CSR for CSR instructions, MULDIV for M, BITMANIP for the Zbb
+ * of ComputeCoreBitmanip, else ALU), rs1
  * when uses_rs1, rs2 when uses_rs2, funct3 when the kind has it, alt for OP and OP-IMM
  * shifts, imm when the kind has an immediate (the CSR address for CSR instructions).
- * At the end every kind must have had a case.
+ * At the end every kind must have had a case; KIND_BITMANIP only with +zbb (its cases
+ * need a compiler that knows Zbb).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -39,6 +41,7 @@ module TbMig2Decode;
     // Expected: kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm.
     word_t       e [FIELDS];
     kind_e       exp_kind;    // kind expected, from the case file
+    kind_e       last_kind;   // kinds up to it must have had a case
     logic [31:0] tested;      // tested[k]: kind k had a case
 
     SimROM #(.DATA_SIZE(4), .ADDR_WIDTH(AW)) u_cases(
@@ -91,6 +94,7 @@ module TbMig2Decode;
             KIND_LOAD:           return RD_LOAD;
             KIND_CSR:            return RD_CSR;
             KIND_MULDIV:         return RD_MULDIV;
+            KIND_BITMANIP:       return RD_BITMANIP;
             default:             return RD_ALU;
         endcase
     endfunction
@@ -127,6 +131,20 @@ module TbMig2Decode;
             default: ;
         endcase
         return ctrl;
+    endfunction
+
+    // The operation of ComputeCoreBitmanip, by the encodings (RiscvInstrPkg); 0 for other
+    // kinds.
+    function automatic ComputeCoreBitmanipPkg::bm_op_e bitmanip_of(input kind_e kind,
+                                                                   input insn_t w);
+        if (kind == KIND_BITMANIP) begin
+            if (w ==? RiscvInstrPkg::SEXT_B)      return ComputeCoreBitmanipPkg::BM_SEXT_B;
+            if (w ==? RiscvInstrPkg::SEXT_H)      return ComputeCoreBitmanipPkg::BM_SEXT_H;
+            if (w ==? RiscvInstrPkg::ZEXT_H_RV32) return ComputeCoreBitmanipPkg::BM_ZEXT_H;
+            if (w ==? RiscvInstrPkg::ORC_B)       return ComputeCoreBitmanipPkg::BM_ORC_B;
+            if (w ==? RiscvInstrPkg::REV8_RV32)   return ComputeCoreBitmanipPkg::BM_REV8;
+        end
+        return ComputeCoreBitmanipPkg::bm_op_e'('0);
     endfunction
 
     // JALR is a return (pops the return-address stack) when rs1 is x1 or x5, unless rd = rs1.
@@ -202,6 +220,7 @@ module TbMig2Decode;
             check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));
+            check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));
             if (uses_alu(exp_kind))
                 check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, insn)));
             if (exp_kind != KIND_ILLEGAL) begin
@@ -226,7 +245,8 @@ module TbMig2Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        for (k = 0; k <= KIND_MULDIV; k = k + 1)
+        last_kind = $test$plusargs("zbb") ? KIND_BITMANIP : KIND_MULDIV;
+        for (k = 0; k <= last_kind; k = k + 1)
             if (!tested[k])
                 $fatal(1, "Mig2Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);

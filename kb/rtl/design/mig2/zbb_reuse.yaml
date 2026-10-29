@@ -33,6 +33,8 @@ evidence: >
   a or b) and group 4 (ROL, ROR, RORI: the shifter's rotate mode) added only controls and
   muxes to Mig2Alu (2026-10-28). Decode recognizes them by their encodings in RiscvInstrPkg
   (==?) and gives named controls; no funct3 or funct7 bits are coded by hand (user).
+  Group 3 (SEXT.B, SEXT.H, ZEXT.H, ORC.B, REV8) in ComputeCoreBitmanip: a kind and an rd
+  source of their own, the operation from the encodings (2026-10-29).
 code:
   - rtl/design/mig2/mig2_alu.sv#b_alu1
   - rtl/design/mig2/mig2_alu.sv#pick_a

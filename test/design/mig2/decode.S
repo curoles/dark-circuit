@@ -41,6 +41,7 @@
     .equ K_MRET,    14
     .equ K_WFI,     15
     .equ K_MULDIV,  16
+    .equ K_BITMANIP, 17
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -104,6 +105,11 @@
     .macro MULDIV op, funct3, rd, rs1, rs2          /* mul mulh mulhsu mulhu div divu rem remu */
     \op x\rd, x\rs1, x\rs2
     EXPECT K_MULDIV, 1, 1, 1, \rd, \rs1, \rs2, \funct3, 0, 0
+    .endm
+
+    .macro BITMANIP op, rd, rs1                     /* sext.b sext.h zext.h orc.b rev8 */
+    \op x\rd, x\rs1
+    EXPECT K_BITMANIP, 1, 1, 0, \rd, \rs1, 0, 0, 0, 0
     .endm
 
     .macro CSR op, funct3, rd, rs1, csr             /* csrrw csrrs csrrc: imm is the CSR address */
@@ -228,6 +234,13 @@ cases:
     OP     ror,    5,     1,  31, 30, 0
     RORI_  4,  5,  0
     RORI_  31, 1,  31
+
+    /*       op      rd  rs1   Zbb with one operand, in ComputeCoreBitmanip */
+    BITMANIP sext.b, 1,  2
+    BITMANIP sext.h, 31, 30
+    BITMANIP zext.h, 0,  31
+    BITMANIP orc.b,  5,  0
+    BITMANIP rev8,   17, 18
 #endif
 
     /*     op      funct3 rd  rs1 csr: addresses with bit 11 set must not be sign-extended */
@@ -252,4 +265,5 @@ cases:
     ILLEGAL 0x0000100f      /* fence.i: Zifencei extension */
     ILLEGAL 0x00200073      /* like ecall and ebreak, but imm=2 */
     ILLEGAL 0x0000000b      /* custom-0 opcode */
+    ILLEGAL 0x60701013      /* like sext.b (OP-IMM, imm[11:5] F7_ROT, funct3 1), rs2 field 7 */
 cases_end:

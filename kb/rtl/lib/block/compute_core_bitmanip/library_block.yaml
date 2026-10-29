@@ -40,3 +40,4 @@ code:
   - rtl/lib/block/pop_count/struct/pop_count.sv#u_wallace_tree
   - rtl/lib/block/compute_core_bitmanip/struct/compute_core_bitmanip.sv#u_priority_encoder
   - rtl/lib/block/compute_core_bitmanip/struct/compute_core_bitmanip.sv#u_pop_count
+  - rtl/design/mig2/mig2_core.sv#u_compute_core_bitmanip

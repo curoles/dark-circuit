@@ -37,6 +37,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             EBREAK:                                                 kind = KIND_EBREAK;
             CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind = KIND_CSR;
             MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU:         kind = KIND_MULDIV;
+            SEXT_B, SEXT_H, ZEXT_H_RV32, ORC_B, REV8_RV32:          kind = KIND_BITMANIP;
             MRET:                                                   kind = KIND_MRET;
             WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
@@ -81,6 +82,18 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     assign mm_unsigned = insn ==? MINU || insn ==? MAXU;
     assign rotate      = insn ==? ROL || insn ==? ROR || insn ==? RORI_RV32;
 
+    // Zbb with one operand, in ComputeCoreBitmanip: its operation, by the encodings.
+    function automatic ComputeCoreBitmanipPkg::bm_op_e bitmanip_of(insn_t w);
+        casez (w)
+            SEXT_B:      return ComputeCoreBitmanipPkg::BM_SEXT_B;
+            SEXT_H:      return ComputeCoreBitmanipPkg::BM_SEXT_H;
+            ZEXT_H_RV32: return ComputeCoreBitmanipPkg::BM_ZEXT_H;
+            ORC_B:       return ComputeCoreBitmanipPkg::BM_ORC_B;
+            REV8_RV32:   return ComputeCoreBitmanipPkg::BM_REV8;
+            default:     return ComputeCoreBitmanipPkg::bm_op_e'('0);  // other kinds: not used
+        endcase
+    endfunction
+
     // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0). A JAL or
     // JALR that writes a link register is a call (it pushes the return-address stack), a JALR
     // that reads one is a return (it pops), both for a swap (a coroutine: pop, then push).
@@ -111,6 +124,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.mem      = '0;
         dec.sys      = '0;
         dec.muldiv   = '0;
+        dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
                 dec.rd_we = 1'b1;  dec.imm = imm_u_of(insn);  dec.alu.a = A_ZERO;
@@ -153,6 +167,10 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             KIND_MULDIV: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_MULDIV;
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.muldiv = muldiv_of(dec.funct3);
+            end
+            KIND_BITMANIP: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_BITMANIP;  dec.uses_rs1 = 1'b1;
+                dec.bitmanip = bitmanip_of(insn);
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;  dec.imm = imm_csr;

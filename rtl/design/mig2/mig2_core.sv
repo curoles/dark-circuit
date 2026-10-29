@@ -14,7 +14,8 @@
  * - Mig2Regs: the register file, also for the debug port;
  * - Mig2Forward: results not yet in the register file, for ID;
  * - Mig2Pipe: the ID/EX and EX/MEM registers;
- * - Mig2Alu, Mig2Branch, Mig2Lsu (dmem requests), Mig2Csr, Mig2MulDiv: the parts of EX;
+ * - Mig2Alu, Mig2Branch, Mig2Lsu (dmem requests), Mig2Csr, Mig2MulDiv and the library
+ *   block ComputeCoreBitmanip (Zbb with one operand): the parts of EX;
  * - Mig2LoadData: the loaded value, in MEM/WB.
  *
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
@@ -102,6 +103,7 @@ module Mig2Core import Mig2Pkg::*; #(
     logic         ex_csr_illegal;
     word_t        ex_muldiv_result; // product, quotient or remainder of an M instruction
     logic         ex_muldiv_stall;
+    word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
     trap_t        ex_trap;          // instruction in EX faults: retires as a trap
@@ -210,16 +212,20 @@ module Mig2Core import Mig2Pkg::*; #(
         .clk, .rst_n, .valid(ex_fetch.valid), .dec(ex_dec), .rs1_data(ex_rs1_data),
         .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall), .result(ex_muldiv_result));
 
+    ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
+        .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
+
     // rd value: decode tells whether rd is written and where its value comes from.
     assign ex_rd_write = ex_done && ex_dec.rd_we && ex_dec.rd != '0;
     assign ex_rd       = (ex_fetch.valid && ex_dec.rd_we) ? ex_dec.rd : '0;
 
     always_comb
         case (ex_dec.rd_src)
-            RD_LINK:   ex_rd_data = ex_link;
-            RD_CSR:    ex_rd_data = ex_csr_rdata;
-            RD_MULDIV: ex_rd_data = ex_muldiv_result;
-            default:   ex_rd_data = ex_alu_result;      // loads: MEM/WB replaces it
+            RD_LINK:     ex_rd_data = ex_link;
+            RD_CSR:      ex_rd_data = ex_csr_rdata;
+            RD_MULDIV:   ex_rd_data = ex_muldiv_result;
+            RD_BITMANIP: ex_rd_data = ex_bitmanip_result;
+            default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
         endcase
 
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not

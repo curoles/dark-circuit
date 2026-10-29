@@ -45,16 +45,20 @@ if(DARK_CIRCUIT_RISCV)
 
     # Decode: unit test of Mig2Decode with cases encoded by the assembler; the Zbb cases only
     # when the compiler knows Zbb (DARK_CIRCUIT_RISCV_ZBB, cmake/riscv.cmake).
+    # +zbb: the testbench then wants a case of KIND_BITMANIP too.
     if(DARK_CIRCUIT_RISCV_ZBB)
         dc_add_riscv_program(design_mig2_decode SOURCES decode.S ARCH rv32im_zbb FLAGS -DHAVE_ZBB
                              LINK_FLAGS -T ${SW}/mig2.ld)
+        set(decode_zbb +zbb)
     else()
         dc_add_riscv_program(design_mig2_decode SOURCES decode.S ARCH rv32im
                              LINK_FLAGS -T ${SW}/mig2.ld)
+        set(decode_zbb)
     endif()
     dc_add_mainsim_test(design_mig2_decode TOP TbMig2Decode TB tb/tb_mig2_decode.sv
                         FLISTS ${FLISTS}
-                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_decode.hex)
+                        ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_decode.hex
+                             ${decode_zbb})
 
     # Programs run on TbMig2, built once; tb/tb_mig2.flist has the modules it instantiates.
     cmake_language(CALL dc_add_${SIM}_build design_mig2_sim TOP TbMig2 TB tb/tb_mig2.sv
@@ -263,7 +267,8 @@ if(DARK_CIRCUIT_RISCV)
 
         # rv32uzbb: Zbb, the groups done so far; only when the compiler knows Zbb.
         if(DARK_CIRCUIT_RISCV_ZBB)
-            foreach(test IN ITEMS andn orn xnor min minu max maxu rol ror rori)
+            foreach(test IN ITEMS andn orn xnor min minu max maxu rol ror rori
+                                  sext_b sext_h zext_h orc_b rev8)
                 mig2_program_test(rv32uzbb_${test} SOURCES ${RISCV_TESTS}/isa/rv32uzbb/${test}.S
                                   ARCH rv32i_zbb FLAGS ${RISCV_TESTS_FLAGS}
                                   ARGS ${RISCV_TESTS_ARGS} LABELS riscv-tests rv32uzbb)

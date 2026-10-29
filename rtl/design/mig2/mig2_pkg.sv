@@ -253,7 +253,8 @@ package Mig2Pkg;
         KIND_CSR,       // CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI
         KIND_MRET,
         KIND_WFI,
-        KIND_MULDIV     // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
+        KIND_MULDIV,    // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
+        KIND_BITMANIP   // SEXT.B, SEXT.H, ZEXT.H, ORC.B, REV8: Zbb in ComputeCoreBitmanip
     } kind_e;
 
     // Source of the value written to rd.
@@ -262,7 +263,8 @@ package Mig2Pkg;
         RD_LINK,        // pc + 4: JAL, JALR
         RD_LOAD,        // loaded data
         RD_CSR,         // old value of the CSR: CSR instructions
-        RD_MULDIV       // product or quotient/remainder: M instructions
+        RD_MULDIV,      // product or quotient/remainder: M instructions
+        RD_BITMANIP     // ComputeCoreBitmanip result: Zbb with one operand
     } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
@@ -331,6 +333,7 @@ package Mig2Pkg;
         mem_ctrl_t         mem;      // Mig2Lsu
         sys_ctrl_t         sys;      // Mig2Control, Mig2Csr
         muldiv_ctrl_t      muldiv;   // Mig2MulDiv
+        ComputeCoreBitmanipPkg::bm_op_e bitmanip;   // ComputeCoreBitmanip: the operation
         RiscvPkg::funct3_t funct3;   // operation within a part: ALU op, branch compare,
                                      // load/store size
         logic              alt;      // insn[30]: SUB instead of ADD, SRA/SRAI instead of SRL/SRLI
