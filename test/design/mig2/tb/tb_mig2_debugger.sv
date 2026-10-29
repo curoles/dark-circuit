@@ -35,6 +35,11 @@ module TbMig2Debugger import Mig2Pkg::*; (
     localparam insn_t SEMIHOST_ENTRY = 32'h01f0_1013;   // slli x0, x0, 0x1f
     localparam insn_t SEMIHOST_NOP   = 32'h4070_5013;   // srai x0, x0, 7
     localparam word_t ADP_STOPPED_APPLICATION_EXIT = 32'h0002_0026;
+    // Semihosting operations (RISC-V semihosting, from the Arm semihosting spec).
+    localparam word_t SYS_WRITEC        = 32'h03;
+    localparam word_t SYS_WRITE0        = 32'h04;
+    localparam word_t SYS_EXIT          = 32'h18;
+    localparam word_t SYS_EXIT_EXTENDED = 32'h20;
 
     // Fields of dbg_req driven by the tasks.
     reg_id_t reg_id;
@@ -101,25 +106,25 @@ module TbMig2Debugger import Mig2Pkg::*; (
         word_t reason;
         exited = 1'b0;
         status = 0;
-        read_reg(5'd10, op);
-        read_reg(5'd11, arg);
+        read_reg(RiscvPkg::REG_A0, op);
+        read_reg(RiscvPkg::REG_A1, arg);
         if (trace_fd != 0)
             $fdisplay(trace_fd, "%8d semihost op %h arg %h", cycle, op, arg);
         case (op)
-            32'h03:     // SYS_WRITEC: byte at arg
+            SYS_WRITEC:         // byte at arg
                 $write("%c", mem_byte(1'b0, arg));
-            32'h04: begin   // SYS_WRITE0: string at arg
+            SYS_WRITE0: begin   // string at arg
                 a = arg;
                 while (mem_byte(1'b0, a) != 0) begin
                     $write("%c", mem_byte(1'b0, a));
                     a = a + 1;
                 end
             end
-            32'h18: begin   // SYS_EXIT: on RV32 arg is the reason, no status
+            SYS_EXIT: begin     // on RV32 arg is the reason, no status
                 exited = 1'b1;
                 status = (arg == ADP_STOPPED_APPLICATION_EXIT) ? 0 : 1;
             end
-            32'h20: begin   // SYS_EXIT_EXTENDED: block {reason, status}
+            SYS_EXIT_EXTENDED: begin    // block {reason, status}
                 reason = mem_word(1'b0, arg);
                 exited = 1'b1;
                 status = (reason == ADP_STOPPED_APPLICATION_EXIT) ? mem_word(1'b0, arg + 4) : 1;
@@ -143,7 +148,7 @@ module TbMig2Debugger import Mig2Pkg::*; (
         word_t a0;
         if (mem_word(1'b1, halt_pc) !== INSN_EBREAK)
             $fatal(1, "Mig2: halted at %h, it is not EBREAK", halt_pc);
-        read_reg(5'd10, a0);
+        read_reg(RiscvPkg::REG_A0, a0);
         if (check_a0 && a0 !== expected_a0)
             $fatal(1, "Mig2: debug read of x10 gave %h, expected %h", a0, expected_a0);
         reg_wdata = a0 + 32'h100;

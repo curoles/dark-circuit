@@ -6,7 +6,9 @@
  * imm_i_of, imm_s_of, imm_b_of, imm_u_of, imm_j_of give the immediate of an instruction,
  * sign-extended to 32 bits; for RV64 sign-extend it to 64: imm = sext64(imm_i_of(insn)).
  * F3_* are the funct3 values that select the operation inside an opcode,
- * CAUSE_* the exception codes of mcause (privileged spec).
+ * CAUSE_* the exception codes of mcause, MISA_* and MSTATUS_* fields of these CSRs
+ * (privileged spec), REG_* integer registers by ABI name; alt_of and csr_read_only read a
+ * bit the spec gives a meaning.
  * Encodings of instructions are in RiscvInstrPkg, CSR addresses in RiscvCsrPkg
  * (both generated from riscv-opcodes).
  *
@@ -78,6 +80,26 @@ package RiscvPkg;
     localparam excp_code_t CAUSE_USER_ECALL          = 5'd8;
     localparam excp_code_t CAUSE_SUPERVISOR_ECALL    = 5'd9;
     localparam excp_code_t CAUSE_MACHINE_ECALL       = 5'd11;
+
+    // Integer registers by ABI name, those a design or a test needs: x1 (ra) and x5 (t0)
+    // are the link registers of the return-address hints of JAL and JALR, a0 and a1 the
+    // first arguments (semihosting).
+    localparam logic [4:0] REG_RA = 5'd1;
+    localparam logic [4:0] REG_T0 = 5'd5;
+    localparam logic [4:0] REG_A0 = 5'd10;
+    localparam logic [4:0] REG_A1 = 5'd11;
+
+    // misa: MXL in the two top bits (1: XLEN 32), one bit per extension, its letter - 'A'.
+    localparam logic [1:0] MISA_MXL_32 = 2'd1;
+    localparam int         MISA_EXT_I  = "I" - "A";
+    localparam int         MISA_EXT_M  = "M" - "A";
+
+    // mstatus: bit of MIE, of MPIE, and the low bit of MPP (2 bits: the privilege before
+    // the trap); PRIV_M is machine mode.
+    localparam int         MSTATUS_MIE  = 3;
+    localparam int         MSTATUS_MPIE = 7;
+    localparam int         MSTATUS_MPP  = 11;
+    localparam logic [1:0] PRIV_M       = 2'd3;
 
     /* verilator lint_on UNUSEDPARAM */
 
@@ -179,6 +201,22 @@ package RiscvPkg;
         f.word = insn;
         return {{11{f.j.imm_20}}, f.j.imm_20, f.j.imm_19_12, f.j.imm_11, f.j.imm_10_1, 1'b0};
     endfunction
+
+    // alt: insn[30], bit 5 of funct7, selects SUB instead of ADD and SRA/SRAI instead of
+    // SRL/SRLI (and marks ANDN, ORN, XNOR of Zbb).
+    function automatic logic alt_of(riscv_insn_t insn);
+        insn_fmt_t f;
+        f.word = insn;
+        return f.r.funct7[5];
+    endfunction
+
+    // A CSR is read-only when bits 11:10 of its address are 11 (privileged spec, CSR map);
+    // the other bits of the address do not matter.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic logic csr_read_only(logic [11:0] addr);
+        return addr[11:10] == 2'b11;
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
 
     // A 32-bit value sign-extended to 64 bits: an immediate for RV64 (XLEN = 64).
     function automatic logic [63:0] sext64(logic [31:0] v);

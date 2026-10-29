@@ -54,7 +54,7 @@ package Mig2Pkg;
     /* verilator lint_on UNUSEDSIGNAL */
 
     // Instructions with fixed encoding.
-    localparam insn_t INSN_EBREAK = 32'h0010_0073;
+    localparam insn_t INSN_EBREAK = RiscvInstrPkg::EBREAK;
 
     /* verilator lint_on UNUSEDPARAM */
 

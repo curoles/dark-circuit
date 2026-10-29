@@ -141,14 +141,18 @@ module TbMig1Decode;
                  ebreak: kind == KIND_EBREAK, illegal: kind == KIND_ILLEGAL};
     endfunction
 
-    // M controls expected, from funct3 (MUL 000, MULH 001, MULHSU 010, MULHU 011,
-    // DIV 100, DIVU 101, REM 110, REMU 111).
-    function automatic muldiv_ctrl_t muldiv_of(input kind_e kind, input funct3_t f3);
+    // M controls expected, by the encodings of the instructions (RiscvInstrPkg).
+    function automatic muldiv_ctrl_t muldiv_of(input kind_e kind, input insn_t w);
+        logic div;
+        logic rem;
         if (kind != KIND_MULDIV)
             return '0;
-        return '{en: 1'b1, div: f3[2], rem: f3[2] && f3[1], mul_lo: f3 == F3_MUL,
-                 a_signed: f3 == F3_MULH || f3 == F3_MULHSU, b_signed: f3 == F3_MULH,
-                 div_signed: f3[2] && !f3[0]};
+        rem = w ==? RiscvInstrPkg::REM || w ==? RiscvInstrPkg::REMU;
+        div = w ==? RiscvInstrPkg::DIV || w ==? RiscvInstrPkg::DIVU || rem;
+        return '{en: 1'b1, div: div, rem: rem, mul_lo: w ==? RiscvInstrPkg::MUL,
+                 a_signed: w ==? RiscvInstrPkg::MULH || w ==? RiscvInstrPkg::MULHSU,
+                 b_signed: w ==? RiscvInstrPkg::MULH,
+                 div_signed: w ==? RiscvInstrPkg::DIV || w ==? RiscvInstrPkg::REM};
     endfunction
 
     // Compare one field of case cn with instruction w.
@@ -178,7 +182,7 @@ module TbMig1Decode;
             check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind, e[4][4:0], e[5][4:0])));
             check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
-            check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));
+            check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
             if (uses_alu(exp_kind))
                 check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, e[8][0])));
             if (exp_kind != KIND_ILLEGAL) begin

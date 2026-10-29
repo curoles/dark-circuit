@@ -277,7 +277,8 @@ module TbMig1;
                 done   = 1'b1;
             end else begin
                 halted = 1'b1;
-                u_debugger.debug_and_resume(written[10], shadow[10]);
+                u_debugger.debug_and_resume(written[RiscvPkg::REG_A0],
+                                            shadow[RiscvPkg::REG_A0]);
                 resumes = resumes - 1;
                 halted  = 1'b0;
             end

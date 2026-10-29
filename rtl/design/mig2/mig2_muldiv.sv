@@ -76,7 +76,7 @@ module Mig2MulDiv import Mig2Pkg::*; (
     always_comb
         if (!dec.muldiv.div)  result = dec.muldiv.mul_lo ? product.lo : product.hi;
         else if (div_by_zero) result = dec.muldiv.rem ? rs1_data : '1;
-        else if (overflow)    result = dec.muldiv.rem ? '0 : 32'h8000_0000;
+        else if (overflow)    result = dec.muldiv.rem ? '0 : {1'b1, {(WIDTH-1){1'b0}}};
         else                  result = dec.muldiv.rem ? remainder : quotient;
 
 endmodule

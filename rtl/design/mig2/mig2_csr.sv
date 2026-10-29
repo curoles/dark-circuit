@@ -48,7 +48,9 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     output wire      illegal,    // CSR does not exist, or write to a read-only CSR
     output csr_t     csr         // mtvec and mepc, for traps and MRET
 );
-    localparam word_t MISA = 32'h4000_1100;    // MXL=1: 32-bit; extensions I, M
+    // misa: XLEN 32, extensions I and M.
+    localparam word_t MISA = {MISA_MXL_32, {(WIDTH-2){1'b0}}} | (word_t'(1) << MISA_EXT_I) |
+                             (word_t'(1) << MISA_EXT_M);
 
     logic [11:0] addr;          // CSR address (immediate of the CSR instruction)
     assign addr = dec.imm[11:0];
@@ -78,10 +80,11 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     // rs1 field: register, or immediate of the I forms.
     assign src       = imm_form ? {{(WIDTH-REG_ID_WIDTH){1'b0}}, dec.rs1} : rs1_data;
     assign writes    = dec.funct3 == F3_CSRRW || dec.funct3 == F3_CSRRWI || dec.rs1 != '0;
-    assign read_only = addr[11:10] == 2'b11;
+    assign read_only = csr_read_only(addr);
 
-    // mstatus: MPP (12:11) = 3, MPIE (7), MIE (3).
-    assign mstatus = {{(WIDTH-13){1'b0}}, 2'b11, 3'b0, mstatus_mpie, 3'b0, mstatus_mie, 3'b0};
+    // mstatus: MPP = M (only machine mode), MPIE, MIE; other bits 0.
+    assign mstatus = (word_t'(PRIV_M) << MSTATUS_MPP) | (word_t'(mstatus_mpie) << MSTATUS_MPIE) |
+                     (word_t'(mstatus_mie) << MSTATUS_MIE);
 
     // Read: the old value of the CSR at addr.
     always_comb begin
@@ -124,8 +127,8 @@ module Mig2Csr import Mig2Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     logic   new_mpie;
     iaddr_t new_iaddr;      // new value of mtvec, mepc without bits 1:0
     logic   mret;           // MRET completes
-    assign new_mie   = new_value[3];
-    assign new_mpie  = new_value[7];
+    assign new_mie   = new_value[MSTATUS_MIE];
+    assign new_mpie  = new_value[MSTATUS_MPIE];
     assign new_iaddr = new_value[WIDTH-1:IADDR_START];
     assign mret      = done && dec.sys.mret;
 

@@ -66,7 +66,7 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
 
     // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0).
     function automatic logic is_link(reg_id_t r);
-        return r == 5'd1 || r == 5'd5;
+        return r == REG_RA || r == REG_T0;
     endfunction
 
     always_comb begin
@@ -76,7 +76,7 @@ module Mig1Decode import Mig1Pkg::*, RiscvPkg::*; (
         dec.rs1    = f.r.rs1;
         dec.rs2    = f.r.rs2;
         dec.funct3 = f.r.funct3;
-        dec.alt    = f.r.funct7[5];    // insn[30]: SUB, SRA, SRAI
+        dec.alt    = alt_of(insn);     // insn[30]: SUB, SRA, SRAI
 
         // Per kind: registers written and read, source of rd, format of the immediate,
         // controls of the parts. Defaults: nothing written or read, I-type immediate,

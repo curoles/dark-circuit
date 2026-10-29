@@ -145,6 +145,11 @@ module TbMig2Alu;
                f3 == F3_AND;
     endfunction
 
+    // Immediate of SRAI: {funct7 of SRAI, shamt}, from its encoding.
+    function automatic word_t srai_imm(input logic [4:0] shamt);
+        return {20'h0, RiscvInstrPkg::SRAI[31:25], shamt};
+    endfunction
+
     // OP-IMM immediate from 12 bits as Mig2Decode gives it (alt is imm[10]).
     function automatic word_t imm12(input logic [11:0] v);
         return {{20{v[11]}}, v};
@@ -180,9 +185,9 @@ module TbMig2Alu;
             for (j = 0; j < 32; j = j + 31) begin
                 check(KIND_OP_IMM, F3_SLL,     1'b0, edges[i], '0, j,           '0);  // SLLI
                 check(KIND_OP_IMM, F3_SRL_SRA, 1'b0, edges[i], '0, j,           '0);  // SRLI
-                check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, 32'h400 | j, '0);  // SRAI
+                check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, srai_imm(5'(j)), '0);
             end
-            check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, 32'h401, '0);          // SRAI 1
+            check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, srai_imm(5'd1), '0);
             check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd0));           // RORI
             check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd1));
             check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd31));
