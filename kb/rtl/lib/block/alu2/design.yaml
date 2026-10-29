@@ -1,0 +1,36 @@
+type: decision
+title: Alu2, the integer operations of a CPU's ALU as a library block, controls from ctrl_of
+date: 2026-10-29
+question: >
+  Mig2Alu held the integer operations of RISC-V (Alu1 with b inverted, the compares of
+  SLT/SLTU, MIN/MAX, the BarrelShifter) next to Mig2's choice of operands, decoded from
+  funct3 and alt in EX. Mig3 starts as a copy of Mig2. Where do these operations go, and how
+  does a CPU tell the block what to do?
+decision: >
+  A library block Alu2 (rtl/lib/block/alu2): out = a op b, 19 operations (Alu2Pkg::op_e),
+  WIDTH a power of 2. It instantiates Alu1 (ADD, SUB, AND, OR, XOR; b inverted for ANDN,
+  ORN, XNOR) and BarrelShifter. A CPU names the operation in decode, calls
+  Alu2Pkg::ctrl_of(op) there, and carries the controls (ctrl_t) to EX: Alu2 decodes nothing.
+  No instruction set inside; the semantics are those RISC-V needs (shift by b mod WIDTH,
+  SLT/SLTU 0 or 1). The operands (rs1, pc or 0; rs2 or imm) stay in the CPU's wrapper.
+why: >
+  Mig3 and later CPUs instantiate the block instead of copying Mig2Alu (user: Alu2 before
+  the single memory). Decoding in EX lengthens the forwarding loop, Mig2's longest path;
+  ctrl_of in decode keeps the op enum readable for the CPU and EX short. Alu1 is reused
+  (reuse first): it is built and tested in both versions.
+rejected:
+  - choice: The op enum alone as Alu2's input, decoded inside
+    why_not: The decode would be in EX, on the forwarding loop.
+  - choice: An adder and logic of Alu2's own instead of Alu1
+    why_not: >
+      Alu1's unused commands (INC, DEC, NOT, ...) cost a few muxes; reuse first, measure
+      later.
+  - choice: A RISC-V block, decoding funct3 and alt itself
+    why_not: Instruction fields belong to the CPU's decode; the block stays reusable.
+evidence: >
+  Behave version and its unit test (every operation; WIDTH 4 exhaustive, 32 and 64 with
+  edge operands, every shift amount, random), 2026-10-29.
+code:
+  - rtl/lib/block/alu2/alu2_pkg.sv#ctrl_of
+  - rtl/lib/block/alu2/behave/alu2.sv#u_alu1
+  - test/block/alu2/tb_alu2.sv#model
