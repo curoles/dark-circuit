@@ -100,10 +100,10 @@ only new logic gets a part of its own. Done, all in Mig2Alu: ANDN, ORN, XNOR, wh
 Alu1's AND, OR, XOR with operand b inverted (`alu_ctrl_t.b_inv`); MIN, MINU, MAX, MAXU,
 where the compare of SLT/SLTU (Alu1's subtraction) selects a or b (`minmax`, `minmax_max`,
 `minmax_unsigned`); ROL, ROR, RORI, which its BarrelShifter rotates (`rotate`). Decode
-recognizes them by their encodings in RiscvInstrPkg. Next, a part of its own, Mig2Bitmanip:
-SEXT.B, SEXT.H,
-ZEXT.H, ORC.B, REV8, CLZ, CTZ (PriorityEncoder), CPOP (a PopCount block). The encodings of all
-of Zbb are in RiscvInstrPkg (`tools/riscv_opcodes.sh`, extensions `rv_zbb rv32_zbb`).
+recognizes them by their encodings in RiscvInstrPkg. Next, the new logic: SEXT.B, SEXT.H,
+ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP, in the library block ComputeCoreBitmanip, which Mig3
+will use too. The encodings of all of Zbb are in RiscvInstrPkg (`tools/riscv_opcodes.sh`,
+extensions `rv_zbb rv32_zbb`).
 
 Tests: riscv-tests `rv32uzbb`, one per instruction, the Zbb cases of `decode.S` and
 Mig2Alu's unit test. `rv32uzbb` and the cases of `decode.S` need a compiler that knows Zbb

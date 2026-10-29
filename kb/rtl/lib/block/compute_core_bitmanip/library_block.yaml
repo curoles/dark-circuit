@@ -1,0 +1,36 @@
+type: decision
+title: The one-operand Zbb operations are a library block, ComputeCoreBitmanip
+date: 2026-10-28
+question: >
+  Where does the new logic of Zbb go (SEXT.B, SEXT.H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP),
+  the instructions that reuse nothing of Mig2Alu, so that the CPUs after Mig2 have it too?
+decision: >
+  A library block, ComputeCoreBitmanip: out = op(in), op from its own package (bm_op_e, one
+  value per instruction), WIDTH a power of 2, 16 or more. Mig2 instantiates it, instead of
+  a part of its own (Mig2Bitmanip). The struct version: CLZ and CTZ share one
+  PriorityEncoder (CTZ on the bit-reversed operand, which is only wires), CPOP is a new
+  library block PopCount (WallaceTree with one row per bit, then an add). The name is the
+  user's: a block of a CPU's compute core, not bit manipulation in general.
+why: >
+  All eight take one operand and share no hardware with Mig2Alu (zbb_reuse). Mig3 starts as
+  a copy of Mig2 and a later CPU has several integer pipes: from the library they
+  instantiate the block instead of copying a part, and an out-of-order core can give it to
+  one pipe only. Its own op enum keeps it free of Mig2Pkg.
+rejected:
+  - choice: A part of Mig2, Mig2Bitmanip (the plan until 2026-10-28)
+    why_not: Mig3 would copy it, and the copies drift apart.
+  - choice: The name Bitmanip, or BitmanipUnary (mine)
+    why_not: >
+      Bitmanip claims all of bit manipulation, but half of Zbb is in the ALU; the user
+      chose ComputeCoreBitmanip.
+  - choice: CPOP from a WallaceTree inside this block
+    why_not: A count of ones is useful elsewhere; the user chose a PopCount block.
+evidence: >
+  Behave version and its unit test (WIDTH 16, 32, 64; every count of CLZ, CTZ, CPOP must
+  happen), 2026-10-28: 9 of 9 mutants caught on Icarus and Verilator.
+relies_on:
+  - rtl/design/mig2/zbb_reuse
+code:
+  - rtl/lib/block/compute_core_bitmanip/compute_core_bitmanip_pkg.sv#bm_op_e
+  - rtl/lib/block/compute_core_bitmanip/behave/compute_core_bitmanip.sv#ComputeCoreBitmanip
+  - test/block/compute_core_bitmanip/tb_compute_core_bitmanip.sv#TbComputeCoreBitmanipCheck

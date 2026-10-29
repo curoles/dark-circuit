@@ -8,8 +8,9 @@ decision: >
   An instruction that reuses hardware Mig2Alu already has goes into Mig2Alu: ANDN, ORN, XNOR
   are Alu1's AND, OR, XOR with operand b inverted (alu_ctrl_t.b_inv; same funct3, only
   insn[30] differs); MIN/MAX use the comparison it computes for SLT/SLTU; ROL/ROR/RORI the
-  rotate mode of its BarrelShifter. Only genuinely new logic gets a part of its own,
-  Mig2Bitmanip: SEXT/ZEXT, ORC.B, REV8, CLZ/CTZ (PriorityEncoder), CPOP (a PopCount block).
+  rotate mode of its BarrelShifter. Only genuinely new logic gets a block of its own, the
+  library block ComputeCoreBitmanip (compute_core_bitmanip/library_block): SEXT/ZEXT,
+  ORC.B, REV8, CLZ/CTZ, CPOP.
   The encodings of all of Zbb are in RiscvInstrPkg (tools/riscv_opcodes.sh). Tests:
   riscv-tests rv32uzbb, one per instruction, the Zbb cases of decode.S and Mig2Alu's unit
   test; rv32uzbb and decode.S's cases only when the compiler knows Zbb
