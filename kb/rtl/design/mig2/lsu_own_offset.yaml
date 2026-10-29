@@ -1,0 +1,33 @@
+type: decision
+title: Mig2Lsu checks alignment with its own rs1[1:0] + imm[1:0], not the ALU's address
+date: 2026-10-29
+question: >
+  The alignment check of loads and stores took addr[1:0] from the result of Mig2Alu. A
+  misaligned trap flushes ID, and ID's moving decides the push and pop of the return-address
+  stack; with the muxes of Zbb in Mig2Alu this became the longest path, 6.2 ns. How can the
+  trap not wait for the ALU?
+decision: >
+  Mig2Lsu adds rs1[1:0] + imm[1:0] itself and uses that offset for the alignment and the
+  strobes. The full address, for dmem and mtval, still comes from Mig2Alu: neither is on the
+  redirect path. Mig2Core asserts that the two offsets agree for every load and store.
+why: >
+  The low bits of a sum depend only on the low bits of the operands, so a 2-bit adder next
+  to the ALU gives them at once. The path in the sky130 report: dec.alu.b_imm in the ID/EX
+  register, operand b, the inversion of b (Zbb), Alu1's adder, the result mux with the
+  min/max select (Zbb), misaligned, the trap, flush_id, id_moves, the push of the
+  return-address stack. Behaviour does not change.
+rejected:
+  - choice: Leave it at 6.2 ns
+    why_not: 0.5 ns (8 %) for two muxes that loads and stores never use.
+  - choice: A 32-bit adder of its own for the load/store address
+    why_not: Only the two low bits are on the path; the rest of the address is not.
+  - choice: Take the low bits from Alu1's adder, before the result mux
+    why_not: Still behind the mux of operand b and the inversion of b.
+evidence: >
+  Before (make mig2_synth TECH=sky130, 2026-10-29): 204 397 um2, 23 570 cells, 6.2 ns, the
+  path above. After (the same run): 204 668 um2, 23 200 cells, 5.9 ns; the longest path is
+  now ID's: from the instruction word (imem_rsp) through decode and ID's redirect to the pc
+  register of Mig2Fetch.
+code:
+  - rtl/design/mig2/mig2_lsu.sv#offset
+  - rtl/design/mig2/mig2_core.sv#a_lsu_offset
