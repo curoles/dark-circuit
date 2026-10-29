@@ -6,8 +6,8 @@
  * zeros. The model computes differently from the block: the sign extension by an arithmetic
  * shift, CLZ and CTZ by shifting until a one comes out, CPOP by clearing the lowest one. In
  * the end the test checks that every count 0..WIDTH of CLZ, CTZ and CPOP happened. Runs with
- * WIDTH 16, 32, 64; 5000 random words on Verilator, 200 on Icarus. Stops at the first
- * mismatch with $fatal.
+ * WIDTH 16, 32 and, on Verilator, 64; 5000 random words on Verilator, 200 on Icarus. Stops at
+ * the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -152,7 +152,11 @@ module TbComputeCoreBitmanip;
 
     TbComputeCoreBitmanipCheck #(.WIDTH(16)) u_check_16(.done(done16));
     TbComputeCoreBitmanipCheck #(.WIDTH(32)) u_check_32(.done(done32));
+`ifdef VERILATOR
     TbComputeCoreBitmanipCheck #(.WIDTH(64)) u_check_64(.done(done64));
+`else
+    assign done64 = 1'b1;   // Icarus: the time (about 1 s at most for a library test)
+`endif
 
     initial begin
         wait (done16 && done32 && done64);

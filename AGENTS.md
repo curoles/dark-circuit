@@ -181,9 +181,10 @@ Icarus means Icarus 13, the version the project uses.
   for `s.field` or `v[3:0]` inside `always_comb`; results are right (the process is
   sensitive to all bits). A function or an `assign` into a signal avoids the message.
 - Icarus does not find a name imported from a package inside an instance port
-  expression, `.left_right(funct3 == F3_SLL)`: it silently makes an implicit wire.
-  For code that must run on Icarus, compute the value with `assign` into a signal and
-  connect the signal.
+  expression, `.left_right(funct3 == F3_SLL)`, nor a name alone, `.in2(BM_CTZ)`: it
+  silently makes an implicit wire. For code that must run on Icarus, compute the value with
+  `assign` into a signal and connect the signal, or write the name with its package,
+  `.in2(ComputeCoreBitmanipPkg::BM_CTZ)`.
 - Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
   (IMPLICIT; in an expression always an error), and every design is built with it.
   sv2v declares an undeclared name of a port connection as a wire, and Yosys makes
