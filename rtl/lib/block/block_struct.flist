@@ -33,3 +33,4 @@
 -F bit_matrix_lru/struct/bit_matrix_lru.flist
 -F cache/cache_replacement/struct/cache_replacement.flist
 -F cache/set_assoc_cache_rd_only/struct/set_assoc_cache_rd_only.flist
+-F pop_count/struct/pop_count.flist

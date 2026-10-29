@@ -27,10 +27,12 @@ rejected:
     why_not: A count of ones is useful elsewhere; the user chose a PopCount block.
 evidence: >
   Behave version and its unit test (WIDTH 16, 32, 64; every count of CLZ, CTZ, CPOP must
-  happen), 2026-10-28: 9 of 9 mutants caught on Icarus and Verilator.
+  happen), 2026-10-28: 9 of 9 mutants caught on Icarus and Verilator. PopCount (behave and
+  struct, WIDTH 1 to 64, also not a power of 2) and its unit test, 2026-10-28.
 relies_on:
   - rtl/design/mig2/zbb_reuse
 code:
   - rtl/lib/block/compute_core_bitmanip/compute_core_bitmanip_pkg.sv#bm_op_e
   - rtl/lib/block/compute_core_bitmanip/behave/compute_core_bitmanip.sv#ComputeCoreBitmanip
   - test/block/compute_core_bitmanip/tb_compute_core_bitmanip.sv#TbComputeCoreBitmanipCheck
+  - rtl/lib/block/pop_count/struct/pop_count.sv#u_wallace_tree
