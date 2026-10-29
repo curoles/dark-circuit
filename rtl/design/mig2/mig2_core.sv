@@ -198,8 +198,13 @@ module Mig2Core import Mig2Pkg::*; #(
         .branch(ex_branch), .link(ex_link));
 
     Mig2Lsu u_mig2_lsu(
-        .valid(ex_fetch.valid), .dec(ex_dec), .addr(ex_alu_result), .rs2_data(ex_rs2_data),
-        .dmem_req, .misaligned(ex_lsu_misaligned), .mem(ex_lsu_mem));
+        .valid(ex_fetch.valid), .dec(ex_dec), .rs1_data(ex_rs1_data), .addr(ex_alu_result),
+        .rs2_data(ex_rs2_data), .dmem_req, .misaligned(ex_lsu_misaligned), .mem(ex_lsu_mem));
+
+    // Mig2Lsu adds the byte offset of its own; it is the low bits of the ALU's address.
+    `DC_ASSERT(a_lsu_offset, !(ex_fetch.valid && (ex_dec.mem.read || ex_dec.mem.write)) ||
+               byte_offset_t'(ex_rs1_data[DADDR_START-1:0] + ex_dec.imm[DADDR_START-1:0]) ==
+               ex_alu_result[DADDR_START-1:0])
 
     assign ex_load_offset = ex_alu_result[DADDR_START-1:0];
 

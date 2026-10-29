@@ -4,13 +4,16 @@
  * the bytes of rs2 are repeated over the word and wr_strb selects the bytes at addr.
  * A load sends the read in EX; the word comes from dmem 1 clock later, in MEM/WB, where
  * Mig2LoadData takes the loaded value from it.
- * misaligned=1 when addr is not aligned to the access size (LW, SW: 4 bytes;
- * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete.
+ * misaligned=1 when the address is not aligned to the access size (LW, SW: 4 bytes;
+ * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete. The byte
+ * in the word (offset: alignment, strobes) is rs1[1:0] + imm[1:0], added here: the low bits
+ * of a sum depend only on the low bits of the operands, so the trap does not wait for the
+ * adder and result mux of Mig2Alu; addr, the same sum, gives the word address.
  * mem describes the access for the retire trace (RVFI): bytes read or written; the word
  * read is added in MEM/WB.
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. In: addr is the result of
- * Mig2Alu, rs2_data comes from the ID/EX register. Out: dmem_req goes straight out of
+ * Mig2Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
  * Mig2Core to data memory (SimRAM in Mig2Cpu); misaligned goes to Mig2Control, which
  * makes it a misaligned load or store trap with mtval = addr; mem goes into the retire
  * entry. The loaded word comes back from dmem in MEM/WB, where Mig2LoadData picks its
@@ -21,11 +24,13 @@
  */
 module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     input  wire              valid,      // instruction in EX is valid
-    // Only mem and funct3 are used.
+    // Of dec only mem, funct3 and the low bits of imm are used, of rs1_data the low bits, of
+    // addr the word address.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t         dec,
+    input  word_t            rs1_data,   // base address
+    input  word_t            addr,       // rs1 + imm, from Mig2Alu
     /* verilator lint_on UNUSEDSIGNAL */
-    input  word_t            addr,
     input  word_t            rs2_data,   // store data
     output dmem_req_t        dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
@@ -36,8 +41,9 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     logic                   odd;        // odd byte address
     logic [7:0]             rs2_b;
     logic [15:0]            rs2_h;
-    assign offset = addr[DADDR_START-1:0];
-    assign odd    = addr[0];
+    // @kb: rtl/design/mig2/lsu_own_offset
+    assign offset = rs1_data[DADDR_START-1:0] + dec.imm[DADDR_START-1:0];
+    assign odd    = offset[0];
     assign rs2_b  = rs2_data[7:0];
     assign rs2_h  = rs2_data[15:0];
 

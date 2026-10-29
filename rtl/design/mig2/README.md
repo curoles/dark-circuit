@@ -141,12 +141,12 @@ and towers do not divide; rv32um div and rem 457 → 349 cycles, divu and remu 4
 
 ## Area and speed (sky130)
 
-Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-27:
+Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-29:
 
 | Mig2Core | |
 |---|---|
-| Area | 199 474 µm² (0.199 mm²), 22 353 cells |
-| Longest logic path (ABC estimate) | 5.7 ns, about 176 MHz |
+| Area | 204 668 µm² (0.205 mm²), 23 200 cells |
+| Longest logic path (ABC estimate) | 5.9 ns, about 168 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -156,6 +156,8 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 | Return-address stack in ID | 194 763 | 5.9 |
 | ID's target: pc + imm into the last mux | 196 308 | 5.7 |
 | Division with early start | 199 474 | 5.7 |
+| Zbb, all 18 instructions | 204 397 | 6.2 |
+| Alignment offset in Mig2Lsu | 204 668 | 5.9 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -177,6 +179,13 @@ pipeline, where taken branches and returns cost more bubbles, gains more from bo
 The early division added 1.6 % of area (3 166 µm², 358 cells: the priority encoder, the
 32-bit barrel shifter, the step count and its muxes); the longest path stays 5.7 ns.
 Dhrystone 11.02 → 10.54 ms (4.4 % faster); qsort and towers do not divide.
+All of Zbb added 2.5 % of area (4 923 µm², 1 217 cells: ComputeCoreBitmanip with its
+PopCount and priority encoder, the controls and muxes in Mig2Alu), and the longest path
+became 6.2 ns: the alignment check of a load or store took the low bits of the address from
+the result of Mig2Alu, behind Zbb's inversion of operand b and its min/max select, and a
+misaligned trap flushes ID, which decides the push of the return-address stack. Mig2Lsu now
+adds rs1[1:0] + imm[1:0] for the check itself (kb `lsu_own_offset`): 5.9 ns, and the longest
+path is ID's: from the instruction word through decode and ID's redirect to the pc register.
 
 Not planned for now: the GShare predictor of `rtl/lib/block/gshare_branch_predictor`. A
 trace model on top of the BTB and the return stack gives at most 1.9 % of Dhrystone
