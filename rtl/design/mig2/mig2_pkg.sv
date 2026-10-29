@@ -254,7 +254,7 @@ package Mig2Pkg;
         KIND_MRET,
         KIND_WFI,
         KIND_MULDIV,    // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
-        KIND_BITMANIP   // SEXT.B, SEXT.H, ZEXT.H, ORC.B, REV8: Zbb in ComputeCoreBitmanip
+        KIND_BITMANIP   // Zbb in ComputeCoreBitmanip: SEXT.B/H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP
     } kind_e;
 
     // Source of the value written to rd.

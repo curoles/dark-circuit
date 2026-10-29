@@ -7,8 +7,8 @@ bubbles, pipeline view, tests, logs (here `DARK_CIRCUIT_MIG2_TRACE` and
 `DARK_CIRCUIT_MIG2_KANATA`), benchmark and cycle ceilings, synthesis (`make mig2_synth`
 here); this file describes what Mig2 changes from Mig1: a BTB in IF and two more
 benchmarks (2026-10-26), a return-address stack in ID and a division that skips the
-leading zeros of the dividend (2026-10-27), the Zbb extension group by group
-(2026-10-28). Mig1 does not take them: it stays the small core. Why the design is as it
+leading zeros of the dividend (2026-10-27), the Zbb extension, all of it, group by group
+(2026-10-28, 29). Mig1 does not take them: it stays the small core. Why the design is as it
 is, with the options rejected: `kb/rtl/design/mig2/`.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
@@ -101,11 +101,10 @@ Alu1's AND, OR, XOR with operand b inverted (`alu_ctrl_t.b_inv`); MIN, MINU, MAX
 where the compare of SLT/SLTU (Alu1's subtraction) selects a or b (`minmax`, `minmax_max`,
 `minmax_unsigned`); ROL, ROR, RORI, which its BarrelShifter rotates (`rotate`). Decode
 recognizes them by their encodings in RiscvInstrPkg. The new logic, Zbb with one operand,
-is the library block ComputeCoreBitmanip, a part of EX (which Mig3 will use too): done
-SEXT.B, SEXT.H, ZEXT.H, ORC.B, REV8 (`KIND_BITMANIP`, `rd_src` `RD_BITMANIP`, the operation
-in `decoded_t.bitmanip`); next CLZ, CTZ, CPOP, which the block already does. The encodings
-of all of Zbb are in RiscvInstrPkg (`tools/riscv_opcodes.sh`, extensions
-`rv_zbb rv32_zbb`).
+is the library block ComputeCoreBitmanip, a part of EX (which Mig3 will use too): SEXT.B,
+SEXT.H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP (`KIND_BITMANIP`, `rd_src` `RD_BITMANIP`, the
+operation in `decoded_t.bitmanip`). The encodings of all of Zbb are in RiscvInstrPkg
+(`tools/riscv_opcodes.sh`, extensions `rv_zbb rv32_zbb`).
 
 Tests: riscv-tests `rv32uzbb`, one per instruction, the Zbb cases of `decode.S` and
 Mig2Alu's unit test. `rv32uzbb` and the cases of `decode.S` need a compiler that knows Zbb

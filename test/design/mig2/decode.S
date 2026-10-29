@@ -107,7 +107,7 @@
     EXPECT K_MULDIV, 1, 1, 1, \rd, \rs1, \rs2, \funct3, 0, 0
     .endm
 
-    .macro BITMANIP op, rd, rs1                     /* sext.b sext.h zext.h orc.b rev8 */
+    .macro BITMANIP op, rd, rs1                     /* sext.b ... rev8 clz ctz cpop (Zbb) */
     \op x\rd, x\rs1
     EXPECT K_BITMANIP, 1, 1, 0, \rd, \rs1, 0, 0, 0, 0
     .endm
@@ -241,6 +241,9 @@ cases:
     BITMANIP zext.h, 0,  31
     BITMANIP orc.b,  5,  0
     BITMANIP rev8,   17, 18
+    BITMANIP clz,    3,  4
+    BITMANIP ctz,    31, 0
+    BITMANIP cpop,   0,  31
 #endif
 
     /*     op      funct3 rd  rs1 csr: addresses with bit 11 set must not be sign-extended */

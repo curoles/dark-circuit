@@ -143,6 +143,9 @@ module TbMig2Decode;
             if (w ==? RiscvInstrPkg::ZEXT_H_RV32) return ComputeCoreBitmanipPkg::BM_ZEXT_H;
             if (w ==? RiscvInstrPkg::ORC_B)       return ComputeCoreBitmanipPkg::BM_ORC_B;
             if (w ==? RiscvInstrPkg::REV8_RV32)   return ComputeCoreBitmanipPkg::BM_REV8;
+            if (w ==? RiscvInstrPkg::CLZ)         return ComputeCoreBitmanipPkg::BM_CLZ;
+            if (w ==? RiscvInstrPkg::CTZ)         return ComputeCoreBitmanipPkg::BM_CTZ;
+            if (w ==? RiscvInstrPkg::CPOP)        return ComputeCoreBitmanipPkg::BM_CPOP;
         end
         return ComputeCoreBitmanipPkg::bm_op_e'('0);
     endfunction

@@ -38,6 +38,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind = KIND_CSR;
             MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU:         kind = KIND_MULDIV;
             SEXT_B, SEXT_H, ZEXT_H_RV32, ORC_B, REV8_RV32:          kind = KIND_BITMANIP;
+            CLZ, CTZ, CPOP:                                         kind = KIND_BITMANIP;
             MRET:                                                   kind = KIND_MRET;
             WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
@@ -90,6 +91,9 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             ZEXT_H_RV32: return ComputeCoreBitmanipPkg::BM_ZEXT_H;
             ORC_B:       return ComputeCoreBitmanipPkg::BM_ORC_B;
             REV8_RV32:   return ComputeCoreBitmanipPkg::BM_REV8;
+            CLZ:         return ComputeCoreBitmanipPkg::BM_CLZ;
+            CTZ:         return ComputeCoreBitmanipPkg::BM_CTZ;
+            CPOP:        return ComputeCoreBitmanipPkg::BM_CPOP;
             default:     return ComputeCoreBitmanipPkg::bm_op_e'('0);  // other kinds: not used
         endcase
     endfunction
