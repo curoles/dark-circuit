@@ -1,0 +1,35 @@
+type: decision
+title: Zbb that reuses ALU hardware goes into Mig2Alu; only new logic gets a part of its own
+date: 2026-10-28
+question: >
+  Where do the 18 RV32 Zbb instructions go in Mig2, added group by group, so that the parts
+  stay clear and no hardware is built twice?
+decision: >
+  An instruction that reuses hardware Mig2Alu already has goes into Mig2Alu: ANDN, ORN, XNOR
+  are Alu1's AND, OR, XOR with operand b inverted (alu_ctrl_t.b_inv; same funct3, only
+  insn[30] differs); MIN/MAX use the comparison it computes for SLT/SLTU; ROL/ROR/RORI the
+  rotate mode of its BarrelShifter. Only genuinely new logic gets a part of its own,
+  Mig2Bitmanip: SEXT/ZEXT, ORC.B, REV8, CLZ/CTZ (PriorityEncoder), CPOP (a PopCount block).
+  The encodings of all of Zbb are in RiscvInstrPkg (tools/riscv_opcodes.sh). Tests:
+  riscv-tests rv32uzbb, one per instruction, the Zbb cases of decode.S and Mig2Alu's unit
+  test; rv32uzbb and decode.S's cases only when the compiler knows Zbb
+  (DARK_CIRCUIT_RISCV_ZBB, probed in cmake/riscv.cmake).
+why: >
+  Reuse first (user, 2026-10-28): Alu1 already does AND, OR, XOR, and an inverter on its b
+  is all ANDN, ORN, XNOR add. Small cores do the same (Ibex puts Zbb into its ALU). Only
+  Alu1's b is inverted, so the comparisons and the shifter keep their paths.
+rejected:
+  - choice: All of Zbb in a part of its own (my first draft, 2026-10-28)
+    why_not: >
+      It built AND, OR, XOR a second time next to Alu1; I had not read Mig2Alu. The user
+      caught it.
+  - choice: All 18 instructions at once
+    why_not: The user chose group by group, each with its tests and mutants.
+  - choice: Encode the Zbb cases of decode.S by hand (.insn)
+    why_not: The test would check our encodings against themselves, not the assembler's.
+code:
+  - rtl/design/mig2/mig2_alu.sv#b_alu1
+  - rtl/design/mig2/mig2_decode.sv#logic_inv
+  - test/design/mig2/CMakeLists.txt#rv32uzbb
+  - test/design/mig2/tb/tb_mig2_alu.sv#alt_op
+  - tools/riscv_opcodes.sh

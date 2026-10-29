@@ -43,8 +43,15 @@ if(DARK_CIRCUIT_RISCV)
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_mem.hex)
 
-    # Decode: unit test of Mig2Decode with cases encoded by the assembler.
-    dc_add_riscv_program(design_mig2_decode SOURCES decode.S ARCH rv32im LINK_FLAGS -T ${SW}/mig2.ld)
+    # Decode: unit test of Mig2Decode with cases encoded by the assembler; the Zbb cases only
+    # when the compiler knows Zbb (DARK_CIRCUIT_RISCV_ZBB, cmake/riscv.cmake).
+    if(DARK_CIRCUIT_RISCV_ZBB)
+        dc_add_riscv_program(design_mig2_decode SOURCES decode.S ARCH rv32im_zbb FLAGS -DHAVE_ZBB
+                             LINK_FLAGS -T ${SW}/mig2.ld)
+    else()
+        dc_add_riscv_program(design_mig2_decode SOURCES decode.S ARCH rv32im
+                             LINK_FLAGS -T ${SW}/mig2.ld)
+    endif()
     dc_add_mainsim_test(design_mig2_decode TOP TbMig2Decode TB tb/tb_mig2_decode.sv
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig2_decode.hex)
@@ -253,5 +260,16 @@ if(DARK_CIRCUIT_RISCV)
                               ARCH rv32im FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
                               LABELS riscv-tests rv32um)
         endforeach()
+
+        # rv32uzbb: Zbb, the groups done so far; only when the compiler knows Zbb.
+        if(DARK_CIRCUIT_RISCV_ZBB)
+            foreach(test IN ITEMS andn orn xnor)
+                mig2_program_test(rv32uzbb_${test} SOURCES ${RISCV_TESTS}/isa/rv32uzbb/${test}.S
+                                  ARCH rv32i_zbb FLAGS ${RISCV_TESTS_FLAGS}
+                                  ARGS ${RISCV_TESTS_ARGS} LABELS riscv-tests rv32uzbb)
+            endforeach()
+        else()
+            message(STATUS "Mig2: the RISC-V compiler does not know Zbb: rv32uzbb not run")
+        endif()
     endif()
 endif()

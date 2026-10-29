@@ -246,7 +246,7 @@ package Mig2Pkg;
         KIND_LOAD,      // LB, LH, LW, LBU, LHU
         KIND_STORE,     // SB, SH, SW
         KIND_OP_IMM,    // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
-        KIND_OP,        // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+        KIND_OP,        // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND; ANDN, ORN, XNOR
         KIND_FENCE,
         KIND_ECALL,
         KIND_EBREAK,
@@ -278,6 +278,7 @@ package Mig2Pkg;
         logic   b_imm;      // operand b is imm, else rs2
         logic   op;         // funct3 selects the operation (OP, OP-IMM), else a + b
         logic   sub;        // OP with alt: SUB instead of ADD
+        logic   b_inv;      // Zbb ANDN, ORN, XNOR: AND, OR, XOR with b inverted
     } alu_ctrl_t;
 
     typedef struct packed {

@@ -103,13 +103,16 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    function automatic alu_ctrl_t alu_of(input kind_e kind, input logic alt);
+    // b_inv: the Zbb ANDN, ORN, XNOR, which are OP with alt and the funct3 of AND, OR, XOR.
+    function automatic alu_ctrl_t alu_of(input kind_e kind, input logic alt, input funct3_t f3);
+        logic inv;
+        inv = kind == KIND_OP && alt && (f3 == F3_XOR || f3 == F3_OR || f3 == F3_AND);
         case (kind)
-            KIND_LUI:    return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0};
-            KIND_AUIPC:  return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0};
-            KIND_OP:     return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: alt};
-            KIND_OP_IMM: return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0};
-            default:     return '{a: A_RS1,  b_imm: 1'b1, op: 1'b0, sub: 1'b0};  // rs1 + imm
+            KIND_LUI:    return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
+            KIND_AUIPC:  return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
+            KIND_OP:     return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: alt,  b_inv: inv};
+            KIND_OP_IMM: return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0};
+            default:     return '{a: A_RS1,  b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
         endcase
     endfunction
 
@@ -187,7 +190,7 @@ module TbMig2Decode;
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));
             if (uses_alu(exp_kind))
-                check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, e[8][0])));
+                check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, e[8][0], e[7][2:0])));
             if (exp_kind != KIND_ILLEGAL) begin
                 check(c, insn, "rd_we",    32'(dec.rd_we),    e[1]);
                 check(c, insn, "uses_rs1", 32'(dec.uses_rs1), e[2]);

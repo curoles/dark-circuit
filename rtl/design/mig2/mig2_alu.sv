@@ -3,8 +3,9 @@
  *
  * Operand a is rs1, or pc for AUIPC, or 0 for LUI; operand b is rs2 for OP, else the
  * immediate. funct3 (RiscvPkg F3_*) selects the operation, alt (insn[30]) SUB and SRA.
- * One Alu1 adds, subtracts and does AND, OR, XOR; comparisons use its SUB: co=1 is
- * no borrow, a >= b unsigned. One BarrelShifter shifts by b[4:0].
+ * One Alu1 adds, subtracts and does AND, OR, XOR; with b inverted (alu.b_inv) its AND, OR,
+ * XOR are ANDN, ORN, XNOR of Zbb. Comparisons use its SUB: co=1 is no borrow, a >= b
+ * unsigned. One BarrelShifter shifts by b[4:0].
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. result is rd's value
  * (rd_src RD_ALU) and the load/store address for Mig2Lsu and Mig2Control (mtval).
@@ -24,6 +25,7 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 );
     word_t a;           // operand a: rs1, pc or 0
     word_t b;           // operand b: rs2 or the immediate
+    word_t b_alu1;      // b into Alu1: inverted for ANDN, ORN, XNOR
     op_e   cmd;         // Alu1 command
     word_t sum;         // Alu1 out
     logic  co;          // Alu1 carry out
@@ -58,7 +60,11 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
                 default:         cmd = OP_ADD;   // shifts do not use Alu1
             endcase
 
-    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd, .in1(a), .in2(b), .co, .out(sum));
+    // @kb: rtl/design/mig2/zbb_reuse
+    // Only Alu1's b is inverted: the comparisons and the shifter keep b as it is.
+    assign b_alu1 = dec.alu.b_inv ? ~b : b;
+
+    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd, .in1(a), .in2(b_alu1), .co, .out(sum));
 
     // SLL left, SRL right with 0, SRA right with the sign bit.
     BarrelShifter #(.WIDTH(WIDTH)) u_barrel_shifter(

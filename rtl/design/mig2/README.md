@@ -7,9 +7,9 @@ bubbles, pipeline view, tests, logs (here `DARK_CIRCUIT_MIG2_TRACE` and
 `DARK_CIRCUIT_MIG2_KANATA`), benchmark and cycle ceilings, synthesis (`make mig2_synth`
 here); this file describes what Mig2 changes from Mig1: a BTB in IF and two more
 benchmarks (2026-10-26), a return-address stack in ID and a division that skips the
-leading zeros of the dividend (2026-10-27). Mig1 does not take them: it stays the small
-core. Why the design is as it is, with the options rejected:
-`kb/rtl/design/mig2/`.
+leading zeros of the dividend (2026-10-27), the Zbb extension group by group
+(2026-10-28). Mig1 does not take them: it stays the small core. Why the design is as it
+is, with the options rejected: `kb/rtl/design/mig2/`.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
 DARK_CIRCUIT_MAIN_SIMULATOR, by default Verilator when it is installed). Mig2 is tested
@@ -92,6 +92,21 @@ quotient bit 0. A division holds EX 2 + steps cycles: 34 for a 32-bit dividend, 
 9 / 7. The leading zeros are counted (PriorityEncoder) and shifted out (BarrelShifter) in
 the start cycle, in EX, not in ID, where the operand comes through the forwarding mux.
 `test/design/mig2/muldiv.S` checks the cycles of a 32-bit and of a 4-bit division.
+
+## Zbb (bit manipulation)
+
+Mig2 gets Zbb group by group. An instruction that reuses hardware of Mig2Alu goes there,
+only new logic gets a part of its own. Done: ANDN, ORN, XNOR, which are Alu1's AND, OR, XOR
+with operand b inverted (`alu_ctrl_t.b_inv`; they have the funct3 of AND, OR, XOR and only
+insn[30] set). Next in Mig2Alu: MIN, MAX, MINU, MAXU (its comparison of SLT/SLTU), ROL, ROR,
+RORI (its BarrelShifter's rotate). Then a part of its own, Mig2Bitmanip: SEXT.B, SEXT.H,
+ZEXT.H, ORC.B, REV8, CLZ, CTZ (PriorityEncoder), CPOP (a PopCount block). The encodings of all
+of Zbb are in RiscvInstrPkg (`tools/riscv_opcodes.sh`, extensions `rv_zbb rv32_zbb`).
+
+Tests: riscv-tests `rv32uzbb`, one per instruction, the Zbb cases of `decode.S` and
+Mig2Alu's unit test. `rv32uzbb` and the cases of `decode.S` need a compiler that knows Zbb
+(gcc 12.2 does, gcc 10.2 does not); `cmake/riscv.cmake` probes it (`DARK_CIRCUIT_RISCV_ZBB`),
+and without it they are skipped with a message.
 
 ## Benchmarks
 
