@@ -1,0 +1,26 @@
+type: dropped
+title: PriorityEncoder's struct version as a tree of halves instead of the chain of ORs
+date: 2026-10-29
+tried: >
+  The struct version built from halves: level l has groups of 2**l bits, each knows whether
+  one of its bits is set (v) and the index of its highest set bit (idx); two groups make one
+  of the next level, v = v_hi | v_lo, idx = {v_hi, v_hi ? idx_hi : idx_lo}. About 2 x SIZE
+  gate levels (10 for 32 bits) instead of the chain of above (31 Or2 for 32 bits). The
+  timing pass of Mig2 had found the chain on the deepest path from the ID/EX register
+  (Yosys ltp, 51 gate levels: the early start of the divider, the magnitude of the
+  dividend, the chain, the step count, the barrel shifter).
+result: >
+  Correct: exhaustive against a behavioural model for SIZE 1 to 4, random for SIZE 5.
+  Mig2Core in sky130 (make mig2_synth TECH=sky130, 2026-10-29): 208 284 -> 207 176 um2
+  (-1 108), 22 934 -> 22 986 cells, longest path 5.2 -> 5.4 ns, and the longest path moved
+  to the forwarding loop (the ID/EX register, an EX result, the forwarding mux into ID's
+  rs2), not through the encoder. Verilator reports UNOPTFLAT for it (a false loop through
+  the arrays of the levels): it would need split_var or an array per level.
+why_dropped: >
+  No gain in the longest path. A change in one block moves ABC's buffering and sizing
+  elsewhere, and the estimate moves by about 0.2 ns for reasons that are not the change;
+  the 5.2 ns path did not go through the encoder either. The area saved is 0.5 %. Worth
+  taking up again for an encoder much wider than 32 bits, or when real timing (placement
+  and wires) shows the chain.
+code:
+  - rtl/lib/block/priority_encoder/struct/priority_encoder.sv#g_above

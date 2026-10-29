@@ -47,6 +47,7 @@ module PriorityEncoder #(
     assign above[WIDTH-1] = 1'b0;
 
     genvar k, j, m;
+    // @kb: rtl/lib/block/priority_encoder/dropped_tree
     generate
     for (k = 0; k < WIDTH-1; k = k + 1) begin: g_above
         Or2 #(1) u_or2(.in1(in[k+1]), .in2(above[k+1]), .out(above[k]));

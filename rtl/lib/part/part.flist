@@ -4,3 +4,4 @@ kogge_stone_adder.sv
 brent_kung_adder.sv
 gated_clk.sv
 lim_dff.sv
+edge_detector.sv
