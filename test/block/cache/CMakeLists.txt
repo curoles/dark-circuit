@@ -1,3 +1,4 @@
 add_subdirectory(direct_cache_rd_only)
 add_subdirectory(direct_cache)
 add_subdirectory(set_assoc_cache_rd_only)
+add_subdirectory(insn_data_cache_arbiter)

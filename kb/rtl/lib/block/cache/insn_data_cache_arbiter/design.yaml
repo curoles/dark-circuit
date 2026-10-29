@@ -1,0 +1,49 @@
+type: decision
+title: InsnDataCacheArbiter passes one request at a time from two caches to one memory
+date: 2026-10-29
+question: >
+  How do an instruction cache and a data cache share one memory (the step from Mig2's two
+  memories to one): which protocol, who gets memory, and how does an answer find its cache?
+decision: >
+  A block of the cache library between the memory sides of the two caches and one memory.
+  All three ports are the caches' memory side (a valid/ready request channel, an answer
+  without ready; the instruction side reads only), so the caches connect unchanged. When
+  both want memory, the input prio decides (PRIO_DATA, PRIO_INSN), and with PRIO_NONE the
+  parameter POLICY (ARB_DATA_FIRST, ARB_INSN_FIRST, ARB_ROUND_ROBIN, the default); a side
+  alone gets memory. A request presented and not taken stays until memory takes it. Memory
+  answers reads in order; a queue (Fifo) of the sides of the reads in memory routes the
+  answers, and while it is full no read is presented, writes are.
+why: >
+  Split instruction and data caches with one memory behind them is the structure of a
+  pipelined core: on hits fetch and loads do not meet, on misses they meet here. The
+  caches' own protocol on every port needs no adapters. prio first (user): the CPU knows
+  what the arbiter cannot (a load miss stalls the pipeline; fetch is empty after a
+  redirect). A held request must not change under memory (valid/ready). The queue keeps
+  the memory protocol as it is.
+rejected:
+  - choice: The protocol of the sketch, grant and bus_ready at the end of a transaction
+    why_not: >
+      Not the caches' protocol, and it had no data path (no read data back, no write data,
+      strobes or we of the data cache).
+  - choice: Lock memory for a whole transaction (the sketch's state machine)
+    why_not: >
+      A request is one line, taken in one handshake; what must be held is a request not
+      yet taken, and answers are routed by the queue.
+  - choice: A generic arbiter of N clients now
+    why_not: >
+      One user so far (Mig2's two caches), named ports read better (user's choice). The
+      choice between the sides is one function (tie_winner): a generic arbiter can take it
+      over later, and this block becomes a thin wrapper.
+  - choice: An ID with every request, echoed by memory, instead of the queue
+    why_not: >
+      Memory answers in order today; IDs change the memory protocol and every memory
+      model. Out-of-order memory (an L2, a NoC) can bring them later.
+evidence: >
+  Behave version and its unit test (three arbiters: round-robin, data first, instruction
+  first; queues of 2 and 4; every case of the decision must happen), 2026-10-29: 9 of 9
+  mutants caught.
+code:
+  - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#tie_winner
+  - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#u_fifo
+  - rtl/lib/block/cache/cache_pkg.sv#ARB_ROUND_ROBIN
+  - test/block/cache/insn_data_cache_arbiter/tb_insn_data_cache_arbiter.sv#tie_side
