@@ -145,8 +145,8 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 
 | Mig2Core | |
 |---|---|
-| Area | 204 668 µm² (0.205 mm²), 23 200 cells |
-| Longest logic path (ABC estimate) | 5.9 ns, about 168 MHz |
+| Area | 208 284 µm² (0.208 mm²), 22 934 cells |
+| Longest logic path (ABC estimate) | 5.2 ns, about 194 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -158,6 +158,7 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 | Division with early start | 199 474 | 5.7 |
 | Zbb, all 18 instructions | 204 397 | 6.2 |
 | Alignment offset in Mig2Lsu | 204 668 | 5.9 |
+| Immediate by opcode in decode | 208 284 | 5.2 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -186,6 +187,11 @@ the result of Mig2Alu, behind Zbb's inversion of operand b and its min/max selec
 misaligned trap flushes ID, which decides the push of the return-address stack. Mig2Lsu now
 adds rs1[1:0] + imm[1:0] for the check itself (kb `lsu_own_offset`): 5.9 ns, and the longest
 path is ID's: from the instruction word through decode and ID's redirect to the pc register.
+Decode selected the immediate by kind, the match of all encodings, which Zbb's patterns made
+deeper, and ID's target pc + imm waited for it; the format follows from the opcode alone,
+and decode now selects the immediate by opcode (kb `imm_by_opcode`): 5.2 ns, and the
+longest path is the forwarding loop of EX, as in Mig1. Area +1.8 % with 266 cells fewer:
+ABC sizes up the gates of the paths that are now the longest.
 
 Not planned for now: the GShare predictor of `rtl/lib/block/gshare_branch_predictor`. A
 trace model on top of the BTB and the return stack gives at most 1.9 % of Dhrystone

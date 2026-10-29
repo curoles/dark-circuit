@@ -1,0 +1,33 @@
+type: decision
+title: Mig2Decode selects the immediate by opcode, not by kind
+date: 2026-10-29
+question: >
+  ID's jump target, pc + imm, was on the longest path (5.9 ns): decode selected the
+  immediate by kind, the match of all encodings, and every extension (Zbb: 18 patterns)
+  makes that match deeper. How can the target not wait for it?
+decision: >
+  The format of an instruction, and so of its immediate, follows from the opcode alone, so
+  decode selects the immediate by the 7 opcode bits. The opcodes are the low 7 bits of
+  encodings of RiscvInstrPkg (LUI, AUIPC, JAL, BEQ, SW, CSRRW), not written by hand. An
+  instruction without an immediate gets what its opcode's format gives; no part reads it.
+why: >
+  The path, from Yosys ltp on the generic netlist (52 gate levels): the instruction word,
+  the casez of kind (18 levels), the case on kind that selected the immediate, the adder
+  pc + imm, the target muxes of Mig2Control and Mig2Fetch, the pc register. By opcode the
+  immediate takes a few levels.
+rejected:
+  - choice: Leave it at 5.9 ns
+    why_not: >
+      Every extension adds patterns to the match of kind, and each would cost ID's target
+      again (user: do not give up 0.2 ns per change).
+  - choice: Make the match of kind shallower
+    why_not: Kind needs the full match, for illegal instructions; the immediate does not.
+evidence: >
+  sky130 (make mig2_synth TECH=sky130, 2026-10-29), one change: 204 668 um2, 23 200 cells,
+  5.9 ns -> 208 284 um2, 22 934 cells, 5.2 ns; the longest path is now the forwarding loop
+  of EX (rs1_data in the ID/EX register), as in Mig1 (5.3 ns). Area +1.8 % with fewer
+  cells: ABC sizes up the gates of the new longest paths. 109 Mig2 tests; 3 of 3 mutants
+  caught (JAL with the B immediate, stores with the I immediate, CSR addresses
+  sign-extended).
+code:
+  - rtl/design/mig2/mig2_decode.sv#imm

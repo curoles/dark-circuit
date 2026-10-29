@@ -55,6 +55,22 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     assign imm_csr = {{(WIDTH-12){1'b0}}, f.i.imm_11_0};
     assign csr_reg = f.i.funct3 == F3_CSRRW || f.i.funct3 == F3_CSRRS || f.i.funct3 == F3_CSRRC;
 
+    // @kb: rtl/design/mig2/imm_by_opcode
+    // The immediate by format. The format follows from the opcode alone, so the immediate
+    // does not wait for kind, the match of all encodings: ID's target pc + imm is on the
+    // longest path. Opcodes from the encodings: the low 7 bits of an instruction of the
+    // format.
+    word_t imm;
+    always_comb
+        case (f.r.opcode)
+            LUI[6:0], AUIPC[6:0]: imm = imm_u_of(insn);
+            JAL[6:0]:             imm = imm_j_of(insn);
+            BEQ[6:0]:             imm = imm_b_of(insn);     // branches
+            SW[6:0]:              imm = imm_s_of(insn);     // stores
+            CSRRW[6:0]:           imm = imm_csr;            // SYSTEM: the CSR address
+            default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM, FENCE
+        endcase
+
     // Controls of an M instruction from its funct3.
     function automatic muldiv_ctrl_t muldiv_of(funct3_t f3);
         muldiv_ctrl_t m;
@@ -121,7 +137,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.rd_src   = RD_ALU;
         dec.uses_rs1 = 1'b0;
         dec.uses_rs2 = 1'b0;
-        dec.imm      = imm_i_of(insn);   // JALR, LOAD, OP_IMM (shifts: imm[4:0] is shamt)
+        dec.imm      = imm;              // by opcode (shifts: imm[4:0] is shamt)
         dec.alu      = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
                          minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};
         dec.br       = '0;
@@ -131,13 +147,13 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
-                dec.rd_we = 1'b1;  dec.imm = imm_u_of(insn);  dec.alu.a = A_ZERO;
+                dec.rd_we = 1'b1;  dec.alu.a = A_ZERO;
             end
             KIND_AUIPC: begin
-                dec.rd_we = 1'b1;  dec.imm = imm_u_of(insn);  dec.alu.a = A_PC;
+                dec.rd_we = 1'b1;  dec.alu.a = A_PC;
             end
             KIND_JAL: begin
-                dec.rd_we = 1'b1;  dec.rd_src = RD_LINK;  dec.imm = imm_j_of(insn);
+                dec.rd_we = 1'b1;  dec.rd_src = RD_LINK;
                 dec.br.jump = 1'b1;  dec.br.call = is_link(dec.rd);
             end
             KIND_JALR: begin
@@ -148,14 +164,14 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
                 dec.br.call = is_link(dec.rd);
             end
             KIND_BRANCH: begin
-                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.imm = imm_b_of(insn);
+                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
                 dec.br.branch = 1'b1;
             end
             KIND_LOAD: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_LOAD;  dec.uses_rs1 = 1'b1;  dec.mem.read = 1'b1;
             end
             KIND_STORE: begin
-                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.imm = imm_s_of(insn);
+                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
                 dec.mem.write = 1'b1;
             end
             KIND_OP_IMM: begin
@@ -177,7 +193,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
                 dec.bitmanip = bitmanip_of(insn);
             end
             KIND_CSR: begin
-                dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;  dec.imm = imm_csr;
+                dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;
                 dec.sys.csr = 1'b1;
             end
             KIND_ECALL:   dec.sys.ecall   = 1'b1;
