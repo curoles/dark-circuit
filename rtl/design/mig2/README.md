@@ -103,7 +103,9 @@ Besides Dhrystone (see Mig1's README), Mig2 runs qsort and towers of riscv-tests
 - towers: Towers of Hanoi with 7 discs, recursive: calls and returns; 50 runs.
 
 The exit status of a benchmark is its own check (`verify` of riscv-tests), so a benchmark
-also tests the CPU. Each has a cycle ceiling.
+also tests the CPU. Each has a cycle ceiling per compiler version (see Mig1's README, Cycle
+ceilings). The cycles below were measured with gcc 10.2.0; gcc 12.2.0 compiles other code
+(Dhrystone 4.2 % more cycles, qsort 2 cycles more, towers 12.3 % fewer).
 
 | Benchmark | Instructions | Static guess: cycles | CPI | BTB: cycles | CPI | + return stack: cycles | CPI | + early division: cycles | CPI |
 |---|---|---|---|---|---|---|---|---|---|

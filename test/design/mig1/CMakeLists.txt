@@ -153,6 +153,12 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_exit=3
                       OUTPUT "semihost_write0 works[\r\n]+OK")
 
+    # Semihosting SYS_EXIT (0x18): on RV32 only the reason, in a1; ADP_Stopped_ApplicationExit
+    # is exit 0, any other reason exit 1 (the semihosting test uses SYS_EXIT_EXTENDED).
+    mig1_program_test(sys_exit SOURCES sys_exit.S FLAGS -DREASON=0x20026 ARGS +expect_exit=0)
+    mig1_program_test(sys_exit_error SOURCES sys_exit.S FLAGS -DREASON=0x20023
+                      ARGS +expect_exit=1)
+
     # riscv-tests with their standard environment env/p (source fetched by cmake/fetch.cmake):
     # self-checking, each test ends with a store to tohost. Labels riscv-tests and the suite.
     dc_riscv_tests()
@@ -185,9 +191,13 @@ if(DARK_CIRCUIT_RISCV)
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
         # calls, to measure cycles (its own results are not printed). One run of bench_main
         # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator. +max_cycles is a
-        # cycle ceiling (Mig1 README): lower it when a change makes the benchmark faster.
+        # cycle ceiling per gcc version (Mig1 README, dc_riscv_cycle_ceiling): the cycles + 1 %,
+        # rounded up to 1000. Lower it when a change makes the benchmark faster; add the
+        # version of a new compiler.
         if(DARK_CIRCUIT_BENCHMARKS)
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
+            dc_riscv_cycle_ceiling(dhry_cycles design_mig1_dhrystone
+                                   10.2.0 2156000 12.2.0 2238000)
             mig1_program_test(dhrystone
                               SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
                                       ${SW}/bench/bench.c ${DHRY}/dhrystone.c
@@ -198,7 +208,7 @@ if(DARK_CIRCUIT_RISCV)
                                     -Wno-implicit-int -Wno-implicit-function-declaration
                                     -I${SW}/bench/include -I${SW}/semihosting -I${DHRY}
                                     -I${RISCV_TESTS}/benchmarks/common -I${RISCV_TESTS}/env
-                              ARGS +expect_exit=0 +max_cycles=2134146
+                              ARGS +expect_exit=0 +max_cycles=${dhry_cycles}
                               LABELS benchmark)
         endif()
 

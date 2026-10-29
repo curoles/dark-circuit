@@ -410,10 +410,16 @@ failing test shows its `$fatal` message; run it again with the trace to see what
 ## Cycle ceilings
 
 A worse prediction does not make a test fail, it only costs cycles. The tests that measure
-prediction have a ceiling: `+max_cycles` of TbMig1 set to their cycles of today, branch_id
-(always) and Dhrystone (benchmark). A change that makes them slower fails ("no end after N
-cycles (+max_cycles)"); one that makes them faster passes, and its cycles become the new
-ceiling. The ceiling counts the cycles of TbMig1 (its PASS line), halted cycles included.
+prediction have a ceiling: `+max_cycles` of TbMig1, branch_id (always) and Dhrystone
+(benchmark). A change that makes them slower fails ("no end after N cycles (+max_cycles)");
+one that makes them faster passes, and its cycles become the new ceiling. The ceiling counts
+the cycles of TbMig1 (its PASS line), halted cycles included.
+
+branch_id is assembly: its cycles do not depend on the compiler, its ceiling is its cycles.
+Dhrystone is C, and its cycles change with the compiler (gcc 12.2.0: 4 % more than gcc
+10.2.0), so it has a ceiling per gcc version, its cycles + 1 % rounded up to 1000
+(`dc_riscv_cycle_ceiling` in `cmake/riscv.cmake` takes the one of the compiler in use); with
+a compiler not listed it has only a guard against a hang, until its version is added.
 
 ## Benchmark
 
@@ -427,7 +433,8 @@ make cmake D=mig1 CMAKE_ARGS=-DDARK_CIRCUIT_BENCHMARKS=ON
 make run D=mig1 L=benchmark
 ```
 
-2026-10-26, with the static branch guess: 1 643 635 instructions in 2 134 146 cycles, CPI
+2026-10-26, gcc 10.2.0, with the static branch guess: 1 643 635 instructions in 2 134 146
+cycles, CPI
 1.30 (6 runs of 500 loops); most bubbles: correct taken guesses (the redirect from ID),
 divisions, returns, calls, wrong guesses.
 

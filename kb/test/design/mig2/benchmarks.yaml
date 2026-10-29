@@ -8,8 +8,10 @@ decision: >
   Programs of riscv-tests/benchmarks (Dhrystone, qsort, towers), unchanged, with the support
   of sw/riscv/bench, only with the cmake option DARK_CIRCUIT_BENCHMARKS (label benchmark).
   Their exit status is their own check (verify), so they also test the CPU. Each has a cycle
-  ceiling (+max_cycles): a change that makes it slower fails; one that makes it faster
-  lowers the ceiling.
+  ceiling (+max_cycles) per gcc version, the cycles + 1 % rounded up to 1000: a change that
+  makes it slower fails; one that makes it faster lowers the ceiling. CMake reads the version
+  of the compiler (gcc -dumpfullversion) and takes its ceiling; a version not listed gets
+  only a guard against a hang (2026-10-28).
 why: >
   Regular testing tests the RTL; benchmarks are for measuring, when someone needs a number
   (user, 2026-10-24). A worse predictor does not make any test fail, it only costs cycles:
@@ -17,7 +19,19 @@ why: >
 rejected:
   - choice: Benchmarks in regular testing
     why_not: Seconds of Verilator per benchmark in every run, for numbers that are rarely needed.
+  - choice: One ceiling for every compiler
+    why_not: >
+      The cycles of C code are the compiler's: gcc 12.2.0 against gcc 10.2.0 gave Dhrystone
+      +3.8 % (Mig1) and +4.2 % (Mig2), qsort +2 cycles, towers -12.3 %; a ceiling wide enough
+      for both would hide a regression of several percent.
+  - choice: No ceilings for benchmarks
+    why_not: A worse predictor fails no test; the ceilings are what catches it.
+evidence: >
+  The program tests with a ceiling or a cycle check (branch_id, btb_if, ras_id, csr, muldiv)
+  are assembly: all 168 tests other than the benchmarks gave the same cycles with gcc 10.2.0
+  and 12.2.0 (2026-10-28), so their ceilings stay single numbers.
 code:
+  - cmake/riscv.cmake#dc_riscv_cycle_ceiling
   - test/design/mig2/CMakeLists.txt#mig2_bench_test
   - cmake/dark_circuit.cmake#DARK_CIRCUIT_BENCHMARKS
   - sw/riscv/bench/bench.c#bench_main

@@ -167,6 +167,12 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_exit=3
                       OUTPUT "semihost_write0 works[\r\n]+OK")
 
+    # Semihosting SYS_EXIT (0x18): on RV32 only the reason, in a1; ADP_Stopped_ApplicationExit
+    # is exit 0, any other reason exit 1 (the semihosting test uses SYS_EXIT_EXTENDED).
+    mig2_program_test(sys_exit SOURCES sys_exit.S FLAGS -DREASON=0x20026 ARGS +expect_exit=0)
+    mig2_program_test(sys_exit_error SOURCES sys_exit.S FLAGS -DREASON=0x20023
+                      ARGS +expect_exit=1)
+
     # riscv-tests with their standard environment env/p (source fetched by cmake/fetch.cmake):
     # self-checking, each test ends with a store to tohost. Labels riscv-tests and the suite.
     dc_riscv_tests()
@@ -199,12 +205,14 @@ if(DARK_CIRCUIT_RISCV)
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
         # calls, to measure cycles (their own results are not printed; the exit status is
         # their own check). DIR is the directory of the benchmark, REPEAT the runs of its
-        # main (BENCH_REPEAT), MAX_CYCLES a cycle ceiling (Mig2 README): lower it when a
-        # change makes the benchmark faster.
+        # main (BENCH_REPEAT), CEILINGS its cycle ceiling per gcc version (Mig2 README,
+        # dc_riscv_cycle_ceiling): the cycles + 1 %, rounded up to 1000. Lower it when a
+        # change makes the benchmark faster; add the version of a new compiler.
         # @kb: test/design/mig2/benchmarks
         if(DARK_CIRCUIT_BENCHMARKS)
             function(mig2_bench_test NAME)
-                cmake_parse_arguments(P "" "DIR;REPEAT;MAX_CYCLES" "SOURCES;FLAGS" ${ARGN})
+                cmake_parse_arguments(P "" "DIR;REPEAT" "SOURCES;FLAGS;CEILINGS" ${ARGN})
+                dc_riscv_cycle_ceiling(max_cycles design_mig2_${NAME} ${P_CEILINGS})
                 mig2_program_test(${NAME}
                                   SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
                                           ${SW}/bench/bench.c ${P_SOURCES}
@@ -215,26 +223,27 @@ if(DARK_CIRCUIT_RISCV)
                                         -I${SW}/bench/include -I${SW}/semihosting -I${P_DIR}
                                         -I${RISCV_TESTS}/benchmarks/common
                                         -I${RISCV_TESTS}/env ${P_FLAGS}
-                                  ARGS +expect_exit=0 +max_cycles=${P_MAX_CYCLES}
+                                  ARGS +expect_exit=0 +max_cycles=${max_cycles}
                                   LABELS benchmark)
             endfunction()
 
             # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
-            mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6 MAX_CYCLES 1848768
+            mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6
+                            CEILINGS 10.2.0 1868000 12.2.0 1947000
                             SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
                             FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
 
             # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
             # sort is in place, a second run would sort sorted numbers.
             set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
-            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 MAX_CYCLES 160147
+            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 10.2.0 162000 12.2.0 162000
                             SOURCES ${QSORT}/qsort_main.c)
 
             # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
             # sets up the towers again.
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
-            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 MAX_CYCLES 264471
+            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 10.2.0 268000 12.2.0 235000
                             SOURCES ${TOWERS}/towers_main.c)
         endif()
 
