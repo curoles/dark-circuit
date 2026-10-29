@@ -41,9 +41,10 @@ rejected:
 evidence: >
   Behave version and its unit test (three arbiters: round-robin, data first, instruction
   first; queues of 2 and 4; every case of the decision must happen), 2026-10-29: 9 of 9
-  mutants caught.
+  mutants caught. The struct version against the same test, 2026-10-29.
 code:
   - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#tie_winner
   - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#u_fifo
+  - rtl/lib/block/cache/insn_data_cache_arbiter/struct/insn_data_cache_arbiter.sv#tie_d
   - rtl/lib/block/cache/cache_pkg.sv#ARB_ROUND_ROBIN
   - test/block/cache/insn_data_cache_arbiter/tb_insn_data_cache_arbiter.sv#tie_side
