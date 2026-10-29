@@ -103,16 +103,25 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    // b_inv: the Zbb ANDN, ORN, XNOR, which are OP with alt and the funct3 of AND, OR, XOR.
-    function automatic alu_ctrl_t alu_of(input kind_e kind, input logic alt, input funct3_t f3);
+    // b_inv: the Zbb ANDN, ORN, XNOR, which are OP with alt and the funct3 of AND, OR, XOR;
+    // minmax: the Zbb MIN, MINU, MAX, MAXU, OP with funct7 0000101 (insn[31:25]).
+    function automatic alu_ctrl_t alu_of(input kind_e kind, input logic alt, input funct3_t f3,
+                                         input logic [6:0] funct7);
         logic inv;
+        logic mm;
         inv = kind == KIND_OP && alt && (f3 == F3_XOR || f3 == F3_OR || f3 == F3_AND);
+        mm  = kind == KIND_OP && funct7 == 7'b000_0101;
         case (kind)
-            KIND_LUI:    return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
-            KIND_AUIPC:  return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
-            KIND_OP:     return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: alt,  b_inv: inv};
-            KIND_OP_IMM: return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0};
-            default:     return '{a: A_RS1,  b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
+            KIND_LUI:
+                return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
+            KIND_AUIPC:
+                return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
+            KIND_OP:
+                return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: alt,  b_inv: inv,  minmax: mm};
+            KIND_OP_IMM:
+                return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
+            default:    // rs1 + imm
+                return '{a: A_RS1,  b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
         endcase
     endfunction
 
@@ -190,7 +199,8 @@ module TbMig2Decode;
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));
             if (uses_alu(exp_kind))
-                check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, e[8][0], e[7][2:0])));
+                check(c, insn, "alu", 32'(dec.alu),
+                      32'(alu_of(exp_kind, e[8][0], e[7][2:0], insn[31:25])));
             if (exp_kind != KIND_ILLEGAL) begin
                 check(c, insn, "rd_we",    32'(dec.rd_we),    e[1]);
                 check(c, insn, "uses_rs1", 32'(dec.uses_rs1), e[2]);

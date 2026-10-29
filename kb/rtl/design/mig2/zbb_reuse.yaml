@@ -27,8 +27,12 @@ rejected:
     why_not: The user chose group by group, each with its tests and mutants.
   - choice: Encode the Zbb cases of decode.S by hand (.insn)
     why_not: The test would check our encodings against themselves, not the assembler's.
+evidence: >
+  Group 1 (ANDN, ORN, XNOR) and group 2 (MIN, MINU, MAX, MAXU, alu_ctrl_t.minmax: the compare
+  of SLT/SLTU selects a or b) added only controls and muxes to Mig2Alu (2026-10-28).
 code:
   - rtl/design/mig2/mig2_alu.sv#b_alu1
+  - rtl/design/mig2/mig2_alu.sv#pick_a
   - rtl/design/mig2/mig2_decode.sv#logic_inv
   - test/design/mig2/CMakeLists.txt#rv32uzbb
   - test/design/mig2/tb/tb_mig2_alu.sv#alt_op

@@ -98,8 +98,9 @@ the start cycle, in EX, not in ID, where the operand comes through the forwardin
 Mig2 gets Zbb group by group. An instruction that reuses hardware of Mig2Alu goes there,
 only new logic gets a part of its own. Done: ANDN, ORN, XNOR, which are Alu1's AND, OR, XOR
 with operand b inverted (`alu_ctrl_t.b_inv`; they have the funct3 of AND, OR, XOR and only
-insn[30] set). Next in Mig2Alu: MIN, MAX, MINU, MAXU (its comparison of SLT/SLTU), ROL, ROR,
-RORI (its BarrelShifter's rotate). Then a part of its own, Mig2Bitmanip: SEXT.B, SEXT.H,
+insn[30] set); MIN, MINU, MAX, MAXU, where the compare of SLT/SLTU (Alu1's subtraction)
+selects a or b (`alu_ctrl_t.minmax`; funct7 0000101, funct3 100 to 111). Next in Mig2Alu:
+ROL, ROR, RORI (its BarrelShifter's rotate). Then a part of its own, Mig2Bitmanip: SEXT.B, SEXT.H,
 ZEXT.H, ORC.B, REV8, CLZ, CTZ (PriorityEncoder), CPOP (a PopCount block). The encodings of all
 of Zbb are in RiscvInstrPkg (`tools/riscv_opcodes.sh`, extensions `rv_zbb rv32_zbb`).
 

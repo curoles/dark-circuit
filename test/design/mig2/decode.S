@@ -204,11 +204,15 @@ cases:
     MULDIV remu,   7,     15, 16, 17
 
 #ifdef HAVE_ZBB
-    /*     Zbb in Mig2Alu (OP with alt, funct3 of AND, OR, XOR), only when the compiler
-           knows Zbb: op funct3 alt rd rs1 rs2 */
+    /*     Zbb in Mig2Alu (ANDN, ORN, XNOR: OP with alt; MIN, MAX: funct7 0000101), only
+           when the compiler knows Zbb: op funct3 alt rd rs1 rs2 */
     OP     andn,   7,     1,  1,  2,  3
     OP     orn,    6,     1,  31, 0,  30
     OP     xnor,   4,     1,  0,  31, 1
+    OP     min,    4,     0,  2,  3,  4
+    OP     minu,   5,     0,  31, 30, 29
+    OP     max,    6,     0,  5,  0,  31
+    OP     maxu,   7,     0,  0,  31, 0
 #endif
 
     /*     op      funct3 rd  rs1 csr: addresses with bit 11 set must not be sign-extended */

@@ -5,7 +5,8 @@
  * immediate. funct3 (RiscvPkg F3_*) selects the operation, alt (insn[30]) SUB and SRA.
  * One Alu1 adds, subtracts and does AND, OR, XOR; with b inverted (alu.b_inv) its AND, OR,
  * XOR are ANDN, ORN, XNOR of Zbb. Comparisons use its SUB: co=1 is no borrow, a >= b
- * unsigned. One BarrelShifter shifts by b[4:0].
+ * unsigned; SLT, SLTU give the result of the compare, the Zbb MIN, MINU, MAX, MAXU
+ * (alu.minmax) select a or b by it. One BarrelShifter shifts by b[4:0].
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. result is rd's value
  * (rd_src RD_ALU) and the load/store address for Mig2Lsu and Mig2Control (mtval).
@@ -34,6 +35,8 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     logic  lt_s;        // a < b signed
     logic  a_sign;
     logic  b_sign;
+    logic  lt;          // MIN, MAX: a < b signed; MINU, MAXU: unsigned (funct3[0])
+    logic  pick_a;      // MIN, MINU: a < b; MAX, MAXU: not (funct3[1])
 
     // Operands.
     always_comb
@@ -46,10 +49,12 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     assign a_sign = a[WIDTH-1];
     assign b_sign = b[WIDTH-1];
 
-    // Alu1 command by funct3; LUI and AUIPC add.
+    // Alu1 command by funct3; LUI and AUIPC add; MIN, MAX compare (funct3 is not Alu1's).
     always_comb
         if (!dec.alu.op)
             cmd = OP_ADD;
+        else if (dec.alu.minmax)
+            cmd = OP_SUB;
         else
             case (dec.funct3)
                 F3_ADD_SUB:      cmd = dec.alu.sub ? OP_SUB : OP_ADD;
@@ -75,10 +80,16 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     assign lt_u = !co;
     assign lt_s = (a_sign != b_sign) ? a_sign : lt_u;
 
-    // Result by funct3; LUI and AUIPC take the sum.
+    // MIN 100, MINU 101, MAX 110, MAXU 111.
+    assign lt     = dec.funct3[0] ? lt_u : lt_s;
+    assign pick_a = lt ^ dec.funct3[1];
+
+    // Result by funct3; LUI and AUIPC take the sum; MIN, MAX the operand picked.
     always_comb
         if (!dec.alu.op)
             result = sum;
+        else if (dec.alu.minmax)
+            result = pick_a ? a : b;
         else
             case (dec.funct3)
                 F3_SLL, F3_SRL_SRA: result = shifted;

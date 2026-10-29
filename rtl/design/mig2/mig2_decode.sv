@@ -30,7 +30,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             SB, SH, SW:                                             kind = KIND_STORE;
             ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI:   kind = KIND_OP_IMM;
             ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind = KIND_OP;
-            ANDN, ORN, XNOR:                                        kind = KIND_OP;  // Zbb
+            ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU:                  kind = KIND_OP;  // Zbb
             FENCE:                                                  kind = KIND_FENCE;
             ECALL:                                                  kind = KIND_ECALL;
             EBREAK:                                                 kind = KIND_EBREAK;
@@ -71,6 +71,10 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     assign logic_inv = f.r.funct7[5] &&
                        (f.r.funct3 == F3_XOR || f.r.funct3 == F3_OR || f.r.funct3 == F3_AND);
 
+    // Zbb MIN, MINU, MAX, MAXU: funct7 0000101 (their funct3 are those of XOR, SRL, OR, AND).
+    logic minmax;
+    assign minmax = f.r.funct7 == 7'b000_0101;
+
     // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0). A JAL or
     // JALR that writes a link register is a call (it pushes the return-address stack), a JALR
     // that reads one is a return (it pops), both for a swap (a coroutine: pop, then push).
@@ -95,7 +99,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.uses_rs1 = 1'b0;
         dec.uses_rs2 = 1'b0;
         dec.imm      = imm_i_of(insn);   // JALR, LOAD, OP_IMM (shifts: imm[4:0] is shamt)
-        dec.alu      = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0};
+        dec.alu      = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
         dec.br       = '0;
         dec.mem      = '0;
         dec.sys      = '0;
@@ -134,7 +138,8 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             end
             KIND_OP: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
-                dec.alu = '{a: A_RS1, b_imm: 1'b0, op: 1'b1, sub: dec.alt, b_inv: logic_inv};
+                dec.alu = '{a: A_RS1, b_imm: 1'b0, op: 1'b1, sub: dec.alt, b_inv: logic_inv,
+                            minmax: minmax};
             end
             KIND_MULDIV: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_MULDIV;

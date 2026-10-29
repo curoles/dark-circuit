@@ -263,7 +263,7 @@ if(DARK_CIRCUIT_RISCV)
 
         # rv32uzbb: Zbb, the groups done so far; only when the compiler knows Zbb.
         if(DARK_CIRCUIT_RISCV_ZBB)
-            foreach(test IN ITEMS andn orn xnor)
+            foreach(test IN ITEMS andn orn xnor min minu max maxu)
                 mig2_program_test(rv32uzbb_${test} SOURCES ${RISCV_TESTS}/isa/rv32uzbb/${test}.S
                                   ARCH rv32i_zbb FLAGS ${RISCV_TESTS_FLAGS}
                                   ARGS ${RISCV_TESTS_ARGS} LABELS riscv-tests rv32uzbb)
