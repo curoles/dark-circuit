@@ -245,7 +245,7 @@ package Mig2Pkg;
         KIND_BRANCH,    // BEQ, BNE, BLT, BGE, BLTU, BGEU
         KIND_LOAD,      // LB, LH, LW, LBU, LHU
         KIND_STORE,     // SB, SH, SW
-        KIND_OP_IMM,    // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+        KIND_OP_IMM,    // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI; RORI (Zbb)
         KIND_OP,        // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND; Zbb in Mig2Alu
         KIND_FENCE,
         KIND_ECALL,
@@ -280,6 +280,9 @@ package Mig2Pkg;
         logic   sub;        // OP with alt: SUB instead of ADD
         logic   b_inv;      // Zbb ANDN, ORN, XNOR: AND, OR, XOR with b inverted
         logic   minmax;     // Zbb MIN, MINU, MAX, MAXU: the compare of SLT/SLTU selects a or b
+        logic   minmax_max;         // MAX, MAXU: the larger
+        logic   minmax_unsigned;    // MINU, MAXU: unsigned compare
+        logic   rotate;     // Zbb ROL, ROR, RORI: the shifter rotates (funct3 of SLL, SRL)
     } alu_ctrl_t;
 
     typedef struct packed {

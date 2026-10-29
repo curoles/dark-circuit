@@ -103,26 +103,30 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    // b_inv: the Zbb ANDN, ORN, XNOR, which are OP with alt and the funct3 of AND, OR, XOR;
-    // minmax: the Zbb MIN, MINU, MAX, MAXU, OP with funct7 0000101 (insn[31:25]).
-    function automatic alu_ctrl_t alu_of(input kind_e kind, input logic alt, input funct3_t f3,
-                                         input logic [6:0] funct7);
-        logic inv;
-        logic mm;
-        inv = kind == KIND_OP && alt && (f3 == F3_XOR || f3 == F3_OR || f3 == F3_AND);
-        mm  = kind == KIND_OP && funct7 == 7'b000_0101;
+    // The Zbb that Mig2Alu does, by their encodings (RiscvInstrPkg): b_inv for ANDN, ORN,
+    // XNOR; minmax for MIN, MINU, MAX, MAXU (max: MAX, MAXU; unsigned: MINU, MAXU); rotate
+    // for ROL, ROR, RORI.
+    function automatic alu_ctrl_t alu_of(input kind_e kind, input insn_t w);
+        alu_ctrl_t ctrl;
+        ctrl = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
+                minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};  // rs1 + imm
         case (kind)
-            KIND_LUI:
-                return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
-            KIND_AUIPC:
-                return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
-            KIND_OP:
-                return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: alt,  b_inv: inv,  minmax: mm};
-            KIND_OP_IMM:
-                return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
-            default:    // rs1 + imm
-                return '{a: A_RS1,  b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
+            KIND_LUI:    begin ctrl.a = A_ZERO; end
+            KIND_AUIPC:  begin ctrl.a = A_PC; end
+            KIND_OP_IMM: begin ctrl.op = 1'b1; ctrl.rotate = w ==? RiscvInstrPkg::RORI_RV32; end
+            KIND_OP:     begin
+                ctrl.b_imm = 1'b0;  ctrl.op = 1'b1;  ctrl.sub = w[30];
+                ctrl.b_inv = w ==? RiscvInstrPkg::ANDN || w ==? RiscvInstrPkg::ORN ||
+                             w ==? RiscvInstrPkg::XNOR;
+                ctrl.minmax_max = w ==? RiscvInstrPkg::MAX || w ==? RiscvInstrPkg::MAXU;
+                ctrl.minmax_unsigned = w ==? RiscvInstrPkg::MINU || w ==? RiscvInstrPkg::MAXU;
+                ctrl.minmax = w ==? RiscvInstrPkg::MIN || ctrl.minmax_max ||
+                              ctrl.minmax_unsigned;
+                ctrl.rotate = w ==? RiscvInstrPkg::ROL || w ==? RiscvInstrPkg::ROR;
+            end
+            default: ;
         endcase
+        return ctrl;
     endfunction
 
     // JALR is a return (pops the return-address stack) when rs1 is x1 or x5, unless rd = rs1.
@@ -199,8 +203,7 @@ module TbMig2Decode;
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, e[7][2:0])));
             if (uses_alu(exp_kind))
-                check(c, insn, "alu", 32'(dec.alu),
-                      32'(alu_of(exp_kind, e[8][0], e[7][2:0], insn[31:25])));
+                check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, insn)));
             if (exp_kind != KIND_ILLEGAL) begin
                 check(c, insn, "rd_we",    32'(dec.rd_we),    e[1]);
                 check(c, insn, "uses_rs1", 32'(dec.uses_rs1), e[2]);

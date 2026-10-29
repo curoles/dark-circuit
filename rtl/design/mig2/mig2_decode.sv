@@ -29,8 +29,9 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             LB, LH, LW, LBU, LHU:                                   kind = KIND_LOAD;
             SB, SH, SW:                                             kind = KIND_STORE;
             ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI:   kind = KIND_OP_IMM;
+            RORI_RV32:                                              kind = KIND_OP_IMM;  // Zbb
             ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind = KIND_OP;
-            ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU:                  kind = KIND_OP;  // Zbb
+            ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR:        kind = KIND_OP;  // Zbb
             FENCE:                                                  kind = KIND_FENCE;
             ECALL:                                                  kind = KIND_ECALL;
             EBREAK:                                                 kind = KIND_EBREAK;
@@ -65,15 +66,20 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         return m;
     endfunction
 
-    // Zbb ANDN, ORN, XNOR have the funct3 of AND, OR, XOR and alt (insn[30]) set, which no
-    // base logic operation has: Mig2Alu does them with Alu1's AND, OR, XOR and b inverted.
+    // Zbb that Mig2Alu does, recognized by their encodings (RiscvInstrPkg): ANDN, ORN, XNOR are
+    // Alu1's AND, OR, XOR with b inverted (they have the funct3 of AND, OR, XOR); MIN, MINU,
+    // MAX, MAXU pick a or b by the compare of SLT/SLTU; ROL, ROR, RORI rotate in the shifter
+    // (funct3 of SLL, SRL).
     logic logic_inv;
-    assign logic_inv = f.r.funct7[5] &&
-                       (f.r.funct3 == F3_XOR || f.r.funct3 == F3_OR || f.r.funct3 == F3_AND);
-
-    // Zbb MIN, MINU, MAX, MAXU: funct7 0000101 (their funct3 are those of XOR, SRL, OR, AND).
     logic minmax;
-    assign minmax = f.r.funct7 == 7'b000_0101;
+    logic mm_max;
+    logic mm_unsigned;
+    logic rotate;
+    assign logic_inv   = insn ==? ANDN || insn ==? ORN || insn ==? XNOR;
+    assign minmax      = insn ==? MIN || insn ==? MINU || insn ==? MAX || insn ==? MAXU;
+    assign mm_max      = insn ==? MAX || insn ==? MAXU;
+    assign mm_unsigned = insn ==? MINU || insn ==? MAXU;
+    assign rotate      = insn ==? ROL || insn ==? ROR || insn ==? RORI_RV32;
 
     // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0). A JAL or
     // JALR that writes a link register is a call (it pushes the return-address stack), a JALR
@@ -99,7 +105,8 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.uses_rs1 = 1'b0;
         dec.uses_rs2 = 1'b0;
         dec.imm      = imm_i_of(insn);   // JALR, LOAD, OP_IMM (shifts: imm[4:0] is shamt)
-        dec.alu      = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
+        dec.alu      = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
+                         minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};
         dec.br       = '0;
         dec.mem      = '0;
         dec.sys      = '0;
@@ -135,11 +142,13 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
             end
             KIND_OP_IMM: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;  dec.alu.op = 1'b1;
+                dec.alu.rotate = rotate;
             end
             KIND_OP: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
                 dec.alu = '{a: A_RS1, b_imm: 1'b0, op: 1'b1, sub: dec.alt, b_inv: logic_inv,
-                            minmax: minmax};
+                            minmax: minmax, minmax_max: mm_max, minmax_unsigned: mm_unsigned,
+                            rotate: rotate};
             end
             KIND_MULDIV: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_MULDIV;

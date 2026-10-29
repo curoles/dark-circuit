@@ -6,7 +6,8 @@
  * One Alu1 adds, subtracts and does AND, OR, XOR; with b inverted (alu.b_inv) its AND, OR,
  * XOR are ANDN, ORN, XNOR of Zbb. Comparisons use its SUB: co=1 is no borrow, a >= b
  * unsigned; SLT, SLTU give the result of the compare, the Zbb MIN, MINU, MAX, MAXU
- * (alu.minmax) select a or b by it. One BarrelShifter shifts by b[4:0].
+ * (alu.minmax) select a or b by it. One BarrelShifter shifts by b[4:0], and rotates for the
+ * Zbb ROL, ROR, RORI (alu.rotate).
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. result is rd's value
  * (rd_src RD_ALU) and the load/store address for Mig2Lsu and Mig2Control (mtval).
@@ -35,8 +36,8 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
     logic  lt_s;        // a < b signed
     logic  a_sign;
     logic  b_sign;
-    logic  lt;          // MIN, MAX: a < b signed; MINU, MAXU: unsigned (funct3[0])
-    logic  pick_a;      // MIN, MINU: a < b; MAX, MAXU: not (funct3[1])
+    logic  lt;          // MIN, MAX: a < b signed; MINU, MAXU: unsigned
+    logic  pick_a;      // MIN, MINU: a < b; MAX, MAXU: not
 
     // Operands.
     always_comb
@@ -71,18 +72,18 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 
     Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd, .in1(a), .in2(b_alu1), .co, .out(sum));
 
-    // SLL left, SRL right with 0, SRA right with the sign bit.
+    // SLL left, SRL right with 0, SRA right with the sign bit; ROL left, ROR and RORI right,
+    // rotating (alu.rotate; their alt is set, but a rotate ignores shift_in_bit).
     BarrelShifter #(.WIDTH(WIDTH)) u_barrel_shifter(
         .in(a), .shift_in_bit(dec.alt && a_sign), .shift(b[$clog2(WIDTH)-1:0]),
-        .shift_rotate(1'b1), .left_right(dec.funct3 == F3_SLL), .out(shifted));
+        .shift_rotate(!dec.alu.rotate), .left_right(dec.funct3 == F3_SLL), .out(shifted));
 
     // Comparisons from the subtraction a - b.
     assign lt_u = !co;
     assign lt_s = (a_sign != b_sign) ? a_sign : lt_u;
 
-    // MIN 100, MINU 101, MAX 110, MAXU 111.
-    assign lt     = dec.funct3[0] ? lt_u : lt_s;
-    assign pick_a = lt ^ dec.funct3[1];
+    assign lt     = dec.alu.minmax_unsigned ? lt_u : lt_s;
+    assign pick_a = lt ^ dec.alu.minmax_max;
 
     // Result by funct3; LUI and AUIPC take the sum; MIN, MAX the operand picked.
     always_comb

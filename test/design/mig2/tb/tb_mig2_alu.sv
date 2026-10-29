@@ -5,8 +5,9 @@
  * directly, like Mig2Decode would: for OP-IMM alt is imm[10], shifts have funct7 in
  * imm[11:5]. Cases: every OP and OP-IMM operation with edge values, LUI, AUIPC,
  * then random cases. OP with alt: SUB, SRA, and the Zbb ANDN, ORN, XNOR (funct3 of AND, OR,
- * XOR); OP with minmax: the Zbb MIN, MINU, MAX, MAXU (funct3 100..111). Stops at the first
- * mismatch with $fatal.
+ * XOR); OP with minmax: the Zbb MIN, MINU, MAX, MAXU; OP and OP-IMM with rotate: the Zbb
+ * ROL, ROR, RORI (shift amounts 0, 1, 31 and random). Their funct3 and funct7 come from
+ * RiscvInstrPkg. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -31,20 +32,41 @@ module TbMig2Alu;
 
     Mig2Alu u_mig2_alu(.dec, .pc, .rs1_data, .rs2_data, .result);
 
-    // Expected result; mm: MIN, MINU, MAX, MAXU by funct3.
+    // funct3 of the Zbb MIN, MINU, MAX, MAXU and funct7 of ROL, ROR, RORI, from their encodings.
+    localparam funct3_t    F3_MIN  = RiscvInstrPkg::MIN[14:12];
+    localparam funct3_t    F3_MINU = RiscvInstrPkg::MINU[14:12];
+    localparam funct3_t    F3_MAX  = RiscvInstrPkg::MAX[14:12];
+    localparam funct3_t    F3_MAXU = RiscvInstrPkg::MAXU[14:12];
+    localparam logic [6:0] F7_ROT  = RiscvInstrPkg::RORI_RV32[31:25];
+
+    function automatic logic minmax_f3(input funct3_t f3);
+        return f3 == F3_MIN || f3 == F3_MINU || f3 == F3_MAX || f3 == F3_MAXU;
+    endfunction
+
+    // Immediate of RORI: {funct7 of the rotates, shamt}.
+    function automatic word_t rori_imm(input logic [4:0] shamt);
+        return {20'h0, F7_ROT, shamt};
+    endfunction
+
+    // Expected result; mm: MIN, MINU, MAX, MAXU by funct3; rot: ROL (funct3 of SLL), ROR, RORI.
     function automatic word_t model(input kind_e k, input funct3_t f3, input logic al,
-                                    input logic mm, input word_t x, input word_t y,
-                                    input word_t im, input word_t pcb);
+                                    input logic mm, input logic rot, input word_t x,
+                                    input word_t y, input word_t im, input word_t pcb);
         word_t bb;
         if (k == KIND_LUI)   return im;
         if (k == KIND_AUIPC) return pcb + im;
         if (mm)
             case (f3)
-                3'b100:  return ($signed(x) < $signed(y)) ? x : y;     // MIN
-                3'b101:  return (x < y) ? x : y;                       // MINU
-                3'b110:  return ($signed(x) < $signed(y)) ? y : x;     // MAX
+                F3_MIN:  return ($signed(x) < $signed(y)) ? x : y;
+                F3_MINU: return (x < y) ? x : y;
+                F3_MAX:  return ($signed(x) < $signed(y)) ? y : x;
                 default: return (x < y) ? y : x;                       // MAXU
             endcase
+        if (rot) begin
+            bb = (k == KIND_OP) ? y : im;
+            return (f3 == F3_SLL) ? (x << bb[4:0]) | (x >> (6'd32 - bb[4:0]))
+                                  : (x >> bb[4:0]) | (x << (6'd32 - bb[4:0]));
+        end
         bb = (k == KIND_OP) ? y : im;
         case (f3)
             F3_ADD_SUB: return (k == KIND_OP && al) ? x - bb : x + bb;
@@ -64,39 +86,57 @@ module TbMig2Alu;
     // ALU controls of a kind, as Mig2Decode gives them (kinds of this test only); b_inv for
     // the Zbb ANDN, ORN, XNOR: OP with alt and the funct3 of AND, OR, XOR.
     function automatic alu_ctrl_t alu_of(input kind_e k, input logic al, input logic mm,
-                                         input funct3_t f3);
-        logic inv;
-        inv = k == KIND_OP && al && (f3 == F3_XOR || f3 == F3_OR || f3 == F3_AND);
+                                         input logic rot, input funct3_t f3);
+        alu_ctrl_t ctrl;
+        ctrl = '{a: A_RS1, b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
+                minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};  // OP-IMM
         case (k)
-            KIND_LUI:
-                return '{a: A_ZERO, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
-            KIND_AUIPC:
-                return '{a: A_PC,   b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
-            KIND_OP:
-                return '{a: A_RS1,  b_imm: 1'b0, op: 1'b1, sub: al,   b_inv: inv,  minmax: mm};
-            default:
-                return '{a: A_RS1,  b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0};
+            KIND_LUI:   begin ctrl.a = A_ZERO; ctrl.op = 1'b0; end
+            KIND_AUIPC: begin ctrl.a = A_PC;   ctrl.op = 1'b0; end
+            KIND_OP:    begin
+                ctrl.b_imm = 1'b0;  ctrl.sub = al;
+                ctrl.b_inv = al && (f3 == F3_XOR || f3 == F3_OR || f3 == F3_AND);
+                ctrl.minmax = mm;
+                ctrl.minmax_max = mm && (f3 == F3_MAX || f3 == F3_MAXU);
+                ctrl.minmax_unsigned = mm && (f3 == F3_MINU || f3 == F3_MAXU);
+            end
+            default: ;
         endcase
+        ctrl.rotate = rot;
+        return ctrl;
     endfunction
 
-    // Apply one case and compare; mm: MIN, MINU, MAX, MAXU (OP, funct3 100..111).
-    task automatic check_mm(input kind_e k, input funct3_t f3, input logic al, input logic mm,
-                            input word_t x, input word_t y, input word_t im, input iaddr_t p);
+    // Apply one case and compare; mm: MIN, MINU, MAX, MAXU (OP); rot: ROL, ROR (OP), RORI
+    // (OP-IMM).
+    task automatic check_v(input kind_e k, input funct3_t f3, input logic al, input logic mm,
+                           input logic rot, input word_t x, input word_t y, input word_t im,
+                           input iaddr_t p);
         word_t exp;
         dec = '0;
         dec.kind = k; dec.funct3 = f3; dec.alt = al; dec.imm = im;
-        dec.alu = alu_of(k, al, mm, f3);
+        dec.alu = alu_of(k, al, mm, rot, f3);
         pc = p; rs1_data = x; rs2_data = y;
         #1;
-        exp = model(k, f3, al, mm, x, y, im, {p, 2'b00});
+        exp = model(k, f3, al, mm, rot, x, y, im, {p, 2'b00});
         if (result !== exp)
-            $fatal(1, "Mig2Alu: kind=%0d funct3=%0d alt=%b minmax=%b rs1=%h rs2=%h imm=%h pc=%h got %h, expected %h",
-                   k, f3, al, mm, x, y, im, {p, 2'b00}, result, exp);
+            $fatal(1, "Mig2Alu: kind=%0d funct3=%0d alt=%b minmax=%b rotate=%b rs1=%h rs2=%h imm=%h pc=%h got %h, expected %h",
+                   k, f3, al, mm, rot, x, y, im, {p, 2'b00}, result, exp);
+    endtask
+
+    task automatic check_mm(input kind_e k, input funct3_t f3, input logic al, input logic mm,
+                            input word_t x, input word_t y, input word_t im, input iaddr_t p);
+        check_v(k, f3, al, mm, 1'b0, x, y, im, p);
+    endtask
+
+    // ROL (funct3 of SLL), ROR (of SRL): OP; RORI: OP-IMM; alt is set (insn[30] of F7_ROT).
+    task automatic check_rot(input kind_e k, input funct3_t f3, input word_t x, input word_t y,
+                             input word_t im);
+        check_v(k, f3, F7_ROT[5], 1'b0, 1'b1, x, y, im, '0);
     endtask
 
     task automatic check(input kind_e k, input funct3_t f3, input logic al, input word_t x,
                          input word_t y, input word_t im, input iaddr_t p);
-        check_mm(k, f3, al, 1'b0, x, y, im, p);
+        check_v(k, f3, al, 1'b0, 1'b0, x, y, im, p);
     endtask
 
     // OP operations that have a form with alt: SUB, SRA, ANDN, ORN, XNOR.
@@ -122,8 +162,10 @@ module TbMig2Alu;
                     check(KIND_OP, f[2:0], 1'b0, edges[i], edges[j], '0, '0);
                     if (alt_op(f[2:0]))
                         check(KIND_OP, f[2:0], 1'b1, edges[i], edges[j], '0, '0);
-                    if (f[2])   // MIN, MINU, MAX, MAXU
+                    if (minmax_f3(f[2:0]))
                         check_mm(KIND_OP, f[2:0], 1'b0, 1'b1, edges[i], edges[j], '0, '0);
+                    if (f[2:0] == F3_SLL || f[2:0] == F3_SRL_SRA)  // ROL, ROR
+                        check_rot(KIND_OP, f[2:0], edges[i], edges[j], '0);
                 end
 
         // OP-IMM: edge immediates; shifts with shamt 0, 1, 31.
@@ -141,6 +183,9 @@ module TbMig2Alu;
                 check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, 32'h400 | j, '0);  // SRAI
             end
             check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, 32'h401, '0);          // SRAI 1
+            check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd0));           // RORI
+            check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd1));
+            check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd31));
         end
 
         // LUI and AUIPC.
@@ -155,9 +200,14 @@ module TbMig2Alu;
             rnd = $random(seed);
             rnd_f3 = rnd[2:0];
             case (rnd[4:3])
-                2'd0: if (rnd_f3[2] && rnd[6])  // MIN, MINU, MAX, MAXU
+                2'd0: if (minmax_f3(rnd_f3) && rnd[6])
                           check_mm(KIND_OP, rnd_f3, 1'b0, 1'b1, $random(seed), $random(seed),
                                    '0, '0);
+                      else if ((rnd_f3 == F3_SLL || rnd_f3 == F3_SRL_SRA) && rnd[7])
+                          check_rot(KIND_OP, rnd_f3, $random(seed), $random(seed), '0);
+                      else if (rnd_f3 == F3_SRL_SRA && rnd[8])    // RORI
+                          check_rot(KIND_OP_IMM, F3_SRL_SRA, $random(seed), '0,
+                                    rori_imm(rnd[13:9]));
                       else
                           check(KIND_OP, rnd_f3, alt_op(rnd_f3) && rnd[5],
                                 $random(seed), $random(seed), '0, '0);

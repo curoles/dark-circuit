@@ -42,6 +42,9 @@
     .equ K_WFI,     15
     .equ K_MULDIV,  16
 
+/* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
+    .equ F7_ROT,    0x30
+
 /* Expected decode after the instruction. */
     .macro EXPECT kind, rd_we, uses_rs1, uses_rs2, rd, rs1, rs2, funct3, alt, imm
     .word \kind, \rd_we, \uses_rs1, \uses_rs2, \rd, \rs1, \rs2, \funct3, \alt, \imm
@@ -56,6 +59,11 @@
     .macro OPI op, funct3, rd, rs1, imm             /* addi slti sltiu xori ori andi */
     \op x\rd, x\rs1, \imm
     EXPECT K_OP_IMM, 1, 1, 0, \rd, \rs1, 0, \funct3, 0, \imm
+    .endm
+
+    .macro RORI_ rd, rs1, shamt                     /* rori (Zbb): imm is {F7_ROT, shamt} */
+    rori x\rd, x\rs1, \shamt
+    EXPECT K_OP_IMM, 1, 1, 0, \rd, \rs1, 0, 5, 1, (F7_ROT << 5) | \shamt
     .endm
 
     .macro SHIFTI op, funct3, alt, rd, rs1, shamt   /* slli srli srai: imm is {funct7, shamt} */
@@ -144,6 +152,9 @@ cases:
     OPI    xori,  4,     3,  4,  -2048
     OPI    ori,   6,     5,  6,  1
     OPI    andi,  7,     7,  8,  2047
+    /*     imm[11:5] F7_ROT like RORI and CLZ (Zbb), but another funct3: no rotate */
+    OPI    addi,  0,     9,  10, F7_ROT << 5
+    OPI    andi,  7,     11, 12, (F7_ROT << 5) | 31
 
     /*     op     funct3 alt  rd  rs1 shamt */
     SHIFTI slli,  1,     0,   2,  3,  0
@@ -204,8 +215,8 @@ cases:
     MULDIV remu,   7,     15, 16, 17
 
 #ifdef HAVE_ZBB
-    /*     Zbb in Mig2Alu (ANDN, ORN, XNOR: OP with alt; MIN, MAX: funct7 0000101), only
-           when the compiler knows Zbb: op funct3 alt rd rs1 rs2 */
+    /*     Zbb in Mig2Alu (ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR, RORI), only when
+           the compiler knows Zbb: op funct3 alt rd rs1 rs2; RORI_ rd rs1 shamt */
     OP     andn,   7,     1,  1,  2,  3
     OP     orn,    6,     1,  31, 0,  30
     OP     xnor,   4,     1,  0,  31, 1
@@ -213,6 +224,10 @@ cases:
     OP     minu,   5,     0,  31, 30, 29
     OP     max,    6,     0,  5,  0,  31
     OP     maxu,   7,     0,  0,  31, 0
+    OP     rol,    1,     1,  1,  2,  3
+    OP     ror,    5,     1,  31, 30, 0
+    RORI_  4,  5,  0
+    RORI_  31, 1,  31
 #endif
 
     /*     op      funct3 rd  rs1 csr: addresses with bit 11 set must not be sign-extended */
