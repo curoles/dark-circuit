@@ -4,7 +4,7 @@
  * protocol). Per way the struct CacheValidRam, CacheTagRam and CacheDataRam at the way's
  * index (way 1: an Xor2 of the set and the low bits of the tag, for the request and for the
  * line looked up), a CmpEq of the tag and And3 for its hit. Control as in the struct
- * SetAssocCacheRdOnly, plus:
+ * SetAssocCache without stores, plus:
  *   hit_way    = hits[1]                   hit_data = Mux2(way 0, way 1, hits[1])
  *   victim_way = ~valid[1] | (valid[0] & recent[0] & ~recent[1])
  *   recent     = per way a RegFile of one bit per line (read combinationally at the line
