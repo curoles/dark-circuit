@@ -40,7 +40,6 @@ module GshareBranchPredictor import BranchCounterPkg::*; #(
     wire [INDEX_WIDTH-1:0] history;         // outcomes of the last branches, newest in bit 0
     wire [INDEX_WIDTH-1:0] history_next;
     wire [INDEX_WIDTH-1:0] index;           // entry of the prediction in this cycle
-    wire [INDEX_WIDTH-1:0] index_next;
     wire [1:0]             counter;         // predict_counter as bits
     wire [1:0]             counter_new;     // update_counter one step towards update_taken
     wire                   c0_n;
@@ -57,9 +56,7 @@ module GshareBranchPredictor import BranchCounterPkg::*; #(
     assign predict_taken   = counter[1];
 
     // predict_index holds while predict_en is 0, like the table output.
-    Mux2 #(INDEX_WIDTH) u_mux2(.in0(predict_index), .in1(index), .sel(predict_en),
-                               .out(index_next));
-    Dff  #(INDEX_WIDTH) u_dff (.clk(clk), .in(index_next), .out(predict_index));
+    DffEn #(INDEX_WIDTH) u_dff_en(.clk(clk), .en(predict_en), .in(index), .out(predict_index));
 
     // Saturating step of the counter.
     Inv  #(1) u_inv   (.in(update_counter[0]), .out(c0_n));

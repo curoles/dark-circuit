@@ -3,7 +3,7 @@
  *
  * Same ports and behavior as the behave version, see there (POLICY, forwarding).
  * REPL_LRU: the state RAM is the struct Sram1R1W; set_q and the bits of the last touch
- * (wr_bits) are flops with a hold Mux2; stale = DffSyncRst(rd_en ? touch AND (set_q ==
+ * (wr_bits) are DffEn (rd_en, touch); stale = DffSyncRst(rd_en ? touch AND (set_q ==
  * rd_set) : touch OR stale); lru = Mux2(ram_bits, wr_bits, stale) into BitMatrixLru.
  * REPL_RANDOM: the struct Lfsr; PriorityEncoder of the inverted valid bits gives the highest
  * invalid way, its valid output says some way is invalid, and Mux2 takes the Lfsr's low bits
@@ -42,10 +42,8 @@ module CacheReplacement import CachePkg::*; #(
         localparam LRU_WIDTH = WAYS * (WAYS - 1) / 2;
 
         wire [SETS_WIDTH-1:0] set_q;        // set of the last read: touches are for it
-        wire [SETS_WIDTH-1:0] set_next;
         wire [LRU_WIDTH-1:0]  ram_bits;     // bits of set_q as the RAM read them
         wire [LRU_WIDTH-1:0]  wr_bits;      // bits of the last touch
-        wire [LRU_WIDTH-1:0]  wr_bits_next;
         wire                  same_set;     // the new read is of set_q
         wire                  touch_same;   // a touch of set_q at the edge of its read
         wire                  touch_more;   // a touch while set_q stays, or stale already
@@ -58,8 +56,7 @@ module CacheReplacement import CachePkg::*; #(
             .clk, .rd_en, .rd_addr(rd_set), .data_out(ram_bits),
             .wr_en(touch), .wr_addr(set_q), .data_in(lru_next));
 
-        Mux2 #(SETS_WIDTH) u_mux2_set(.in0(set_q), .in1(rd_set), .sel(rd_en), .out(set_next));
-        Dff  #(SETS_WIDTH) u_dff_set (.clk, .in(set_next), .out(set_q));
+        DffEn #(SETS_WIDTH) u_dff_en_set(.clk, .en(rd_en), .in(rd_set), .out(set_q));
 
         // stale: see the behave version for why.
         CmpEq #(SETS_WIDTH) u_cmp_eq_set(.in1(set_q), .in2(rd_set), .eq(same_set));
@@ -70,9 +67,7 @@ module CacheReplacement import CachePkg::*; #(
         DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_stale(.clk, .rst_n, .in(stale_next),
                                                      .out(stale));
 
-        Mux2 #(LRU_WIDTH) u_mux2_wr_bits(.in0(wr_bits), .in1(lru_next), .sel(touch),
-                                         .out(wr_bits_next));
-        Dff  #(LRU_WIDTH) u_dff_wr_bits (.clk, .in(wr_bits_next), .out(wr_bits));
+        DffEn #(LRU_WIDTH) u_dff_en_wr_bits(.clk, .en(touch), .in(lru_next), .out(wr_bits));
 
         Mux2 #(LRU_WIDTH) u_mux2_lru(.in0(ram_bits), .in1(wr_bits), .sel(stale), .out(lru));
 

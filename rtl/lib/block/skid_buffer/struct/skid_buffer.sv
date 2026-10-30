@@ -39,7 +39,6 @@ module SkidBuffer #(
     wire                  skid_valid;
     wire [DATA_WIDTH-1:0] skid_data;
     wire [DATA_WIDTH-1:0] next_item;          // skid item when there is one, else in_data
-    wire [DATA_WIDTH-1:0] out_data_d;
 
     Inv  #(1) u_inv_out_ready  (.in(out_ready), .out(not_out_ready));
     And2 #(1) u_and2_stall     (.in1(out_valid), .in2(not_out_ready), .out(stall));
@@ -54,7 +53,6 @@ module SkidBuffer #(
 
     Mux2 #(DATA_WIDTH) u_mux2_next_item(.in0(in_data), .in1(skid_data), .sel(skid_valid), .out(next_item));
     Dff  #(DATA_WIDTH) u_dff_skid_data (.clk, .in(next_item), .out(skid_data));
-    Mux2 #(DATA_WIDTH) u_mux2_out_data (.in0(out_data), .in1(next_item), .sel(out_free), .out(out_data_d));
-    Dff  #(DATA_WIDTH) u_dff_out_data  (.clk, .in(out_data_d), .out(out_data));
+    DffEn #(DATA_WIDTH) u_dff_en_out_data(.clk, .en(out_free), .in(next_item), .out(out_data));
 
 endmodule
