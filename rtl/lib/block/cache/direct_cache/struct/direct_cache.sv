@@ -1,9 +1,11 @@
 /* Direct-mapped read-write cache (a data cache), write-through, made of blocks and gates.
  *
- * Same ports and behavior as the behave version (see there for the protocol, the write
- * policy and forwarding). The RAMs are the struct CacheValidRam, CacheTagRam and
- * CacheDataRam; the request taken (line address, we, wdata, wstrb) is one Dff with a hold
- * Mux2 (accept). Control:
+ * Same ports, parameters and behavior as the behave version (see there for the protocol, the
+ * write policy, forwarding and READ_ONLY). The RAMs are the struct CacheValidRam,
+ * CacheTagRam and CacheDataRam; the request taken is a Dff with a hold Mux2 (accept) for the
+ * line address and, unless READ_ONLY, one for the fields of a store (we, wdata, wstrb).
+ * Control (READ_ONLY=1: we, wdata, wstrb, store_write and fwd are 0, the data RAM writes
+ * mem_rsp_data, and their logic is left out):
  *   req_ready = NOR(waiting, load_miss, held)       accept = req_valid AND req_ready
  *   look      = DffSyncRst(accept OR held)
  *   hit       = look AND valid AND (tag == tag of look_line)
@@ -29,6 +31,7 @@ module DirectCache #(
     parameter  ADDR_WIDTH  = 32,            // byte address
     parameter  SETS_WIDTH  = 6,             // 1 << SETS_WIDTH sets
     parameter  SETS_OFFSET = 2,             // 1 << SETS_OFFSET bytes in a line (2: one word)
+    parameter  READ_ONLY   = 0,             // 1: loads only, no store logic
     localparam DATA_WIDTH  = 8 << SETS_OFFSET,
     localparam STRB_WIDTH  = 1 << SETS_OFFSET,  // a strobe per byte of the line
     localparam TAG_WIDTH   = ADDR_WIDTH - SETS_WIDTH - SETS_OFFSET
@@ -40,13 +43,14 @@ module DirectCache #(
     // CPU side: requests (a channel), answers to loads
     input  wire                  req_valid,
     output wire                  req_ready,
-    input  wire                  req_we,        // 1: store, 0: load
-    // The offset in the line is not used: the cache works on whole lines.
+    // The offset in the line is not used: the cache works on whole lines. The fields of a
+    // store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
+    input  wire                  req_we,        // 1: store, 0: load
     input  wire [ADDR_WIDTH-1:0] req_addr,
-    /* verilator lint_on UNUSEDSIGNAL */
     input  wire [DATA_WIDTH-1:0] req_wdata,     // store: the line with its new bytes
     input  wire [STRB_WIDTH-1:0] req_wstrb,     // store: the bytes to write
+    /* verilator lint_on UNUSEDSIGNAL */
     output wire                  rsp_valid,     // rsp_data is the line a load asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
 
@@ -61,15 +65,13 @@ module DirectCache #(
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
 );
     localparam LINE_WIDTH = ADDR_WIDTH - SETS_OFFSET;   // address bits above the offset
-    localparam REQ_WIDTH  = LINE_WIDTH + 1 + DATA_WIDTH + STRB_WIDTH;   // the request kept
+    localparam STORE_WIDTH = 1 + DATA_WIDTH + STRB_WIDTH;   // the fields of a store kept
 
     wire                  accept;       // a request is taken in this clock
     wire                  look;         // a request taken before is looked up now (or held)
     wire                  look_next;
-    wire [REQ_WIDTH-1:0]  req_in;       // {line address, we, wdata, wstrb} of the request
-    wire [REQ_WIDTH-1:0]  look_req;     // the same, of the lookup
-    wire [REQ_WIDTH-1:0]  look_req_next;
     wire [LINE_WIDTH-1:0] look_line;    // its address without the offset in the line
+    wire [LINE_WIDTH-1:0] look_line_next;
     wire                  look_we;
     wire                  look_we_n;
     wire [DATA_WIDTH-1:0] look_wdata;
@@ -79,7 +81,6 @@ module DirectCache #(
     wire                  tag_eq;
     wire [DATA_WIDTH-1:0] ram_line;     // line of the set as the RAM read it
     wire [DATA_WIDTH-1:0] line;         // line of the set now: forwarded or ram_line
-    wire [DATA_WIDTH-1:0] merged;       // line with the bytes of the store
     wire                  hit;
     wire                  hit_n;
     wire                  store;        // a store is looked up
@@ -95,12 +96,6 @@ module DirectCache #(
     wire                  waiting_kept; // waiting, and memory does not answer now
     wire                  mem_rsp_n;
     wire                  refill;       // the line from memory comes: write it
-    wire                  same_set;     // the request taken is of the set of the lookup
-    wire                  fwd_new;      // the request taken at a store's write, same set
-    wire                  fwd;          // ram_line is older than a store's write: use fwd_line
-    wire                  fwd_next;
-    wire [DATA_WIDTH-1:0] fwd_line;
-    wire [DATA_WIDTH-1:0] fwd_line_next;
     wire                  ram_wr_en;
     wire [DATA_WIDTH-1:0] ram_wr_line;
 
@@ -110,12 +105,10 @@ module DirectCache #(
     Or2 #(1) u_or2_look(.in1(accept), .in2(held), .out(look_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(look_next), .out(look));
 
-    // The request taken, kept for its lookup.
-    assign req_in = {req_addr[ADDR_WIDTH-1:SETS_OFFSET], req_we, req_wdata, req_wstrb};
-    Mux2 #(REQ_WIDTH) u_mux2_req(.in0(look_req), .in1(req_in), .sel(accept),
-                                 .out(look_req_next));
-    Dff  #(REQ_WIDTH) u_dff_req (.clk, .in(look_req_next), .out(look_req));
-    assign {look_line, look_we, look_wdata, look_wstrb} = look_req;
+    // The line address of the request taken, kept for its lookup.
+    Mux2 #(LINE_WIDTH) u_mux2_line(.in0(look_line), .in1(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
+                                   .sel(accept), .out(look_line_next));
+    Dff  #(LINE_WIDTH) u_dff_line (.clk, .in(look_line_next), .out(look_line));
 
     CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
         .clk, .rst_n, .invalidate,
@@ -153,13 +146,6 @@ module DirectCache #(
     assign mem_req_wdata = look_wdata;
     assign mem_req_wstrb = look_wstrb;
 
-    // Store: the bytes of its strobes into the line, written when memory takes the store.
-    for (genvar b = 0; b < STRB_WIDTH; b++) begin: g_byte
-        Mux2 #(8) u_mux2_byte(.in0(line[8*b +: 8]), .in1(look_wdata[8*b +: 8]),
-                              .sel(look_wstrb[b]), .out(merged[8*b +: 8]));
-    end
-    And3 #(1) u_and3_store_write(.in1(store), .in2(hit), .in3(mem_req_ready), .out(store_write));
-
     // Load miss served from the clock memory takes its read until the answer comes.
     And2 #(1) u_and2_wait_start(.in1(load_miss), .in2(mem_req_ready), .out(wait_start));
     Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
@@ -171,20 +157,57 @@ module DirectCache #(
     // See the behave version.
     `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
 
-    Or2  #(1)          u_or2_ram_wr  (.in1(refill), .in2(store_write), .out(ram_wr_en));
-    Mux2 #(DATA_WIDTH) u_mux2_ram_wr (.in0(merged), .in1(mem_rsp_data), .sel(refill),
-                                      .out(ram_wr_line));
+    Or2 #(1) u_or2_ram_wr(.in1(refill), .in2(store_write), .out(ram_wr_en));
 
-    // Forwarding (see the behave version): decided at the edge of a read.
-    CmpEq #(SETS_WIDTH) u_cmp_eq_set(.in1(look_line[SETS_WIDTH-1:0]),
-                                     .in2(req_addr[SETS_OFFSET +: SETS_WIDTH]), .eq(same_set));
-    And2  #(1) u_and2_fwd (.in1(store_write), .in2(same_set), .out(fwd_new));
-    Mux2  #(1) u_mux2_fwd (.in0(fwd), .in1(fwd_new), .sel(accept), .out(fwd_next));
-    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_fwd(.clk, .rst_n, .in(fwd_next), .out(fwd));
-    Mux2 #(DATA_WIDTH) u_mux2_fwd_line(.in0(fwd_line), .in1(merged), .sel(store_write),
-                                       .out(fwd_line_next));
-    Dff  #(DATA_WIDTH) u_dff_fwd_line (.clk, .in(fwd_line_next), .out(fwd_line));
-    Mux2 #(DATA_WIDTH) u_mux2_line    (.in0(ram_line), .in1(fwd_line), .sel(fwd), .out(line));
+    // The logic only stores need; a read-only cache has none of it.
+    // @kb: rtl/lib/block/cache/read_only
+    if (READ_ONLY) begin: g_read_only
+        assign look_we     = 1'b0;
+        assign look_wdata  = '0;
+        assign look_wstrb  = '0;
+        assign store_write = 1'b0;
+        assign ram_wr_line = mem_rsp_data;
+        assign line        = ram_line;
+    end else begin: g_store
+        wire [STORE_WIDTH-1:0] look_store;      // {we, wdata, wstrb} of the lookup
+        wire [STORE_WIDTH-1:0] look_store_next;
+        wire [DATA_WIDTH-1:0]  merged;          // line with the bytes of the store
+        wire                   same_set;        // the request taken is of the lookup's set
+        wire                   fwd_new;         // the request taken at a store's write, same set
+        wire                   fwd;             // ram_line is older than a store's write
+        wire                   fwd_next;
+        wire [DATA_WIDTH-1:0]  fwd_line;
+        wire [DATA_WIDTH-1:0]  fwd_line_next;
+
+        // The fields of the store taken, kept for its lookup.
+        Mux2 #(STORE_WIDTH) u_mux2_store(.in0(look_store), .in1({req_we, req_wdata, req_wstrb}),
+                                         .sel(accept), .out(look_store_next));
+        Dff  #(STORE_WIDTH) u_dff_store (.clk, .in(look_store_next), .out(look_store));
+        assign {look_we, look_wdata, look_wstrb} = look_store;
+
+        // Store: the bytes of its strobes into the line, written when memory takes the store.
+        for (genvar b = 0; b < STRB_WIDTH; b++) begin: g_byte
+            Mux2 #(8) u_mux2_byte(.in0(line[8*b +: 8]), .in1(look_wdata[8*b +: 8]),
+                                  .sel(look_wstrb[b]), .out(merged[8*b +: 8]));
+        end
+        And3 #(1) u_and3_store_write(.in1(store), .in2(hit), .in3(mem_req_ready),
+                                     .out(store_write));
+        Mux2 #(DATA_WIDTH) u_mux2_ram_wr(.in0(merged), .in1(mem_rsp_data), .sel(refill),
+                                         .out(ram_wr_line));
+
+        // Forwarding (see the behave version): decided at the edge of a read.
+        CmpEq #(SETS_WIDTH) u_cmp_eq_set(.in1(look_line[SETS_WIDTH-1:0]),
+                                         .in2(req_addr[SETS_OFFSET +: SETS_WIDTH]),
+                                         .eq(same_set));
+        And2  #(1) u_and2_fwd (.in1(store_write), .in2(same_set), .out(fwd_new));
+        Mux2  #(1) u_mux2_fwd (.in0(fwd), .in1(fwd_new), .sel(accept), .out(fwd_next));
+        DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_fwd(.clk, .rst_n, .in(fwd_next), .out(fwd));
+        Mux2 #(DATA_WIDTH) u_mux2_fwd_line(.in0(fwd_line), .in1(merged), .sel(store_write),
+                                           .out(fwd_line_next));
+        Dff  #(DATA_WIDTH) u_dff_fwd_line (.clk, .in(fwd_line_next), .out(fwd_line));
+        Mux2 #(DATA_WIDTH) u_mux2_line_fwd(.in0(ram_line), .in1(fwd_line), .sel(fwd),
+                                           .out(line));
+    end
 
     Or2  #(1)          u_or2_rsp  (.in1(load_hit), .in2(refill), .out(rsp_valid));
     Mux2 #(DATA_WIDTH) u_mux2_data(.in0(line), .in1(mem_rsp_data), .sel(waiting),

@@ -23,6 +23,9 @@
  * so the merged line is used instead.
  * invalidate=1 makes every line invalid; allowed while no load miss is served. Reset makes
  * every line invalid.
+ * READ_ONLY=1 makes an instruction cache (DirectCacheRdOnly): no stores (req_we, req_wdata
+ * and req_wstrb are not used; mem_req_we, mem_req_wdata and mem_req_wstrb are 0), so the
+ * logic only stores need (their fields of the request, the merge, forwarding) is left out.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -34,6 +37,7 @@ module DirectCache #(
     parameter  ADDR_WIDTH  = 32,            // byte address
     parameter  SETS_WIDTH  = 6,             // 1 << SETS_WIDTH sets
     parameter  SETS_OFFSET = 2,             // 1 << SETS_OFFSET bytes in a line (2: one word)
+    parameter  READ_ONLY   = 0,             // 1: loads only, no store logic
     localparam DATA_WIDTH  = 8 << SETS_OFFSET,
     localparam STRB_WIDTH  = 1 << SETS_OFFSET,  // a strobe per byte of the line
     localparam TAG_WIDTH   = ADDR_WIDTH - SETS_WIDTH - SETS_OFFSET
@@ -45,13 +49,14 @@ module DirectCache #(
     // CPU side: requests (a channel), answers to loads
     input  wire                  req_valid,
     output wire                  req_ready,
-    input  wire                  req_we,        // 1: store, 0: load
-    // The offset in the line is not used: the cache works on whole lines.
+    // The offset in the line is not used: the cache works on whole lines. The fields of a
+    // store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
+    input  wire                  req_we,        // 1: store, 0: load
     input  wire [ADDR_WIDTH-1:0] req_addr,
-    /* verilator lint_on UNUSEDSIGNAL */
     input  wire [DATA_WIDTH-1:0] req_wdata,     // store: the line with its new bytes
     input  wire [STRB_WIDTH-1:0] req_wstrb,     // store: the bytes to write
+    /* verilator lint_on UNUSEDSIGNAL */
     output wire                  rsp_valid,     // rsp_data is the line a load asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
 
@@ -75,7 +80,6 @@ module DirectCache #(
     logic [TAG_WIDTH-1:0]  tag;
     logic [DATA_WIDTH-1:0] ram_line;    // line of the set as the RAM read it
     logic [DATA_WIDTH-1:0] line;        // line of the set now: forwarded or ram_line
-    logic [DATA_WIDTH-1:0] merged;      // line with the bytes of the store
     logic                  hit;
     logic                  store;       // a store is looked up
     logic                  load_hit;
@@ -84,8 +88,6 @@ module DirectCache #(
     logic                  store_write; // a store that hits is taken by memory: write merged
     logic                  waiting;     // a load miss is served: memory has not answered yet
     logic                  refill;      // the line from memory comes: write it
-    logic                  fwd;         // ram_line is older than a store's write: use fwd_line
-    logic [DATA_WIDTH-1:0] fwd_line;
     logic                  ram_wr_en;
     logic [DATA_WIDTH-1:0] ram_wr_line;
 
@@ -99,12 +101,8 @@ module DirectCache #(
         else        look <= accept || held;
 
     always_ff @(posedge clk)
-        if (accept) begin
-            look_line  <= req_addr[ADDR_WIDTH-1:SETS_OFFSET];
-            look_we    <= req_we;
-            look_wdata <= req_wdata;
-            look_wstrb <= req_wstrb;
-        end
+        if (accept)
+            look_line <= req_addr[ADDR_WIDTH-1:SETS_OFFSET];
 
     // The RAMs read the set of the request; their answers come with look and hold while a
     // lookup is held (no request is taken). Refills write valid, tag and data; a store that
@@ -140,19 +138,6 @@ module DirectCache #(
     assign mem_req_wdata = look_wdata;
     assign mem_req_wstrb = look_wstrb;
 
-    // The merged line goes into the cache once: in the clock memory takes the store.
-    function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,
-                                              input [DATA_WIDTH-1:0] new_bytes,
-                                              input [STRB_WIDTH-1:0] strb);
-        merge = old;
-        for (int b = 0; b < STRB_WIDTH; b++)
-            if (strb[b])
-                merge[8*b +: 8] = new_bytes[8*b +: 8];
-    endfunction
-
-    assign merged      = merge(line, look_wdata, look_wstrb);
-    assign store_write = store && hit && mem_req_ready;
-
     // A load miss is served from the clock memory takes its read until the answer comes
     // (look_line holds: no request is taken meanwhile).
     always_ff @(posedge clk)
@@ -167,24 +152,59 @@ module DirectCache #(
     // data RAM's one write port, and the refill writes the set of look_line.
     `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
 
-    assign ram_wr_en   = refill || store_write;
-    assign ram_wr_line = refill ? mem_rsp_data : merged;
+    assign ram_wr_en = refill || store_write;
 
-    // Forwarding: the request taken at the edge of a store's write read the old line when it
-    // is of the same set. Only the edge of a read decides: no store completes while a lookup
-    // is held, and a lookup ends with its store.
-    always_ff @(posedge clk)
-        if (!rst_n)
-            fwd <= 1'b0;
-        else if (accept)
-            fwd <= store_write &&
-                   look_line[SETS_OFFSET +: SETS_WIDTH] == req_addr[SETS_OFFSET +: SETS_WIDTH];
+    // The merged line goes into the cache once: in the clock memory takes the store.
+    function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,
+                                              input [DATA_WIDTH-1:0] new_bytes,
+                                              input [STRB_WIDTH-1:0] strb);
+        merge = old;
+        for (int b = 0; b < STRB_WIDTH; b++)
+            if (strb[b])
+                merge[8*b +: 8] = new_bytes[8*b +: 8];
+    endfunction
 
-    always_ff @(posedge clk)
-        if (store_write)
-            fwd_line <= merged;
+    // The logic only stores need; a read-only cache has none of it.
+    // @kb: rtl/lib/block/cache/read_only
+    if (READ_ONLY) begin: g_read_only
+        assign look_we     = 1'b0;
+        assign look_wdata  = '0;
+        assign look_wstrb  = '0;
+        assign store_write = 1'b0;
+        assign ram_wr_line = mem_rsp_data;
+        assign line        = ram_line;
+    end else begin: g_store
+        logic                  fwd;         // ram_line is older than a store's write
+        logic [DATA_WIDTH-1:0] fwd_line;
+        logic [DATA_WIDTH-1:0] merged;      // line with the bytes of the store
 
-    assign line = fwd ? fwd_line : ram_line;
+        always_ff @(posedge clk)
+            if (accept) begin
+                look_we    <= req_we;
+                look_wdata <= req_wdata;
+                look_wstrb <= req_wstrb;
+            end
+
+        assign merged      = merge(line, look_wdata, look_wstrb);
+        assign store_write = store && hit && mem_req_ready;
+        assign ram_wr_line = refill ? mem_rsp_data : merged;
+
+        // Forwarding: the request taken at the edge of a store's write read the old line
+        // when it is of the same set. Only the edge of a read decides: no store completes
+        // while a lookup is held, and a lookup ends with its store.
+        always_ff @(posedge clk)
+            if (!rst_n)
+                fwd <= 1'b0;
+            else if (accept)
+                fwd <= store_write &&
+                       look_line[SETS_OFFSET +: SETS_WIDTH] == req_addr[SETS_OFFSET +: SETS_WIDTH];
+
+        always_ff @(posedge clk)
+            if (store_write)
+                fwd_line <= merged;
+
+        assign line = fwd ? fwd_line : ram_line;
+    end
 
     assign rsp_valid = load_hit || refill;
     assign rsp_data  = waiting ? mem_rsp_data : line;

@@ -1,0 +1,48 @@
+type: decision
+title: A read-only cache is its read-write cache with READ_ONLY=1, in a thin wrapper
+date: 2026-10-29
+question: >
+  The cache library has each kind twice, read-only (instruction cache) and read-write (data
+  cache), in behave and struct versions: four implementations of one lookup. Can one reuse
+  the other, and how does the instruction cache stay free of store logic?
+decision: >
+  The read-write cache has a parameter READ_ONLY (default 0). With 1, one generate branch
+  (g_read_only) ties the fields of a store, store_write and the forwarded line to constants
+  and the data RAM writes the line from memory; the other branch (g_store) holds the logic
+  only stores need: their fields of the request, the merge, the RAM write mux, forwarding.
+  The read-only module is a wrapper with the read-only ports: the read-write cache with
+  READ_ONLY=1, req_we, req_wdata and req_wstrb 0, the memory write fields unused. One file
+  above behave/ and struct/, listed by both flists: the read-write cache of the library it is
+  built with gives the version. First DirectCacheRdOnly; SetAssocCacheRdOnly and
+  SkewedCacheRdOnly the same way when this one reads well.
+why: >
+  With no stores the read-write cache is the read-only one: held only on a load miss, so its
+  req_ready is the read-only one's; no store_write, so the touch and the RAM writes are the
+  read-only ones; no forwarding. One lookup to keep and fix instead of two. The parameter
+  (user) leaves the store logic out by construction, not by trusting synthesis to fold
+  constants. The wrapper keeps the instruction cache's port list (no store ports) and its
+  testbench, which now tests READ_ONLY=1.
+rejected:
+  - choice: The read-write cache instantiating the read-only one
+    why_not: >
+      A store writes the data RAM of the way that hit and the request after it needs the
+      forwarded line, both inside the read-only module: it would need a write port, a
+      forwarding input and the hit way out, and would be the read-write cache without its
+      store control.
+  - choice: The wrapper only, store logic removed by synthesis (req_we tied to 0)
+    why_not: >
+      Works for the logic, but relies on the optimizer, also for the flops of the store's
+      fields (constant D, no reset); the parameter makes the struct version have no such
+      gates at all.
+  - choice: Separate implementations as before
+    why_not: Two copies of the lookup, behave and struct, to keep equal by hand.
+evidence: >
+  DirectCache, 2026-10-29: the read-only testbench (unchanged) passes with the wrapper over
+  both versions on Icarus and Verilator, the read-write testbench with READ_ONLY=0; mutants
+  in the read-only branch caught by the first, in the store branch by the second (8 of 8).
+  Generic Yosys synthesis (flattened) of DirectCacheRdOnly, 64 sets, one-word lines: the
+  same flops as the separate struct version (3737), 11411 cells against 11433.
+code:
+  - rtl/lib/block/cache/direct_cache/behave/direct_cache.sv#g_read_only
+  - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#g_read_only
+  - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#READ_ONLY
