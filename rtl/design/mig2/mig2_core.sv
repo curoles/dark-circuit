@@ -1,9 +1,9 @@
 /* Mig2 core: RISC-V RV32IM with Zicsr and Zicntr, synthesizable; the memories are outside.
  *
  * Instruction fetch and data access are valid/ready channels with the answers of reads
- * after them (imem_req_t, Mig2Pkg). Fetch waits for imem (Mig2Fetch); for dmem the core
- * still needs every request taken at once and its answer 1 clock later (a memory like SRAM
- * or FPGA block RAM; SimLatencyRAM with latency 1), and asserts it.
+ * after them (imem_req_t, Mig2Pkg). Fetch waits for imem (Mig2Fetch); a load or store
+ * waits in EX until dmem takes its request, a load waits in MEM/WB for its word (one dmem
+ * request in flight).
  * Faults (ECALL, illegal instruction, misaligned
  * jump target or load/store address, ...) trap to mtvec in machine mode, MRET returns.
  * EBREAK traps too, or halts the core (halt=1) when the debugger sets
@@ -24,7 +24,8 @@
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
  * from imem and reads its registers; EX executes: branches, traps, CSRs and stores
  * happen there, loads send their read; MEM/WB gets load data, writes rd and retires.
- * An instruction that leaves EX always completes. Signals of a stage have its prefix:
+ * An instruction that leaves EX always completes (a load when its word comes). Signals of
+ * a stage have its prefix:
  * if_, id_, ex_, mem_.
  * A branch guessed wrong, JALR, a trap and MRET cost two bubbles: the instructions in ID
  * and IF are dropped; JAL and a branch guessed taken (Mig2BranchPredict) cost one: ID
@@ -108,6 +109,8 @@ module Mig2Core import Mig2Pkg::*; #(
     logic         ex_csr_illegal;
     word_t        ex_muldiv_result; // product, quotient or remainder of an M instruction
     logic         ex_muldiv_stall;
+    logic         ex_lsu_valid;     // the load or store in EX may send its request
+    logic         ex_dmem_wait;     // dmem does not take the request of EX
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
@@ -124,6 +127,7 @@ module Mig2Core import Mig2Pkg::*; #(
     // MEM/WB
     retire_t      mem_ret;          // instruction in MEM/WB: its entry from EX
     word_t        mem_load_data;
+    logic         mem_wait;         // the load in MEM/WB waits for its word from dmem
     reg_id_t      mem_rd;           // rd written in MEM/WB, 0 when none
     logic         mem_rd_write;
     word_t        mem_rd_data;      // rd value written in MEM/WB: load data or EX's value
@@ -143,7 +147,8 @@ module Mig2Core import Mig2Pkg::*; #(
         .id_ras_top, .ex_ras_target(id_ex_q.ras_target),
         .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
         .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
-        .ex_csr_illegal, .ex_muldiv_stall, .csr, .ebreak_halt(dbg_req.ebreak_halt),
+        .ex_csr_illegal, .ex_muldiv_stall, .ex_dmem_wait, .mem_wait, .csr,
+        .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
         .ras_ctrl,
         .id_redirected, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
@@ -199,8 +204,13 @@ module Mig2Core import Mig2Pkg::*; #(
         .dec(ex_dec), .pc(ex_fetch.pc), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
         .branch(ex_branch), .link(ex_link));
 
+    // One dmem request in flight: EX sends its request only while no load in MEM/WB waits
+    // (or its word comes now); a request dmem does not take stays offered, EX waits.
+    assign ex_lsu_valid = ex_fetch.valid && !mem_wait;
+    assign ex_dmem_wait = dmem_req.valid && !dmem_rsp.ready;
+
     Mig2Lsu u_mig2_lsu(
-        .valid(ex_fetch.valid), .dec(ex_dec), .rs1_data(ex_rs1_data), .addr(ex_alu_result),
+        .valid(ex_lsu_valid), .dec(ex_dec), .rs1_data(ex_rs1_data), .addr(ex_alu_result),
         .rs2_data(ex_rs2_data), .dmem_req, .misaligned(ex_lsu_misaligned), .mem(ex_lsu_mem));
 
     // Mig2Lsu adds the byte offset of its own; it is the low bits of the ALU's address.
@@ -216,8 +226,9 @@ module Mig2Core import Mig2Pkg::*; #(
         .illegal(ex_csr_illegal), .csr);
 
     Mig2MulDiv u_mig2_muldiv(
-        .clk, .rst_n, .valid(ex_fetch.valid), .dec(ex_dec), .rs1_data(ex_rs1_data),
-        .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall), .result(ex_muldiv_result));
+        .clk, .rst_n, .valid(ex_fetch.valid), .hold(mem_wait), .dec(ex_dec),
+        .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall),
+        .result(ex_muldiv_result));
 
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
@@ -257,16 +268,21 @@ module Mig2Core import Mig2Pkg::*; #(
                           mem_wdata: ex_lsu_mem.wdata};
 
     // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
-    // a division (the only way an instruction in EX neither completes nor traps).
+    // a division or for dmem to take its request (EX/MEM keeps its load while it waits for
+    // its word: no bubble goes in then).
     assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
-                       !ex_fetch.valid ? ex_fetch.bubble : BUBBLE_DIV;
+                       !ex_fetch.valid ? ex_fetch.bubble :
+                       ex_muldiv_stall ? BUBBLE_DIV : BUBBLE_DMEM;
 
-    `DC_ASSERT(a_ex_bubble_div, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall)
+    `DC_ASSERT(a_ex_bubble_why, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall ||
+                                ex_dmem_wait || mem_wait)
 
+    // load: a load that sent its read (a misaligned one traps and reads nothing); MEM/WB
+    // waits for its word.
     assign ex_mem_d = '{valid:  ex_retire.valid,
                         bubble: ex_bubble,
                         ret:    ex_retire,
-                        load:   ex_dec.rd_src == RD_LOAD,
+                        load:   ex_dec.rd_src == RD_LOAD && !ex_trap.valid,
                         funct3: ex_dec.funct3,
                         offset: ex_load_offset};
 
@@ -277,10 +293,13 @@ module Mig2Core import Mig2Pkg::*; #(
         .funct3(ex_mem_q.funct3), .offset(ex_mem_q.offset), .word(dmem_rsp.data),
         .load_data(mem_load_data));
 
+    // A load waits in MEM/WB until its word comes; it writes rd and retires then.
+    assign mem_wait = ex_mem_q.valid && ex_mem_q.load && !dmem_rsp.valid;
+
     // Write back: rd_addr of the entry is 0 when nothing is written (RVFI: traps, x0;
     // EX builds it from ex_done). A bubble keeps old fields (Mig2PipeReg clears only
     // valid, also at reset), so valid gates the write.
-    assign mem_rd       = ex_mem_q.valid ? mem_ret.rd_addr : '0;
+    assign mem_rd       = (ex_mem_q.valid && !mem_wait) ? mem_ret.rd_addr : '0;
     assign mem_rd_write = mem_rd != '0;
     assign mem_rd_data  = ex_mem_q.load ? mem_load_data : mem_ret.rd_wdata;
 
@@ -291,8 +310,8 @@ module Mig2Core import Mig2Pkg::*; #(
 
     always_comb begin
         retire           = mem_ret;
-        retire.valid     = ex_mem_q.valid;
-        retire.bubble    = ex_mem_q.bubble;
+        retire.valid     = ex_mem_q.valid && !mem_wait;
+        retire.bubble    = mem_wait ? BUBBLE_DMEM : ex_mem_q.bubble;
         retire.order     = retire_order;
         retire.rd_wdata  = mem_rd_write ? mem_rd_data : '0;
         retire.mem_rdata = mem_ret.mem_rmask != '0 ? dmem_rsp.data : '0;
@@ -306,23 +325,22 @@ module Mig2Core import Mig2Pkg::*; #(
                                       pc:     id_fetch.pc},
                           ex:       ex_fetch,
                           mem:      '{valid:  ex_mem_q.valid,
-                                      bubble: ex_mem_q.bubble,
+                                      bubble: mem_wait ? BUBBLE_DMEM : ex_mem_q.bubble,
                                       pc:     mem_ret.pc_rdata[WIDTH-1:IADDR_START]},
                           redirect: if_ctrl.redirect,
                           id_wait:  id_wait,
                           id_stall: id_keep,
                           ex_stall: pipe_ctrl.ex_stall,
-                          ex_flush: pipe_ctrl.ex_flush};
+                          ex_flush: pipe_ctrl.ex_flush,
+                          mem_wait: mem_wait};
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;
 
-    // dmem latency 1 for now: every request is taken at once and a read is answered in the
-    // next clock, and only then (MEM/WB does not wait for memory yet).
-    `DC_ASSERT(a_dmem_ready, !dmem_req.valid || dmem_rsp.ready)
-    `DC_ASSERT_NEXT(a_dmem_on_time, dmem_req.valid && !dmem_req.we && dmem_rsp.ready,
-                    dmem_rsp.valid)
-    `DC_ASSERT_NEXT(a_dmem_no_extra, !(dmem_req.valid && !dmem_req.we && dmem_rsp.ready),
-                    !dmem_rsp.valid)
+    // dmem keeps the valid/ready rules: a request it does not take stays as it is.
+    `DC_ASSERT_NEXT(a_dmem_req_held, dmem_req.valid && !dmem_rsp.ready,
+                    dmem_req.valid && $stable(dmem_req))
+    // dmem answers only the load in MEM/WB (one request in flight).
+    `DC_ASSERT(a_dmem_answer_expected, !dmem_rsp.valid || (ex_mem_q.valid && ex_mem_q.load))
 
 endmodule

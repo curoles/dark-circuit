@@ -116,6 +116,10 @@ if(DARK_CIRCUIT_RISCV)
 
     # Loads and stores: every size and offset, sign extension, strobes.
     mig2_program_test(load_store SOURCES load_store.S ARGS +expect_sequential +expect_regs)
+    # The same with a slow dmem: ready withheld, words after 1 to 3 clocks, now and then 5 to
+    # 10; EX and MEM/WB wait.
+    mig2_program_test(load_store_slow_dmem SOURCES load_store.S
+                      ARGS +expect_sequential +expect_regs +dmem_latency=70,80,1,3,5,10)
 
     # Faults trap: a handler checks mcause, mepc and mtval; rd and memory are not
     # written. One build of the program per case (-DCASE_<case>):

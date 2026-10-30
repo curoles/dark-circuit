@@ -87,6 +87,8 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     input  wire                        ex_lsu_misaligned, // load/store address not aligned: a fault
     input  wire                        ex_csr_illegal,    // CSR instruction can not be done
     input  wire                        ex_muldiv_stall,   // division of the instruction in EX not done
+    input  wire                        ex_dmem_wait,      // dmem does not take the request of EX
+    input  wire                        mem_wait,          // the load in MEM/WB waits for its word
     input  csr_t                       csr,         // mtvec, mepc
     input  wire                        ebreak_halt, // debug: EBREAK halts instead of trapping
     input  wire                        resume,      // debug: continue after EBREAK
@@ -104,7 +106,10 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     output iaddr_t                     halt_pc
 );
     logic       ex_stall;    // the instruction in EX stays for another cycle
-    assign ex_stall = ex_muldiv_stall;
+    logic       ex_act;      // the instruction in EX acts now: it does not wait behind MEM/WB
+    // @kb: rtl/design/mig2/data_waits
+    assign ex_stall = ex_muldiv_stall || ex_dmem_wait || mem_wait;
+    assign ex_act   = ex_fetch.valid && !mem_wait;
 
     logic       running;     // 1 from reset until EBREAK halts the core, again after resume
     logic       ex_stop;     // EBREAK in EX halts the core
@@ -136,12 +141,14 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     logic       flush_id;    // the instruction in ID must not go on
     bubble_e    redirect_why; // reason of the bubbles of a redirect
 
-    assign ex_stop = ex_fetch.valid && ex_dec.sys.ebreak && ebreak_halt;
-    assign ex_mret = ex_fetch.valid && ex_dec.sys.mret;
+    // Traps, MRET, a halting EBREAK and redirects of EX happen once, in a cycle the
+    // instruction acts (not while it waits behind a load in MEM/WB).
+    assign ex_stop = ex_act && ex_dec.sys.ebreak && ebreak_halt;
+    assign ex_mret = ex_act && ex_dec.sys.mret;
 
     // Fault of the instruction in EX; at most one source applies to an instruction.
     always_comb begin
-        ex_fault = ex_fetch.valid;
+        ex_fault = ex_act;
         ex_cause = '0;
         ex_tval  = '0;
         if (ex_dec.sys.illegal || ex_csr_illegal) begin
@@ -189,7 +196,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // returns go to a target that ID does not compute itself).
     assign ex_jal       = ex_dec.br.jump && !ex_dec.br.target_rs1;
     assign ex_ras_wrong = ex_redirected && ex_dec.br.ret && ex_branch.target != ex_ras_target;
-    assign ex_wrong     = ex_fetch.valid && (ex_branch.taken != ex_redirected || ex_ras_wrong);
+    assign ex_wrong     = ex_act && (ex_branch.taken != ex_redirected || ex_ras_wrong);
     assign ex_branch_pc = ex_branch.taken ? ex_branch.target : ex_fetch.pc + 1'b1;
     assign ex_redirect  = ex_fault || ex_mret || ex_wrong || resuming;
     assign flush_id     = ex_redirect || ex_stop;
@@ -303,6 +310,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign pipe_ctrl.ex_flush  = !ex_stall && (id_hazard || flush_id);
     assign pipe_ctrl.ex_why    = ex_redirect ? redirect_why :
                                  ex_stop ? BUBBLE_FILL : BUBBLE_LOAD_USE;
+    assign pipe_ctrl.mem_stall = mem_wait;
 
     // Next pc of the instruction in EX, for retire: where EX redirects, else where the jump
     // or branch goes (redirected from ID or not taken), else the next instruction.
@@ -316,8 +324,9 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
                $onehot0({ex_dec.sys.illegal || ex_csr_illegal, ex_dec.sys.ecall,
                          ex_dec.sys.ebreak && !ebreak_halt,
                          ex_branch.taken && ex_branch.misaligned, ex_lsu_misaligned}))
-    // A stalled instruction stays in EX for the next cycle.
-    `DC_ASSERT_NEXT(a_ex_held, ex_stall, ex_fetch.valid && $stable(ex_fetch.pc))
+    // A stalled instruction stays in EX for the next cycle (EX may also hold a bubble while
+    // MEM/WB waits).
+    `DC_ASSERT_NEXT(a_ex_held, ex_stall && ex_fetch.valid, ex_fetch.valid && $stable(ex_fetch.pc))
     // ID redirects only for an instruction that moves to EX in this cycle.
     `DC_ASSERT(a_id_redirect_moves, !id_redirect || (!pipe_ctrl.ex_stall && !pipe_ctrl.ex_flush))
     // Fetch is never told to redirect and to stall in the same cycle.

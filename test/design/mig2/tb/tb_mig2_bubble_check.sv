@@ -11,7 +11,8 @@
  * an entry), else it comes first after the instruction; a load-use bubble follows a load,
  * and the next instruction reads its rd; division bubbles come right before a division;
  * fill bubbles only before the first instruction after reset or resume; imem bubbles (ID
- * waits for imem) at any time. The trace gets a
+ * waits for imem) at any time; dmem bubbles come right before a load or store. The trace
+ * gets a
  * line per bubble; report() at the end of the run prints the count per reason and checks
  * that every counted cycle retired an instruction or a bubble. Stops at the first failure
  * with $fatal.
@@ -51,6 +52,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
     reg_id_t load_rd;               // the last retired instruction loads rd, 0: none
     reg_id_t use_rd;                // after a load-use bubble: the next one reads it
     logic    div_pending;           // after a division bubble: the next one divides
+    logic    dmem_pending;          // after a dmem bubble: the next one loads or stores
     logic    prev_ret;              // the last retired instruction is a return (also one that
                                     // trapped: ID predicted it all the same)
 
@@ -108,6 +110,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
                     $fatal(1, "Mig2: cycle %0d: load-use bubble, no load retired before it", cycle);
             BUBBLE_DIV: ;   // the next retired instruction must be a division
             BUBBLE_IMEM: ;  // ID waits for imem: at any time
+            BUBBLE_DMEM: ;  // the next retired instruction must load or store
             BUBBLE_BTB_FIX:     // ID corrects the BTB: first, right after the instruction
                 if (BTB_FULL_TAG)
                     $fatal(1, "Mig2: cycle %0d: btb_fix bubble after pc %h, but the BTB tag covers imem",
@@ -169,6 +172,8 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
                     use_rd <= load_rd;
                 if (retire.bubble == BUBBLE_DIV)
                     div_pending <= 1'b1;
+                if (retire.bubble == BUBBLE_DMEM)
+                    dmem_pending <= 1'b1;
             end
         end
         if (halt && resume)
@@ -182,6 +187,9 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
                        retire.pc_rdata, use_rd);
             if (div_pending && !is_div(retire.insn))
                 $fatal(1, "Mig2: pc %h after division bubbles is not a division", retire.pc_rdata);
+            if (dmem_pending && retire.mem_rmask == '0 && retire.mem_wmask == '0)
+                $fatal(1, "Mig2: pc %h after dmem bubbles neither loads nor stores",
+                       retire.pc_rdata);
             prev_pc          <= retire.pc_rdata;
             retired          <= retired + 1;
             redirect_class   <= redirect_class_of(retire.trap, retire.insn);
@@ -190,6 +198,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
             load_rd          <= retire.mem_rmask != 0 ? retire.rd_addr : '0;
             use_rd           <= '0;
             div_pending      <= 1'b0;
+            dmem_pending     <= 1'b0;
             filling          <= 1'b0;
         end
     end
@@ -206,6 +215,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
         load_rd          = '0;
         use_rd           = '0;
         div_pending      = 1'b0;
+        dmem_pending     = 1'b0;
         prev_ret         = 1'b0;
     end
 

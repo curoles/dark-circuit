@@ -10,6 +10,8 @@
  * divide by 0 gives quotient all ones and remainder the dividend; signed overflow
  * (-2^31 / -1) gives quotient -2^31 and remainder 0.
  *
+ * hold=1 (EX keeps the instruction for another reason: a load in MEM/WB waits for its word)
+ * keeps a finished division's result, so it does not start again.
  * Mig2Core instantiates it in EX, for the instruction in EX. stall goes to Mig2Control,
  * which keeps the instruction in EX and holds ID and IF; result is rd's value (rd_src
  * RD_MULDIV).
@@ -24,6 +26,7 @@ module Mig2MulDiv import Mig2Pkg::*; (
     input  wire      clk,
     input  wire      rst_n,     // synchronous reset, active low
     input  wire      valid,     // instruction in EX is valid
+    input  wire      hold,      // EX keeps its instruction for another reason
     // Only muldiv is used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t dec,       // the instruction taken apart
@@ -61,7 +64,7 @@ module Mig2MulDiv import Mig2Pkg::*; (
 
     always_ff @(posedge clk)
         if (!rst_n) div_ready <= 1'b0;
-        else        div_ready <= done;
+        else        div_ready <= done || (div_ready && hold);
 
     assign stall = muldiv && dec.muldiv.div && !div_ready;
 

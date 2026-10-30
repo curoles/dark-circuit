@@ -35,10 +35,10 @@ evidence: >
   after 2 clocks with a free slot (a_imem_on_time, a_dmem_on_time), answering twice
   (a_imem_no_extra, a_dmem_no_extra). Synthesis of Mig2Core (sky130): 207175 um2 against
   207034 (the instruction word kept), 5.5 ns as before. Step 2 (kb fetch_waits): the kept
-  word moved into Mig2Fetch, and the imem assertions gave way to its waiting; the dmem ones
-  stay until MEM/WB waits.
+  word moved into Mig2Fetch, and the imem assertions gave way to its waiting. Step 3 (kb
+  data_waits): the dmem ones gave way to MEM/WB waiting.
 code:
   - rtl/design/mig2/mig2_pkg.sv#imem_rsp_t
   - rtl/design/mig2/mig2_fetch.sv#word_q
-  - rtl/design/mig2/mig2_core.sv#a_dmem_on_time
+  - rtl/design/mig2/mig2_core.sv#a_dmem_answer_expected
   - rtl/design/mig2/mig2_cpu.sv#SimLatencyRAM

@@ -78,7 +78,8 @@ package Mig2Pkg;
         BUBBLE_XRET,        // MRET: fetch goes to mepc
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
         BUBBLE_DIV,         // EX holds a division
-        BUBBLE_IMEM         // ID waits for the instruction from imem
+        BUBBLE_IMEM,        // ID waits for the instruction from imem
+        BUBBLE_DMEM         // a load or store waits for dmem: to take it, or a load's word
     } bubble_e;
 
     // Ports of Mig2Core
@@ -88,8 +89,7 @@ package Mig2Pkg;
     // no ready: the core takes every answer), in order, one or more clocks after the request
     // was taken; the memory side of the caches (DirectCache), SimLatencyRAM in Mig2Cpu. A
     // struct per direction: req_t from the core, rsp_t to it (ready of the request channel,
-    // the answer). Mig2Fetch waits for imem; for dmem Mig2Core still needs every request
-    // taken at once and its answer 1 clock later, and asserts it.
+    // the answer). Mig2Fetch waits for imem, EX and MEM/WB wait for dmem (Mig2Control).
 
     // Instruction fetch: the word at addr.
     typedef struct packed {
@@ -378,9 +378,10 @@ package Mig2Pkg;
 
     // Control -> Pipe, per boundary: keep the instruction (stall) or put a bubble (flush).
     typedef struct packed {
-        logic    ex_stall;   // EX keeps its instruction (division)
+        logic    ex_stall;   // EX keeps its instruction (division, waiting for dmem)
         logic    ex_flush;   // EX gets a bubble: ID can not go on, or it is dropped
         bubble_e ex_why;     // ex_flush: reason of the bubble
+        logic    mem_stall;  // MEM/WB keeps its load: its word has not come from dmem
     } pipe_ctrl_t;
 
     // Mig2Core -> testbench: the pipeline view (Konata): the slot of every stage in this
@@ -394,8 +395,9 @@ package Mig2Pkg;
         logic   redirect;   // the request of this cycle is dropped
         logic   id_wait;    // the instruction in ID waits for its word from imem
         logic   id_stall;   // IF/ID keeps its slot (load-use, division, waiting for imem)
-        logic   ex_stall;   // EX keeps its instruction (division)
+        logic   ex_stall;   // EX keeps its instruction (division, waiting for dmem)
         logic   ex_flush;   // EX gets a bubble; without id_stall the instruction in ID dies
+        logic   mem_wait;   // MEM/WB keeps its load: it waits for its word from dmem
     } pipe_trace_t;
 
 endpackage

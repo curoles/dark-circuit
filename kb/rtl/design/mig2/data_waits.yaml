@@ -1,0 +1,47 @@
+type: decision
+title: Mig2 waits for dmem in EX and MEM/WB, with one dmem request in flight
+date: 2026-10-30
+question: >
+  Step 3 of Mig2's memory: dmem may be slow (ready withheld, a load's word later than one
+  clock). Where does the pipeline wait, how many dmem requests are in flight, and what keeps
+  the rest of the pipeline right while it waits?
+decision: >
+  dmem keeps the valid/ready rules (a load or store must not vanish, unlike a fetch): EX
+  keeps offering its request until dmem takes it and stalls meanwhile (EX/MEM gets bubbles of
+  reason dmem). A load waits in MEM/WB for its word: EX/MEM keeps it (Pipe's new mem_stall),
+  EX, ID and IF stall behind it, rd is written and the load retires when the word comes
+  (bubbles of reason dmem meanwhile, one reason for both waits, user). One dmem request in
+  flight (user): EX sends its request only while no load in MEM/WB waits or its word comes
+  now. The instruction in EX acts (trap, MRET, halting EBREAK, redirect) only in a cycle it
+  does not wait behind MEM/WB (ex_act), so each happens once; a finished division keeps its
+  result while EX is held (Mig2MulDiv hold).
+why: >
+  With one request in flight, rule 2 holds without extra state: when EX offers and dmem
+  does not take it, EX stalls, MEM/WB gets a bubble, nothing waits there, and EX keeps
+  offering the same request; no second load can be taken while one waits, so words come in
+  order to the load they belong to. Waiting in MEM/WB keeps loads and stores simple in EX
+  and an instruction that leaves EX still completes, only later. Before, only a division
+  held EX, and it never redirects; now any instruction may wait in EX behind a load, so its
+  actions must wait for the cycle it moves.
+rejected:
+  - choice: Hold the load in EX until its word comes
+    why_not: >
+      EX would hold a request already taken: a flag that it was taken, a different rule for
+      loads and stores in EX, and the word routed to EX instead of MEM/WB.
+  - choice: Two bubble reasons (dmem not ready, word late)
+    why_not: One reason is enough (user); the trace shows where the wait was.
+evidence: >
+  2026-10-30: all 111 Mig2 tests pass and the traces of all 104 programs at latency 1 are
+  identical to step 2 (cycle-exact). Every program run once with
+  +dmem_latency=70,80,1,3,5,10: 107 of 109 pass, btb_if and ras_id only on their max_cycles
+  bounds; load_store keeps that run as test load_store_slow_dmem. The first draft failed
+  four misaligned-load tests (a trapping load waited in MEM/WB for a word it never asked
+  for: load is now a load that sent its read) and a_ex_held (a waiting load stalls EX while
+  EX holds a bubble). Mutants: EX moving on before dmem takes its request fires
+  a_dmem_req_held, a dmem that answers twice a_dmem_answer_expected. Synthesis of Mig2Core
+  (sky130): 207763 um2, 5.4 ns.
+code:
+  - rtl/design/mig2/mig2_control.sv#ex_act
+  - rtl/design/mig2/mig2_core.sv#mem_wait
+  - rtl/design/mig2/mig2_core.sv#a_dmem_req_held
+  - rtl/design/mig2/mig2_muldiv.sv#hold

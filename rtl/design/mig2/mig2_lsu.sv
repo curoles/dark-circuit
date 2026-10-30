@@ -2,8 +2,9 @@
  *
  * addr is the byte address rs1 + imm (Mig2Alu). A load or a store sends its request to
  * dmem in EX. A store writes there: the bytes of rs2 are repeated over the word and wstrb
- * selects the bytes at addr. A load's word comes 1 clock later, in MEM/WB, where
- * Mig2LoadData takes the loaded value from it.
+ * selects the bytes at addr. A load's word comes 1 or more clocks later, in MEM/WB, where
+ * Mig2LoadData takes the loaded value from it. valid=0 sends nothing (Mig2Core: a load in
+ * MEM/WB waits, one dmem request in flight).
  * misaligned=1 when the address is not aligned to the access size (LW, SW: 4 bytes;
  * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete. The byte
  * in the word (offset: alignment, strobes) is rs1[1:0] + imm[1:0], added here: the low bits

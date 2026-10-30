@@ -1,9 +1,9 @@
 /* Mig2 pipeline registers: the instruction of each stage, between the stages
  * (Mig2PipeReg: reset or flush puts a bubble, stall keeps the instruction).
  *
- * ID/EX: Mig2Control stalls and flushes it. EX/MEM has no stall or flush: an
- * instruction that leaves EX always completes in MEM/WB. The IF/ID register is in
- * Mig2Fetch (the instruction comes from imem 1 clock after its request).
+ * ID/EX: Mig2Control stalls and flushes it. EX/MEM has no flush: an instruction that
+ * leaves EX always completes in MEM/WB; it stalls while a load in MEM/WB waits for its word
+ * from dmem. The IF/ID register is in Mig2Fetch.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -11,7 +11,7 @@
 module Mig2Pipe import Mig2Pkg::*; (
     input  wire        clk,
     input  wire        rst_n,       // synchronous reset, active low
-    input  pipe_ctrl_t ctrl,        // stall, flush and bubble reason of ID/EX, from Mig2Control
+    input  pipe_ctrl_t ctrl,        // stalls, flush and bubble reason, from Mig2Control
     input  id_ex_t     id_ex_d,     // from ID
     output id_ex_t     id_ex_q,     // to EX
     input  ex_mem_t    ex_mem_d,    // from EX
@@ -22,6 +22,7 @@ module Mig2Pipe import Mig2Pkg::*; (
         .d(id_ex_d), .q(id_ex_q));
 
     Mig2PipeReg #(.T(ex_mem_t)) u_mig2_pipe_reg_ex_mem(
-        .clk, .rst_n, .stall(1'b0), .flush(1'b0), .why(BUBBLE_NONE), .d(ex_mem_d), .q(ex_mem_q));
+        .clk, .rst_n, .stall(ctrl.mem_stall), .flush(1'b0), .why(BUBBLE_NONE), .d(ex_mem_d),
+        .q(ex_mem_q));
 
 endmodule

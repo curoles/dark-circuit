@@ -5,7 +5,8 @@
  * edge. The module keeps the instruction of every stage, moves it as pipe_trace tells,
  * and checks in every cycle out of reset that its stages and the reported slots agree
  * (valid and pc). An instruction is in IF in the cycle imem takes its request; in ID it may
- * wait for its word (id_wait): it stays there and EX gets a bubble. +kanata=<file> writes
+ * wait for its word (id_wait): it stays there and EX gets a bubble; a load in MEM/WB may wait
+ * for its word (mem_wait): it stays there and retires a bubble. +kanata=<file> writes
  * the view as a Konata log (Kanata format 0004, tab separated): a row per instruction,
  * stages IF ID EX MEM, the instructions of the wrong path flushed; label: pc and
  * instruction word, tooltip: the bubbles before it. Cycles in messages count from reset,
@@ -100,7 +101,7 @@ module TbMig2PipeView import Mig2Pkg::*, TbMig2Pkg::*; (
         check_slot(S_ID, pipe_trace.id.valid, pipe_trace.id.pc);
         check_slot(S_EX, pipe_trace.ex.valid, pipe_trace.ex.pc);
         check_slot(S_MEM, pipe_trace.mem.valid, pipe_trace.mem.pc);
-        if (!pipe_trace.mem.valid && !halt)
+        if ((!pipe_trace.mem.valid || pipe_trace.mem_wait) && !halt)
             bubbles[pipe_trace.mem.bubble] = bubbles[pipe_trace.mem.bubble] + 1;
         stage_id[S_IF] = -1;
         if (pipe_trace.if_req) begin
@@ -128,13 +129,16 @@ module TbMig2PipeView import Mig2Pkg::*, TbMig2Pkg::*; (
             $fatal(1, "Mig2: cycle %0d: pipe_trace: ID both goes to EX and stalls", cycle);
         if (old_if >= 0 && pipe_trace.id_stall)
             $fatal(1, "Mig2: cycle %0d: pipe_trace: IF requests while ID stalls", cycle);
-        // MEM/WB retires; EX goes to MEM/WB unless it stalls.
-        if (stage_id[S_MEM] >= 0)
-            kanata_retire(stage_id[S_MEM]);
-        stage_id[S_MEM] = pipe_trace.ex_stall ? -1 : old_ex;
-        stage_pc[S_MEM] = old_ex_pc;
-        if (stage_id[S_MEM] >= 0)
-            kanata_stage(old_ex, S_MEM);
+        // MEM/WB retires, unless its load waits for its word; EX goes to MEM/WB unless it
+        // stalls.
+        if (!pipe_trace.mem_wait) begin
+            if (stage_id[S_MEM] >= 0)
+                kanata_retire(stage_id[S_MEM]);
+            stage_id[S_MEM] = pipe_trace.ex_stall ? -1 : old_ex;
+            stage_pc[S_MEM] = old_ex_pc;
+            if (stage_id[S_MEM] >= 0)
+                kanata_stage(old_ex, S_MEM);
+        end
         // EX keeps its instruction (stall), takes ID's, or gets a bubble (flush).
         if (!pipe_trace.ex_stall) begin
             stage_id[S_EX] = id_to_ex ? old_id : -1;
