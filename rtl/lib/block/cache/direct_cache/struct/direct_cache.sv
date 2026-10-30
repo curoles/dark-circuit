@@ -2,8 +2,8 @@
  *
  * Same ports, parameters and behavior as the behave version (see there for the protocol, the
  * write policy, forwarding and READ_ONLY). The RAMs are the struct CacheValidRam,
- * CacheTagRam and CacheDataRam; the request taken is a Dff with a hold Mux2 (accept) for the
- * line address and, unless READ_ONLY, one for the fields of a store (we, wdata, wstrb).
+ * CacheTagRam and CacheDataRam; the request taken is a DffEn (accept) for the line address
+ * and, unless READ_ONLY, one for the fields of a store (we, wdata, wstrb).
  * Control (READ_ONLY=1: we, wdata, wstrb, store_write and fwd are 0, the data RAM writes
  * mem_rsp_data, and their logic is left out):
  *   req_ready = NOR(waiting, load_miss, held)       accept = req_valid AND req_ready
@@ -16,8 +16,8 @@
  *   waiting   = DffSyncRst((load_miss AND mem_req_ready) OR (waiting AND NOT mem_rsp_valid))
  *   refill    = waiting AND mem_rsp_valid
  *   data RAM write: refill OR store_write, Mux2(merged, mem_rsp_data, refill)
- *   fwd       = DffSyncRst(accept ? store_write AND (set == set of the request) : fwd)
- *   fwd_line  = Dff with a hold Mux2 (store_write) of merged
+ *   fwd       = DffSyncRstEn(en accept) of store_write AND (set == set of the request)
+ *   fwd_line  = DffEn (store_write) of merged
  *   line      = Mux2(ram_line, fwd_line, fwd)       rsp_data = Mux2(line, mem_rsp_data, waiting)
  *   rsp_valid = load_hit OR refill
  *
@@ -71,7 +71,6 @@ module DirectCache #(
     wire                  look;         // a request taken before is looked up now (or held)
     wire                  look_next;
     wire [LINE_WIDTH-1:0] look_line;    // its address without the offset in the line
-    wire [LINE_WIDTH-1:0] look_line_next;
     wire                  look_we;
     wire                  look_we_n;
     wire [DATA_WIDTH-1:0] look_wdata;
@@ -106,9 +105,8 @@ module DirectCache #(
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(look_next), .out(look));
 
     // The line address of the request taken, kept for its lookup.
-    Mux2 #(LINE_WIDTH) u_mux2_line(.in0(look_line), .in1(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
-                                   .sel(accept), .out(look_line_next));
-    Dff  #(LINE_WIDTH) u_dff_line (.clk, .in(look_line_next), .out(look_line));
+    DffEn #(LINE_WIDTH) u_dff_en_line(.clk, .en(accept), .in(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
+                                      .out(look_line));
 
     CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
         .clk, .rst_n, .invalidate,
@@ -158,19 +156,15 @@ module DirectCache #(
         assign line        = ram_line;
     end else begin: g_store
         wire [STORE_WIDTH-1:0] look_store;      // {we, wdata, wstrb} of the lookup
-        wire [STORE_WIDTH-1:0] look_store_next;
         wire [DATA_WIDTH-1:0]  merged;          // line with the bytes of the store
         wire                   same_set;        // the request taken is of the lookup's set
         wire                   fwd_new;         // the request taken at a store's write, same set
         wire                   fwd;             // ram_line is older than a store's write
-        wire                   fwd_next;
         wire [DATA_WIDTH-1:0]  fwd_line;
-        wire [DATA_WIDTH-1:0]  fwd_line_next;
 
         // The fields of the store taken, kept for its lookup.
-        Mux2 #(STORE_WIDTH) u_mux2_store(.in0(look_store), .in1({req_we, req_wdata, req_wstrb}),
-                                         .sel(accept), .out(look_store_next));
-        Dff  #(STORE_WIDTH) u_dff_store (.clk, .in(look_store_next), .out(look_store));
+        DffEn #(STORE_WIDTH) u_dff_en_store(.clk, .en(accept), .in({req_we, req_wdata, req_wstrb}),
+                                            .out(look_store));
         assign {look_we, look_wdata, look_wstrb} = look_store;
 
         // Store: the bytes of its strobes into the line, written when memory takes the store.
@@ -188,11 +182,9 @@ module DirectCache #(
                                          .in2(req_addr[SETS_OFFSET +: SETS_WIDTH]),
                                          .eq(same_set));
         And2  #(1) u_and2_fwd (.in1(store_write), .in2(same_set), .out(fwd_new));
-        Mux2  #(1) u_mux2_fwd (.in0(fwd), .in1(fwd_new), .sel(accept), .out(fwd_next));
-        DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_fwd(.clk, .rst_n, .in(fwd_next), .out(fwd));
-        Mux2 #(DATA_WIDTH) u_mux2_fwd_line(.in0(fwd_line), .in1(merged), .sel(store_write),
-                                           .out(fwd_line_next));
-        Dff  #(DATA_WIDTH) u_dff_fwd_line (.clk, .in(fwd_line_next), .out(fwd_line));
+        DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(accept), .in(fwd_new),
+                                                        .out(fwd));
+        DffEn #(DATA_WIDTH) u_dff_en_fwd_line(.clk, .en(store_write), .in(merged), .out(fwd_line));
         Mux2 #(DATA_WIDTH) u_mux2_line_fwd(.in0(ram_line), .in1(fwd_line), .sel(fwd),
                                            .out(line));
     end

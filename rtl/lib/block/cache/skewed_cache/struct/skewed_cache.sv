@@ -5,9 +5,9 @@
  * the protocol, the write policy and forwarding). Per way the struct CacheValidRam,
  * CacheTagRam and CacheDataRam at the way's index (way 1: an Xor2 of the set and the low bits
  * of the tag, for the request and for the line looked up), a CmpEq of the tag and And3 for
- * its hit. The request taken is a Dff with a hold Mux2 (accept) for the line address and,
- * unless READ_ONLY, one for the fields of a store (we, wdata, wstrb). Control as in the
- * struct SetAssocCache (READ_ONLY=1: the same logic left out), plus:
+ * its hit. The request taken is a DffEn (accept) for the line address and, unless
+ * READ_ONLY, one for the fields of a store (we, wdata, wstrb). Control as in the struct
+ * SetAssocCache (READ_ONLY=1: the same logic left out), plus:
  *   hit_way    = hits[1]                   hit_line = Mux2(line[0], line[1], hits[1])
  *   victim_way = ~valid[1] | (valid[0] & recent[0] & ~recent[1])
  *   recent     = per way a RegFile of one bit per line (read combinationally at the line
@@ -15,8 +15,8 @@
  * and per way w:
  *   valid and tag RAM write: refill AND fill_way == w
  *   data RAM write: that OR (store_write AND hits[w]), Mux2(merged, mem_rsp_data, refill)
- *   fwd[w]  = DffSyncRst(accept ? store_write AND hits[w] AND (index of the lookup in w ==
- *             index of the request in w) : fwd[w])
+ *   fwd[w]  = DffSyncRstEn(en accept) of store_write AND hits[w] AND (index of the lookup
+ *             in w == index of the request in w)
  *   line[w] = Mux2(ram_line[w], fwd_line, fwd[w])
  *
  * @author    Igor Lesik
@@ -72,7 +72,6 @@ module SkewedCache #(
     wire                  look_next;
     wire [LINE_WIDTH-1:0] req_line;     // the request's address without the offset
     wire [LINE_WIDTH-1:0] look_line;    // its address without the offset in the line
-    wire [LINE_WIDTH-1:0] look_line_next;
     wire                  look_we;
     wire                  look_we_n;
     wire [DATA_WIDTH-1:0] look_wdata;
@@ -109,7 +108,6 @@ module SkewedCache #(
     wire                  victim_way;   // the way a load miss found now replaces
     wire                  fill_way;     // the way the line of the served miss goes into
     wire                  fill_way_n;
-    wire                  fill_way_next;
     wire                  touch;
     wire                  touch_way;
     wire                  touch_way_n;
@@ -122,9 +120,7 @@ module SkewedCache #(
 
     // The line address of the request taken, kept for its lookup.
     assign req_line = req_addr[ADDR_WIDTH-1:SETS_OFFSET];
-    Mux2 #(LINE_WIDTH) u_mux2_line(.in0(look_line), .in1(req_line), .sel(accept),
-                                   .out(look_line_next));
-    Dff  #(LINE_WIDTH) u_dff_line (.clk, .in(look_line_next), .out(look_line));
+    DffEn #(LINE_WIDTH) u_dff_en_line(.clk, .en(accept), .in(req_line), .out(look_line));
 
     // @kb: rtl/lib/block/cache/skewed_cache_rd_only/design
     // The indices: way 0 the set, way 1 the set xor the low bits of the tag.
@@ -219,15 +215,12 @@ module SkewedCache #(
         assign line        = ram_line;
     end else begin: g_store
         wire [STORE_WIDTH-1:0] look_store;      // {we, wdata, wstrb} of the lookup
-        wire [STORE_WIDTH-1:0] look_store_next;
         wire [DATA_WIDTH-1:0]  merged;          // hit_line with the bytes of the store
         wire [DATA_WIDTH-1:0]  fwd_line;
-        wire [DATA_WIDTH-1:0]  fwd_line_next;
 
         // The fields of the store taken, kept for its lookup.
-        Mux2 #(STORE_WIDTH) u_mux2_store(.in0(look_store), .in1({req_we, req_wdata, req_wstrb}),
-                                         .sel(accept), .out(look_store_next));
-        Dff  #(STORE_WIDTH) u_dff_store (.clk, .in(look_store_next), .out(look_store));
+        DffEn #(STORE_WIDTH) u_dff_en_store(.clk, .en(accept), .in({req_we, req_wdata, req_wstrb}),
+                                            .out(look_store));
         assign {look_we, look_wdata, look_wstrb} = look_store;
 
         // Store: the bytes of its strobes into the line, written when memory takes the store.
@@ -239,15 +232,12 @@ module SkewedCache #(
                                      .out(store_write));
         Mux2 #(DATA_WIDTH) u_mux2_ram_wr(.in0(merged), .in1(mem_rsp_data), .sel(refill),
                                          .out(ram_wr_line));
-        Mux2 #(DATA_WIDTH) u_mux2_fwd_line(.in0(fwd_line), .in1(merged), .sel(store_write),
-                                           .out(fwd_line_next));
-        Dff  #(DATA_WIDTH) u_dff_fwd_line (.clk, .in(fwd_line_next), .out(fwd_line));
+        DffEn #(DATA_WIDTH) u_dff_en_fwd_line(.clk, .en(store_write), .in(merged), .out(fwd_line));
 
         for (genvar w = 0; w < 2; w++) begin: g_line
             wire same_index;   // the request taken has the lookup's index here
             wire fwd_new;      // the request taken at a store's write here
             wire fwd;          // this way's RAM read a line older than a store
-            wire fwd_next;
 
             // Forwarding (see the behave version): decided at the edge of a read, per way.
             // @kb: rtl/lib/block/cache/skewed_cache/design
@@ -255,8 +245,8 @@ module SkewedCache #(
                                                .eq(same_index));
             And3  #(1) u_and3_fwd(.in1(store_write), .in2(hits[w]), .in3(same_index),
                                   .out(fwd_new));
-            Mux2  #(1) u_mux2_fwd(.in0(fwd), .in1(fwd_new), .sel(accept), .out(fwd_next));
-            DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_fwd(.clk, .rst_n, .in(fwd_next), .out(fwd));
+            DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(accept), .in(fwd_new),
+                                                            .out(fwd));
             Mux2 #(DATA_WIDTH) u_mux2_line(.in0(ram_line[w]), .in1(fwd_line), .sel(fwd),
                                            .out(line[w]));
         end
@@ -277,9 +267,7 @@ module SkewedCache #(
     // Load miss served from the clock memory takes its read until the answer comes; the
     // victim is taken then.
     And2 #(1) u_and2_wait_start(.in1(load_miss), .in2(mem_req_ready), .out(wait_start));
-    Mux2 #(1) u_mux2_fill(.in0(fill_way), .in1(victim_way), .sel(wait_start),
-                          .out(fill_way_next));
-    Dff  #(1) u_dff_fill (.clk, .in(fill_way_next), .out(fill_way));
+    DffEn #(1) u_dff_en_fill(.clk, .en(wait_start), .in(victim_way), .out(fill_way));
     Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
     And2 #(1) u_and2_kept      (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
     Or2  #(1) u_or2_wait       (.in1(wait_start), .in2(waiting_kept), .out(waiting_next));

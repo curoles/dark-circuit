@@ -3,19 +3,18 @@
  * Same ports, parameters and behavior as the behave version (see there, and DirectCache for
  * the protocol, the write policy and forwarding). Per way the struct CacheValidRam,
  * CacheTagRam and CacheDataRam, a CmpEq of the tag and And3 for its hit. The request taken
- * is a Dff with a hold Mux2 (accept) for the line address and, unless READ_ONLY, one for the
- * fields of a store (we, wdata, wstrb). Control as in the struct DirectCache (READ_ONLY=1:
- * the same logic left out), plus:
+ * is a DffEn (accept) for the line address and, unless READ_ONLY, one for the fields of a
+ * store (we, wdata, wstrb). Control as in the struct DirectCache (READ_ONLY=1: the same logic
+ * left out), plus:
  *   hit      = OrReduce(hits)                hit_way = PriorityEncoder(hits), hits one-hot
  *   hit_line = per bit OrReduce over the ways of (line AND hit of the way)
- *   fill_way = Dff with a hold Mux2 (load_miss AND mem_req_ready) of CacheReplacement's
- *              victim_way
+ *   fill_way = DffEn (load_miss AND mem_req_ready) of CacheReplacement's victim_way
  *   touch    = load_hit OR store_write OR refill    touch_way = Mux2(hit_way, fill_way, refill)
  * and per way w:
  *   valid and tag RAM write: refill AND fill_way == w (a Decoder of fill_way)
  *   data RAM write: that OR (store_write AND hits[w]), Mux2(merged, mem_rsp_data, refill)
- *   line[w]  = Mux2(ram_line[w], fwd_line, fwd AND fwd_hits[w]), where fwd_hits is a Dff
- *              with a hold Mux2 (store_write) of hits: the way of the store, one-hot
+ *   line[w]  = Mux2(ram_line[w], fwd_line, fwd AND fwd_hits[w]), where fwd_hits is a DffEn
+ *              (store_write) of hits: the way of the store, one-hot
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -71,7 +70,6 @@ module SetAssocCache import CachePkg::*; #(
     wire                  look;         // a request taken before is looked up now (or held)
     wire                  look_next;
     wire [LINE_WIDTH-1:0] look_line;    // its address without the offset in the line
-    wire [LINE_WIDTH-1:0] look_line_next;
     wire                  look_we;
     wire                  look_we_n;
     wire [DATA_WIDTH-1:0] look_wdata;
@@ -107,7 +105,6 @@ module SetAssocCache import CachePkg::*; #(
     wire [DATA_WIDTH-1:0] ram_wr_line;  // what a data RAM write writes: the fill or merged
     wire [WAY_WIDTH-1:0]  victim_way;   // CacheReplacement's way for a load miss found now
     wire [WAY_WIDTH-1:0]  fill_way;     // the way the line of the served miss goes into
-    wire [WAY_WIDTH-1:0]  fill_way_next;
     wire                  touch;
     wire [WAY_WIDTH-1:0]  touch_way;
 
@@ -118,9 +115,8 @@ module SetAssocCache import CachePkg::*; #(
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(look_next), .out(look));
 
     // The line address of the request taken, kept for its lookup.
-    Mux2 #(LINE_WIDTH) u_mux2_line(.in0(look_line), .in1(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
-                                   .sel(accept), .out(look_line_next));
-    Dff  #(LINE_WIDTH) u_dff_line (.clk, .in(look_line_next), .out(look_line));
+    DffEn #(LINE_WIDTH) u_dff_en_line(.clk, .en(accept), .in(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
+                                      .out(look_line));
 
     Decoder #(.SIZE(WAY_WIDTH)) u_decoder_fill(.in(fill_way), .en(refill), .out(fill_wr));
 
@@ -204,21 +200,16 @@ module SetAssocCache import CachePkg::*; #(
         assign line        = ram_line;
     end else begin: g_store
         wire [STORE_WIDTH-1:0] look_store;      // {we, wdata, wstrb} of the lookup
-        wire [STORE_WIDTH-1:0] look_store_next;
         wire [DATA_WIDTH-1:0]  merged;          // hit_line with the bytes of the store
         wire                   same_set;        // the request taken is of the lookup's set
         wire                   fwd_new;         // the request taken at a store's write, same set
         wire                   fwd;             // a RAM line is older than a store's write
-        wire                   fwd_next;
         wire [WAYS-1:0]        fwd_hits;        // one-hot: the way of that store
-        wire [WAYS-1:0]        fwd_hits_next;
         wire [DATA_WIDTH-1:0]  fwd_line;
-        wire [DATA_WIDTH-1:0]  fwd_line_next;
 
         // The fields of the store taken, kept for its lookup.
-        Mux2 #(STORE_WIDTH) u_mux2_store(.in0(look_store), .in1({req_we, req_wdata, req_wstrb}),
-                                         .sel(accept), .out(look_store_next));
-        Dff  #(STORE_WIDTH) u_dff_store (.clk, .in(look_store_next), .out(look_store));
+        DffEn #(STORE_WIDTH) u_dff_en_store(.clk, .en(accept), .in({req_we, req_wdata, req_wstrb}),
+                                            .out(look_store));
         assign {look_we, look_wdata, look_wstrb} = look_store;
 
         // Store: the bytes of its strobes into the line, written when memory takes the store.
@@ -237,14 +228,10 @@ module SetAssocCache import CachePkg::*; #(
                                          .in2(req_addr[SETS_OFFSET +: SETS_WIDTH]),
                                          .eq(same_set));
         And2  #(1) u_and2_fwd (.in1(store_write), .in2(same_set), .out(fwd_new));
-        Mux2  #(1) u_mux2_fwd (.in0(fwd), .in1(fwd_new), .sel(accept), .out(fwd_next));
-        DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_fwd(.clk, .rst_n, .in(fwd_next), .out(fwd));
-        Mux2 #(WAYS) u_mux2_fwd_hits(.in0(fwd_hits), .in1(hits), .sel(store_write),
-                                     .out(fwd_hits_next));
-        Dff  #(WAYS) u_dff_fwd_hits (.clk, .in(fwd_hits_next), .out(fwd_hits));
-        Mux2 #(DATA_WIDTH) u_mux2_fwd_line(.in0(fwd_line), .in1(merged), .sel(store_write),
-                                           .out(fwd_line_next));
-        Dff  #(DATA_WIDTH) u_dff_fwd_line (.clk, .in(fwd_line_next), .out(fwd_line));
+        DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(accept), .in(fwd_new),
+                                                        .out(fwd));
+        DffEn #(WAYS) u_dff_en_fwd_hits(.clk, .en(store_write), .in(hits), .out(fwd_hits));
+        DffEn #(DATA_WIDTH) u_dff_en_fwd_line(.clk, .en(store_write), .in(merged), .out(fwd_line));
 
         for (genvar w = 0; w < WAYS; w++) begin: g_line
             wire fwd_way;      // fwd_line is of this way
@@ -271,9 +258,7 @@ module SetAssocCache import CachePkg::*; #(
     // Load miss served from the clock memory takes its read until the answer comes; the
     // victim is taken then: the random way changes every clock, also while the miss is held.
     And2 #(1) u_and2_wait_start(.in1(load_miss), .in2(mem_req_ready), .out(wait_start));
-    Mux2 #(WAY_WIDTH) u_mux2_fill(.in0(fill_way), .in1(victim_way), .sel(wait_start),
-                                  .out(fill_way_next));
-    Dff  #(WAY_WIDTH) u_dff_fill (.clk, .in(fill_way_next), .out(fill_way));
+    DffEn #(WAY_WIDTH) u_dff_en_fill(.clk, .en(wait_start), .in(victim_way), .out(fill_way));
     Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
     And2 #(1) u_and2_kept      (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
     Or2  #(1) u_or2_wait       (.in1(wait_start), .in2(waiting_kept), .out(waiting_next));

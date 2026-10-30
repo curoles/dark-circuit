@@ -167,8 +167,9 @@ that shows it (paths under `rtl/lib/` unless written in full); a new idiom gets 
 the chunk that establishes it:
 
 - Register with reset: `DffSyncRst #(.RST_VAL(...))`, with enable `DffSyncRstEn`, not a reset
-  Mux2 in front of a Dff (`part/crc8_ccitt_lfsr.sv`). Hold: a Mux2 whose in0 is the register's
-  own output, or the enable of `DffSyncRstEn` (`block/cache/skewed_cache_rd_only/struct`).
+  Mux2 in front of a Dff (`part/crc8_ccitt_lfsr.sv`). Hold: the enable of `DffEn` (no reset)
+  or `DffSyncRstEn`, not a Mux2 whose in0 is the register's own output
+  (`block/cache/set_assoc_cache/struct`).
 - Conditional inversion: `Xor2` with the condition copied to every bit, `{W{inv}}`
   (`block/alu2/struct`).
 - Selecting a result: assign the inputs by enum name, `result[RES_SHIFT] = ...`, then a
