@@ -185,6 +185,9 @@ Icarus means Icarus 13, the version the project uses.
   silently makes an implicit wire. For code that must run on Icarus, compute the value with
   `assign` into a signal and connect the signal, or write the name with its package,
   `.in2(ComputeCoreBitmanipPkg::BM_CTZ)`.
+- Icarus evaluates a `?:` on a genvar written directly in an instance port connection,
+  `.wr_data((w == 0) ? a : b)`, as X (Verilator gets it right). Assign a vector and connect
+  its element, `assign v = {b, a};` and `.wr_data(v[w])`, or a wire per generate branch.
 - Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
   (IMPLICIT; in an expression always an error), and every design is built with it.
   sv2v declares an undeclared name of a port connection as a wire, and Yosys makes

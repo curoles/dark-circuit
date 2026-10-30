@@ -14,8 +14,10 @@
  * Replacement: the two candidates of an address are in different "sets", so the state is per
  * line: a recent bit. A hit or a fill sets its line's bit and clears the other candidate's;
  * a miss replaces an invalid candidate (way 1 first), else the one whose bit is clear, else
- * (both alike: the bits are shared by other pairs) way 0. The bits are flops, read in the
- * lookup clock, so a lookup sees the update of the one before.
+ * (both alike: the bits are shared by other pairs) way 0. The bits are flops without reset
+ * (a fill writes the bit of the line it makes valid; the bits are compared only when both
+ * candidates are valid), read in the lookup clock, so a lookup sees the update of the one
+ * before.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -152,12 +154,7 @@ module SkewedCacheRdOnly #(
     assign touch_way = refill ? fill_way : hit_way;
 
     always_ff @(posedge clk)
-        if (!rst_n) begin
-            for (int i = 0; i < SETS; i++) begin
-                recent[0][i] <= 1'b0;
-                recent[1][i] <= 1'b0;
-            end
-        end else if (touch) begin
+        if (touch) begin
             recent[0][look_index[0]] <= !touch_way;
             recent[1][look_index[1]] <= touch_way;
         end

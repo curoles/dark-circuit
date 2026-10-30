@@ -12,7 +12,9 @@ decision: >
   bits of its tag (Seznec, ISCA 1993). Replacement state is per line, a recent bit: a hit or
   a fill sets its line's bit and clears the other candidate's; a miss replaces an invalid
   candidate (way 1 first), else the one whose bit is clear, else way 0. The bits are flops
-  read in the lookup clock, so no forwarding is needed.
+  read in the lookup clock, so no forwarding is needed, and have no reset: a fill writes the
+  bit of the line it makes valid, and the bits are compared only when both candidates are
+  valid (found writing the struct version, a RegFile per way).
 why: >
   Same ports: the comparison with SetAssocCacheRdOnly (same address streams, misses, area)
   is fair, and Mig2 can take either. The user asked for something simple that makes sense
@@ -32,8 +34,10 @@ rejected:
 evidence: >
   Behave version and its unit test (model of its own; 8 lines per way with 12-bit addresses,
   and 64 with 32-bit on Verilator; every case counted, including hits in way 1 at an index
-  other than way 0's and victims by the recent bits and by the tie rule), 2026-10-29.
+  other than way 0's and victims by the recent bits and by the tie rule), 2026-10-29: 8 of 8
+  mutants caught. The struct version against the same test, 2026-10-29.
 code:
   - rtl/lib/block/cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.sv#index_of
   - rtl/lib/block/cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.sv#victim_way
+  - rtl/lib/block/cache/skewed_cache_rd_only/struct/skewed_cache_rd_only.sv#u_reg_file_recent
   - test/block/cache/skewed_cache_rd_only/tb_skewed_cache_rd_only.sv#model_victim
