@@ -1,0 +1,41 @@
+type: decision
+title: SkewedCache is DirectCache's stores on SkewedCacheRdOnly's ways
+date: 2026-10-29
+question: >
+  How does the read-write two-way skewed-associative cache (a data cache) combine the skewed
+  ways and recent bits of SkewedCacheRdOnly with the stores of DirectCache: does a store
+  change the recent bits, and when is forwarding needed if each way has its own index?
+decision: >
+  DirectCache's ports, protocol and write policy (write-through, no write-allocate, a store
+  held until memory takes it, a store that hits merges its bytes into its line in the clock
+  memory takes it), as in SetAssocCache. Ways, indices and victim as in SkewedCacheRdOnly.
+  A load hit, a store hit (when memory takes it) and a fill set their line's recent bit and
+  clear the other candidate's. Forwarding per way: the request taken at a store's write uses
+  the merged line in the store's way when its index in that way is the store's index.
+why: >
+  One protocol and one write policy for all caches. A store hit touches for the reason
+  SetAssocCache's does (kb set_assoc_cache/design): a line used only by stores must not go
+  first. The recent bits are flops read in the lookup clock, so the touch at the store's
+  write is seen by the next lookup without forwarding. The data RAMs read at the request's
+  edge, so a store's write at that edge needs forwarding, but only where the request reads
+  the written line: the same way at the same index; the two ways have different indices, so
+  "same set" of a set-associative cache becomes a compare per way.
+rejected:
+  - choice: Forward when the request has the store's set (as in SetAssocCache)
+    why_not: >
+      In way 1 the index is not the set: a request of the same set reads another line
+      there, and a request of another set can read the written one.
+  - choice: A store hit does not touch the recent bits
+    why_not: >
+      As in SetAssocCache (kb set_assoc_cache/design).
+evidence: >
+  Behave version and its unit test (8 lines per way with one- and two-word lines; on
+  Verilator also 64 lines per way; a model with stores, memory writes and recent bits per
+  way and index; every case must happen, also a load right after a store hit of the same
+  line, of the other way and of the same way at another index), 2026-10-29: 14 of 15
+  mutants caught, the one left equivalent (a held store writing and touching every clock
+  before memory takes it cannot be seen: no request is taken meanwhile).
+code:
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#touch_way
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#fwd
+  - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_fwd_index
