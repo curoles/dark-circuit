@@ -113,7 +113,7 @@ then modules that the design does not use are not elaborated.
 - multiplexer: Mux2, Mux2i, Mux3, Mux4, Mux8, Mux1hot2, Mux1hot3
 - arithmetic: HalfAdder, FullAdder, FullAdderMaj3, FullAdderAoi, Maj3, Benc, Bml
 - reduction: AndReduce, OrReduce, NorReduce, Parity, CmpEq, CmpNe
-- sequential: Dff, DffAsyncRst, DffAsyncRstEn, DffSyncRst, DffSyncRstEn, Latch
+- sequential: Dff, DffEn, DffAsyncRst, DffAsyncRstEn, DffSyncRst, DffSyncRstEn, Latch
 
 ### Tests
 

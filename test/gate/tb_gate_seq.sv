@@ -18,6 +18,7 @@ module TbGateSeq;
     reg  [W-1:0] d;
     reg  [W-1:0] held;
     wire [W-1:0] dff_q;
+    wire [W-1:0] dff_en_q;
     wire [W-1:0] rst_q;
     wire [W-1:0] latch_q;
     wire [W-1:0] srst_q;
@@ -29,6 +30,7 @@ module TbGateSeq;
     DffAsyncRst #(.WIDTH(W), .RST_VAL(RST_VAL)) u_rst  (.clk(clk), .rst_n(rst_n), .in(d), .out(rst_q));
     Latch       #(.WIDTH(W))                   u_latch(.in(d), .enable(en), .out(latch_q));
 
+    DffEn         #(.WIDTH(W))                   u_dff_en (.clk(clk), .en(en2), .in(d), .out(dff_en_q));
     DffSyncRst    #(.WIDTH(W), .RST_VAL(RST_VAL)) u_srst   (.clk(clk), .rst_n(srst_n), .in(d), .out(srst_q));
     DffSyncRstEn  #(.WIDTH(W))                   u_srst_en(.clk(clk), .rst_n(srst_n), .en(en2), .in(d), .out(srst_en_q));
     DffAsyncRstEn #(.WIDTH(W), .RST_VAL(RST_VAL)) u_rst_en (.clk(clk), .rst_n(rst_n), .en(en2), .in(d), .out(rst_en_q));
@@ -40,6 +42,7 @@ module TbGateSeq;
         // Nothing is known before the first clock, reset or enable.
 `ifndef VERILATOR  // 2-state simulator: flops start at 0, not x
         if (dff_q     !== {W{1'bx}}) $fatal(1, "Dff: before first clock got=%b, expected x", dff_q);
+        if (dff_en_q  !== {W{1'bx}}) $fatal(1, "DffEn: before first clock got=%b, expected x", dff_en_q);
         if (rst_q     !== {W{1'bx}}) $fatal(1, "DffAsyncRst: before reset got=%b, expected x", rst_q);
         if (latch_q   !== {W{1'bx}}) $fatal(1, "Latch: before enable got=%b, expected x", latch_q);
         if (srst_q    !== {W{1'bx}}) $fatal(1, "DffSyncRst: before first clock got=%b, expected x", srst_q);
@@ -105,6 +108,7 @@ module TbGateSeq;
         #3 clk = 1;
         #1;
         if (srst_q    !== d) $fatal(1, "DffSyncRst: in=%b got=%b", d, srst_q);
+        if (dff_en_q  !== d) $fatal(1, "DffEn: en=1 in=%b got=%b", d, dff_en_q);
         if (srst_en_q !== d) $fatal(1, "DffSyncRstEn: en=1 in=%b got=%b", d, srst_en_q);
         if (rst_en_q  !== d) $fatal(1, "DffAsyncRstEn: en=1 in=%b got=%b", d, rst_en_q);
         #4 clk = 0;
@@ -125,21 +129,24 @@ module TbGateSeq;
         #3 clk = 1;
         #1;
         if (srst_q    !== d)      $fatal(1, "DffSyncRst: after reset in=%b got=%b", d, srst_q);
+        if (dff_en_q  !== 3'b011) $fatal(1, "DffEn: en=0 holds 011, got=%b", dff_en_q);
         if (srst_en_q !== 3'b000) $fatal(1, "DffSyncRstEn: en=0 holds 000, got=%b", srst_en_q);
         if (rst_en_q  !== 3'b011) $fatal(1, "DffAsyncRstEn: en=0 holds 011, got=%b", rst_en_q);
         #4 clk = 0;
         #2 en2 = 1;
         #3 clk = 1;
         #1;
+        if (dff_en_q  !== d) $fatal(1, "DffEn: en=1 in=%b got=%b", d, dff_en_q);
         if (srst_en_q !== d) $fatal(1, "DffSyncRstEn: en=1 in=%b got=%b", d, srst_en_q);
         if (rst_en_q  !== d) $fatal(1, "DffAsyncRstEn: en=1 in=%b got=%b", d, rst_en_q);
         #4 clk = 0;
 
-        // Synchronous reset wins over en2=0.
+        // Synchronous reset wins over en2=0; DffEn has no reset and holds.
         #2 en2 = 0; srst_n = 0;
         #3 clk = 1;
         #1;
         if (srst_en_q !== 0) $fatal(1, "DffSyncRstEn: srst_n=0 en=0 at clock edge got=%b, expected 000", srst_en_q);
+        if (dff_en_q !== 3'b110) $fatal(1, "DffEn: en=0 holds 110, got=%b", dff_en_q);
         #4 clk = 0;
 
         // Asynchronous reset with en2=0 takes effect without clock.
