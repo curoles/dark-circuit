@@ -2,12 +2,10 @@
  * and stores, purely combinational.
  *
  * Operand a is rs1, or pc for AUIPC, or 0 for LUI; operand b is rs2 for OP, else the
- * immediate. funct3 (RiscvPkg F3_*) selects the operation, alt (insn[30]) SUB and SRA.
- * One Alu1 adds, subtracts and does AND, OR, XOR; with b inverted (alu.b_inv) its AND, OR,
- * XOR are ANDN, ORN, XNOR of Zbb. Comparisons use its SUB: co=1 is no borrow, a >= b
- * unsigned; SLT, SLTU give the result of the compare, the Zbb MIN, MINU, MAX, MAXU
- * (alu.minmax) select a or b by it. One BarrelShifter shifts by b[4:0], and rotates for the
- * Zbb ROL, ROR, RORI (alu.rotate).
+ * immediate (dec.alu.a, dec.alu.b_imm). The library block Alu2 computes the operation with
+ * the controls decode gave (dec.alu.alu2 = Alu2Pkg::ctrl_of of the operation): the RV32I
+ * operations and the Zbb that reuse the ALU (ANDN, ORN, XNOR, MIN, MAX, ROL, ROR, RORI).
+ * LUI is 0 + imm, AUIPC pc + imm, loads and stores rs1 + imm.
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. result is rd's value
  * (rd_src RD_ALU) and the load/store address for Mig2Lsu and Mig2Control (mtval).
@@ -15,8 +13,8 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
-    // Only alu, funct3, alt and imm are used.
+module Mig2Alu import Mig2Pkg::*; (
+    // Only alu and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t dec,       // the instruction taken apart
     /* verilator lint_on UNUSEDSIGNAL */
@@ -27,76 +25,15 @@ module Mig2Alu import Mig2Pkg::*, RiscvPkg::*, Alu1Pkg::*; (
 );
     word_t a;           // operand a: rs1, pc or 0
     word_t b;           // operand b: rs2 or the immediate
-    word_t b_alu1;      // b into Alu1: inverted for ANDN, ORN, XNOR
-    op_e   cmd;         // Alu1 command
-    word_t sum;         // Alu1 out
-    logic  co;          // Alu1 carry out
-    word_t shifted;     // BarrelShifter out
-    logic  lt_u;        // a < b unsigned
-    logic  lt_s;        // a < b signed
-    logic  a_sign;
-    logic  b_sign;
-    logic  lt;          // MIN, MAX: a < b signed; MINU, MAXU: unsigned
-    logic  pick_a;      // MIN, MINU: a < b; MAX, MAXU: not
 
-    // Operands.
     always_comb
         case (dec.alu.a)
             A_PC:    a = {pc, {IADDR_START{1'b0}}};
             A_ZERO:  a = '0;
             default: a = rs1_data;
         endcase
-    assign b      = dec.alu.b_imm ? dec.imm : rs2_data;
-    assign a_sign = a[WIDTH-1];
-    assign b_sign = b[WIDTH-1];
+    assign b = dec.alu.b_imm ? dec.imm : rs2_data;
 
-    // Alu1 command by funct3; LUI and AUIPC add; MIN, MAX compare (funct3 is not Alu1's).
-    always_comb
-        if (!dec.alu.op)
-            cmd = OP_ADD;
-        else if (dec.alu.minmax)
-            cmd = OP_SUB;
-        else
-            case (dec.funct3)
-                F3_ADD_SUB:      cmd = dec.alu.sub ? OP_SUB : OP_ADD;
-                F3_SLT, F3_SLTU: cmd = OP_SUB;   // compare by subtraction
-                F3_XOR:          cmd = OP_XOR;
-                F3_OR:           cmd = OP_OR;
-                F3_AND:          cmd = OP_AND;
-                default:         cmd = OP_ADD;   // shifts do not use Alu1
-            endcase
-
-    // @kb: rtl/design/mig2/zbb_reuse
-    // Only Alu1's b is inverted: the comparisons and the shifter keep b as it is.
-    assign b_alu1 = dec.alu.b_inv ? ~b : b;
-
-    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd, .in1(a), .in2(b_alu1), .co, .out(sum));
-
-    // SLL left, SRL right with 0, SRA right with the sign bit; ROL left, ROR and RORI right,
-    // rotating (alu.rotate; their alt is set, but a rotate ignores shift_in_bit).
-    BarrelShifter #(.WIDTH(WIDTH)) u_barrel_shifter(
-        .in(a), .shift_in_bit(dec.alt && a_sign), .shift(b[$clog2(WIDTH)-1:0]),
-        .shift_rotate(!dec.alu.rotate), .left_right(dec.funct3 == F3_SLL), .out(shifted));
-
-    // Comparisons from the subtraction a - b.
-    assign lt_u = !co;
-    assign lt_s = (a_sign != b_sign) ? a_sign : lt_u;
-
-    assign lt     = dec.alu.minmax_unsigned ? lt_u : lt_s;
-    assign pick_a = lt ^ dec.alu.minmax_max;
-
-    // Result by funct3; LUI and AUIPC take the sum; MIN, MAX the operand picked.
-    always_comb
-        if (!dec.alu.op)
-            result = sum;
-        else if (dec.alu.minmax)
-            result = pick_a ? a : b;
-        else
-            case (dec.funct3)
-                F3_SLL, F3_SRL_SRA: result = shifted;
-                F3_SLT:             result = {{(WIDTH-1){1'b0}}, lt_s};
-                F3_SLTU:            result = {{(WIDTH-1){1'b0}}, lt_u};
-                default:            result = sum;   // ADD, SUB, XOR, OR, AND
-            endcase
+    Alu2 #(.WIDTH(WIDTH)) u_alu2(.ctrl(dec.alu.alu2), .a, .b, .out(result));
 
 endmodule

@@ -16,6 +16,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
     output decoded_t dec    // the instruction taken apart: fields, immediate, controls
 );
     import RiscvInstrPkg::*;
+    import Alu2Pkg::*;
 
     kind_e kind;    // instruction group, from the exact encodings: decides the controls
 
@@ -84,20 +85,34 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         return m;
     endfunction
 
-    // Zbb that Mig2Alu does, recognized by their encodings (RiscvInstrPkg): ANDN, ORN, XNOR are
-    // Alu1's AND, OR, XOR with b inverted (they have the funct3 of AND, OR, XOR); MIN, MINU,
-    // MAX, MAXU pick a or b by the compare of SLT/SLTU; ROL, ROR, RORI rotate in the shifter
-    // (funct3 of SLL, SRL).
-    logic logic_inv;
-    logic minmax;
-    logic mm_max;
-    logic mm_unsigned;
-    logic rotate;
-    assign logic_inv   = insn ==? ANDN || insn ==? ORN || insn ==? XNOR;
-    assign minmax      = insn ==? MIN || insn ==? MINU || insn ==? MAX || insn ==? MAXU;
-    assign mm_max      = insn ==? MAX || insn ==? MAXU;
-    assign mm_unsigned = insn ==? MINU || insn ==? MAXU;
-    assign rotate      = insn ==? ROL || insn ==? ROR || insn ==? RORI_RV32;
+    // @kb: rtl/design/mig2/zbb_reuse
+    // The operation of Alu2 (Mig2Alu), by the encodings: OP and OP-IMM, also the Zbb that
+    // reuse the ALU (ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR, RORI); a + b for every
+    // other instruction (LUI, AUIPC, loads, stores, JALR). Its controls (ctrl_of) go to EX
+    // in decoded_t: Alu2 decodes nothing.
+    function automatic op_e alu_op_of(insn_t w);
+        casez (w)
+            SUB:                return ALU2_SUB;
+            SLL, SLLI:          return ALU2_SLL;
+            SLT, SLTI:          return ALU2_SLT;
+            SLTU, SLTIU:        return ALU2_SLTU;
+            XOR, XORI:          return ALU2_XOR;
+            SRL, SRLI:          return ALU2_SRL;
+            SRA, SRAI:          return ALU2_SRA;
+            OR, ORI:            return ALU2_OR;
+            AND, ANDI:          return ALU2_AND;
+            ANDN:               return ALU2_ANDN;
+            ORN:                return ALU2_ORN;
+            XNOR:               return ALU2_XNOR;
+            MIN:                return ALU2_MIN;
+            MINU:               return ALU2_MINU;
+            MAX:                return ALU2_MAX;
+            MAXU:               return ALU2_MAXU;
+            ROL:                return ALU2_ROL;
+            ROR, RORI_RV32:     return ALU2_ROR;
+            default:            return ALU2_ADD;    // ADD, ADDI and the address sums
+        endcase
+    endfunction
 
     // Zbb with one operand, in ComputeCoreBitmanip: its operation, by the encodings.
     function automatic ComputeCoreBitmanipPkg::bm_op_e bitmanip_of(insn_t w);
@@ -138,8 +153,7 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
         dec.uses_rs1 = 1'b0;
         dec.uses_rs2 = 1'b0;
         dec.imm      = imm;              // by opcode (shifts: imm[4:0] is shamt)
-        dec.alu      = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
-                         minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};
+        dec.alu      = '{a: A_RS1, b_imm: 1'b1, alu2: ctrl_of(alu_op_of(insn))};
         dec.br       = '0;
         dec.mem      = '0;
         dec.sys      = '0;
@@ -175,14 +189,11 @@ module Mig2Decode import Mig2Pkg::*, RiscvPkg::*; (
                 dec.mem.write = 1'b1;
             end
             KIND_OP_IMM: begin
-                dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;  dec.alu.op = 1'b1;
-                dec.alu.rotate = rotate;
+                dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;
             end
             KIND_OP: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
-                dec.alu = '{a: A_RS1, b_imm: 1'b0, op: 1'b1, sub: dec.alt, b_inv: logic_inv,
-                            minmax: minmax, minmax_max: mm_max, minmax_unsigned: mm_unsigned,
-                            rotate: rotate};
+                dec.alu.b_imm = 1'b0;
             end
             KIND_MULDIV: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_MULDIV;

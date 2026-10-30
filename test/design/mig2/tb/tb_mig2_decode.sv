@@ -21,6 +21,7 @@
 module TbMig2Decode;
     import Mig2Pkg::*;
     import RiscvPkg::*;
+    import RiscvInstrPkg::*;    // the encodings, for the models of the ALU operation
 
     localparam AW     = MIG2_CFG.mem_addr_width;
     localparam FIELDS = 10;                  // expected values after the instruction
@@ -107,27 +108,40 @@ module TbMig2Decode;
         endcase
     endfunction
 
-    // The Zbb that Mig2Alu does, by their encodings (RiscvInstrPkg): b_inv for ANDN, ORN,
-    // XNOR; minmax for MIN, MINU, MAX, MAXU (max: MAX, MAXU; unsigned: MINU, MAXU); rotate
-    // for ROL, ROR, RORI.
+    // The operation of Alu2 for an instruction, by its encoding (RiscvInstrPkg); a + b for
+    // the instructions that are not OP or OP-IMM.
+    function automatic Alu2Pkg::op_e alu_op_of(input insn_t w);
+        if (w ==? SUB)                         return Alu2Pkg::ALU2_SUB;
+        if (w ==? SLL  || w ==? SLLI)          return Alu2Pkg::ALU2_SLL;
+        if (w ==? SLT  || w ==? SLTI)          return Alu2Pkg::ALU2_SLT;
+        if (w ==? SLTU || w ==? SLTIU)         return Alu2Pkg::ALU2_SLTU;
+        if (w ==? XOR  || w ==? XORI)          return Alu2Pkg::ALU2_XOR;
+        if (w ==? SRL  || w ==? SRLI)          return Alu2Pkg::ALU2_SRL;
+        if (w ==? SRA  || w ==? SRAI)          return Alu2Pkg::ALU2_SRA;
+        if (w ==? OR   || w ==? ORI)           return Alu2Pkg::ALU2_OR;
+        if (w ==? AND  || w ==? ANDI)          return Alu2Pkg::ALU2_AND;
+        if (w ==? ANDN)                        return Alu2Pkg::ALU2_ANDN;
+        if (w ==? ORN)                         return Alu2Pkg::ALU2_ORN;
+        if (w ==? XNOR)                        return Alu2Pkg::ALU2_XNOR;
+        if (w ==? MIN)                         return Alu2Pkg::ALU2_MIN;
+        if (w ==? MINU)                        return Alu2Pkg::ALU2_MINU;
+        if (w ==? MAX)                         return Alu2Pkg::ALU2_MAX;
+        if (w ==? MAXU)                        return Alu2Pkg::ALU2_MAXU;
+        if (w ==? ROL)                         return Alu2Pkg::ALU2_ROL;
+        if (w ==? ROR  || w ==? RORI_RV32)     return Alu2Pkg::ALU2_ROR;
+        return Alu2Pkg::ALU2_ADD;
+    endfunction
+
+    // ALU controls expected: the operands of the kind, the controls of the operation.
     function automatic alu_ctrl_t alu_of(input kind_e kind, input insn_t w);
         alu_ctrl_t ctrl;
-        ctrl = '{a: A_RS1, b_imm: 1'b1, op: 1'b0, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
-                minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};  // rs1 + imm
+        ctrl.a     = A_RS1;
+        ctrl.b_imm = 1'b1;
+        ctrl.alu2  = Alu2Pkg::ctrl_of(alu_op_of(w));
         case (kind)
-            KIND_LUI:    begin ctrl.a = A_ZERO; end
-            KIND_AUIPC:  begin ctrl.a = A_PC; end
-            KIND_OP_IMM: begin ctrl.op = 1'b1; ctrl.rotate = w ==? RiscvInstrPkg::RORI_RV32; end
-            KIND_OP:     begin
-                ctrl.b_imm = 1'b0;  ctrl.op = 1'b1;  ctrl.sub = RiscvPkg::alt_of(w);
-                ctrl.b_inv = w ==? RiscvInstrPkg::ANDN || w ==? RiscvInstrPkg::ORN ||
-                             w ==? RiscvInstrPkg::XNOR;
-                ctrl.minmax_max = w ==? RiscvInstrPkg::MAX || w ==? RiscvInstrPkg::MAXU;
-                ctrl.minmax_unsigned = w ==? RiscvInstrPkg::MINU || w ==? RiscvInstrPkg::MAXU;
-                ctrl.minmax = w ==? RiscvInstrPkg::MIN || ctrl.minmax_max ||
-                              ctrl.minmax_unsigned;
-                ctrl.rotate = w ==? RiscvInstrPkg::ROL || w ==? RiscvInstrPkg::ROR;
-            end
+            KIND_LUI:   ctrl.a = A_ZERO;
+            KIND_AUIPC: ctrl.a = A_PC;
+            KIND_OP:    ctrl.b_imm = 1'b0;
             default: ;
         endcase
         return ctrl;

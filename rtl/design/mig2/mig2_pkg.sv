@@ -276,15 +276,9 @@ package Mig2Pkg;
     } alu_a_e;
 
     typedef struct packed {
-        alu_a_e a;          // operand a
-        logic   b_imm;      // operand b is imm, else rs2
-        logic   op;         // funct3 selects the operation (OP, OP-IMM), else a + b
-        logic   sub;        // OP with alt: SUB instead of ADD
-        logic   b_inv;      // Zbb ANDN, ORN, XNOR: AND, OR, XOR with b inverted
-        logic   minmax;     // Zbb MIN, MINU, MAX, MAXU: the compare of SLT/SLTU selects a or b
-        logic   minmax_max;         // MAX, MAXU: the larger
-        logic   minmax_unsigned;    // MINU, MAXU: unsigned compare
-        logic   rotate;     // Zbb ROL, ROR, RORI: the shifter rotates (funct3 of SLL, SRL)
+        alu_a_e         a;      // operand a
+        logic           b_imm;  // operand b is imm, else rs2
+        Alu2Pkg::ctrl_t alu2;   // the operation: Alu2Pkg::ctrl_of of its op (Mig2Decode)
     } alu_ctrl_t;
 
     typedef struct packed {

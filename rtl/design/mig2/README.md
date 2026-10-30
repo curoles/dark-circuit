@@ -96,11 +96,13 @@ the start cycle, in EX, not in ID, where the operand comes through the forwardin
 ## Zbb (bit manipulation)
 
 Mig2 gets Zbb group by group. An instruction that reuses hardware of Mig2Alu goes there,
-only new logic gets a part of its own. Done, all in Mig2Alu: ANDN, ORN, XNOR, which are
-Alu1's AND, OR, XOR with operand b inverted (`alu_ctrl_t.b_inv`); MIN, MINU, MAX, MAXU,
-where the compare of SLT/SLTU (Alu1's subtraction) selects a or b (`minmax`, `minmax_max`,
-`minmax_unsigned`); ROL, ROR, RORI, which its BarrelShifter rotates (`rotate`). Decode
-recognizes them by their encodings in RiscvInstrPkg. The new logic, Zbb with one operand,
+only new logic gets a part of its own. Done in the ALU (since 2026-10-29 the library block
+Alu2, which Mig2Alu instantiates next to its choice of operands): ANDN, ORN, XNOR, which are
+Alu1's AND, OR, XOR with operand b inverted; MIN, MINU, MAX, MAXU, where the compare of
+SLT/SLTU (Alu1's subtraction) selects a or b; ROL, ROR, RORI, which its BarrelShifter
+rotates. Decode recognizes them by their encodings in RiscvInstrPkg and names Alu2's
+operation (`alu_op_of`); its controls (`Alu2Pkg::ctrl_of`) go to EX in `decoded_t`. The
+new logic, Zbb with one operand,
 is the library block ComputeCoreBitmanip, a part of EX (which Mig3 will use too): SEXT.B,
 SEXT.H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP (`KIND_BITMANIP`, `rd_src` `RD_BITMANIP`, the
 operation in `decoded_t.bitmanip`). The encodings of all of Zbb are in RiscvInstrPkg
@@ -145,8 +147,8 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 
 | Mig2Core | |
 |---|---|
-| Area | 208 284 µm² (0.208 mm²), 22 934 cells |
-| Longest logic path (ABC estimate) | 5.2 ns, about 194 MHz |
+| Area | 207 034 µm² (0.207 mm²), 22 861 cells |
+| Longest logic path (ABC estimate) | 5.5 ns, about 183 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -159,6 +161,7 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 | Zbb, all 18 instructions | 204 397 | 6.2 |
 | Alignment offset in Mig2Lsu | 204 668 | 5.9 |
 | Immediate by opcode in decode | 208 284 | 5.2 |
+| Mig2Alu: the operands and the library block Alu2 | 207 034 | 5.5 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -192,6 +195,12 @@ deeper, and ID's target pc + imm waited for it; the format follows from the opco
 and decode now selects the immediate by opcode (kb `imm_by_opcode`): 5.2 ns, and the
 longest path is the forwarding loop of EX, as in Mig1. Area +1.8 % with 266 cells fewer:
 ABC sizes up the gates of the paths that are now the longest.
+Mig2Alu then became the operands and the library block Alu2, its controls computed in decode:
+1 250 µm² less, longest path 5.5 ns, the forwarding loop. Its gate depth did not change (Yosys
+ltp): the deepest paths of the loop are CLZ through the chain of the priority encoder (50
+levels) and the single-cycle multiplier (44), not the ALU; the estimate moves by 0.2 to 0.3 ns
+with the mapping (5.4 ns with a tree priority encoder, with either ALU). The loop's limit is
+the multiplier's result forwarded from EX.
 
 Not planned for now: the GShare predictor of `rtl/lib/block/gshare_branch_predictor`. A
 trace model on top of the BTB and the return stack gives at most 1.9 % of Dhrystone

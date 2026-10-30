@@ -6,9 +6,10 @@ question: >
   stay clear and no hardware is built twice?
 decision: >
   An instruction that reuses hardware Mig2Alu already has goes into Mig2Alu: ANDN, ORN, XNOR
-  are Alu1's AND, OR, XOR with operand b inverted (alu_ctrl_t.b_inv; same funct3, only
-  insn[30] differs); MIN/MAX use the comparison it computes for SLT/SLTU; ROL/ROR/RORI the
-  rotate mode of its BarrelShifter. Only genuinely new logic gets a block of its own, the
+  are Alu1's AND, OR, XOR with operand b inverted (same funct3, only insn[30] differs);
+  MIN/MAX use the comparison it computes for SLT/SLTU; ROL/ROR/RORI the rotate mode of its
+  BarrelShifter. Since 2026-10-29 this ALU is the library block Alu2 (alu2/design), which
+  Mig2Alu instantiates. Only genuinely new logic gets a block of its own, the
   library block ComputeCoreBitmanip (compute_core_bitmanip/library_block): SEXT/ZEXT,
   ORC.B, REV8, CLZ/CTZ, CPOP.
   The encodings of all of Zbb are in RiscvInstrPkg (tools/riscv_opcodes.sh). Tests:
@@ -38,10 +39,9 @@ evidence: >
   CPOP) only added decode and tests: the block already did them (2026-10-29). All 18 RV32
   Zbb instructions pass rv32uzbb.
 code:
-  - rtl/design/mig2/mig2_alu.sv#b_alu1
-  - rtl/design/mig2/mig2_alu.sv#pick_a
-  - rtl/design/mig2/mig2_decode.sv#rotate
-  - rtl/design/mig2/mig2_decode.sv#logic_inv
+  - rtl/lib/block/alu2/behave/alu2.sv#b_alu1
+  - rtl/lib/block/alu2/behave/alu2.sv#pick_a
+  - rtl/design/mig2/mig2_decode.sv#alu_op_of
   - test/design/mig2/CMakeLists.txt#rv32uzbb
-  - test/design/mig2/tb/tb_mig2_alu.sv#alt_op
+  - test/design/mig2/tb/tb_mig2_alu.sv#op_model
   - tools/riscv_opcodes.sh

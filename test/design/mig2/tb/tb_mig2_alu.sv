@@ -1,20 +1,22 @@
-/* Unit test of Mig2Alu.
+/* Unit test of Mig2Alu: the operands (rs1, pc or 0; rs2 or the immediate) and Alu2.
  *
- * The model computes RV32I results with SystemVerilog operators (+, -, signed and
- * unsigned <, <<, >>, >>>), independent of Alu1 and BarrelShifter. dec is filled
- * directly, like Mig2Decode would: for OP-IMM alt is imm[10], shifts have funct7 in
- * imm[11:5]. Cases: every OP and OP-IMM operation with edge values, LUI, AUIPC,
- * then random cases. OP with alt: SUB, SRA, and the Zbb ANDN, ORN, XNOR (funct3 of AND, OR,
- * XOR); OP with minmax: the Zbb MIN, MINU, MAX, MAXU; OP and OP-IMM with rotate: the Zbb
- * ROL, ROR, RORI (shift amounts 0, 1, 31 and random). Their funct3 and funct7 come from
- * RiscvInstrPkg. Stops at the first mismatch with $fatal.
+ * dec.alu is filled like Mig2Decode would: the operand sources and Alu2Pkg::ctrl_of of the
+ * operation. The model selects the operands and computes the operation by its meaning with
+ * SystemVerilog operators ($signed compares, >>> for SRA, rotates as two shifts),
+ * independent of Alu2. Cases: every operation with edge values from rs1 and rs2, and from
+ * rs1 and the immediate; every shift amount; every operand source; LUI (0 + imm) and AUIPC
+ * (pc + imm); then random cases. Alu2's own test checks the operations exhaustively. Stops
+ * at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig2Alu;
     import Mig2Pkg::*;
-    import RiscvPkg::*;
+    import Alu2Pkg::*;
+
+    localparam N_OPS = ALU2_ROR + 1;
+    localparam SW    = $clog2(WIDTH);
 
     decoded_t dec;
     iaddr_t   pc;
@@ -23,210 +25,97 @@ module TbMig2Alu;
     word_t    result;
 
     word_t    edges [6];
+    // Random word, only some of its bits are used.
+    /* verilator lint_off UNUSEDSIGNAL */
     word_t    rnd;
-    funct3_t  rnd_f3;       // funct3 of a random case
-    integer   i;
-    integer   j;
-    integer   f;
+    /* verilator lint_on UNUSEDSIGNAL */
     integer   seed;
 
     Mig2Alu u_mig2_alu(.dec, .pc, .rs1_data, .rs2_data, .result);
 
-    // funct3 of the Zbb MIN, MINU, MAX, MAXU and funct7 of ROL, ROR, RORI, from their encodings.
-    localparam funct3_t    F3_MIN  = RiscvInstrPkg::MIN[14:12];
-    localparam funct3_t    F3_MINU = RiscvInstrPkg::MINU[14:12];
-    localparam funct3_t    F3_MAX  = RiscvInstrPkg::MAX[14:12];
-    localparam funct3_t    F3_MAXU = RiscvInstrPkg::MAXU[14:12];
-    localparam logic [6:0] F7_ROT  = RiscvInstrPkg::RORI_RV32[31:25];
-
-    function automatic logic minmax_f3(input funct3_t f3);
-        return f3 == F3_MIN || f3 == F3_MINU || f3 == F3_MAX || f3 == F3_MAXU;
-    endfunction
-
-    // Immediate of RORI: {funct7 of the rotates, shamt}.
-    function automatic word_t rori_imm(input logic [4:0] shamt);
-        return {20'h0, F7_ROT, shamt};
-    endfunction
-
-    // Expected result; mm: MIN, MINU, MAX, MAXU by funct3; rot: ROL (funct3 of SLL), ROR, RORI.
-    function automatic word_t model(input kind_e k, input funct3_t f3, input logic al,
-                                    input logic mm, input logic rot, input word_t x,
-                                    input word_t y, input word_t im, input word_t pcb);
-        word_t bb;
-        if (k == KIND_LUI)   return im;
-        if (k == KIND_AUIPC) return pcb + im;
-        if (mm)
-            case (f3)
-                F3_MIN:  return ($signed(x) < $signed(y)) ? x : y;
-                F3_MINU: return (x < y) ? x : y;
-                F3_MAX:  return ($signed(x) < $signed(y)) ? y : x;
-                default: return (x < y) ? y : x;                       // MAXU
-            endcase
-        if (rot) begin
-            bb = (k == KIND_OP) ? y : im;
-            return (f3 == F3_SLL) ? (x << bb[4:0]) | (x >> (6'd32 - bb[4:0]))
-                                  : (x >> bb[4:0]) | (x << (6'd32 - bb[4:0]));
-        end
-        bb = (k == KIND_OP) ? y : im;
-        case (f3)
-            F3_ADD_SUB: return (k == KIND_OP && al) ? x - bb : x + bb;
-            F3_SLL:     return x << bb[4:0];
-            F3_SLT:     return ($signed(x) < $signed(bb)) ? 32'd1 : 32'd0;
-            F3_SLTU:    return (x < bb) ? 32'd1 : 32'd0;
-            F3_XOR:     return (k == KIND_OP && al) ? ~(x ^ bb) : x ^ bb;    // XNOR
-            // Not `al ? $signed(x) >>> s : x >> s`: a ?: with an unsigned branch makes
-            // the whole expression unsigned, then >>> shifts in zeros.
-            F3_SRL_SRA: if (al) return $signed(x) >>> bb[4:0];
-                        else    return x >> bb[4:0];
-            F3_OR:      return (k == KIND_OP && al) ? x | ~bb : x | bb;      // ORN
-            default:    return (k == KIND_OP && al) ? x & ~bb : x & bb;      // F3_AND, ANDN
+    // The operation by its meaning.
+    function automatic word_t op_model(input op_e op, input word_t x, input word_t y);
+        int sh;
+        sh = int'(y[SW-1:0]);
+        case (op)
+            ALU2_ADD:  return x + y;
+            ALU2_SUB:  return x - y;
+            ALU2_AND:  return x & y;
+            ALU2_OR:   return x | y;
+            ALU2_XOR:  return x ^ y;
+            ALU2_ANDN: return x & ~y;
+            ALU2_ORN:  return x | ~y;
+            ALU2_XNOR: return ~(x ^ y);
+            ALU2_SLT:  return word_t'($signed(x) < $signed(y));
+            ALU2_SLTU: return word_t'(x < y);
+            ALU2_MIN:  return ($signed(x) < $signed(y)) ? x : y;
+            ALU2_MINU: return (x < y) ? x : y;
+            ALU2_MAX:  return ($signed(x) < $signed(y)) ? y : x;
+            ALU2_MAXU: return (x < y) ? y : x;
+            ALU2_SLL:  return x << sh;
+            ALU2_SRL:  return x >> sh;
+            ALU2_SRA:  return word_t'($signed(x) >>> sh);
+            ALU2_ROL:  return (x << sh) | (x >> (WIDTH - sh));
+            ALU2_ROR:  return (x >> sh) | (x << (WIDTH - sh));
+            default:   return 'x;   // not an operation: never asked
         endcase
     endfunction
 
-    // ALU controls of a kind, as Mig2Decode gives them (kinds of this test only); b_inv for
-    // the Zbb ANDN, ORN, XNOR: OP with alt and the funct3 of AND, OR, XOR.
-    function automatic alu_ctrl_t alu_of(input kind_e k, input logic al, input logic mm,
-                                         input logic rot, input funct3_t f3);
-        alu_ctrl_t ctrl;
-        ctrl = '{a: A_RS1, b_imm: 1'b1, op: 1'b1, sub: 1'b0, b_inv: 1'b0, minmax: 1'b0,
-                minmax_max: 1'b0, minmax_unsigned: 1'b0, rotate: 1'b0};  // OP-IMM
-        case (k)
-            KIND_LUI:   begin ctrl.a = A_ZERO; ctrl.op = 1'b0; end
-            KIND_AUIPC: begin ctrl.a = A_PC;   ctrl.op = 1'b0; end
-            KIND_OP:    begin
-                ctrl.b_imm = 1'b0;  ctrl.sub = al;
-                ctrl.b_inv = al && (f3 == F3_XOR || f3 == F3_OR || f3 == F3_AND);
-                ctrl.minmax = mm;
-                ctrl.minmax_max = mm && (f3 == F3_MAX || f3 == F3_MAXU);
-                ctrl.minmax_unsigned = mm && (f3 == F3_MINU || f3 == F3_MAXU);
-            end
-            default: ;
-        endcase
-        ctrl.rotate = rot;
-        return ctrl;
-    endfunction
-
-    // Apply one case and compare; mm: MIN, MINU, MAX, MAXU (OP); rot: ROL, ROR (OP), RORI
-    // (OP-IMM).
-    task automatic check_v(input kind_e k, input funct3_t f3, input logic al, input logic mm,
-                           input logic rot, input word_t x, input word_t y, input word_t im,
-                           input iaddr_t p);
+    // Apply one case and compare: operation, operand sources, rs1, rs2, imm, pc.
+    task automatic check(input op_e op, input alu_a_e src_a, input logic b_imm, input word_t x,
+                         input word_t y, input word_t im, input iaddr_t p);
+        word_t a;
+        word_t b;
         word_t exp;
         dec = '0;
-        dec.kind = k; dec.funct3 = f3; dec.alt = al; dec.imm = im;
-        dec.alu = alu_of(k, al, mm, rot, f3);
+        dec.imm = im;
+        dec.alu = '{a: src_a, b_imm: b_imm, alu2: ctrl_of(op)};
         pc = p; rs1_data = x; rs2_data = y;
         #1;
-        exp = model(k, f3, al, mm, rot, x, y, im, {p, 2'b00});
+        case (src_a)
+            A_PC:    a = {p, {IADDR_START{1'b0}}};
+            A_ZERO:  a = '0;
+            default: a = x;
+        endcase
+        b   = b_imm ? im : y;
+        exp = op_model(op, a, b);
         if (result !== exp)
-            $fatal(1, "Mig2Alu: kind=%0d funct3=%0d alt=%b minmax=%b rotate=%b rs1=%h rs2=%h imm=%h pc=%h got %h, expected %h",
-                   k, f3, al, mm, rot, x, y, im, {p, 2'b00}, result, exp);
+            $fatal(1, "Mig2Alu: %s a=%0d b_imm=%b rs1=%h rs2=%h imm=%h pc=%h got %h, expected %h",
+                   op.name(), src_a, b_imm, x, y, im, {p, 2'b00}, result, exp);
     endtask
-
-    task automatic check_mm(input kind_e k, input funct3_t f3, input logic al, input logic mm,
-                            input word_t x, input word_t y, input word_t im, input iaddr_t p);
-        check_v(k, f3, al, mm, 1'b0, x, y, im, p);
-    endtask
-
-    // ROL (funct3 of SLL), ROR (of SRL): OP; RORI: OP-IMM; alt is set (insn[30] of F7_ROT).
-    task automatic check_rot(input kind_e k, input funct3_t f3, input word_t x, input word_t y,
-                             input word_t im);
-        check_v(k, f3, F7_ROT[5], 1'b0, 1'b1, x, y, im, '0);
-    endtask
-
-    task automatic check(input kind_e k, input funct3_t f3, input logic al, input word_t x,
-                         input word_t y, input word_t im, input iaddr_t p);
-        check_v(k, f3, al, 1'b0, 1'b0, x, y, im, p);
-    endtask
-
-    // OP operations that have a form with alt: SUB, SRA, ANDN, ORN, XNOR.
-    function automatic logic alt_op(input funct3_t f3);
-        return f3 == F3_ADD_SUB || f3 == F3_SRL_SRA || f3 == F3_XOR || f3 == F3_OR ||
-               f3 == F3_AND;
-    endfunction
-
-    // Immediate of SRAI: {funct7 of SRAI, shamt}, from its encoding.
-    function automatic word_t srai_imm(input logic [4:0] shamt);
-        return {20'h0, RiscvInstrPkg::SRAI[31:25], shamt};
-    endfunction
-
-    // OP-IMM immediate from 12 bits as Mig2Decode gives it (alt is imm[10]).
-    function automatic word_t imm12(input logic [11:0] v);
-        return {{20{v[11]}}, v};
-    endfunction
 
     initial begin
-        edges[0] = 32'h0000_0000; edges[1] = 32'h0000_0001; edges[2] = 32'hffff_ffff;
-        edges[3] = 32'h8000_0000; edges[4] = 32'h7fff_ffff; edges[5] = 32'h1234_5678;
+        edges[0] = '0;
+        edges[1] = word_t'(1);
+        edges[2] = '1;
+        edges[3] = word_t'(1) << (WIDTH - 1);
+        edges[4] = ~edges[3];
+        edges[5] = 32'h1234_5678;
 
-        // OP: every operation with edge values; alt for ADD/SUB, SRL/SRA and the logic
-        // operations (ANDN, ORN, XNOR).
-        for (i = 0; i < 6; i = i + 1)
-            for (j = 0; j < 6; j = j + 1)
-                for (f = 0; f < 8; f = f + 1) begin
-                    check(KIND_OP, f[2:0], 1'b0, edges[i], edges[j], '0, '0);
-                    if (alt_op(f[2:0]))
-                        check(KIND_OP, f[2:0], 1'b1, edges[i], edges[j], '0, '0);
-                    if (minmax_f3(f[2:0]))
-                        check_mm(KIND_OP, f[2:0], 1'b0, 1'b1, edges[i], edges[j], '0, '0);
-                    if (f[2:0] == F3_SLL || f[2:0] == F3_SRL_SRA)  // ROL, ROR
-                        check_rot(KIND_OP, f[2:0], edges[i], edges[j], '0);
+        // Every operation: rs1 with rs2, rs1 with the immediate; every shift amount.
+        for (int k = 0; k < N_OPS; k++) begin
+            for (int i = 0; i < 6; i++)
+                for (int j = 0; j < 6; j++) begin
+                    check(op_e'(k), A_RS1, 1'b0, edges[i], edges[j], '0, '0);
+                    check(op_e'(k), A_RS1, 1'b1, edges[i], '0, edges[j], '0);
                 end
-
-        // OP-IMM: edge immediates; shifts with shamt 0, 1, 31.
-        for (i = 0; i < 6; i = i + 1) begin
-            for (f = 0; f < 8; f = f + 1)
-                if (f[2:0] != F3_SLL && f[2:0] != F3_SRL_SRA) begin
-                    check(KIND_OP_IMM, f[2:0], 1'b0, edges[i], '0, imm12(12'h000), '0);
-                    check(KIND_OP_IMM, f[2:0], 1'b1, edges[i], '0, imm12(12'h7ff), '0);
-                    check(KIND_OP_IMM, f[2:0], 1'b0, edges[i], '0, imm12(12'h800), '0);
-                    check(KIND_OP_IMM, f[2:0], 1'b1, edges[i], '0, imm12(12'hfff), '0);
-                end
-            for (j = 0; j < 32; j = j + 31) begin
-                check(KIND_OP_IMM, F3_SLL,     1'b0, edges[i], '0, j,           '0);  // SLLI
-                check(KIND_OP_IMM, F3_SRL_SRA, 1'b0, edges[i], '0, j,           '0);  // SRLI
-                check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, srai_imm(5'(j)), '0);
-            end
-            check(KIND_OP_IMM, F3_SRL_SRA, 1'b1, edges[i], '0, srai_imm(5'd1), '0);
-            check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd0));           // RORI
-            check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd1));
-            check_rot(KIND_OP_IMM, F3_SRL_SRA, edges[i], '0, rori_imm(5'd31));
+            for (int s = 0; s < WIDTH; s++)
+                check(op_e'(k), A_RS1, 1'b1, edges[5], '0, word_t'(s), '0);
         end
 
-        // LUI and AUIPC.
-        check(KIND_LUI,   F3_ADD_SUB, 1'b0, 32'hdead_beef, '0, 32'h1234_5000, '0);
-        check(KIND_LUI,   F3_SRL_SRA, 1'b1, 32'hdead_beef, '0, 32'hffff_f000, '0);
-        check(KIND_AUIPC, F3_ADD_SUB, 1'b0, 32'hdead_beef, '0, 32'h0000_1000, 30'h0000_0040);
-        check(KIND_AUIPC, F3_ADD_SUB, 1'b0, 32'hdead_beef, '0, 32'hffff_f000, 30'h0000_0001);
+        // LUI (0 + imm) and AUIPC (pc + imm).
+        check(ALU2_ADD, A_ZERO, 1'b1, 32'hdead_beef, '0, 32'h1234_5000, '0);
+        check(ALU2_ADD, A_ZERO, 1'b1, 32'hdead_beef, '0, 32'hffff_f000, '0);
+        check(ALU2_ADD, A_PC,   1'b1, 32'hdead_beef, '0, 32'h0000_1000, 30'h0000_0040);
+        check(ALU2_ADD, A_PC,   1'b1, 32'hdead_beef, '0, 32'hffff_f000, 30'h0000_0001);
 
-        // Random cases.
+        // Random: operation, operand sources and values.
         seed = 1;
-        for (i = 0; i < 5000; i = i + 1) begin
+        for (int i = 0; i < 5000; i++) begin
             rnd = $random(seed);
-            rnd_f3 = rnd[2:0];
-            case (rnd[4:3])
-                2'd0: if (minmax_f3(rnd_f3) && rnd[6])
-                          check_mm(KIND_OP, rnd_f3, 1'b0, 1'b1, $random(seed), $random(seed),
-                                   '0, '0);
-                      else if ((rnd_f3 == F3_SLL || rnd_f3 == F3_SRL_SRA) && rnd[7])
-                          check_rot(KIND_OP, rnd_f3, $random(seed), $random(seed), '0);
-                      else if (rnd_f3 == F3_SRL_SRA && rnd[8])    // RORI
-                          check_rot(KIND_OP_IMM, F3_SRL_SRA, $random(seed), '0,
-                                    rori_imm(rnd[13:9]));
-                      else
-                          check(KIND_OP, rnd_f3, alt_op(rnd_f3) && rnd[5],
-                                $random(seed), $random(seed), '0, '0);
-                2'd1: if (rnd_f3 == F3_SLL || rnd_f3 == F3_SRL_SRA)
-                          check(KIND_OP_IMM, rnd_f3, rnd_f3 == F3_SRL_SRA && rnd[5],
-                                $random(seed), '0,
-                                {21'h0, rnd_f3 == F3_SRL_SRA && rnd[5], 5'h0, rnd[10:6]}, '0);
-                      else
-                          check(KIND_OP_IMM, rnd_f3, rnd[21], $random(seed), '0, imm12(rnd[22:11]),
-                                '0);
-                2'd2: check(KIND_LUI, rnd_f3, 1'b0, $random(seed), '0, {rnd[31:12], 12'h0}, '0);
-                2'd3: check(KIND_AUIPC, rnd_f3, 1'b0, $random(seed), '0, {rnd[31:12], 12'h0},
-                            rnd[29:0]);
-            endcase
+            check(op_e'(int'(rnd[4:0]) % N_OPS),
+                  (rnd[6:5] == 2'd1) ? A_PC : (rnd[6:5] == 2'd2) ? A_ZERO : A_RS1, rnd[7],
+                  $random(seed), $random(seed), $random(seed), iaddr_t'($random(seed)));
         end
 
         $display("PASS");

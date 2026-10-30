@@ -30,9 +30,17 @@ rejected:
 evidence: >
   Behave version and its unit test (every operation; WIDTH 4 exhaustive, 32 and 64 with
   edge operands, every shift amount, random), 2026-10-29: 9 of 9 mutants caught. The
-  struct version against the same test, 2026-10-29.
+  struct version against the same test, 2026-10-29. Mig2 uses it (Mig2Alu: the operands and
+  Alu2; Mig2Decode: alu_op_of, ctrl_of), 2026-10-29: 109 Mig2 tests, 6 of 6 mutants. sky130:
+  208 284 -> 207 034 um2, 5.2 -> 5.5 ns (the forwarding loop). Gate depth of the loop (Yosys
+  ltp) the same with both ALUs: its deepest paths are CLZ through the priority encoder's chain
+  (50 levels) and the multiplier (44); late results in the last mux: 5.5 ns; with a tree
+  priority encoder: 5.4 ns. Read as the estimate's mapping variation, not the ALU (user
+  accepted, 2026-10-29).
 code:
   - rtl/lib/block/alu2/alu2_pkg.sv#ctrl_of
   - rtl/lib/block/alu2/behave/alu2.sv#u_alu1
   - rtl/lib/block/alu2/struct/alu2.sv#u_mux4_out
   - test/block/alu2/tb_alu2.sv#model
+  - rtl/design/mig2/mig2_alu.sv#u_alu2
+  - rtl/design/mig2/mig2_decode.sv#alu_op_of
