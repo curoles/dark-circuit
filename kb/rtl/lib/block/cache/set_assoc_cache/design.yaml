@@ -35,14 +35,16 @@ rejected:
       Not for this step: the same policy as DirectCache. A write buffer behind the cache is
       the plan for store traffic.
 evidence: >
-  Behave version and its unit test (2 ways LRU with one-word lines, 4 ways LRU with
-  two-word lines, 4 ways random; on Verilator also 3 ways and 64 sets; a model with stores,
+  Behave version and its unit test (2 ways LRU with one-word lines, 4 ways random with
+  two-word lines; on Verilator also 3 and 4 ways LRU and 64 sets; a model with stores,
   memory writes and time stamps per way; every case must happen, also a load right after a
   store hit of the same way and of another way), 2026-10-29: 13 of 14 mutants caught, the
   one left equivalent (a held store writing and touching every clock before memory takes it
-  cannot be seen: no request is taken meanwhile).
+  cannot be seen: no request is taken meanwhile). The struct version against the same
+  test, 2026-10-29: 14 of 15 mutants caught, the same one left.
 code:
   - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#u_cache_replacement
   - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#store_write
   - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#fwd_way
+  - rtl/lib/block/cache/set_assoc_cache/struct/set_assoc_cache.sv#fwd_hits
   - test/block/cache/set_assoc_cache/tb_set_assoc_cache.sv#n_fwd_ways

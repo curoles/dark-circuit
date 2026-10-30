@@ -20,10 +20,10 @@
  * with only some bytes) and misses, a load hit right after a store hit of the same way and of
  * another way of the set, back-to-back load hits of two ways of one set, a store and a read
  * held by memory, evictions, a miss on a line an invalidate cleared, both memory latencies.
- * Verilator runs 2 ways with LRU and lines of one word, 4 ways with LRU and lines of two
- * words (8 strobes), 4 ways random and 3 ways with LRU, on 8 sets with 12-bit addresses, and
- * 4 ways with LRU on 64 sets with 32-bit addresses, 20000 clocks each; Icarus the first three,
- * 1000 clocks. Stops at the first mismatch with $fatal.
+ * Icarus runs 2 ways with LRU and lines of one word and 4 ways random with lines of two words
+ * (8 strobes), on 8 sets with 12-bit addresses, 1000 clocks (the struct version is slow
+ * there); Verilator also 3 and 4 ways with LRU on 8 sets and 4 ways with LRU on 64 sets with
+ * 32-bit addresses, 20000 clocks each. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -490,7 +490,7 @@ endmodule
 
 module TbSetAssocCache import CachePkg::*;;
 `ifdef VERILATOR
-    localparam bit WIDE = 1'b1;     // also 3 ways, and 64 sets with 32-bit addresses
+    localparam bit WIDE = 1'b1;     // also 3 and 4 ways with LRU, and 64 sets
 `else
     localparam bit WIDE = 1'b0;
 `endif
@@ -505,17 +505,18 @@ module TbSetAssocCache import CachePkg::*;;
 
     TbSetAssocCacheCheck #(.SETS_OFFSET(2), .WAYS(2), .REPLACEMENT(REPL_LRU)) u_check_2(
         .clk, .done(done_2));
-    TbSetAssocCacheCheck #(.SETS_OFFSET(3), .WAYS(4), .REPLACEMENT(REPL_LRU)) u_check_4(
-        .clk, .done(done_4));
-    TbSetAssocCacheCheck #(.SETS_OFFSET(2), .WAYS(4), .REPLACEMENT(REPL_RANDOM)) u_check_4r(
+    TbSetAssocCacheCheck #(.SETS_OFFSET(3), .WAYS(4), .REPLACEMENT(REPL_RANDOM)) u_check_4r(
         .clk, .done(done_4r));
     if (WIDE) begin: g_wide
         TbSetAssocCacheCheck #(.SETS_OFFSET(2), .WAYS(3), .REPLACEMENT(REPL_LRU)) u_check_3(
             .clk, .done(done_3));
+        TbSetAssocCacheCheck #(.SETS_OFFSET(2), .WAYS(4), .REPLACEMENT(REPL_LRU)) u_check_4(
+            .clk, .done(done_4));
         TbSetAssocCacheCheck #(.ADDR_WIDTH(32), .SETS_WIDTH(6), .SETS_OFFSET(2), .WAYS(4),
                                .REPLACEMENT(REPL_LRU)) u_check_64(.clk, .done(done_64));
     end else begin: g_narrow
         assign done_3  = 1'b1;
+        assign done_4  = 1'b1;
         assign done_64 = 1'b1;
     end
 
