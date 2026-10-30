@@ -33,6 +33,7 @@
 -F bit_matrix_lru/behave/bit_matrix_lru.flist
 -F cache/cache_replacement/behave/cache_replacement.flist
 -F cache/set_assoc_cache_rd_only/behave/set_assoc_cache_rd_only.flist
+-F cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.flist
 -F cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.flist
 -F alu2/behave/alu2.flist
 -F compute_core_bitmanip/behave/compute_core_bitmanip.flist

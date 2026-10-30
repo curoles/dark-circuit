@@ -1,0 +1,39 @@
+type: decision
+title: SkewedCacheRdOnly, a two-way skewed-associative cache with a recent bit per line
+date: 2026-10-29
+question: >
+  The user modeled a skewed-associative cache once and it "worked like magic". To decide
+  between it and SetAssocCacheRdOnly for Mig2, the library needs one that drops in for the
+  set-associative cache. How is it indexed, and how is a victim chosen when the two
+  candidates of an address are in different "sets"?
+decision: >
+  Two ways (the user: start with 2), the ports and protocol of SetAssocCacheRdOnly, built of
+  the same cache RAMs. Way 0 indexes a line by its set, way 1 by set ^ the low SETS_WIDTH
+  bits of its tag (Seznec, ISCA 1993). Replacement state is per line, a recent bit: a hit or
+  a fill sets its line's bit and clears the other candidate's; a miss replaces an invalid
+  candidate (way 1 first), else the one whose bit is clear, else way 0. The bits are flops
+  read in the lookup clock, so no forwarding is needed.
+why: >
+  Same ports: the comparison with SetAssocCacheRdOnly (same address streams, misses, area)
+  is fair, and Mig2 can take either. The user asked for something simple that makes sense
+  (simple versions gave good results in the user's model); one bit per line and two writes
+  per touch are cheap.
+rejected:
+  - choice: The other agent's sketch (2026-10-29)
+    why_not: >
+      Its replacement bit was per set, indexed by way 0's index, which describes nothing for
+      way 1's candidate (shared by many way-0 indices); no memory side (a mocked fill), no
+      line offset, combinational arrays with an asynchronous reset, reads and writes mixed.
+      Its two index functions are the ones kept.
+  - choice: A timestamp per line (the older candidate loses)
+    why_not: Closer to LRU but k bits per line and a global counter; start simple.
+  - choice: Stronger skew functions (a fold of the whole tag) or more ways
+    why_not: Later, when the comparison shows it is worth it.
+evidence: >
+  Behave version and its unit test (model of its own; 8 lines per way with 12-bit addresses,
+  and 64 with 32-bit on Verilator; every case counted, including hits in way 1 at an index
+  other than way 0's and victims by the recent bits and by the tie rule), 2026-10-29.
+code:
+  - rtl/lib/block/cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.sv#index_of
+  - rtl/lib/block/cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.sv#victim_way
+  - test/block/cache/skewed_cache_rd_only/tb_skewed_cache_rd_only.sv#model_victim
