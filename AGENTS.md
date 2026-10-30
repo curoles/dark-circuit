@@ -158,6 +158,43 @@ This file has the rules that are not in README.md.
 - Comments must not start with the word "verilator": Verilator reads them as pragmas.
 - No WaveDrom in comments.
 
+## Library idioms
+
+Before writing a module, read the closest existing module of the same kind (a part, a
+block's behave or struct version, a testbench) and follow its idioms; when the library has an
+element for a job, use it instead of writing the logic again. The idioms, each with a file
+that shows it (paths under `rtl/lib/` unless written in full); a new idiom gets a line here in
+the chunk that establishes it:
+
+- Register with reset: `DffSyncRst #(.RST_VAL(...))`, with enable `DffSyncRstEn`, not a reset
+  Mux2 in front of a Dff (`part/crc8_ccitt_lfsr.sv`). Hold: a Mux2 whose in0 is the register's
+  own output, or the enable of `DffSyncRstEn` (`block/cache/skewed_cache_rd_only/struct`).
+- Conditional inversion: `Xor2` with the condition copied to every bit, `{W{inv}}`
+  (`block/alu2/struct`).
+- Selecting a result: assign the inputs by enum name, `result[RES_SHIFT] = ...`, then a
+  `Mux4`/`Mux8` on the enum, so that the wiring does not depend on the enum's numbering
+  (`block/alu2/struct`, `block/compute_core_bitmanip/struct`).
+- Equality with a constant: `CmpEq` with the package's name, `.in2(Pkg::NAME)`
+  (`block/cache/insn_data_cache_arbiter/struct`).
+- Existing blocks for common jobs: index of the highest one `PriorityEncoder`, index to
+  one-hot `Decoder`, count of ones `PopCount`, sum of many rows `WallaceTree` and
+  `KoggeStoneAdder`, a small storage read combinationally `RegFile`, a queue `Fifo`.
+- Logic only one parameter value needs: a generate branch `g_<variant>`, so the other
+  variants do not have it (the round-robin flop in `block/cache/insn_data_cache_arbiter/struct`).
+- Behave versions: combinational logic with bit or field selects as `assign` or an
+  `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a
+  `case` on a whole signal (`block/alu2/behave`). Parameter limits `` `DC_STATIC_ASSERT ``,
+  invariants `` `DC_ASSERT ``.
+- ISA facts: names from RiscvInstrPkg (`insn ==? ROL`, `JAL[6:0]`, `SRAI[31:25]`) and RiscvPkg
+  (`REG_RA`, `MSTATUS_MIE`, `alt_of`), never bare numbers (`rtl/design/mig2/mig2_decode.sv`).
+- Bits a module does not use: `lint_off UNUSEDSIGNAL` around the declaration, with a comment
+  that says why.
+- Testbenches: a check module per configuration and a top that waits for all of them
+  (`test/block/alu2`); a model that computes differently from the RTL; counters of the cases,
+  each must happen by the end; inputs change after the rising edge and are checked before the
+  next; fewer cases on Icarus under `` `ifdef VERILATOR ``; mutants in a scratch copy, each one
+  must build.
+
 ## Simulator traps (measured)
 
 Icarus means Icarus 13, the version the project uses.
