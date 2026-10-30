@@ -1,0 +1,48 @@
+type: decision
+title: SimLatencyRAM, a SimRAM behind the caches' memory channel with variable latency
+date: 2026-10-30
+question: >
+  Mig2 will wait for memory (caches, then one memory for code and data); its stall logic
+  needs a memory that is slow and irregular in simulation, behind a cache or right behind the
+  core, and the caches need what is behind them (an L2, DRAM). What does the model do, and
+  with which knobs?
+decision: >
+  A simulation model in rtl/lib/sim with the memory side of the caches: a valid/ready request
+  channel (we, byte address, word, strobes), writes without an answer, reads answered in
+  order one or more clocks later, no ready on the answer. A SimRAM inside, load() and
+  peek() passed through. A request does its work at the edge it is taken (a read keeps its
+  word until the answer is due). Latency of a read two-level (user): FAST_PERCENT of the
+  reads FAST_MIN..FAST_MAX clocks, the rest SLOW_MIN..SLOW_MAX; an answer no earlier than
+  the clock after the one before. MAX_PENDING reads may wait (default 1); a slot is free in
+  the clock its answer goes out. req_ready random (READY_PERCENT), drawn a clock ahead, and 0
+  while every slot waits. $random with a SEED parameter (user: no plusarg), restarted by
+  reset. Name SimLatencyRAM (user): SimRAM with latency.
+why: >
+  The caches' protocol on the memory side: the same model goes behind a cache or, with
+  one-word lines, behind a core. Doing the work at the take keeps memory order simple: a
+  read sees exactly the writes taken before it. Two levels look like an L2 hit or miss; with
+  100 % fast and latency 1 and ready always, the model is a fixed memory of latency 1, as
+  now. A slot that frees in its answer clock lets latency 1 with one slot take a read every
+  clock (no lost throughput in the fixed case); more slots let a pipelined fetch overlap
+  reads. Ready drawn a clock ahead does not depend on the request (rule 3). A seed makes a
+  failing run repeat.
+rejected:
+  - choice: A name with the level in it (SimVarDelayLxDram)
+    why_not: The model does not know what it stands for (L2, L3, DRAM, a bus, no cache).
+  - choice: Reads take their word when the answer is due
+    why_not: A write taken after the read would show in its answer; memory order would
+      depend on the latencies.
+  - choice: One read in flight, fixed
+    why_not: A pipelined fetch overlaps reads; the knob costs a ring of slots.
+  - choice: A plusarg for the seed
+    why_not: Not expected to be used much (user); the parameter is enough.
+evidence: >
+  Unit test (a model with its own bytes and waiting reads; latency 1 always ready, two-level
+  with one slot, two-level with four slots and 8-byte words; every case of the configuration
+  must happen), Icarus and Verilator, 2026-10-30: 8 of 8 mutants caught; answers out of order
+  fire the model's own assertion a_answer_not_late.
+code:
+  - rtl/lib/sim/sim_latency_ram.sv#read_word
+  - rtl/lib/sim/sim_latency_ram.sv#last_due
+  - rtl/lib/sim/sim_latency_ram.sv#a_answer_not_late
+  - test/sim/tb_sim_latency_ram.sv#n_b2b

@@ -25,7 +25,8 @@ rtl/lib/
   riscv/         RISC-V instruction encodings and CSR addresses, generated from riscv-opcodes
                  by tools/riscv_opcodes.sh
   macro/         include files kept for old code; use $clog2, not `CLOG2
-  sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM
+  sim/           simulation models for testbenches: SimClkGen, SimRstGen, SimRAM, SimROM,
+                 SimLatencyRAM
 rtl/design/mig1/ Mig1 RISC-V CPU (RV32IM, 4-stage pipeline), see its README.md
 rtl/design/mig2/ Mig2 RISC-V CPU, where bigger changes of Mig1 go first
 cmake/           cmake helpers, one file per simulator

@@ -1,5 +1,6 @@
 sim_clk_gen.sv
 sim_rst_gen.sv
 sim_ram.sv
+sim_latency_ram.sv
 sim_rom.sv
 sim_vld_rdy.sv
