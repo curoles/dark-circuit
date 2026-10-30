@@ -1,0 +1,48 @@
+type: decision
+title: SetAssocCache is DirectCache's stores on SetAssocCacheRdOnly's ways
+date: 2026-10-29
+question: >
+  How does the read-write set-associative cache (a data cache) combine the ways and the
+  replacement of SetAssocCacheRdOnly with the stores of DirectCache: which way a store
+  writes, does a store touch the replacement state, and how does forwarding work with ways?
+decision: >
+  DirectCache's ports and protocol, and its write policy: write-through, no
+  write-allocate, a store held until memory takes it, a store that hits merges its bytes
+  into the line of the way that hits, written in the clock memory takes the store. Loads as
+  in SetAssocCacheRdOnly: every way read with the request, a load miss replaces the way
+  CacheReplacement picks when memory takes the read. A load hit, a store hit (when memory
+  takes it) and a fill touch their way. Forwarding remembers the way of the store: the
+  request of the same set taken at the store's write edge uses the merged line for that way
+  only, the RAM lines for the others.
+why: >
+  One protocol for all caches, and the write policy already decided and tested in
+  DirectCache, so the core can take either. A store is a use of the line as much as a load:
+  a line that is only written (a buffer the CPU fills) must not be the first to go. The
+  touch comes with the write, at the same edge, so the replacement state sees one event per
+  store and CacheReplacement's forwarding of a touch covers the next request of the set.
+  Forwarding per way: the other ways of the set were not written, their RAM lines are right.
+rejected:
+  - choice: A store hit does not touch (only loads and fills)
+    why_not: >
+      A line kept alive only by stores would be replaced as if unused, and the store that
+      comes next misses (no write-allocate: it stays a miss until a load brings the line).
+  - choice: Touch when the store is looked up, not when memory takes it
+    why_not: >
+      While memory holds the store the touch would repeat every clock; at the take it is
+      one touch, together with the write of the line.
+  - choice: Write-back, or write-allocate
+    why_not: >
+      Not for this step: the same policy as DirectCache. A write buffer behind the cache is
+      the plan for store traffic.
+evidence: >
+  Behave version and its unit test (2 ways LRU with one-word lines, 4 ways LRU with
+  two-word lines, 4 ways random; on Verilator also 3 ways and 64 sets; a model with stores,
+  memory writes and time stamps per way; every case must happen, also a load right after a
+  store hit of the same way and of another way), 2026-10-29: 13 of 14 mutants caught, the
+  one left equivalent (a held store writing and touching every clock before memory takes it
+  cannot be seen: no request is taken meanwhile).
+code:
+  - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#u_cache_replacement
+  - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#store_write
+  - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#fwd_way
+  - test/block/cache/set_assoc_cache/tb_set_assoc_cache.sv#n_fwd_ways
