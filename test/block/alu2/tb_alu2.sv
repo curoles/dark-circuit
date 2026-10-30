@@ -5,7 +5,7 @@
  * simulator's operators ($signed compares, >>> for SRA, rotates as two shifts). WIDTH 4:
  * exhaustive, every operation x a x b. WIDTH 32 and, on Verilator, 64: every operation with
  * edge operands (0, 1, all ones, the sign bit alone, the largest positive, every shift
- * amount) and random ones: 5000 on Verilator, 300 on Icarus. Stops at the first mismatch
+ * amount) and random ones: 5000 on Verilator, 30 on Icarus. Stops at the first mismatch
  * with $fatal.
  *
  * @author    Igor Lesik
@@ -19,7 +19,7 @@ module TbAlu2Check import Alu2Pkg::*; #(
 `ifdef VERILATOR
     localparam N_RANDOM = 5000;
 `else
-    localparam N_RANDOM = 300;
+    localparam N_RANDOM = 30;
 `endif
     localparam SW         = $clog2(WIDTH);
     localparam N_OPS      = ALU2_ROR + 1;

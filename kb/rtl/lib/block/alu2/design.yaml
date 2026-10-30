@@ -29,8 +29,10 @@ rejected:
     why_not: Instruction fields belong to the CPU's decode; the block stays reusable.
 evidence: >
   Behave version and its unit test (every operation; WIDTH 4 exhaustive, 32 and 64 with
-  edge operands, every shift amount, random), 2026-10-29.
+  edge operands, every shift amount, random), 2026-10-29: 9 of 9 mutants caught. The
+  struct version against the same test, 2026-10-29.
 code:
   - rtl/lib/block/alu2/alu2_pkg.sv#ctrl_of
   - rtl/lib/block/alu2/behave/alu2.sv#u_alu1
+  - rtl/lib/block/alu2/struct/alu2.sv#u_mux4_out
   - test/block/alu2/tb_alu2.sv#model

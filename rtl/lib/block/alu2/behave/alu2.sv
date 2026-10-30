@@ -37,6 +37,7 @@ module Alu2 import Alu2Pkg::*; #(
     logic             lt_s;     // a < b signed
     logic             lt;       // the compare of the operation
     logic             pick_a;   // MIN, MAX: a, else b
+    res_e             res;      // ctrl.res: a signal of its own for the case (Icarus)
 
     // @kb: rtl/lib/block/alu2/design
     assign b_alu1 = ctrl.b_inv ? ~b : b;
@@ -51,9 +52,10 @@ module Alu2 import Alu2Pkg::*; #(
     assign lt_s   = (a[WIDTH-1] != b[WIDTH-1]) ? a[WIDTH-1] : lt_u;
     assign lt     = ctrl.cmp_unsigned ? lt_u : lt_s;
     assign pick_a = lt ^ ctrl.pick_max;
+    assign res    = ctrl.res;
 
     always_comb
-        case (ctrl.res)
+        case (res)
             RES_ALU1:   out = sum;
             RES_SHIFT:  out = shifted;
             RES_LT:     out = {{(WIDTH-1){1'b0}}, lt};
