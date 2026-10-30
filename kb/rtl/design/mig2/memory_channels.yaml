@@ -1,0 +1,42 @@
+type: decision
+title: Mig2's memory ports are valid/ready channels, for now with latency 1 asserted
+date: 2026-10-30
+question: >
+  Mig2 will wait for memory (caches, one memory for code and data). The first step: how do
+  the memory ports of Mig2Core look, and how does the core change without changing what it
+  does yet?
+decision: >
+  imem and dmem are the memory side of the caches: a request channel (imem: valid, addr;
+  dmem: valid, we, addr, wdata, wstrb) and the answers of reads (valid, data, no ready), a
+  struct per direction (imem_req_t from the core; imem_rsp_t with ready and the answer to
+  it). Mig2Cpu has two SimLatencyRAM (u_imem, u_dmem: the testbenches' peek() stays) with
+  latency 1, always ready. The core keeps the instruction word of ID itself (the answer in
+  its clock, else the word kept from it), since an answer comes once and ID may stall. Until
+  the pipeline can wait, Mig2Core asserts what it needs: every request taken at once, a read
+  answered in the next clock and only then. User: one step at a time, this one first.
+why: >
+  The interface change alone, cycle-exact, before any stall logic: every test and trace stays
+  as it is, so a later difference is the stall logic's. The cache protocol on the core lets a
+  cache or the arbiter drop in later. Keeping the instruction word in the core replaces what
+  SimROM did by holding its output while en=0, which a channel's answer does not promise. The
+  assertions say where the core is not yet general and stop a test that gives it a memory it
+  cannot use.
+rejected:
+  - choice: Channels and the waiting pipeline in one chunk
+    why_not: A difference in the traces would not tell whether the interface or the stalls
+      caused it.
+  - choice: Rely on the memory holding rsp_data until the next read (SimLatencyRAM with one
+      slot happens to)
+    why_not: Not part of the protocol; a cache or another memory does not hold it.
+evidence: >
+  2026-10-30: all 109 Mig2 tests pass before and after, and the traces of all 103 programs
+  (cycles, retired instructions, bubbles) are identical. Mutants of the memories each fire
+  their assertion: imem or dmem not always ready (a_imem_ready, a_dmem_ready), answering
+  after 2 clocks with a free slot (a_imem_on_time, a_dmem_on_time), answering twice
+  (a_imem_no_extra, a_dmem_no_extra). Synthesis of Mig2Core (sky130): 207175 um2 against
+  207034 (the instruction word kept), 5.5 ns as before.
+code:
+  - rtl/design/mig2/mig2_pkg.sv#imem_rsp_t
+  - rtl/design/mig2/mig2_core.sv#id_insn_q
+  - rtl/design/mig2/mig2_core.sv#a_imem_on_time
+  - rtl/design/mig2/mig2_cpu.sv#SimLatencyRAM

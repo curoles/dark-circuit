@@ -1,12 +1,12 @@
 /* Mig2 fetch: program counter, branch target buffer and instruction memory requests.
  *
  * pc is the address requested from imem in this cycle; the instruction comes
- * 1 clock later, together with fetch.valid and fetch.pc for the next stage.
+ * 1 clock later (Mig2Core keeps it for ID), together with fetch.valid and fetch.pc.
  * Reset loads CFG.rst_addr (reset is a jump), then the PC advances every cycle with
  * ctrl.run=1 and holds with ctrl.run=0. ctrl.redirect=1 loads ctrl.target (taken
  * branch or jump) and drops the request of this cycle: its instruction comes with
- * fetch.valid=0. ctrl.stall=1 keeps everything: pc, the imem output (SimROM and SRAM
- * hold data while en=0) and fetch, so the instruction in ID stays for another cycle.
+ * fetch.valid=0. ctrl.stall=1 keeps everything: pc and fetch, and no request goes out, so
+ * the instruction in ID stays for another cycle (Mig2Core keeps its word).
  * A slot without an instruction carries its reason (bubble_e): ctrl.why for a dropped
  * request, fill when fetch does not run (reset, halt).
  * The BTB (BranchTargetBuffer) looks up pc in the same cycle: a hit predicted taken loads
@@ -30,7 +30,7 @@ module Mig2Fetch import Mig2Pkg::*; #(
     input  btb_update_t btb_update,       // a branch or JAL completed in EX: the BTB learns it
     input  btb_inval_t  btb_inval,        // the BTB sent fetch where the insn in ID does not go
     /* verilator lint_on UNUSEDSIGNAL */
-    output imem_req_t   imem_req,         // request to imem: enable and word address
+    output imem_req_t   imem_req,         // request to imem: valid and word address
     output fetch_t      fetch,            // instruction arriving from imem: valid and pc, to ID
     output btb_pred_t   btb_pred          // what the BTB said for the instruction in ID
 );
@@ -71,8 +71,8 @@ module Mig2Fetch import Mig2Pkg::*; #(
         .update_taken(btb_update.taken), .update_target(btb_update.target),
         .inval_en(btb_inval.en), .inval_pc(btb_inval.pc[IADDR_START +: BTB_PC_WIDTH]));
 
-    assign imem_req.en   = advance;
-    assign imem_req.addr = pc;
+    assign imem_req.valid = advance;
+    assign imem_req.addr  = pc;
 
     // IF/ID: the instruction comes from imem 1 clock after its request; valid=0 when
     // fetch did not run (a fill bubble) or the request was dropped by a redirect.

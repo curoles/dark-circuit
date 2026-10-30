@@ -82,28 +82,40 @@ package Mig2Pkg;
 
     // Ports of Mig2Core
 
-    // Instruction fetch: rsp.data is the word at req.addr 1 clock after req.en=1.
+    // @kb: rtl/design/mig2/memory_channels
+    // Memories: a request channel (valid/ready, AGENTS.md) and the answers to reads (valid,
+    // no ready: the core takes every answer), in order, one or more clocks after the request
+    // was taken; the memory side of the caches (DirectCache), SimLatencyRAM in Mig2Cpu. A
+    // struct per direction: req_t from the core, rsp_t to it (ready of the request channel,
+    // the answer). Mig2Core still needs every request taken at once and its answer 1 clock
+    // later, and asserts it.
+
+    // Instruction fetch: the word at addr.
     typedef struct packed {
-        logic   en;
+        logic   valid;
         iaddr_t addr;
     } imem_req_t;
 
     typedef struct packed {
+        logic   ready;      // the request is taken when valid and ready
+        logic   valid;      // data is the answer to a request
         insn_t  data;
     } imem_rsp_t;
 
-    // Data: rsp.rd_data comes 1 clock after req.rd_en=1;
-    // req.wr_en=1 writes bytes of wr_data with wr_strb=1, see SimRAM.
+    // Data: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0 reads the
+    // word at addr.
     typedef struct packed {
-        logic   rd_en;
-        logic   wr_en;
+        logic   valid;
+        logic   we;
         daddr_t addr;
-        word_t  wr_data;
-        strb_t  wr_strb;
+        word_t  wdata;
+        strb_t  wstrb;
     } dmem_req_t;
 
     typedef struct packed {
-        word_t  rd_data;
+        logic   ready;      // the request is taken when valid and ready
+        logic   valid;      // data is the answer to a read
+        word_t  data;
     } dmem_rsp_t;
 
     // Retire: one entry per retired instruction, RVFI (riscv-formal) fields and names.

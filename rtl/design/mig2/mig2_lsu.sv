@@ -1,8 +1,8 @@
 /* Mig2 load/store unit: data memory requests of loads and stores.
  *
- * addr is the byte address rs1 + imm (Mig2Alu). A store writes in its cycle in EX:
- * the bytes of rs2 are repeated over the word and wr_strb selects the bytes at addr.
- * A load sends the read in EX; the word comes from dmem 1 clock later, in MEM/WB, where
+ * addr is the byte address rs1 + imm (Mig2Alu). A load or a store sends its request to
+ * dmem in EX. A store writes there: the bytes of rs2 are repeated over the word and wstrb
+ * selects the bytes at addr. A load's word comes 1 clock later, in MEM/WB, where
  * Mig2LoadData takes the loaded value from it.
  * misaligned=1 when the address is not aligned to the access size (LW, SW: 4 bytes;
  * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete. The byte
@@ -14,7 +14,7 @@
  *
  * Mig2Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig2Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
- * Mig2Core to data memory (SimRAM in Mig2Cpu); misaligned goes to Mig2Control, which
+ * Mig2Core to data memory (SimLatencyRAM in Mig2Cpu); misaligned goes to Mig2Control, which
  * makes it a misaligned load or store trap with mtval = addr; mem goes into the retire
  * entry. The loaded word comes back from dmem in MEM/WB, where Mig2LoadData picks its
  * bytes by the offset and funct3 that EX/MEM carries.
@@ -85,16 +85,16 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
             default: wr_data = rs2_data;
         endcase
 
-    assign dmem_req.rd_en   = load && !misaligned;
-    assign dmem_req.wr_en   = store && !misaligned;
-    assign dmem_req.addr    = addr[WIDTH-1:DADDR_START];
-    assign dmem_req.wr_data = wr_data;
-    assign dmem_req.wr_strb = strb;
+    assign dmem_req.valid = (load || store) && !misaligned;
+    assign dmem_req.we    = store;
+    assign dmem_req.addr  = addr[WIDTH-1:DADDR_START];
+    assign dmem_req.wdata = wr_data;
+    assign dmem_req.wstrb = strb;
 
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
     assign mem.rmask = (load && !misaligned) ? strb : '0;
-    assign mem.wmask = dmem_req.wr_en ? strb : '0;
-    assign mem.wdata = dmem_req.wr_en ? wr_data : '0;
+    assign mem.wmask = (store && !misaligned) ? strb : '0;
+    assign mem.wdata = (store && !misaligned) ? wr_data : '0;
 
 endmodule
