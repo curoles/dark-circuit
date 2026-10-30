@@ -34,8 +34,12 @@ evidence: >
   way and index; every case must happen, also a load right after a store hit of the same
   line, of the other way and of the same way at another index), 2026-10-29: 14 of 15
   mutants caught, the one left equivalent (a held store writing and touching every clock
-  before memory takes it cannot be seen: no request is taken meanwhile).
+  before memory takes it cannot be seen: no request is taken meanwhile). The struct version
+  against the same test, 2026-10-29: 13 of 15 mutants caught, the two left equivalent (the
+  same one, and fwd_line loading merged in every clock: fwd outlives the store's write only
+  while the next lookup is held, and then merged is that line again).
 code:
   - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#touch_way
   - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#fwd
+  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#same_index
   - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_fwd_index

@@ -35,6 +35,7 @@
 -F cache/set_assoc_cache_rd_only/struct/set_assoc_cache_rd_only.flist
 -F cache/set_assoc_cache/struct/set_assoc_cache.flist
 -F cache/skewed_cache_rd_only/struct/skewed_cache_rd_only.flist
+-F cache/skewed_cache/struct/skewed_cache.flist
 -F cache/insn_data_cache_arbiter/struct/insn_data_cache_arbiter.flist
 -F alu2/struct/alu2.flist
 -F pop_count/struct/pop_count.flist
