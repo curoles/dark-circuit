@@ -1,0 +1,57 @@
+type: decision
+title: An uncached request bypasses the lines, passing to memory without a flop while idle
+date: 2026-10-30
+question: >
+  Programs that check cycle counts (the Mig2 timing tests) must keep their timing when the
+  caches come into the core, and I/O addresses will later need requests that do not use the
+  lines. How does a cache let a request bypass its lines, and what does it cost?
+decision: >
+  A per-request input req_uncached. An uncached request does not read or write the lines (no
+  lookup, no fill, no recent-bit update) and passes straight to the memory side while the
+  cache is idle: mem_req_valid = req_valid && req_uncached && idle, the address and the fields
+  of a store from the request; it is taken in the clock memory takes it (req_ready =
+  idle && mem_req_ready). Idle: nothing looked up, no load miss served, no uncached read
+  waiting (the clock memory answers it counts as idle). A load is answered in the clock memory
+  answers, with memory's line; a store is done when memory takes it. A cached request is not
+  taken while an uncached read waits. An address is used either cached or uncached, never
+  both: the cache does not check. THE COST, accepted (user, 2026-10-30): memory's ready
+  reaches the cache's req_ready without a flop, and req_valid reaches mem_req_valid without a
+  flop; in a CPU the path runs from memory's ready through the cache into the pipeline's
+  stall. Memory's ready must not depend on its valid (SimLatencyRAM draws it a clock ahead),
+  or the two paths close a loop. SkewedCache first; DirectCache and SetAssocCache the same way
+  in a chunk of their own.
+why: >
+  With latency-1 memory an uncached request has the memory's own timing: a load taken in clock
+  t is answered in t+1, as without a cache, so programs that count cycles run unchanged (user:
+  a pin we will need anyway, rather than changing programs to warm the cache). Passing without
+  a flop adds no clock. Waiting for idle keeps one request at a time on the memory side, so
+  answers come in order without a queue. A requester that withdraws a request not taken
+  (Mig2's fetch: kb rtl/design/mig2/fetch_waits) makes the memory side withdraw in uncached
+  mode, against the cache's rule that its own request is held until taken; memory must accept
+  that (SimLatencyRAM does its work only at the take).
+rejected:
+  - choice: Uncached as a mode of the whole cache (one input for every request)
+    why_not: >
+      I/O addresses later need it per request; per request also gives the whole-cache mode
+      (tie the input to 1).
+  - choice: Register the uncached request, pass it to memory one clock later
+    why_not: >
+      No path without a flop, but every uncached access takes a clock more: the timing tests
+      would not keep their cycle counts.
+  - choice: Warm the cache in the programs of the timing tests
+    why_not: User, 2026-10-30, do not change programs for the cache.
+relies_on:
+  - rtl/design/mig2/fetch_waits
+evidence: >
+  SkewedCache, 2026-10-30: its test with uncached requests (one in 8, a tag of their own; the
+  model checks req_ready, the memory request and the answer in every clock; uncached loads,
+  stores, a wait for idle and a wait for memory must happen) passes on both versions, Icarus
+  and Verilator; the read-only test (req_uncached 0) passes unchanged. 13 of 13 mutants of
+  the uncached logic caught (7 behave, 6 struct: idle, the cached ready, the answer, the
+  memory address and write fields, accept).
+code:
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#unc_pass
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#a_unc_alone
+  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_mux2_ready
+  - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached
+  - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_unc_idle_wait
