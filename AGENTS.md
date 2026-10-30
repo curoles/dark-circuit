@@ -179,7 +179,8 @@ the chunk that establishes it:
   (`block/cache/insn_data_cache_arbiter/struct`).
 - Existing blocks for common jobs: index of the highest one `PriorityEncoder`, index to
   one-hot `Decoder`, count of ones `PopCount`, sum of many rows `WallaceTree` and
-  `KoggeStoneAdder`, a small storage read combinationally `RegFile`, a queue `Fifo`.
+  `KoggeStoneAdder`, a small storage read combinationally `RegFile`, a queue `Fifo`, one of
+  N inputs by a binary select `MuxN`.
 - Logic only one parameter value needs: a generate branch `g_<variant>`, so the other
   variants do not have it (the round-robin flop in `block/cache/insn_data_cache_arbiter/struct`).
   A variant that is another block with some logic left out: a parameter of that block

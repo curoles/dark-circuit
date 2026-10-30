@@ -1,5 +1,6 @@
 add_subdirectory(counter)
 add_subdirectory(decoder)
+add_subdirectory(mux_n)
 add_subdirectory(priority_encoder)
 add_subdirectory(shift_reg)
 add_subdirectory(sram_1r1w)

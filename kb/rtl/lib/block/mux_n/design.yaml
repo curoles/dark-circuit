@@ -1,0 +1,44 @@
+type: decision
+title: MuxN selects one of N inputs with a tree of Mux4; sel >= N is not allowed
+date: 2026-10-30
+question: >
+  The library has Mux2, Mux3, Mux4 and Mux8 gates; a block for any number of inputs N (user):
+  which ports, what does a sel of N or more give when N is not a power of 2, and how is the
+  struct version built?
+decision: >
+  Ports: the inputs as one packed array [N-1:0][WIDTH-1:0] (RegFile's ports do the same), a
+  binary sel of $clog2(N) bits. sel >= N is not allowed and out is undefined then, written
+  in the header; no assertion inside (DC_STATIC_ASSERT for N >= 2 only). The struct version
+  is a tree of Mux4, two bits of sel per level, low bits first; the last group of a level
+  takes a Mux3 for 3 nodes, a Mux2 on the low bit for 2, no gate for 1; with $clog2(N) odd
+  the top level has at most two nodes, so a Mux2. The nodes are one array, level after
+  level, with offsets from automatic functions: no recursive instantiation.
+why: >
+  A packed array is the same bits as a flat vector (a caller may pass a concatenation) and
+  reads as in[k]; unpacked array ports are where Icarus and sv2v are weak. A defined out
+  for sel >= N costs gates for every non-power-of-2 N, and callers often present a sel
+  nobody uses (valid=0); MuxN has no clock, so an assertion inside could not tell. Mux4 and
+  Mux3 are cells (MUX4, MUX3 with gate/cell) and the synthesis maps the structure as written:
+  a Mux4 per bit instead of three Mux2; Mux8 adds nothing (two Mux4 and a Mux2). The last
+  group's smaller gate is exact because a sel that reaches a missing node is not allowed.
+rejected:
+  - choice: out = 0 for sel >= N
+    why_not: Gates for a case that is not allowed; a caller that needs it can mask.
+  - choice: A tree of Mux2 (N-1 of them, the simplest code)
+    why_not: Three Mux2 where one MUX4 cell does; the Mux4 tree is one loop as well.
+  - choice: Recursive instantiation (MuxN of two halves)
+    why_not: Works in principle, but one flat loop of levels is easier to follow and to
+      check in every tool.
+  - choice: Unpacked ports, input [WIDTH-1:0] in [N]
+    why_not: Weak support in Icarus and sv2v.
+evidence: >
+  Behave and struct versions against one testbench (N = 2, 3, 4, 5, 6, 8, 9, 16, 17, every
+  allowed sel, random inputs, a loop model), Icarus and Verilator, 2026-10-30: 7 of 7
+  mutants of the struct caught. The tree's gates by Yosys hierarchy: N=2 one Mux2, 3 one
+  Mux3, 4 one Mux4, 5 Mux4 and Mux2, 6 Mux4 and two Mux2, 8 two Mux4 and Mux2, 9 two Mux4
+  and Mux3, 16 five Mux4, 17 five Mux4 and Mux2. A full Mux4 for every last group (more
+  gates, same function) is the change no functional test sees: the gate count shows it.
+code:
+  - rtl/lib/block/mux_n/struct/mux_n.sv#node_count
+  - rtl/lib/block/mux_n/struct/mux_n.sv#g_mux3
+  - rtl/lib/block/mux_n/behave/mux_n.sv#a_two_inputs

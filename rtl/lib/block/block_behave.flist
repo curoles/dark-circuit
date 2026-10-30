@@ -1,5 +1,6 @@
 -F counter/behave/counter.flist
 -F decoder/behave/decoder.flist
+-F mux_n/behave/mux_n.flist
 -F priority_encoder/behave/priority_encoder.flist
 -F shift_reg/behave/shift_reg.flist
 -F sram_1r1w/behave/sram_1r1w.flist

@@ -13,7 +13,7 @@ rtl/lib/
     generic/     behavioral
     cell/        built from cells, or from other gates of gate/cell
   part/          parts made of gates: CarrySaveAdder, RippleCarryAdder, GatedClk, LimDff
-  block/         blocks: Counter, Decoder, PriorityEncoder, ShiftReg, Sram1R1W,
+  block/         blocks: Counter, Decoder, MuxN, PriorityEncoder, ShiftReg, Sram1R1W,
                  RegFile, RegFileSram, BarrelShifter, PrgCounter, Fifo, SkidBuffer, Incr,
                  Alu1, AddCmp, Lfsr, StochasticBitstreamGen, CsaMultiplier, Divider, ...
     <block>/behave/  behavioral version, fast to simulate
