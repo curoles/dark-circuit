@@ -138,22 +138,6 @@ module DirectCache #(
     assign mem_req_wdata = look_wdata;
     assign mem_req_wstrb = look_wstrb;
 
-    // A load miss is served from the clock memory takes its read until the answer comes
-    // (look_line holds: no request is taken meanwhile).
-    always_ff @(posedge clk)
-        if (!rst_n)                          waiting <= 1'b0;
-        else if (load_miss && mem_req_ready) waiting <= 1'b1;
-        else if (mem_rsp_valid)              waiting <= 1'b0;
-
-    assign refill = waiting && mem_rsp_valid;
-
-    // A lookup ends when memory takes its read, and no request is taken while the miss is
-    // served: so a refill (while waiting) never meets a store's write (in a lookup) on the
-    // data RAM's one write port, and the refill writes the set of look_line.
-    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
-
-    assign ram_wr_en = refill || store_write;
-
     // The merged line goes into the cache once: in the clock memory takes the store.
     function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,
                                               input [DATA_WIDTH-1:0] new_bytes,
@@ -164,7 +148,8 @@ module DirectCache #(
                 merge[8*b +: 8] = new_bytes[8*b +: 8];
     endfunction
 
-    // The logic only stores need; a read-only cache has none of it.
+    // The logic only stores need; a read-only cache has none of it. Both branches drive
+    // look_we, look_wdata, look_wstrb, store_write, ram_wr_line and line.
     // @kb: rtl/lib/block/cache/read_only
     if (READ_ONLY) begin: g_read_only
         assign look_we     = 1'b0;
@@ -205,6 +190,22 @@ module DirectCache #(
 
         assign line = fwd ? fwd_line : ram_line;
     end
+
+    // A load miss is served from the clock memory takes its read until the answer comes
+    // (look_line holds: no request is taken meanwhile).
+    always_ff @(posedge clk)
+        if (!rst_n)                          waiting <= 1'b0;
+        else if (load_miss && mem_req_ready) waiting <= 1'b1;
+        else if (mem_rsp_valid)              waiting <= 1'b0;
+
+    assign refill = waiting && mem_rsp_valid;
+
+    // A lookup ends when memory takes its read, and no request is taken while the miss is
+    // served: so a refill (while waiting) never meets a store's write (in a lookup) on the
+    // data RAM's one write port, and the refill writes the set of look_line.
+    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
+
+    assign ram_wr_en = refill || store_write;
 
     assign rsp_valid = load_hit || refill;
     assign rsp_data  = waiting ? mem_rsp_data : line;

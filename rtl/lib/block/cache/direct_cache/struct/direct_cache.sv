@@ -146,20 +146,8 @@ module DirectCache #(
     assign mem_req_wdata = look_wdata;
     assign mem_req_wstrb = look_wstrb;
 
-    // Load miss served from the clock memory takes its read until the answer comes.
-    And2 #(1) u_and2_wait_start(.in1(load_miss), .in2(mem_req_ready), .out(wait_start));
-    Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
-    And2 #(1) u_and2_kept      (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
-    Or2  #(1) u_or2_wait       (.in1(wait_start), .in2(waiting_kept), .out(waiting_next));
-    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_wait(.clk, .rst_n, .in(waiting_next), .out(waiting));
-    And2 #(1) u_and2_refill    (.in1(waiting), .in2(mem_rsp_valid), .out(refill));
-
-    // See the behave version.
-    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
-
-    Or2 #(1) u_or2_ram_wr(.in1(refill), .in2(store_write), .out(ram_wr_en));
-
-    // The logic only stores need; a read-only cache has none of it.
+    // The logic only stores need; a read-only cache has none of it. Both branches drive
+    // look_we, look_wdata, look_wstrb, store_write, ram_wr_line and line.
     // @kb: rtl/lib/block/cache/read_only
     if (READ_ONLY) begin: g_read_only
         assign look_we     = 1'b0;
@@ -208,6 +196,19 @@ module DirectCache #(
         Mux2 #(DATA_WIDTH) u_mux2_line_fwd(.in0(ram_line), .in1(fwd_line), .sel(fwd),
                                            .out(line));
     end
+
+    // Load miss served from the clock memory takes its read until the answer comes.
+    And2 #(1) u_and2_wait_start(.in1(load_miss), .in2(mem_req_ready), .out(wait_start));
+    Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
+    And2 #(1) u_and2_kept      (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
+    Or2  #(1) u_or2_wait       (.in1(wait_start), .in2(waiting_kept), .out(waiting_next));
+    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_wait(.clk, .rst_n, .in(waiting_next), .out(waiting));
+    And2 #(1) u_and2_refill    (.in1(waiting), .in2(mem_rsp_valid), .out(refill));
+
+    // See the behave version.
+    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
+
+    Or2 #(1) u_or2_ram_wr(.in1(refill), .in2(store_write), .out(ram_wr_en));
 
     Or2  #(1)          u_or2_rsp  (.in1(load_hit), .in2(refill), .out(rsp_valid));
     Mux2 #(DATA_WIDTH) u_mux2_data(.in0(line), .in1(mem_rsp_data), .sel(waiting),
