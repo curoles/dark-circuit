@@ -9,8 +9,11 @@ This file has the rules that are not in README.md.
   file, in all files (SV, C, assembly, CMake, Python).
 - Line length: up to 100 characters; a longer line only when breaking it would read
   worse, and never over 120.
-- Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`),
-  instances `u_` and name (`u_aoi22`, `u_mux4_0`). Cells use TSMC names and pins.
+- Modules CamelCase (`DffAsyncRst`), files snake_case (`dff_async_rst.sv`). An instance name
+  says what the instance is for, not which module it is: `u_` and its role (`u_icache`,
+  `u_dcache`, `u_btb`, `u_out_mux`), never just the module's name. Gates in struct versions
+  keep the gate in front of the role (`u_and2_hit`, `u_mux2_line`): the role is still
+  required. Cells use TSMC names and pins.
 - Types end in `_t`, enum types in `_e` (`kind_e`, `alu_a_e`); an enum declares its
   storage, `enum logic [N-1:0]`, and its values are ALL_CAPS with a common prefix
   (`KIND_LOAD`, `RD_ALU`).

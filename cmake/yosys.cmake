@@ -5,15 +5,21 @@
 
 dc_use_tool(YOSYS yosys)
 
-# _dc_yosys_target(<name> <tech> <target> <liberty> <top> <file>...)
+# _dc_yosys_target(<name> <tech> <target> <liberty> <top> <ram modules> <file>...)
 #
 # Target <target> for dc_add_yosys_synth(): sv2v converts <file>... with top module <top>,
 # Yosys runs cmake/yosys_synth.ys.in with cmake/yosys_tech_<tech>.ys.in, both filled in
 # into the output directory <target>/ (synth.ys, tech.ys). For a technology with a
 # liberty file (not generic), report.txt has area and longest path (synth_report.cmake);
 # building the target prints it, also when nothing changed.
-function(_dc_yosys_target NAME TECH TARGET LIBERTY TOP)
+function(_dc_yosys_target NAME TECH TARGET LIBERTY TOP RAMS)
     set(files ${ARGN})
+    if(RAMS)
+        string(JOIN " " ram_names ${RAMS})
+        set(SYNTH_BLACKBOX_RAM "blackbox ${ram_names}")
+    else()
+        set(SYNTH_BLACKBOX_RAM "# (none)")
+    endif()
     set(dir ${CMAKE_CURRENT_BINARY_DIR}/${TARGET})
     set(SYNTH_NAME ${NAME})
     set(SYNTH_TECH ${TECH})
@@ -59,7 +65,8 @@ function(_dc_yosys_target NAME TECH TARGET LIBERTY TOP)
     add_custom_target(${TARGET} COMMAND ${show} DEPENDS ${outputs} VERBATIM)
 endfunction()
 
-# dc_add_yosys_synth(<name> TOP <module> FLISTS <flist>...)
+# dc_add_yosys_synth(<name> TOP <module> FLISTS <flist>...
+#                    [BLACKBOX_RAM_MODULES <module>...])
 #
 # Add targets, not built by default (make <design>_synth [TECH=<tech>]):
 #   <name>.synth         generic: Yosys gates; checks, cells of every module
@@ -70,12 +77,15 @@ endfunction()
 # tech.ys (the scripts that ran), <name>.sv2v.v, netlist.v, stat.txt, yosys.log and, for
 # sky130, report.txt. A target fails when synthesis fails, finds a latch or a structural
 # problem; synth_sky130 also fails when the sky130 liberty is not available.
+# BLACKBOX_RAM_MODULES: modules that are RAMs, memory macros in a real chip (the cache tag
+# and data RAMs): Yosys keeps them as black boxes, so the area is that of the logic around
+# them and the longest path starts at their outputs.
 # Does nothing if Yosys or sv2v is not used.
 function(dc_add_yosys_synth NAME)
     if(NOT DARK_CIRCUIT_YOSYS OR NOT DARK_CIRCUIT_SV2V)
         return()
     endif()
-    cmake_parse_arguments(Y "" "TOP" "FLISTS" ${ARGN})
+    cmake_parse_arguments(Y "" "TOP" "FLISTS;BLACKBOX_RAM_MODULES" ${ARGN})
     if(NOT Y_TOP OR NOT Y_FLISTS)
         message(FATAL_ERROR "Synthesis ${NAME}: TOP and FLISTS are required")
     endif()
@@ -85,11 +95,13 @@ function(dc_add_yosys_synth NAME)
         list(APPEND files ${flist_files})
     endforeach()
 
-    _dc_yosys_target(${NAME} generic ${NAME}.synth "" ${Y_TOP} ${files})
+    _dc_yosys_target(${NAME} generic ${NAME}.synth "" ${Y_TOP} "${Y_BLACKBOX_RAM_MODULES}"
+                     ${files})
 
     dc_sky130()
     if(DARK_CIRCUIT_SKY130)
-        _dc_yosys_target(${NAME} sky130 ${NAME}.synth_sky130 ${SKY130_FILE} ${Y_TOP} ${files})
+        _dc_yosys_target(${NAME} sky130 ${NAME}.synth_sky130 ${SKY130_FILE} ${Y_TOP}
+                         "${Y_BLACKBOX_RAM_MODULES}" ${files})
     else()
         add_custom_target(${NAME}.synth_sky130
             COMMAND ${CMAKE_COMMAND} -E echo "sky130 liberty not available, see DARK_CIRCUIT_USE_SKY130"

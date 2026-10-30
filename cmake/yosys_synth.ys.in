@@ -13,6 +13,11 @@
 log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): read
 read_verilog -noautowire @SYNTH_INPUT@
 
+# RAM modules (BLACKBOX_RAM_MODULES of dc_add_yosys_synth): memory macros in a real chip.
+# Kept as black boxes (ports only, also every parameter version of them): not synthesized,
+# their area not counted (stat calls it unknown); their outputs start paths like flip-flops.
+@SYNTH_BLACKBOX_RAM@
+
 # 2. Structural problems are errors: multiple drivers, undriven inputs, combinational
 #    loops. Checked after elaboration and always blocks (proc), before optimization:
 #    optimization can remove a problem (one of two drivers) without an error.
