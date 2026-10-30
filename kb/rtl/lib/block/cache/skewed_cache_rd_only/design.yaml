@@ -35,9 +35,11 @@ evidence: >
   Behave version and its unit test (model of its own; 8 lines per way with 12-bit addresses,
   and 64 with 32-bit on Verilator; every case counted, including hits in way 1 at an index
   other than way 0's and victims by the recent bits and by the tie rule), 2026-10-29: 8 of 8
-  mutants caught. The struct version against the same test, 2026-10-29.
+  mutants caught. The struct version against the same test, 2026-10-29. Since 2026-10-29
+  SkewedCacheRdOnly is SkewedCache with READ_ONLY=1 (kb rtl/lib/block/cache/read_only): the
+  skew, the recent bits and the victim are in SkewedCache, and the code anchors moved there.
 code:
-  - rtl/lib/block/cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.sv#index_of
-  - rtl/lib/block/cache/skewed_cache_rd_only/behave/skewed_cache_rd_only.sv#victim_way
-  - rtl/lib/block/cache/skewed_cache_rd_only/struct/skewed_cache_rd_only.sv#u_reg_file_recent
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#index_of
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#victim_way
+  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_reg_file_recent
   - test/block/cache/skewed_cache_rd_only/tb_skewed_cache_rd_only.sv#model_victim

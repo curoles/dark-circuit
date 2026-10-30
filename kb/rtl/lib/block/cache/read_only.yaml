@@ -13,9 +13,9 @@ decision: >
   The read-only module is a wrapper with the read-only ports: the read-write cache with
   READ_ONLY=1, req_we, req_wdata and req_wstrb 0, the memory write fields unused. One file
   above behave/ and struct/, listed by both flists: the read-write cache of the library it is
-  built with gives the version. DirectCacheRdOnly first, then SetAssocCacheRdOnly; in the
-  read-write cache the generate sits where the store logic is (after the memory request),
-  so the file reads in pipeline order. SkewedCacheRdOnly next.
+  built with gives the version. DirectCacheRdOnly first, then SetAssocCacheRdOnly and
+  SkewedCacheRdOnly; in the read-write cache the generate sits where the store logic is
+  (after the memory request), so the file reads in pipeline order.
 why: >
   With no stores the read-write cache is the read-only one: held only on a load miss, so its
   req_ready is the read-only one's; no store_write, so the touch and the RAM writes are the
@@ -45,7 +45,9 @@ evidence: >
   same flops as the separate struct version (3737), 11411 cells against 11433.
   SetAssocCache, 2026-10-29, the same tests and mutants (8 of 8); synthesis of
   SetAssocCacheRdOnly, 4 ways LRU, 64 sets: the same flops (15251), 46473 cells against
-  46433 (0.09 %, ABC's restructuring: DirectCache came out smaller).
+  46433 (0.09 %, ABC's restructuring: DirectCache came out smaller). SkewedCache,
+  2026-10-29, the same tests and mutants (8 of 8); synthesis of SkewedCacheRdOnly, 64 lines
+  per way: the same flops (7571), 23531 cells against 23628.
 code:
   - rtl/lib/block/cache/direct_cache/behave/direct_cache.sv#g_read_only
   - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#g_read_only
@@ -53,3 +55,6 @@ code:
   - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#g_read_only
   - rtl/lib/block/cache/set_assoc_cache/struct/set_assoc_cache.sv#g_read_only
   - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#READ_ONLY
+  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#g_read_only
+  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#g_read_only
+  - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#READ_ONLY
