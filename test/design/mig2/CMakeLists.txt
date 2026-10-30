@@ -109,6 +109,10 @@ if(DARK_CIRCUIT_RISCV)
 
     # Branches and jumps: every branch type taken and not taken, JAL, JALR.
     mig2_program_test(branch SOURCES branch.S ARGS +expect_regs)
+    # The same with a slow imem: ready withheld, answers after 1 to 3 clocks, now and then 5
+    # to 10; fetch waits.
+    mig2_program_test(branch_slow_imem SOURCES branch.S
+                      ARGS +expect_regs +imem_latency=70,80,1,3,5,10)
 
     # Loads and stores: every size and offset, sign extension, strobes.
     mig2_program_test(load_store SOURCES load_store.S ARGS +expect_sequential +expect_regs)

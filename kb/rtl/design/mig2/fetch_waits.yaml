@@ -1,0 +1,48 @@
+type: decision
+title: Mig2 fetch waits for imem with one request in flight; a request not taken is not kept
+date: 2026-10-30
+question: >
+  Step 2 of Mig2's memory: imem may be slow (ready withheld, answers later than one clock).
+  How many requests does fetch keep in flight, and what happens to a request imem does not
+  take when the next cycle wants something else (a redirect) or can not take the instruction
+  (ID stalls)?
+decision: >
+  One request in flight (user: caches come soon, an I-cache answers a hit in the next clock,
+  more in flight would be waste). Fetch asks only while the instruction can go into IF/ID at
+  once (ID does not stall, no request pending or its answer comes now); the request imem
+  takes goes into IF/ID at that edge, and the slot waits there for its word (bubble imem
+  meanwhile; the word is kept while ID stalls). A request imem does not take is not kept:
+  fetch asks again in the next cycle for what is right then (user: option B). A redirect or
+  a halt drops the slot that waits and the request of its cycle; a one-bit flag throws the
+  answer of a dropped request away when it comes. pc moves with the requests imem takes.
+  Known limit: rule 2 does not hold on the imem port, so fetch can not go straight to a
+  receiver that relies on it (InsnDataCacheArbiter without an I-cache in front, a standard
+  bus such as AXI); that needs an I-cache or a one-entry request register in between.
+why: >
+  A fetch request is a lookup, not a transaction: cores cancel instruction-cache lookups on
+  a redirect. The memories here act only on a request they take (SimLatencyRAM, the caches),
+  never on valid alone. With requests that are not kept, a taken request always enters
+  IF/ID at once: no second slot, no held offer, and with latency 1 the core is cycle-exact
+  with the earlier fetch. After a redirect fetch asks for the target at once instead of
+  waiting for a stale offer to be taken.
+rejected:
+  - choice: Keep an offer until imem takes it (valid/ready rule 2), option A
+    why_not: >
+      A held offer register (the pc moves on at a redirect) and a second slot (imem may take
+      the offer while ID stalls), and every mix of offer, redirect, stall and answer as a
+      case; slower after a redirect. Its merit, a port anything can take, is not needed:
+      imem meets a cache or SimLatencyRAM.
+  - choice: More requests in flight
+    why_not: Pays only for a slow memory without a cache; an I-cache hit answers next clock.
+evidence: >
+  2026-10-30: all 110 Mig2 tests pass and the traces of all 103 programs at latency 1 are
+  identical to step 1 (cycle-exact). Every program run once with +imem_latency=70,80,1,3,5,10:
+  103 of 108 pass, the 5 others only on cycle counts (max_cycles bounds of branch_id, btb_if,
+  ras_id; rdcycle differences in csr and muldiv); the branch program keeps that run as test
+  branch_slow_imem. Mutants: asking imem while ID stalls fires a_taken_enters_ifid, an imem
+  that answers twice a_imem_answer_expected. Synthesis of Mig2Core (sky130): 208432 um2
+  against 207175, 5.5 ns as before.
+code:
+  - rtl/design/mig2/mig2_fetch.sv#imem_req.valid
+  - rtl/design/mig2/mig2_fetch.sv#id_keep
+  - rtl/design/mig2/mig2_fetch.sv#a_taken_enters_ifid

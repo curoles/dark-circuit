@@ -1,9 +1,10 @@
 /* Mig2 core: RISC-V RV32IM with Zicsr and Zicntr, synthesizable; the memories are outside.
  *
  * Instruction fetch and data access are valid/ready channels with the answers of reads
- * after them (imem_req_t, Mig2Pkg); for now the core needs every request taken at once and
- * its answer 1 clock later (a memory like SRAM or FPGA block RAM; SimLatencyRAM with latency
- * 1), and asserts it. Faults (ECALL, illegal instruction, misaligned
+ * after them (imem_req_t, Mig2Pkg). Fetch waits for imem (Mig2Fetch); for dmem the core
+ * still needs every request taken at once and its answer 1 clock later (a memory like SRAM
+ * or FPGA block RAM; SimLatencyRAM with latency 1), and asserts it.
+ * Faults (ECALL, illegal instruction, misaligned
  * jump target or load/store address, ...) trap to mtvec in machine mode, MRET returns.
  * EBREAK traps too, or halts the core (halt=1) when the debugger sets
  * dbg_req.ebreak_halt; while halted, the debug port reads and writes registers, and
@@ -78,8 +79,9 @@ module Mig2Core import Mig2Pkg::*; #(
     btb_inval_t   btb_inval;        // Control -> Fetch: the BTB was wrong for the insn in ID
     ras_ctrl_t    ras_ctrl;         // Control -> return stack: push for a call, pop for a return
     iaddr_t       id_ras_top;       // top of the return stack: where a return in ID goes
-    insn_t        id_insn;          // instruction in ID: the answer of imem, or kept from it
-    insn_t        id_insn_q;        // the last answer of imem
+    insn_t        id_insn;          // instruction in ID: its word, from Mig2Fetch
+    logic         id_wait;          // the slot in ID waits for its word from imem
+    logic         id_keep;          // IF/ID keeps its slot
     decoded_t     id_dec;           // instruction in ID taken apart
     logic         id_pred_taken;    // conditional branch in ID guessed taken
     logic         id_redirected;    // fetch went to the target of the insn in ID (IF or ID)
@@ -133,8 +135,8 @@ module Mig2Core import Mig2Pkg::*; #(
 
     // IF
     Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(
-        .clk, .rst_n, .ctrl(if_ctrl), .btb_update, .btb_inval, .imem_req, .fetch(id_fetch),
-        .btb_pred(id_btb));
+        .clk, .rst_n, .ctrl(if_ctrl), .btb_update, .btb_inval, .imem_req, .imem_rsp,
+        .fetch(id_fetch), .insn(id_insn), .btb_pred(id_btb), .id_wait, .id_keep);
 
     Mig2Control u_mig2_control(
         .clk, .rst_n, .if_pc(imem_req.addr), .id_fetch, .id_dec, .id_pred_taken, .id_btb,
@@ -145,14 +147,6 @@ module Mig2Core import Mig2Pkg::*; #(
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
         .ras_ctrl,
         .id_redirected, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
-
-    // ID: the instruction comes as the answer of imem; it stays in ID while ID stalls, when
-    // no request goes out, so the answer is kept.
-    always_ff @(posedge clk)
-        if (imem_rsp.valid)
-            id_insn_q <= imem_rsp.data;
-
-    assign id_insn = imem_rsp.valid ? imem_rsp.data : id_insn_q;
 
     Mig2Decode u_mig2_decode(.insn(id_insn), .dec(id_dec));
 
@@ -305,26 +299,26 @@ module Mig2Core import Mig2Pkg::*; #(
     end
 
     // Pipeline view: the slots of the stages and their moves (pipe_trace_t, Mig2Pkg).
-    assign pipe_trace = '{if_req:   imem_req.valid,
+    assign pipe_trace = '{if_req:   imem_req.valid && imem_rsp.ready,
                           if_pc:    imem_req.addr,
-                          id:       id_fetch,
+                          id:       '{valid:  id_fetch.valid || id_wait,
+                                      bubble: id_fetch.bubble,
+                                      pc:     id_fetch.pc},
                           ex:       ex_fetch,
                           mem:      '{valid:  ex_mem_q.valid,
                                       bubble: ex_mem_q.bubble,
                                       pc:     mem_ret.pc_rdata[WIDTH-1:IADDR_START]},
                           redirect: if_ctrl.redirect,
-                          id_stall: if_ctrl.stall,
+                          id_wait:  id_wait,
+                          id_stall: id_keep,
                           ex_stall: pipe_ctrl.ex_stall,
                           ex_flush: pipe_ctrl.ex_flush};
 
     assign dbg_rsp.halt_pc   = halt_pc;
     assign dbg_rsp.reg_rdata = dbg_reg_rdata;
 
-    // Latency 1 for now: every request is taken at once and a read is answered in the next
-    // clock, and only then (the pipeline does not wait for memory yet).
-    `DC_ASSERT(a_imem_ready, !imem_req.valid || imem_rsp.ready)
-    `DC_ASSERT_NEXT(a_imem_on_time, imem_req.valid && imem_rsp.ready, imem_rsp.valid)
-    `DC_ASSERT_NEXT(a_imem_no_extra, !(imem_req.valid && imem_rsp.ready), !imem_rsp.valid)
+    // dmem latency 1 for now: every request is taken at once and a read is answered in the
+    // next clock, and only then (MEM/WB does not wait for memory yet).
     `DC_ASSERT(a_dmem_ready, !dmem_req.valid || dmem_rsp.ready)
     `DC_ASSERT_NEXT(a_dmem_on_time, dmem_req.valid && !dmem_req.we && dmem_rsp.ready,
                     dmem_rsp.valid)

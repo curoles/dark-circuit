@@ -77,7 +77,8 @@ package Mig2Pkg;
         BUBBLE_TRAP,        // fault, ECALL, EBREAK as a breakpoint: fetch goes to mtvec
         BUBBLE_XRET,        // MRET: fetch goes to mepc
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
-        BUBBLE_DIV          // EX holds a division
+        BUBBLE_DIV,         // EX holds a division
+        BUBBLE_IMEM         // ID waits for the instruction from imem
     } bubble_e;
 
     // Ports of Mig2Core
@@ -87,8 +88,8 @@ package Mig2Pkg;
     // no ready: the core takes every answer), in order, one or more clocks after the request
     // was taken; the memory side of the caches (DirectCache), SimLatencyRAM in Mig2Cpu. A
     // struct per direction: req_t from the core, rsp_t to it (ready of the request channel,
-    // the answer). Mig2Core still needs every request taken at once and its answer 1 clock
-    // later, and asserts it.
+    // the answer). Mig2Fetch waits for imem; for dmem Mig2Core still needs every request
+    // taken at once and its answer 1 clock later, and asserts it.
 
     // Instruction fetch: the word at addr.
     typedef struct packed {
@@ -171,7 +172,7 @@ package Mig2Pkg;
     // Control -> Fetch.
     typedef struct packed {
         logic    run;      // 1: request the next instruction, 0: stop (fetch.valid drops)
-        logic    stall;    // 1: keep pc, imem output and fetch: the instruction in EX stays
+        logic    stall;    // 1: keep pc and IF/ID, no request: the instruction in ID stays
         logic    redirect; // 1: next request is at target; the request of this cycle is dropped
         bubble_e why;      // redirect: reason of the bubble of the dropped request
         iaddr_t  target;
@@ -385,13 +386,14 @@ package Mig2Pkg;
     // Mig2Core -> testbench: the pipeline view (Konata): the slot of every stage in this
     // cycle and how the slots move at the rising edge. The core only reports it.
     typedef struct packed {
-        logic   if_req;     // IF requests the instruction at if_pc from imem
+        logic   if_req;     // imem takes the request of IF for the instruction at if_pc
         iaddr_t if_pc;
-        fetch_t id;         // slots: valid, bubble reason, pc
+        fetch_t id;         // slots: valid, bubble reason, pc; ID also while it waits
         fetch_t ex;
         fetch_t mem;        // MEM/WB
         logic   redirect;   // the request of this cycle is dropped
-        logic   id_stall;   // IF and ID keep their instruction (load-use, division)
+        logic   id_wait;    // the instruction in ID waits for its word from imem
+        logic   id_stall;   // IF/ID keeps its slot (load-use, division, waiting for imem)
         logic   ex_stall;   // EX keeps its instruction (division)
         logic   ex_flush;   // EX gets a bubble; without id_stall the instruction in ID dies
     } pipe_trace_t;

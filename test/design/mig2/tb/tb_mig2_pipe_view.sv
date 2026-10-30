@@ -4,10 +4,12 @@
  * pipe_trace (Mig2Pkg) has the slot of every stage and how the slots move at the rising
  * edge. The module keeps the instruction of every stage, moves it as pipe_trace tells,
  * and checks in every cycle out of reset that its stages and the reported slots agree
- * (valid and pc). +kanata=<file> writes the view as a Konata log (Kanata format 0004, tab
- * separated): a row per instruction, stages IF ID EX MEM, the instructions of the wrong
- * path flushed; label: pc and instruction word, tooltip: the bubbles before it. Cycles in
- * messages count from reset, like the log. Stops at the first mismatch with $fatal.
+ * (valid and pc). An instruction is in IF in the cycle imem takes its request; in ID it may
+ * wait for its word (id_wait): it stays there and EX gets a bubble. +kanata=<file> writes
+ * the view as a Konata log (Kanata format 0004, tab separated): a row per instruction,
+ * stages IF ID EX MEM, the instructions of the wrong path flushed; label: pc and
+ * instruction word, tooltip: the bubbles before it. Cycles in messages count from reset,
+ * like the log. Stops at the first mismatch with $fatal.
  *
  * TbMig2 instantiates it; it only reads its ports.
  *
@@ -121,7 +123,7 @@ module TbMig2PipeView import Mig2Pkg::*, TbMig2Pkg::*; (
         old_if_pc = stage_pc[S_IF];
         old_id_pc = stage_pc[S_ID];
         old_ex_pc = stage_pc[S_EX];
-        id_to_ex  = !pipe_trace.ex_stall && !pipe_trace.ex_flush;
+        id_to_ex  = !pipe_trace.ex_stall && !pipe_trace.ex_flush && !pipe_trace.id_wait;
         if (id_to_ex && pipe_trace.id_stall)
             $fatal(1, "Mig2: cycle %0d: pipe_trace: ID both goes to EX and stalls", cycle);
         if (old_if >= 0 && pipe_trace.id_stall)

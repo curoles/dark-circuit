@@ -34,7 +34,9 @@
  * The debug port and the semihosting calls: TbMig2Debugger.
  * Other plusargs: +trace=<file> writes every retired instruction, register write,
  * debug action and semihosting call into <file>, +trace alone prints them;
- * +max_cycles=<n> (default 100000).
+ * +max_cycles=<n> (default 100000);
+ * +imem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how imem of
+ * Mig2Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready.
  * Bubbles, their checks, their trace lines and the count per reason at the end:
  * TbMig2BubbleCheck.
  * Pipeline view, checked against pipe_trace, and its Konata log (+kanata=<file>):
@@ -63,6 +65,8 @@ module TbMig2;
     string       hex;
     string       trace_file;
     integer      trace_fd;              // 0: no trace
+    string       mem_latency;           // +imem_latency
+    int          lat [6];               // its six numbers
     logic        expect_trap;
     logic        first_ebreak_traps;
     logic        expect_regs;
@@ -230,6 +234,13 @@ module TbMig2;
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles     = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
         ebreak_halt = !first_ebreak_traps && !no_debugger;
+        if ($value$plusargs("imem_latency=%s", mem_latency)) begin
+            if ($sscanf(mem_latency, "%d,%d,%d,%d,%d,%d", lat[0], lat[1], lat[2], lat[3], lat[4],
+                        lat[5]) != 6)
+                $fatal(1, "Mig2: +imem_latency=%s: expected six numbers with commas",
+                       mem_latency);
+            u_mig2_cpu.u_imem.configure(lat[0], lat[1], lat[2], lat[3], lat[4], lat[5]);
+        end
 
         // +trace=<file> writes the trace into <file>, +trace alone prints it.
         if ($value$plusargs("trace=%s", trace_file)) begin

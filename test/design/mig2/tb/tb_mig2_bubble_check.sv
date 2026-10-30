@@ -10,7 +10,8 @@
  * while the BTB tag covers the word address of imem (Mig2ConfigPkg: then no two pcs share
  * an entry), else it comes first after the instruction; a load-use bubble follows a load,
  * and the next instruction reads its rd; division bubbles come right before a division;
- * fill bubbles only before the first instruction after reset or resume. The trace gets a
+ * fill bubbles only before the first instruction after reset or resume; imem bubbles (ID
+ * waits for imem) at any time. The trace gets a
  * line per bubble; report() at the end of the run prints the count per reason and checks
  * that every counted cycle retired an instruction or a bubble. Stops at the first failure
  * with $fatal.
@@ -106,6 +107,7 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
                 if (load_rd == 0)
                     $fatal(1, "Mig2: cycle %0d: load-use bubble, no load retired before it", cycle);
             BUBBLE_DIV: ;   // the next retired instruction must be a division
+            BUBBLE_IMEM: ;  // ID waits for imem: at any time
             BUBBLE_BTB_FIX:     // ID corrects the BTB: first, right after the instruction
                 if (BTB_FULL_TAG)
                     $fatal(1, "Mig2: cycle %0d: btb_fix bubble after pc %h, but the BTB tag covers imem",
