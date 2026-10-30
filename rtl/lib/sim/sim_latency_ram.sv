@@ -18,6 +18,10 @@
  * latency 1 a read can be taken every clock. req_ready is 1 in READY_PERCENT of the clocks
  * (drawn a clock ahead: ready does not depend on the request) and while a slot is free.
  * FAST_PERCENT=100, FAST_MIN=FAST_MAX=1 and READY_PERCENT=100 make a memory of latency 1.
+ * configure() sets READY_PERCENT and the latency mix at run time, the parameters being the
+ * values until then: a testbench calls it at time 0 (for example with values of plusargs), so
+ * one build runs with any of them; a later call takes effect from the next draw. MAX_PENDING
+ * (the size of the queue) and SEED stay parameters.
  * Random numbers come from $random with SEED, from reset on: a run repeats.
  * load() and peek() as in SimRAM; rst_n empties the queue of reads, not the memory.
  *
@@ -78,6 +82,13 @@ module SimLatencyRAM #(
     longint                now;             // clocks since reset
     longint                last_due;        // clock of the answer of the last read taken
     integer                seed;
+    // READY_PERCENT and the latency mix now: the parameters, or what configure() set.
+    int                    ready_percent = READY_PERCENT;
+    int                    fast_percent  = FAST_PERCENT;
+    int                    fast_min      = FAST_MIN;
+    int                    fast_max      = FAST_MAX;
+    int                    slow_min      = SLOW_MIN;
+    int                    slow_max      = SLOW_MAX;
 
     // The reads waiting for their answers: a ring of MAX_PENDING slots, the oldest at head.
     logic [DATA_WIDTH-1:0] q_data [MAX_PENDING];
@@ -114,11 +125,26 @@ module SimLatencyRAM #(
         return w;
     endfunction
 
+    // READY_PERCENT and the latency mix from now on, with the limits of the parameters.
+    function automatic void configure(input int ready_pct, input int fast_pct, input int fast_lo,
+                                      input int fast_hi, input int slow_lo, input int slow_hi);
+        if (ready_pct < 1 || ready_pct > 100 || fast_pct < 0 || fast_pct > 100 ||
+            fast_lo < 1 || fast_hi < fast_lo || slow_lo < 1 || slow_hi < slow_lo)
+            $fatal(1, "%m: configure(%0d, %0d, %0d, %0d, %0d, %0d): a value out of its range",
+                   ready_pct, fast_pct, fast_lo, fast_hi, slow_lo, slow_hi);
+        ready_percent = ready_pct;
+        fast_percent  = fast_pct;
+        fast_min      = fast_lo;
+        fast_max      = fast_hi;
+        slow_min      = slow_lo;
+        slow_max      = slow_hi;
+    endfunction
+
     // A latency, drawn for a read: fast or slow, then uniform in its range.
     function automatic int latency();
-        if ({$random(seed)} % 100 < FAST_PERCENT)
-            return FAST_MIN + {$random(seed)} % (FAST_MAX - FAST_MIN + 1);
-        return SLOW_MIN + {$random(seed)} % (SLOW_MAX - SLOW_MIN + 1);
+        if ({$random(seed)} % 100 < fast_percent)
+            return fast_min + {$random(seed)} % (fast_max - fast_min + 1);
+        return slow_min + {$random(seed)} % (slow_max - slow_min + 1);
     endfunction
 
     assign word_addr = {req_addr[ADDR_WIDTH-1:ADDR_START], {ADDR_START{1'b0}}};
@@ -138,11 +164,11 @@ module SimLatencyRAM #(
             last_due   <= 0;
             head       <= 0;
             count      <= 0;
-            ready_draw <= {$random(seed)} % 100 < READY_PERCENT;
+            ready_draw <= {$random(seed)} % 100 < ready_percent;
         end else begin
             longint due;
             now        <= now + 1;
-            ready_draw <= {$random(seed)} % 100 < READY_PERCENT;
+            ready_draw <= {$random(seed)} % 100 < ready_percent;
             if (accept && !req_we) begin
                 due = now + longint'(latency());
                 if (due <= last_due)

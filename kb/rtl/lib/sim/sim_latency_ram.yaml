@@ -16,7 +16,10 @@ decision: >
   the clock after the one before. MAX_PENDING reads may wait (default 1); a slot is free in
   the clock its answer goes out. req_ready random (READY_PERCENT), drawn a clock ahead, and 0
   while every slot waits. $random with a SEED parameter (user: no plusarg), restarted by
-  reset. Name SimLatencyRAM (user): SimRAM with latency.
+  reset. Name SimLatencyRAM (user): SimRAM with latency. configure() sets READY_PERCENT and
+  the latency mix at run time, the parameters being the defaults (user, 2026-10-30): a
+  testbench calls it at time 0, for example with values from its plusargs; MAX_PENDING (the
+  size of the queue) and SEED stay parameters.
 why: >
   The caches' protocol on the memory side: the same model goes behind a cache or, with
   one-word lines, behind a core. Doing the work at the take keeps memory order simple: a
@@ -36,13 +39,25 @@ rejected:
     why_not: A pipelined fetch overlaps reads; the knob costs a ring of slots.
   - choice: A plusarg for the seed
     why_not: Not expected to be used much (user); the parameter is enough.
+  - choice: The latency mix as parameters only, a build per configuration
+    why_not: >
+      A test variant or a study point would cost a Verilator build of the whole testbench
+      (Mig2: minutes); with configure() one build runs them all.
+  - choice: The model reads plusargs itself
+    why_not: >
+      The library model would decide the names and the format for every testbench; the
+      testbench knows where its values come from.
 evidence: >
   Unit test (a model with its own bytes and waiting reads; latency 1 always ready, two-level
   with one slot, two-level with four slots and 8-byte words; every case of the configuration
   must happen), Icarus and Verilator, 2026-10-30: 8 of 8 mutants caught; answers out of order
-  fire the model's own assertion a_answer_not_late.
+  fire the model's own assertion a_answer_not_late. configure(), 2026-10-30: a fourth
+  configuration, the model built with the defaults and set by configure() at time 0 to the
+  two-level mix of the second, passes the same checks; 3 of 3 mutants caught (configure()
+  not setting the latencies or ready, a draw still using the parameter).
 code:
   - rtl/lib/sim/sim_latency_ram.sv#read_word
   - rtl/lib/sim/sim_latency_ram.sv#last_due
   - rtl/lib/sim/sim_latency_ram.sv#a_answer_not_late
+  - rtl/lib/sim/sim_latency_ram.sv#configure
   - test/sim/tb_sim_latency_ram.sv#n_b2b

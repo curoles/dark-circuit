@@ -13,9 +13,10 @@
  * full queue answers, a request stopped by a full queue, ready withheld with a slot free,
  * fast and slow answers, a read of a word just written, a write of some bytes only, two or
  * more reads waiting.
- * Three configurations: latency 1 (READY_PERCENT=100), two-level with one read waiting,
- * two-level with four on words of 8 bytes; 3000 clocks each. Stops at the first mismatch
- * with $fatal.
+ * Four configurations: latency 1 (READY_PERCENT=100), two-level with one read waiting,
+ * two-level with four on words of 8 bytes, and the second again on a model built with the
+ * defaults (latency 1) and set with configure() at time 0; 3000 clocks each. Stops at the
+ * first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -31,7 +32,8 @@ module TbSimLatencyRAMCheck #(
     parameter     MAX_PENDING   = 1,
     parameter     SEED          = 1,
     parameter bit EXACT         = 1'b0,     // latency 1, always ready: check that exactly
-    parameter     REQUIRED      = 8'hFF     // cases that must happen, bits as in missing
+    parameter     REQUIRED      = 8'hFF,    // cases that must happen, bits as in missing
+    parameter bit CONFIGURE     = 1'b0      // model built with the defaults, set by configure()
 )(
     input  wire  clk,
     output logic done
@@ -73,10 +75,19 @@ module TbSimLatencyRAMCheck #(
     integer n_multi;        // two or more reads waiting
     logic [7:0] missing;
 
+    // The latency mix and READY_PERCENT as parameters of the model, or its defaults
+    // (latency 1, always ready) and then configure().
+    localparam R_PCT  = CONFIGURE ? 100 : READY_PERCENT;
+    localparam F_PCT  = CONFIGURE ? 100 : FAST_PERCENT;
+    localparam F_MIN  = CONFIGURE ? 1   : FAST_MIN;
+    localparam F_MAX  = CONFIGURE ? 1   : FAST_MAX;
+    localparam S_MIN  = CONFIGURE ? 10  : SLOW_MIN;
+    localparam S_MAX  = CONFIGURE ? 20  : SLOW_MAX;
+
     SimLatencyRAM #(.DATA_SIZE(DATA_SIZE), .ADDR_WIDTH(ADDR_WIDTH),
-                    .READY_PERCENT(READY_PERCENT), .FAST_PERCENT(FAST_PERCENT),
-                    .FAST_MIN(FAST_MIN), .FAST_MAX(FAST_MAX), .SLOW_MIN(SLOW_MIN),
-                    .SLOW_MAX(SLOW_MAX), .MAX_PENDING(MAX_PENDING), .SEED(SEED))
+                    .READY_PERCENT(R_PCT), .FAST_PERCENT(F_PCT), .FAST_MIN(F_MIN),
+                    .FAST_MAX(F_MAX), .SLOW_MIN(S_MIN), .SLOW_MAX(S_MAX),
+                    .MAX_PENDING(MAX_PENDING), .SEED(SEED))
         u_sim_latency_ram(.clk, .rst_n, .req_valid, .req_ready, .req_we, .req_addr, .req_wdata,
                           .req_wstrb, .rsp_valid, .rsp_data);
 
@@ -171,6 +182,9 @@ module TbSimLatencyRAMCheck #(
         req_addr  = '0;
         req_wdata = '0;
         req_wstrb = '0;
+        if (CONFIGURE)
+            u_sim_latency_ram.configure(READY_PERCENT, FAST_PERCENT, FAST_MIN, FAST_MAX,
+                                        SLOW_MIN, SLOW_MAX);
         // Memory content from a file, the model the same.
         hex = $sformatf("tb_sim_latency_ram_%0d.hex", SEED);
         fd  = $fopen(hex, "w");
@@ -214,7 +228,7 @@ endmodule
 
 module TbSimLatencyRAM;
     wire       clk;
-    wire [2:0] done;
+    wire [3:0] done;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
@@ -229,6 +243,10 @@ module TbSimLatencyRAM;
     TbSimLatencyRAMCheck #(.DATA_SIZE(8), .READY_PERCENT(80), .FAST_PERCENT(50), .FAST_MIN(1),
                            .FAST_MAX(3), .SLOW_MIN(8), .SLOW_MAX(12), .MAX_PENDING(4), .SEED(3),
                            .REQUIRED(8'b1111_1111)) u_check_3(.clk, .done(done[2]));
+    // The second, set with configure() on a model built with the defaults.
+    TbSimLatencyRAMCheck #(.READY_PERCENT(70), .FAST_PERCENT(70), .FAST_MIN(1), .FAST_MAX(2),
+                           .SLOW_MIN(6), .SLOW_MAX(9), .SEED(4), .REQUIRED(8'b1111_1110),
+                           .CONFIGURE(1'b1)) u_check_4(.clk, .done(done[3]));
 
     initial begin
         wait (done == '1);
