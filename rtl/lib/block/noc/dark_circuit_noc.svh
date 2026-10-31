@@ -1,9 +1,10 @@
 /* The flit of the NoC library: its layout in one place, built from numbers.
  *
  * Packets are one or more flits: the first has head=1, the last tail=1 (a packet of one flit
- * has both). vc is the virtual channel the flit travels in. The data of a head flit begins
- * with the route, DC_NOC_HEAD_T: the destination's mesh coordinates (XY routing), then the
- * rest of the data; body and tail flits carry data only. The blocks of the library define
+ * has both). vc is the flit's virtual channel on the link it is on: each router writes the
+ * output VC it allocated to the packet, so the vc changes from hop to hop. The data of a head
+ * flit begins with the route, DC_NOC_HEAD_T: the destination's mesh coordinates (XY routing),
+ * then the rest of the data; body and tail flits carry data only. The blocks of the library define
  * their types with these macros from their parameters; a design does the same in its
  * configuration package, with the same numbers:
  *     `include "../block/noc/dark_circuit_noc.svh"
