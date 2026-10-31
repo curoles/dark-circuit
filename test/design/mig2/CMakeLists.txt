@@ -20,8 +20,10 @@ set(SYNTH_FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
 # sv2v supports.
 dc_add_sv2v_check(design_mig2 TOP Mig2Core FLISTS ${SYNTH_FLISTS})
 
-# Synthesis of Mig2Core: build target design_mig2.synth (make mig2_synth), not a test.
-dc_add_yosys_synth(design_mig2 TOP Mig2Core FLISTS ${SYNTH_FLISTS})
+# Synthesis of Mig2Core: build target design_mig2.synth (make mig2_synth), not a test. The
+# tag and data RAMs of the caches are memory macros in a chip: black boxes.
+dc_add_yosys_synth(design_mig2 TOP Mig2Core FLISTS ${SYNTH_FLISTS}
+                   BLACKBOX_RAM_MODULES CacheTagRam CacheDataRam)
 
 # Mig2 runs on the main simulator only: DARK_CIRCUIT_MAIN_SIMULATOR, by default
 # Verilator when it is installed (see cmake/dark_circuit.cmake).
@@ -142,11 +144,14 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +resumes=2 +expect_sequential +expect_retired=6
                            +expect_halt_pc=14 +expect_regs)
 
-    # CSRs and counters: Zicsr instructions on mscratch, read-only CSRs, Zicntr.
-    mig2_program_test(csr SOURCES csr.S ARGS +expect_regs)
+    # CSRs and counters: Zicsr instructions on mscratch, read-only CSRs, Zicntr. The tests
+    # that count cycles (this one, muldiv, branch_id, btb_if, ras_id) and the benchmarks run
+    # uncached (+uncached): the caches would add the cycles of their misses.
+    # @kb: rtl/design/mig2/caches_in_core
+    mig2_program_test(csr SOURCES csr.S ARGS +expect_regs +uncached)
 
     # M extension: results used right away, division and branches, cycle cost, minstret.
-    mig2_program_test(muldiv SOURCES muldiv.S ARCH rv32im ARGS +expect_regs)
+    mig2_program_test(muldiv SOURCES muldiv.S ARCH rv32im ARGS +expect_regs +uncached)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig2_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
@@ -161,21 +166,21 @@ if(DARK_CIRCUIT_RISCV)
     # to misaligned targets. +max_cycles is a cycle ceiling (Mig2 README): lower it when a
     # change makes the test faster.
     mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=147)
+                      ARGS +expect_trap +expect_regs +max_cycles=147 +uncached)
 
     # Jumps and conditional branches that a BTB learns, in the corners of the pipeline:
     # loops, calls, branches taken every time and every other time, two branches sharing an
     # entry, waiting in ID (load-use, division), back to back, a loop of two instructions, on
     # the wrong path, to a misaligned target. With a cycle ceiling (Mig2 README).
     mig2_program_test(btb_if SOURCES btb_if.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=458)
+                      ARGS +expect_trap +expect_regs +max_cycles=458 +uncached)
 
     # Calls and returns in the corners of the pipeline, for the return-address stack: deep
     # recursion (the stack wraps), an empty function, a return waiting in ID (load-use,
     # division), an indirect call, a return to a changed ra, a call on the wrong path, calls
     # that wait in ID, a swap (coroutine), calls in a trap handler. With a cycle ceiling.
     mig2_program_test(ras_id SOURCES ras_id.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=401)
+                      ARGS +expect_trap +expect_regs +max_cycles=401 +uncached)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
@@ -226,7 +231,8 @@ if(DARK_CIRCUIT_RISCV)
         # their own check). DIR is the directory of the benchmark, REPEAT the runs of its
         # main (BENCH_REPEAT), CEILINGS its cycle ceiling per gcc version (Mig2 README,
         # dc_riscv_cycle_ceiling): the cycles + 1 %, rounded up to 1000. Lower it when a
-        # change makes the benchmark faster; add the version of a new compiler.
+        # change makes the benchmark faster; add the version of a new compiler. They run
+        # uncached (+uncached): the cycles of the pipeline, as before the caches.
         # @kb: test/design/mig2/benchmarks
         if(DARK_CIRCUIT_BENCHMARKS)
             function(mig2_bench_test NAME)
@@ -242,7 +248,7 @@ if(DARK_CIRCUIT_RISCV)
                                         -I${SW}/bench/include -I${SW}/semihosting -I${P_DIR}
                                         -I${RISCV_TESTS}/benchmarks/common
                                         -I${RISCV_TESTS}/env ${P_FLAGS}
-                                  ARGS +expect_exit=0 +max_cycles=${max_cycles}
+                                  ARGS +expect_exit=0 +max_cycles=${max_cycles} +uncached
                                   LABELS benchmark)
             endfunction()
 

@@ -14,5 +14,6 @@ mig2_load_data.sv
 mig2_csr.sv
 mig2_muldiv.sv
 mig2_pipe.sv
+mig2_caches.sv
 mig2_core.sv
 mig2_cpu.sv

@@ -2,8 +2,9 @@
  *
  * load() puts the same hex image (objcopy -O verilog, see sw/riscv/mig2.ld) into
  * instruction memory and data memory: code is fetched from imem, loads and stores go to
- * dmem. Both are SimLatencyRAM behind the memory channels of the core, for now with latency
- * 1 and always ready (what Mig2Core needs yet); imem is not written. Both have
+ * dmem. Both are SimLatencyRAM behind the memory ports of the core (its caches are inside
+ * it), with latency 1 and always ready unless the testbench configures them (configure());
+ * imem is not written. uncached=1 makes the core bypass its caches. Both have
  * 1 << CFG.mem_addr_width bytes; the core address bits above them are ignored, so addresses
  * wrap around.
  * The debug port of the core is a port of Mig2Cpu: the testbench (or a semihosting
@@ -17,6 +18,7 @@ module Mig2Cpu import Mig2Pkg::*; #(
 )(
     input  wire         clk,
     input  wire         rst_n,          // synchronous reset, active low
+    input  wire         uncached,       // the core bypasses its caches, see Mig2Caches
     output wire         halt,           // core halted at EBREAK, see Mig2Core
     output retire_t     retire,         // for trace in testbench
     output pipe_trace_t pipe_trace,     // pipeline view for testbench
@@ -34,8 +36,8 @@ module Mig2Cpu import Mig2Pkg::*; #(
     /* verilator lint_on UNUSEDSIGNAL */
 
     Mig2Core #(.CFG(CFG)) u_mig2_core(
-        .clk, .rst_n, .imem_req, .imem_rsp, .dmem_req, .dmem_rsp, .halt, .retire, .pipe_trace,
-        .dbg_req, .dbg_rsp);
+        .clk, .rst_n, .uncached, .imem_req, .imem_rsp, .dmem_req, .dmem_rsp, .halt, .retire,
+        .pipe_trace, .dbg_req, .dbg_rsp);
 
     // Instruction memory, read only; latency 1, always ready.
     SimLatencyRAM #(.DATA_SIZE($bits(insn_t) / 8), .ADDR_WIDTH(MEM_ADDR_WIDTH),

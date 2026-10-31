@@ -38,6 +38,8 @@
  * +imem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how imem of
  * Mig2Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready;
  * +dmem_latency the same for dmem.
+ * +uncached: every request of the core bypasses its caches (Mig2Caches), so the program sees
+ * the memories' own timing: for tests that count cycles.
  * Bubbles, their checks, their trace lines and the count per reason at the end:
  * TbMig2BubbleCheck.
  * Pipeline view, checked against pipe_trace, and its Konata log (+kanata=<file>):
@@ -67,6 +69,7 @@ module TbMig2;
     string       trace_file;
     integer      trace_fd;              // 0: no trace
     string       mem_latency;           // +imem_latency, +dmem_latency
+    logic        uncached;              // +uncached
     int          lat [6];               // its six numbers
     logic        expect_trap;
     logic        first_ebreak_traps;
@@ -104,7 +107,7 @@ module TbMig2;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
-    Mig2Cpu u_mig2_cpu(.clk, .rst_n, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
+    Mig2Cpu u_mig2_cpu(.clk, .rst_n, .uncached, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
 
     TbMig2PipeView u_pipe_view(.clk, .rst_n, .halt, .retire, .pipe_trace);
 
@@ -229,6 +232,7 @@ module TbMig2;
         expect_mem_unchanged = $test$plusargs("expect_mem_unchanged");
         riscv_test           = $test$plusargs("riscv_test");
         no_debugger          = $test$plusargs("no_debugger");
+        uncached             = $test$plusargs("uncached");
         check_halt_pc        = $value$plusargs("expect_halt_pc=%h", expect_halt_pc);
         check_exit           = $value$plusargs("expect_exit=%d", expect_exit);
         if (!$value$plusargs("resumes=%d", resumes))               resumes        = 0;

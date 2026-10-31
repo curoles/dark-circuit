@@ -1,0 +1,61 @@
+type: decision
+title: Mig2Caches inside Mig2Core, skewed caches, run uncached by tests that count cycles
+date: 2026-10-30
+question: >
+  Mig2's memory channels wait (steps 1 to 3, kb memory_channels, fetch_waits, data_waits);
+  now the caches come. Where do they go, which kind and size, how do they meet the memory
+  channels, and how do the tests that count cycles keep their counts?
+decision: >
+  A module Mig2Caches inside Mig2Core, between the pipeline's channels (icache_req/rsp,
+  dcache_req/rsp, the types of Mig2Pkg) and the memory ports, which stay as they were, so
+  Mig2Cpu and its SimLatencyRAMs do not change; the arbiter of a single memory goes there
+  later, as a step of its own. Both caches skewed (SkewedCacheRdOnly, SkewedCache), 2 ways of
+  64 one-word lines (cfg icache_sets_width, dcache_sets_width = 6); no configuration without
+  caches; invalidate tied to 0 (no FENCE.I, imem is not written). An input uncached of
+  Mig2Core and Mig2Cpu, driven by TbMig2's +uncached, makes every request bypass both caches
+  (req_uncached of the library caches, kb rtl/lib/block/cache/uncached): the tests that
+  count cycles (csr, muldiv, branch_id, btb_if, ras_id) and the benchmarks run uncached,
+  every other test cached. Synthesis keeps the tag and data RAMs as black boxes
+  (BLACKBOX_RAM_MODULES CacheTagRam CacheDataRam): memory macros in a chip.
+why: >
+  Inside Mig2Core the caches are part of what synthesis measures (user). The memory ports as
+  they were: the caches' memory side is the same channel, the testbench knobs of steps 1 to
+  3 (+imem_latency, +dmem_latency) now set what is behind the caches. Skewed for both: the
+  conflict comparison of skewed_cache_rd_only/compare (user: no direct-mapped start). With
+  memory of latency 1 a cache only adds cycles: a hit answers in the next clock as the memory
+  did, a miss one clock later; so the tests that count cycles, and the benchmarks, whose
+  ceilings measure the pipeline (user), run uncached and keep their counts. Cached
+  benchmarks mean something only with slow memory, a later step. The uncached input is a
+  test knob; later addresses decide (I/O regions).
+rejected:
+  - choice: The caches in Mig2Cpu, outside the core
+    why_not: Synthesis of Mig2Core would not include them (user chose inside).
+  - choice: A configuration without caches ("none")
+    why_not: >
+      User: no; uncached gives the memories' timing in the same build, and one configuration
+      is tested.
+  - choice: Warm the caches in the programs of the timing tests
+    why_not: User, do not change programs for the cache.
+  - choice: Benchmarks cached, with new cycle ceilings
+    why_not: >
+      User: uncached; at latency 1 the caches only add the cycles of their misses (each cache
+      is 512 bytes, Dhrystone's code is larger).
+relies_on:
+  - rtl/lib/block/cache/uncached
+  - rtl/design/mig2/memory_channels
+evidence: >
+  2026-10-30, Verilator: every Mig2 program run with +uncached (a one-time check, the plusarg
+  added to every program test in a scratch copy) gives the traces of step 3, 105 of 105
+  identical, cycle for cycle; the suite as committed (cached, the tests that count cycles
+  uncached) passes, 111 of 111. The store check of TbMig2RetireCheck had to move: it peeked
+  dmem when a store retired, and the write-through D-cache gives dmem the store in that cycle
+  or later; it now pairs each retired store with the next write dmem takes, at most one
+  waiting on either side. A D-cache writing a wrong byte to memory and one that never sends
+  stores both fail it, cached and uncached.
+code:
+  - rtl/design/mig2/mig2_caches.sv#u_icache
+  - rtl/design/mig2/mig2_caches.sv#u_dcache
+  - rtl/design/mig2/mig2_core.sv#u_caches
+  - test/design/mig2/tb/tb_mig2.sv#uncached
+  - test/design/mig2/tb/tb_mig2_retire_check.sv#match_stores
+  - test/design/mig2/CMakeLists.txt#BLACKBOX_RAM_MODULES

@@ -8,7 +8,8 @@ bubbles, pipeline view, tests, logs (here `DARK_CIRCUIT_MIG2_TRACE` and
 here); this file describes what Mig2 changes from Mig1: a BTB in IF and two more
 benchmarks (2026-10-26), a return-address stack in ID and a division that skips the
 leading zeros of the dividend (2026-10-27), the Zbb extension, all of it, group by group
-(2026-10-28, 29). Mig1 does not take them: it stays the small core. Why the design is as it
+(2026-10-28, 29), memory channels that wait and an instruction and a data cache
+(2026-10-30). Mig1 does not take them: it stays the small core. Why the design is as it
 is, with the options rejected: `kb/rtl/design/mig2/`.
 
 Simulation: Mig2 tests run on the main simulator of the build (cmake option
@@ -112,6 +113,23 @@ Tests: riscv-tests `rv32uzbb`, one per instruction, the Zbb cases of `decode.S` 
 Mig2Alu's unit test. `rv32uzbb` and the cases of `decode.S` need a compiler that knows Zbb
 (gcc 12.2 does, gcc 10.2 does not); `cmake/riscv.cmake` probes it (`DARK_CIRCUIT_RISCV_ZBB`),
 and without it they are skipped with a message.
+
+## Caches
+
+Mig2Core has an instruction and a data cache (Mig2Caches) between the pipeline and its
+memory ports, which stay the channels they were (`imem_req_t`, `dmem_req_t`): Mig2Cpu and
+its SimLatencyRAMs did not change. Both are skewed-associative caches of the library
+(`rtl/lib/block/cache`): the I-cache SkewedCacheRdOnly, the D-cache SkewedCache,
+write-through without write-allocate; 2 ways of 64 one-word lines each, 512 bytes
+(`icache_sets_width`, `dcache_sets_width` in `cfg/mig2_config.yaml`). A hit answers in the
+clock after the request, as memory of latency 1 does; a miss costs a clock more, so with
+latency-1 memory the caches only add cycles: they pay off with slow memory (`+imem_latency`,
+`+dmem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
+of the library caches), so a program sees the memories' own timing: the tests that count
+cycles (csr, muldiv, branch_id, btb_if, ras_id) and the benchmarks run uncached, the others
+cached. No FENCE.I: imem is not written, the caches are never invalidated. Synthesis keeps
+the tag and data RAMs as black boxes, memory macros in a chip. Why:
+`kb/rtl/design/mig2/caches_in_core.yaml`.
 
 ## Benchmarks
 
