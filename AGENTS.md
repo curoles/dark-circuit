@@ -222,6 +222,10 @@ Icarus means Icarus 13, the version the project uses.
   `s.f[i -: w]`; copy the field to a plain vector and select on that.
 - Icarus has no queues of packed structs ("Queue of type netstruct_t is not yet
   supported"); queue plain vectors of `$bits(T)` and assign to and from T.
+- Icarus and fields of array elements: a field of an element of an unpacked array of
+  structs, `hist[k].valid`, crashes the elaboration (the same elab_expr.cc assert), and a
+  field of a packed-array element picked by a variable index, `grant[w].valid = 1`, can not
+  be written; read or write the element whole through a local.
 - Icarus says "sorry: constant selects in always_* processes are not fully supported"
   for `s.field` or `v[3:0]` inside `always_comb`; results are right (the process is
   sensitive to all bits). A function or an `assign` into a signal avoids the message.
