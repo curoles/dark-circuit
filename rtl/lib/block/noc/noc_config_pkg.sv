@@ -1,5 +1,5 @@
-/* Configuration of the NoC of a design: its numbers, and its flit built from them with the
- * library's macros (later generated from YAML, as Mig2ConfigPkg is).
+/* Configuration of the NoC of a design: its numbers, and its flit and link built from them with
+ * the library's macros (later generated from YAML, as Mig2ConfigPkg is).
  */
 `include "../block/noc/dark_circuit_noc.svh"
 
@@ -13,5 +13,7 @@ package NocConfigPkg;
 
     typedef `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH) flit_t;
     typedef `DC_NOC_HEAD_T(X_WIDTH, Y_WIDTH, DATA_WIDTH) head_t;
+    typedef `DC_NOC_LINK_FWD_T(VC_WIDTH, DATA_WIDTH) link_fwd_t;
+    typedef `DC_NOC_LINK_BWD_T(VC_WIDTH) link_bwd_t;
 
 endpackage

@@ -1,17 +1,17 @@
 /* NoC router of a 2D mesh with virtual channels (sketch: ports, types and the route of a head
  * flit; the other parts are placeholders).
  *
- * N ports, each an input and an output link. A link carries flits (dark_circuit_noc.svh:
- * multi-flit packets, head and tail flags, a vc) and goes back with credits. The vc of a flit
- * is its virtual channel on this link: each router writes the output VC it allocated into the
- * flits it sends. Each input has a buffer of BUF_DEPTH flits per VC; when a flit leaves it,
- * a credit for that VC goes back upstream (credit_valid, credit_vc: one flit leaves an input
- * per clock, so one credit at most). A sender keeps a credit count per VC of the link, BUF_DEPTH
- * after reset, and sends a flit only while its VC's count is above 0 (no ready). The router at
- * (MY_X, MY_Y) routes XY: a head flit goes east or west until its dest_x is reached, then north
- * or south, then out of the local port; the body and tail flits follow their head. Parts to
- * come: the input buffers per VC, VC allocation, switch allocation, the crossbar (NocMuxXbar),
- * the credit counts of the outputs.
+ * N ports, each an input and an output link (dark_circuit_noc.svh): the forward wires carry
+ * flits (multi-flit packets, head and tail flags, a vc), the backward wires credits. The vc of
+ * a flit is its virtual channel on this link: each router writes the output VC it allocated
+ * into the flits it sends. Each input has a buffer of BUF_DEPTH flits per VC; when a flit
+ * leaves it, a credit for that VC goes back upstream (one flit leaves an input per clock, so
+ * one credit at most). A sender keeps a credit count per VC of the link, BUF_DEPTH after reset,
+ * and sends a flit only while its VC's count is above 0 (no ready). The router at (MY_X, MY_Y)
+ * routes XY: a head flit goes east or west until its dest_x is reached, then north or south,
+ * then out of the local port; the body and tail flits follow their head. Parts to come: the
+ * input buffers per VC, VC allocation, switch allocation, the crossbar (NocMuxXbar), the credit
+ * counts of the outputs.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -30,26 +30,18 @@ module NocVirtChRouter #(
     parameter  MY_X       = 0,                  // where this router is
     parameter  MY_Y       = 0,
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
-    localparam FLIT_WIDTH = `DC_NOC_FLIT_WIDTH(VC_WIDTH, DATA_WIDTH)
+    localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
+    localparam type HEAD_T     = `DC_NOC_HEAD_T(X_WIDTH, Y_WIDTH, DATA_WIDTH),
+    localparam type LINK_FWD_T = `DC_NOC_LINK_FWD_T(VC_WIDTH, DATA_WIDTH),
+    localparam type LINK_BWD_T = `DC_NOC_LINK_BWD_T(VC_WIDTH)
 )(
-    input  wire                           clk,
-    input  wire                           rst_n,        // synchronous reset, active low
-
-    // Input links: a flit per port and clock in, a credit per port and clock back
-    input  wire [N-1:0]                   in_valid,
-    input  wire [N-1:0][FLIT_WIDTH-1:0]   in_flit,
-    output wire [N-1:0]                   in_credit_valid,  // a slot of in_credit_vc is free
-    output wire [N-1:0][VC_WIDTH-1:0]     in_credit_vc,
-
-    // Output links
-    output wire [N-1:0]                   out_valid,
-    output wire [N-1:0][FLIT_WIDTH-1:0]   out_flit,
-    input  wire [N-1:0]                   out_credit_valid,
-    input  wire [N-1:0][VC_WIDTH-1:0]     out_credit_vc
+    input  wire               clk,
+    input  wire               rst_n,        // synchronous reset, active low
+    input  LINK_FWD_T [N-1:0] in_fwd,       // links into the router: flits in
+    output LINK_BWD_T [N-1:0] in_bwd,       //   and their credits back
+    output LINK_FWD_T [N-1:0] out_fwd,      // links out of the router
+    input  LINK_BWD_T [N-1:0] out_bwd
 );
-    typedef `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH) flit_t;
-    typedef `DC_NOC_HEAD_T(X_WIDTH, Y_WIDTH, DATA_WIDTH) head_t;
-
     `DC_STATIC_ASSERT(a_mesh_ports, N == NocPkg::MESH_PORTS)
     `DC_STATIC_ASSERT(a_route_fits, DATA_WIDTH > X_WIDTH + Y_WIDTH)
     `DC_STATIC_ASSERT(a_buf_depth, BUF_DEPTH >= 1)
@@ -66,11 +58,11 @@ module NocVirtChRouter #(
     endfunction
 
     // The route of the flit at each input, when it is a head flit.
-    flit_t [N-1:0]      flit;
-    head_t [N-1:0]      head;
+    FLIT_T [N-1:0]      flit;
+    HEAD_T [N-1:0]      head;
     logic  [N-1:0][2:0] route;
     for (genvar i = 0; i < N; i++) begin: g_in
-        assign flit[i]  = in_flit[i];
+        assign flit[i]  = in_fwd[i].flit;
         assign head[i]  = flit[i].data;
         assign route[i] = xy_port(head[i].dest_x, head[i].dest_y);
     end
@@ -78,11 +70,9 @@ module NocVirtChRouter #(
     // Placeholders, so the sketch elaborates: no buffering, straight through.
     /* verilator lint_off UNUSEDSIGNAL */
     logic unused;
-    assign unused = clk ^ rst_n ^ (|out_credit_valid) ^ (|out_credit_vc) ^ (|route);
+    assign unused = clk ^ rst_n ^ (|out_bwd) ^ (|route);
     /* verilator lint_on UNUSEDSIGNAL */
-    assign in_credit_valid = '0;
-    assign in_credit_vc    = '0;
-    assign out_valid       = in_valid;
-    assign out_flit        = in_flit;
+    assign in_bwd  = '0;
+    assign out_fwd = in_fwd;
 
 endmodule
