@@ -32,6 +32,8 @@
 -F stack/struct/stack.flist
 -F return_address_stack/struct/return_address_stack.flist
 -F age_matrix/struct/age_matrix.flist
+-F round_robin_arbiter/struct/round_robin_arbiter.flist
+-F matrix_lru_arbiter/struct/matrix_lru_arbiter.flist
 -F bit_matrix_lru/struct/bit_matrix_lru.flist
 -F cache/cache_replacement/struct/cache_replacement.flist
 -F cache/set_assoc_cache_rd_only/struct/set_assoc_cache_rd_only.flist

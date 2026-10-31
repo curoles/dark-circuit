@@ -32,6 +32,8 @@
 -F return_address_stack/behave/return_address_stack.flist
 -F credit_barrier/behave/credit_barrier.flist
 -F age_matrix/behave/age_matrix.flist
+-F round_robin_arbiter/behave/round_robin_arbiter.flist
+-F matrix_lru_arbiter/behave/matrix_lru_arbiter.flist
 -F bit_matrix_lru/behave/bit_matrix_lru.flist
 -F cache/cache_replacement/behave/cache_replacement.flist
 -F cache/set_assoc_cache_rd_only/behave/set_assoc_cache_rd_only.flist
