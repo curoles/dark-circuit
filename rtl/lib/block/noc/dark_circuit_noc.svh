@@ -75,10 +75,12 @@
 `define DC_NOC_LINK_BWD_T(vc_width) `DC_NOC_VC_VLD_T(vc_width)
 
 // The state of an input VC (NocVirtChIn), for the allocators: state (NocPkg::VC_IDLE,
-// VC_WAIT_VC, VC_ACTIVE), the packet's output port and output VC (from its head to its tail).
+// VC_WAIT_VC, VC_ACTIVE), a flit at the front, the packet's output port and output VC (from its
+// head to its tail).
 `define DC_NOC_VC_IN_STATE_T(port_width, vc_width)   \
     struct packed {                                  \
         logic [1:0]              state;              \
+        logic                    has_flit;           \
         logic [(port_width)-1:0] route;              \
         logic [(vc_width)-1:0]   out_vc;             \
     }

@@ -34,7 +34,7 @@ module NocVirtChIn #(
     output FLIT_VLD_T            front,         // the flit at the front; valid: not empty
     input  wire [PORT_WIDTH-1:0] front_route,   // route of the front flit, when it is a head
     input  VC_VLD_T              grant,         // VC allocation: the packet's output VC
-    output STATE_T               state          // state, route, output VC: for the allocators
+    output STATE_T               state          // state, flit, route, output VC: for allocators
 );
     // FifoT holds a power of 2 entries, at least 2: BUF_DEPTH rounded up.
     localparam BUF_ADDR_WIDTH = (BUF_DEPTH > 1) ? $clog2(BUF_DEPTH) : 1;
@@ -81,9 +81,10 @@ module NocVirtChIn #(
                         state_q <= NocPkg::VC_IDLE;
             endcase
 
-    assign state.state  = state_q;
-    assign state.route  = route_q;
-    assign state.out_vc = out_vc_q;
+    assign state.state    = state_q;
+    assign state.has_flit = !empty;
+    assign state.route    = route_q;
+    assign state.out_vc   = out_vc_q;
 
     // The protocol around the VC: credits keep the buffer from overflowing; a packet starts
     // with a head flit; VC allocation grants only a waiting packet; switch allocation sends

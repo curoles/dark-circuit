@@ -44,3 +44,5 @@
 -F noc/noc.flist
 -F noc/noc_virt_ch_in/behave/noc_virt_ch_in.flist
 -F noc/noc_virt_ch_out/behave/noc_virt_ch_out.flist
+-F noc/noc_route_xy/behave/noc_route_xy.flist
+-F noc/noc_virt_ch_rtr_input_unit/behave/noc_virt_ch_rtr_input_unit.flist

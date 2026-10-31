@@ -117,7 +117,7 @@ module TbNocVirtChInCheck #(
         if (front.valid !== (buffer.size() > 0) || (front.valid && front.flit !== buffer[0]))
             $fatal(1, "NocVirtChIn %0d: front %b %h, expected %b %h", BUF_DEPTH, front.valid,
                    front.flit, buffer.size() > 0, buffer.size() > 0 ? buffer[0] : '0);
-        if (state.state !== m_state ||
+        if (state.state !== m_state || state.has_flit !== (buffer.size() > 0) ||
             (m_state != NocPkg::VC_IDLE && state.route !== m_route) ||
             (m_state == NocPkg::VC_ACTIVE && state.out_vc !== m_out_vc))
             $fatal(1, "NocVirtChIn %0d: state %0d route %0d vc %0d, expected %0d %0d %0d",
