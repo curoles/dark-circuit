@@ -23,7 +23,8 @@ why: >
   3 (+imem_latency, +dmem_latency) now set what is behind the caches. Skewed for both: the
   conflict comparison of skewed_cache_rd_only/compare (user: no direct-mapped start). With
   memory of latency 1 a cache only adds cycles: a hit answers in the next clock as the memory
-  did, a miss one clock later; so the tests that count cycles, and the benchmarks, whose
+  did; a miss answers a clock later and the cache takes no request in that clock (the refill
+  clock), two clocks per miss; so the tests that count cycles, and the benchmarks, whose
   ceilings measure the pipeline (user), run uncached and keep their counts. Cached
   benchmarks mean something only with slow memory, a later step. The uncached input is a
   test knob; later addresses decide (I/O regions).

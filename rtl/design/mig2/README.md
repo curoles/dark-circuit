@@ -122,7 +122,8 @@ its SimLatencyRAMs did not change. Both are skewed-associative caches of the lib
 (`rtl/lib/block/cache`): the I-cache SkewedCacheRdOnly, the D-cache SkewedCache,
 write-through without write-allocate; 2 ways of 64 one-word lines each, 512 bytes
 (`icache_sets_width`, `dcache_sets_width` in `cfg/mig2_config.yaml`). A hit answers in the
-clock after the request, as memory of latency 1 does; a miss costs a clock more, so with
+clock after the request, as memory of latency 1 does; a miss costs two clocks more (its word
+comes a clock later, and the cache takes no request in the clock the word comes), so with
 latency-1 memory the caches only add cycles: they pay off with slow memory (`+imem_latency`,
 `+dmem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
 of the library caches), so a program sees the memories' own timing: the tests that count
@@ -161,12 +162,13 @@ and towers do not divide; rv32um div and rem 457 → 349 cycles, divu and remu 4
 
 ## Area and speed (sky130)
 
-Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-29:
+Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-30, the tag
+and data RAMs of the caches as black boxes:
 
 | Mig2Core | |
 |---|---|
-| Area | 207 034 µm² (0.207 mm²), 22 861 cells |
-| Longest logic path (ABC estimate) | 5.5 ns, about 183 MHz |
+| Area | 241 295 µm² (0.241 mm²), 29 371 cells |
+| Longest logic path (ABC estimate) | 6.1 ns, about 163 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -180,6 +182,8 @@ Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10
 | Alignment offset in Mig2Lsu | 204 668 | 5.9 |
 | Immediate by opcode in decode | 208 284 | 5.2 |
 | Mig2Alu: the operands and the library block Alu2 | 207 034 | 5.5 |
+| Memory channels that wait (fetch and data) | 207 763 | 5.4 |
+| Caches, without their tag and data RAMs | 241 295 | 6.1 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -219,6 +223,24 @@ ltp): the deepest paths of the loop are CLZ through the chain of the priority en
 levels) and the single-cycle multiplier (44), not the ALU; the estimate moves by 0.2 to 0.3 ns
 with the mapping (5.4 ns with a tree priority encoder, with either ALU). The loop's limit is
 the multiplier's result forwarded from EX.
+The memory channels that wait changed little (207 763 µm², 5.4 ns). The caches add 16 % of
+area without their tag and data RAMs, which are black boxes (memory macros in a chip): the
+valid and recent bits, flops, with their read muxes, the tag comparators, the control of both
+caches. The longest path becomes 6.1 ns, accepted for now: from the I-cache's line register
+through the 24-bit tag compare and the hit to the cache's ready, the request Fetch takes and
+the pc register. Fetch sends the next request in the clock an answer comes (a hit every
+clock), and the cache's ready and its answer both depend on the hit, which now comes after
+the RAM read and the compare instead of from a port. Experiments (wrong, for timing only):
+ready without the miss 6.0 ns (I-cache) and 5.9 ns (both caches), the answer without the hit
+too 5.7 ns, the hit still in ready through the held request. Tags of 8 bits (caches that
+cover the 64 KiB memory, as the BTB does) give 5.8 ns, but would cut the address of an
+uncached request too. The usual fix is a microtag: a few tag bits, unique among the lines an
+address can be in, decide ready and the answer; the full compare follows a clock later and
+repairs a false hit, which is rare (a uTag miss is a sure miss); with virtual memory the uTag
+also does not wait for the TLB. For Mig2 now it gives about what 8-bit tags give, with a
+repair path in Fetch (a redirect to the same pc) and in the load path: a redesign for later.
+The estimate starts a path at a RAM's output without its clock-to-output time: with real RAMs
+this path is longer.
 
 Not planned for now: the GShare predictor of `rtl/lib/block/gshare_branch_predictor`. A
 trace model on top of the BTB and the return stack gives at most 1.9 % of Dhrystone
