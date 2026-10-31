@@ -160,6 +160,10 @@ This file has the rules that are not in README.md.
   locally with `/* verilator lint_off X */ ... lint_on`, and a comment why.
 - Comments must not start with the word "verilator": Verilator reads them as pragmas.
 - No WaveDrom in comments.
+- Block diagrams: the header of a module made of parts gets an ASCII block diagram of the
+  parts and the signals between them (plain ASCII: - | + > < ^ v, within the line limit);
+  a small one may sit beside a generate loop or a tricky connection. Diagrams of structure,
+  not timing (no WaveDrom). A diagram is code: change it with the code it shows.
 
 ## Library idioms
 

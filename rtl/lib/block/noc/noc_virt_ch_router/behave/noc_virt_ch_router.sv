@@ -1,17 +1,28 @@
-/* NoC router of a 2D mesh with virtual channels (sketch: ports, types and the route of a head
- * flit; the other parts are placeholders).
+/* NoC router of a 2D mesh with virtual channels (skeleton: the input units and the output VC
+ * states; VC allocation, switch allocation and the crossbar are placeholders, so no flit moves).
  *
- * N ports, each an input and an output link (dark_circuit_noc.svh): the forward wires carry
- * flits (multi-flit packets, head and tail flags, a vc), the backward wires credits. The vc of
- * a flit is its virtual channel on this link: each router writes the output VC it allocated
- * into the flits it sends. Each input has a buffer of BUF_DEPTH flits per VC; when a flit
- * leaves it, a credit for that VC goes back upstream (one flit leaves an input per clock, so
- * one credit at most). A sender keeps a credit count per VC of the link, BUF_DEPTH after reset,
- * and sends a flit only while its VC's count is above 0 (no ready). The router at (MY_X, MY_Y)
- * routes XY: a head flit goes east or west until its dest_x is reached, then north or south,
- * then out of the local port; the body and tail flits follow their head. Parts to come: the
- * input buffers per VC, VC allocation, switch allocation, the crossbar (NocMuxXbar), the credit
- * counts of the outputs.
+ * N ports, each an input and an output link (dark_circuit_noc.svh). The router is input-queued:
+ * flits wait only in the input units (NocVirtChRtrInputUnit: a buffer per VC, the XY route of
+ * each head, a credit back for every flit that leaves). The output side keeps no flits, only
+ * the state of the next router's input VCs (NocVirtChOut per VC of each output link): a credit
+ * count, BUF_DEPTH after reset, and whether a packet holds the VC. It follows the link itself:
+ * a flit sent on out_fwd takes a credit (its tail frees the VC), a credit on out_bwd returns
+ * one; VC allocation takes a free output VC for a packet's head. Parts to come: VC allocation
+ * (waiting input VCs, free output VCs), switch allocation (active input VCs with a flit, output
+ * VCs with a credit; one flit per input and per output each clock), the crossbar (NocMuxXbar).
+ *
+ *              +-----------------------+  xbar_in  +----------+  out_fwd
+ *   in_fwd --->| NocVirtChRtrInputUnit |---------->| crossbar |---+-------> next router
+ *   in_bwd <---| [N]: VC buffers,      |           +----------+   |
+ *   (credits)  | routes, credits back  |                ^ sel     | flits sent
+ *              +-----------------------+                |         v
+ *                in_vc_state |  ^ vc_grant, pop         |   +--------------+
+ *                            v  |                       |   | NocVirtChOut |<--- out_bwd
+ *              +----------------------------------------+   | [N][NUM_VCS] |    (credits)
+ *              | VC allocation, switch allocation       |<--| credits, free|
+ *              | (to come)                              |-->|              |
+ *              +----------------------------------------+   +--------------+
+ *              (allocation reads out_vc_state and drives vc_alloc)
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -30,8 +41,10 @@ module NocVirtChRouter #(
     parameter  MY_X       = 0,                  // where this router is
     parameter  MY_Y       = 0,
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
-    localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
-    localparam type HEAD_T     = `DC_NOC_HEAD_T(X_WIDTH, Y_WIDTH, DATA_WIDTH),
+    localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
+    localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
+    localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
+    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH),
     localparam type LINK_FWD_T = `DC_NOC_LINK_FWD_T(VC_WIDTH, DATA_WIDTH),
     localparam type LINK_BWD_T = `DC_NOC_LINK_BWD_T(VC_WIDTH)
 )(
@@ -43,36 +56,54 @@ module NocVirtChRouter #(
     input  LINK_BWD_T [N-1:0] out_bwd
 );
     `DC_STATIC_ASSERT(a_mesh_ports, N == NocPkg::MESH_PORTS)
-    `DC_STATIC_ASSERT(a_route_fits, DATA_WIDTH > X_WIDTH + Y_WIDTH)
-    `DC_STATIC_ASSERT(a_buf_depth, BUF_DEPTH >= 1)
 
-    // XY route: the output port of a head flit with destination (x, y). West and south as
-    // "not east, not here" (x < MY_X is constant on the west edge of the mesh).
-    function automatic logic [2:0] xy_port(input logic [X_WIDTH-1:0] x,
-                                           input logic [Y_WIDTH-1:0] y);
-        if (x >  X_WIDTH'(MY_X)) return 3'(NocPkg::PORT_EAST);
-        if (x != X_WIDTH'(MY_X)) return 3'(NocPkg::PORT_WEST);
-        if (y >  Y_WIDTH'(MY_Y)) return 3'(NocPkg::PORT_NORTH);
-        if (y != Y_WIDTH'(MY_Y)) return 3'(NocPkg::PORT_SOUTH);
-        return 3'(NocPkg::PORT_LOCAL);
-    endfunction
+    // Input side: per input port, the state of its VCs, the grants of VC allocation, the pop of
+    // switch allocation and the flit it sends to the crossbar.
+    // The allocators and the crossbar, to come, read the states and the flits.
+    /* verilator lint_off UNUSEDSIGNAL */
+    VC_STATE_T [N-1:0][NUM_VCS-1:0] in_vc_state;
+    FLIT_VLD_T [N-1:0]              xbar_in;
+    /* verilator lint_on UNUSEDSIGNAL */
+    VC_VLD_T   [N-1:0][NUM_VCS-1:0] vc_grant;
+    VC_VLD_T   [N-1:0]              pop;
 
-    // The route of the flit at each input, when it is a head flit.
-    FLIT_T [N-1:0]      flit;
-    HEAD_T [N-1:0]      head;
-    logic  [N-1:0][2:0] route;
-    for (genvar i = 0; i < N; i++) begin: g_in
-        assign flit[i]  = in_fwd[i].flit;
-        assign head[i]  = flit[i].data;
-        assign route[i] = xy_port(head[i].dest_x, head[i].dest_y);
+    for (genvar p = 0; p < N; p++) begin: g_in
+        NocVirtChRtrInputUnit #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
+                                .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X),
+                                .MY_Y(MY_Y)) u_input(
+            .clk, .rst_n, .in_fwd(in_fwd[p]), .in_bwd(in_bwd[p]), .vc_state(in_vc_state[p]),
+            .vc_grant(vc_grant[p]), .pop(pop[p]), .out(xbar_in[p]));
     end
 
-    // Placeholders, so the sketch elaborates: no buffering, straight through.
+    // Output side: per output port, the state of the next router's input VCs, following the
+    // link: a flit sent on a VC, its tail, a credit back for it; VC allocation takes one.
+    //   out_fwd[p] (flit on VC v, its tail) ---> NocVirtChOut [p][v] ---> out_vc_state[p][v]
+    //   out_bwd[p] (credit for VC v) -----------^     ^                   (free, has_credit)
+    //   vc_alloc[p][v] (VC allocation) ---------------+
+    // VC and switch allocation, to come, read the states.
     /* verilator lint_off UNUSEDSIGNAL */
-    logic unused;
-    assign unused = clk ^ rst_n ^ (|out_bwd) ^ (|route);
+    NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state;
     /* verilator lint_on UNUSEDSIGNAL */
-    assign in_bwd  = '0;
-    assign out_fwd = in_fwd;
+    logic                  [N-1:0][NUM_VCS-1:0] vc_alloc;
+
+    for (genvar p = 0; p < N; p++) begin: g_out
+        for (genvar v = 0; v < NUM_VCS; v++) begin: g_vc
+            logic send;         // a flit goes out on this VC
+
+            assign send = out_fwd[p].valid && out_fwd[p].flit.vc == VC_WIDTH'(v);
+
+            NocVirtChOut #(.BUF_DEPTH(BUF_DEPTH)) u_out_vc(
+                .clk, .rst_n, .alloc(vc_alloc[p][v]), .send,
+                .send_tail(send && out_fwd[p].flit.tail),
+                .credit(out_bwd[p].valid && out_bwd[p].vc == VC_WIDTH'(v)),
+                .state(out_vc_state[p][v]));
+        end
+    end
+
+    // Placeholders until the allocators and the crossbar: nothing is granted, taken or sent.
+    assign vc_grant = '0;
+    assign pop      = '0;
+    assign vc_alloc = '0;
+    assign out_fwd  = '0;
 
 endmodule

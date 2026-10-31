@@ -8,6 +8,18 @@
  * VC goes back upstream on the link, a clock later (a flop keeps the switch allocation off the
  * link's backward wires).
  *
+ *                          +-----------------+   front[v]   +-------------+
+ *   in_fwd ---> by vc ---->| NocVirtChIn [v] |-----+------->| pop.vc      |---> out
+ *   (link)                 |  [NUM_VCS]      |     |        | picks; vc = |    (crossbar)
+ *                          +-----------------+     |        | out_vc      |
+ *                            ^       ^      |      v        +-------------+
+ *                      route |       | grant|   NocRouteXy [v] (the front head's destination)
+ *                            +-------|------|------+
+ *                      vc_grant[v] --+      +---> vc_state[v] (to the allocators)
+ *
+ *   in_bwd <--- flop <--- pop (switch allocation)
+ *   (link)
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
