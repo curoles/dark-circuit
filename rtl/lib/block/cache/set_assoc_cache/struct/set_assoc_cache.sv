@@ -4,8 +4,8 @@
  * the protocol, the write policy and forwarding). Per way the struct CacheValidRam,
  * CacheTagRam and CacheDataRam, a CmpEq of the tag and And3 for its hit. The request taken
  * is a DffEn (accept) for the line address and, unless READ_ONLY, one for the fields of a
- * store (we, wdata, wstrb). Control as in the struct DirectCache (READ_ONLY=1: the same logic
- * left out), plus:
+ * store (we, wdata, wstrb). Control, also of uncached requests, as in the struct DirectCache
+ * (READ_ONLY=1: the same logic left out), plus:
  *   hit      = OrReduce(hits)                hit_way = PriorityEncoder(hits), hits one-hot
  *   hit_line = per bit OrReduce over the ways of (line AND hit of the way)
  *   fill_way = DffEn (load_miss AND mem_req_ready) of CacheReplacement's victim_way
@@ -40,7 +40,8 @@ module SetAssocCache import CachePkg::*; #(
 
     // CPU side: requests (a channel), answers to loads
     input  wire                  req_valid,
-    output wire                  req_ready,
+    output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
+    input  wire                  req_uncached,  // the request bypasses the lines
     // The offset in the line is not used: the cache works on whole lines. The fields of a
     // store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -72,8 +73,6 @@ module SetAssocCache import CachePkg::*; #(
     wire [LINE_WIDTH-1:0] look_line;    // its address without the offset in the line
     wire                  look_we;
     wire                  look_we_n;
-    wire [DATA_WIDTH-1:0] look_wdata;
-    wire [STRB_WIDTH-1:0] look_wstrb;
     wire [WAYS-1:0]       valid;        // of the ways of the set of look_line
     wire [WAYS-1:0]       hits;         // one-hot: the way that hits, 0 on a miss
     wire                  hit;
@@ -94,6 +93,8 @@ module SetAssocCache import CachePkg::*; #(
     wire                  load_hit;
     wire                  load_miss;
     wire                  mem_ready_n;
+    wire                  look_req;     // the lookup asks memory: a store or a load miss
+    wire [LINE_WIDTH-1:0] mem_line;     // the line memory is asked for
     wire                  held;         // its memory request is not taken: the lookup stays
     wire                  store_write;  // a store that hits is taken by memory: write merged
     wire                  waiting;      // a load miss is served: memory has not answered yet
@@ -107,9 +108,34 @@ module SetAssocCache import CachePkg::*; #(
     wire [WAY_WIDTH-1:0]  fill_way;     // the way the line of the served miss goes into
     wire                  touch;
     wire [WAY_WIDTH-1:0]  touch_way;
+    wire                  uncached_n;
+    wire                  ready_cached; // a cached request may be taken
+    wire                  ready_unc;    // an uncached one may be taken
+    wire                  idle;         // nothing looked up or served: uncached may pass
+    wire                  unc_pass;     // an uncached request goes to memory now
+    wire                  unc_waiting;  // memory took an uncached read, has not answered yet
+    wire                  unc_busy;     // ... and does not answer now
+    wire                  unc_start;    // memory takes an uncached read
+    wire                  unc_next;
+    wire                  unc_rsp;      // memory answers the uncached read
+    wire                  mem_we_n;
+    wire                  rsp_mem;      // the answer is memory's line
 
-    Nor3 #(1) u_nor3_ready (.in1(waiting), .in2(load_miss), .in3(held), .out(req_ready));
-    And2 #(1) u_and2_accept(.in1(req_valid), .in2(req_ready), .out(accept));
+    // A cached request is taken when the lookup is done and no uncached read waits; an
+    // uncached one passes to memory while idle and is taken when memory takes it.
+    // @kb: rtl/lib/block/cache/uncached
+    And2 #(1) u_and2_unc_busy (.in1(unc_waiting), .in2(mem_rsp_n), .out(unc_busy));
+    Nor3 #(1) u_nor3_idle     (.in1(look), .in2(waiting), .in3(unc_busy), .out(idle));
+    NorReduce #(4) u_nor_reduce_ready_cached(.in({waiting, load_miss, held, unc_busy}),
+                                             .out(ready_cached));
+    And2 #(1) u_and2_ready_unc(.in1(idle), .in2(mem_req_ready), .out(ready_unc));
+    Mux2 #(1) u_mux2_ready    (.in0(ready_cached), .in1(ready_unc), .sel(req_uncached),
+                               .out(req_ready));
+    Inv  #(1) u_inv_uncached  (.in(req_uncached), .out(uncached_n));
+    And3 #(1) u_and3_accept   (.in1(req_valid), .in2(uncached_n), .in3(req_ready),
+                               .out(accept));
+    And3 #(1) u_and3_unc_pass (.in1(req_valid), .in2(req_uncached), .in3(idle),
+                               .out(unc_pass));
 
     Or2 #(1) u_or2_look(.in1(accept), .in2(held), .out(look_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(look_next), .out(look));
@@ -179,27 +205,33 @@ module SetAssocCache import CachePkg::*; #(
     And2 #(1) u_and2_load_hit (.in1(load), .in2(hit), .out(load_hit));
     And2 #(1) u_and2_load_miss(.in1(load), .in2(hit_n), .out(load_miss));
 
-    // Memory request: a store always, a load when it misses (from the lookup's registers).
-    Or2  #(1) u_or2_mem_valid(.in1(store), .in2(load_miss), .out(mem_req_valid));
+    // Memory request: a store always, a load when it misses (from the lookup's registers), an
+    // uncached request as it comes (only while idle); the fields of a write in the branches.
+    Or2  #(1) u_or2_look_req (.in1(store), .in2(load_miss), .out(look_req));
+    Or2  #(1) u_or2_mem_valid(.in1(unc_pass), .in2(look_req), .out(mem_req_valid));
     Inv  #(1) u_inv_mem_ready(.in(mem_req_ready), .out(mem_ready_n));
-    And2 #(1) u_and2_held    (.in1(mem_req_valid), .in2(mem_ready_n), .out(held));
-    assign mem_req_we    = look_we;
-    assign mem_req_addr  = {look_line, {SETS_OFFSET{1'b0}}};
-    assign mem_req_wdata = look_wdata;
-    assign mem_req_wstrb = look_wstrb;
+    And2 #(1) u_and2_held    (.in1(look_req), .in2(mem_ready_n), .out(held));
+    Mux2 #(LINE_WIDTH) u_mux2_mem_line(.in0(look_line), .in1(req_addr[ADDR_WIDTH-1:SETS_OFFSET]),
+                                       .sel(unc_pass), .out(mem_line));
+    assign mem_req_addr = {mem_line, {SETS_OFFSET{1'b0}}};
 
     // The logic only stores need; a read-only cache has none of it. Both branches drive
-    // look_we, look_wdata, look_wstrb, store_write, ram_wr_line and line.
+    // look_we, store_write, ram_wr_line, line and the fields of a memory write (mem_req_we,
+    // mem_req_wdata, mem_req_wstrb).
     // @kb: rtl/lib/block/cache/read_only
     if (READ_ONLY) begin: g_read_only
         assign look_we     = 1'b0;
-        assign look_wdata  = '0;
-        assign look_wstrb  = '0;
         assign store_write = 1'b0;
         assign ram_wr_line = mem_rsp_data;
         assign line        = ram_line;
+
+        assign mem_req_we    = 1'b0;
+        assign mem_req_wdata = '0;
+        assign mem_req_wstrb = '0;
     end else begin: g_store
         wire [STORE_WIDTH-1:0] look_store;      // {we, wdata, wstrb} of the lookup
+        wire [DATA_WIDTH-1:0]  look_wdata;
+        wire [STRB_WIDTH-1:0]  look_wstrb;
         wire [DATA_WIDTH-1:0]  merged;          // hit_line with the bytes of the store
         wire                   same_set;        // the request taken is of the lookup's set
         wire                   fwd_new;         // the request taken at a store's write, same set
@@ -211,6 +243,11 @@ module SetAssocCache import CachePkg::*; #(
         DffEn #(STORE_WIDTH) u_dff_en_store(.clk, .en(accept), .in({req_we, req_wdata, req_wstrb}),
                                             .out(look_store));
         assign {look_we, look_wdata, look_wstrb} = look_store;
+
+        // A memory write: an uncached store as it comes, else the lookup's store.
+        Mux2 #(STORE_WIDTH) u_mux2_mem_store(
+            .in0(look_store), .in1({req_we, req_wdata, req_wstrb}), .sel(unc_pass),
+            .out({mem_req_we, mem_req_wdata, mem_req_wstrb}));
 
         // Store: the bytes of its strobes into the line, written when memory takes the store.
         for (genvar b = 0; b < STRB_WIDTH; b++) begin: g_byte
@@ -268,8 +305,21 @@ module SetAssocCache import CachePkg::*; #(
     // See the behave version.
     `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
 
-    Or2  #(1)          u_or2_rsp  (.in1(load_hit), .in2(refill), .out(rsp_valid));
-    Mux2 #(DATA_WIDTH) u_mux2_data(.in0(hit_line), .in1(mem_rsp_data), .sel(waiting),
-                                   .out(rsp_data));
+    // Uncached read served from the clock memory takes it until the answer comes.
+    Inv  #(1) u_inv_mem_we    (.in(mem_req_we), .out(mem_we_n));
+    And3 #(1) u_and3_unc_start(.in1(unc_pass), .in2(mem_req_ready), .in3(mem_we_n),
+                               .out(unc_start));
+    Or2  #(1) u_or2_unc_wait  (.in1(unc_start), .in2(unc_busy), .out(unc_next));
+    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_unc_wait(.clk, .rst_n, .in(unc_next),
+                                                    .out(unc_waiting));
+    And2 #(1) u_and2_unc_rsp  (.in1(unc_waiting), .in2(mem_rsp_valid), .out(unc_rsp));
+
+    // See the behave version.
+    `DC_ASSERT(a_unc_alone, !(unc_waiting && (look || waiting)))
+
+    Or3  #(1)          u_or3_rsp    (.in1(load_hit), .in2(refill), .in3(unc_rsp), .out(rsp_valid));
+    Or2  #(1)          u_or2_rsp_mem(.in1(waiting), .in2(unc_waiting), .out(rsp_mem));
+    Mux2 #(DATA_WIDTH) u_mux2_data  (.in0(hit_line), .in1(mem_rsp_data), .sel(rsp_mem),
+                                     .out(rsp_data));
 
 endmodule

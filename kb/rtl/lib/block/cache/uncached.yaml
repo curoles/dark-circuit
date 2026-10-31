@@ -18,8 +18,10 @@ decision: >
   reaches the cache's req_ready without a flop, and req_valid reaches mem_req_valid without a
   flop; in a CPU the path runs from memory's ready through the cache into the pipeline's
   stall. Memory's ready must not depend on its valid (SimLatencyRAM draws it a clock ahead),
-  or the two paths close a loop. SkewedCache first; DirectCache and SetAssocCache the same way
-  in a chunk of their own.
+  or the two paths close a loop. Channel rule 3 holds: mem_req_valid depends on req_valid and
+  idle, never on mem_req_ready (ready on ready is allowed). The same logic in all three
+  read-write caches, so their read-only wrappers have the input too: SkewedCache first, then
+  DirectCache and SetAssocCache.
 why: >
   With latency-1 memory an uncached request has the memory's own timing: a load taken in clock
   t is answered in t+1, as without a cache, so programs that count cycles run unchanged (user:
@@ -48,10 +50,21 @@ evidence: >
   stores, a wait for idle and a wait for memory must happen) passes on both versions, Icarus
   and Verilator; the read-only test (req_uncached 0) passes unchanged. 13 of 13 mutants of
   the uncached logic caught (7 behave, 6 struct: idle, the cached ready, the answer, the
-  memory address and write fields, accept).
+  memory address and write fields, accept). DirectCache and SetAssocCache, 2026-10-30: the
+  same uncached requests in their tests pass on both versions, Icarus and Verilator (all ways
+  and policies the tests run), the read-only tests unchanged; 20 of 20 mutants of the same
+  kinds caught (5 per version per cache).
 code:
   - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#unc_pass
   - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#a_unc_alone
   - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_mux2_ready
   - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached
   - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_unc_idle_wait
+  - rtl/lib/block/cache/direct_cache/behave/direct_cache.sv#unc_pass
+  - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#u_mux2_ready
+  - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#req_uncached
+  - test/block/cache/direct_cache/tb_direct_cache.sv#n_unc_idle_wait
+  - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#unc_pass
+  - rtl/lib/block/cache/set_assoc_cache/struct/set_assoc_cache.sv#u_mux2_ready
+  - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#req_uncached
+  - test/block/cache/set_assoc_cache/tb_set_assoc_cache.sv#n_unc_idle_wait

@@ -6,7 +6,8 @@
  * invalidate=1 makes every line invalid (allowed while no miss is served). Each set has WAYS
  * lines; a miss replaces the way CacheReplacement picks when memory takes the read
  * (REPLACEMENT, CachePkg: REPL_LRU, REPL_RANDOM; invalid ways first); a hit and a fill touch
- * their way. See SetAssocCache.
+ * their way. req_uncached=1: the request bypasses the lines and goes straight to memory.
+ * See SetAssocCache.
  * One file for the behave and the struct library: the SetAssocCache of the library it is
  * built with gives the version.
  *
@@ -30,6 +31,7 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     // CPU side
     input  wire                  req_valid,
     input  wire [ADDR_WIDTH-1:0] req_addr,
+    input  wire                  req_uncached,  // the request bypasses the lines
     output wire                  req_ready,     // 0 while a miss is served: hold the request
     output wire                  rsp_valid,     // rsp_data is the line asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
@@ -52,7 +54,8 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     SetAssocCache #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET),
                     .WAYS(WAYS), .REPLACEMENT(REPLACEMENT), .READ_ONLY(1)) u_set_assoc_cache(
         .clk, .rst_n, .invalidate,
-        .req_valid, .req_ready, .req_we(1'b0), .req_addr, .req_wdata({DATA_WIDTH{1'b0}}),
+        .req_valid, .req_ready, .req_uncached, .req_we(1'b0), .req_addr,
+        .req_wdata({DATA_WIDTH{1'b0}}),
         .req_wstrb({STRB_WIDTH{1'b0}}), .rsp_valid, .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
         .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data);

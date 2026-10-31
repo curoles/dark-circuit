@@ -95,7 +95,8 @@ module TbCacheCheck #(
 
     DirectCacheRdOnly #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH),
                         .SETS_OFFSET(SETS_OFFSET)) u_direct_cache_rd_only(
-        .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_ready, .rsp_valid, .rsp_data,
+        .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_uncached(1'b0), .req_ready,
+        .rsp_valid, .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_rsp_valid, .mem_rsp_data);
 
     // The address of the line of a: offset 0.

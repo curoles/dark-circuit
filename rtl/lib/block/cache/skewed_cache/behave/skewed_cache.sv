@@ -193,7 +193,8 @@ module SkewedCache #(
 
     // Write-through: a store always goes to memory; a load only when it misses. A cached
     // request comes from the lookup's registers; an uncached one straight from the CPU side
-    // (only while idle: never both). The fields of a write are set in the branches below.
+    // (only while idle: never both); valid does not depend on mem_req_ready (rule 3). The
+    // fields of a write are set in the branches below.
     assign look_req      = store || load_miss;
     assign mem_req_valid = unc_pass || look_req;
     assign held          = look_req && !mem_req_ready;
