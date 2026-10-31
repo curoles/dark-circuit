@@ -1,0 +1,2 @@
+add_subdirectory(noc_virt_ch_in)
+add_subdirectory(noc_virt_ch_out)

@@ -41,3 +41,6 @@
 -F alu2/behave/alu2.flist
 -F compute_core_bitmanip/behave/compute_core_bitmanip.flist
 -F pop_count/behave/pop_count.flist
+-F noc/noc.flist
+-F noc/noc_virt_ch_in/behave/noc_virt_ch_in.flist
+-F noc/noc_virt_ch_out/behave/noc_virt_ch_out.flist
