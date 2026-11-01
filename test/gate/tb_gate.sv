@@ -27,6 +27,7 @@ module TbGate;
     wire [W-1:0] xor2;
     wire [W-1:0] xnor2;
     wire [W-1:0] xor3;
+    wire [W-1:0] ao21;
     wire [W-1:0] aoi21;
     wire [W-1:0] aoi22;
     wire [W-1:0] aoi31;
@@ -96,6 +97,7 @@ module TbGate;
     Xor2  #(W) u_xor2 (.in1(a), .in2(b), .out(xor2));
     Xnor2 #(W) u_xnor2(.in1(a), .in2(b), .out(xnor2));
     Xor3  #(W) u_xor3 (.in1(a), .in2(b), .in3(c), .out(xor3));
+    Ao21  #(W) u_ao21 (.in1(a), .in2(b), .in3(c), .out(ao21));
     Aoi21 #(W) u_aoi21(.in1(a), .in2(b), .in3(c), .out(aoi21));
     Aoi22 #(W) u_aoi22(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi22));
     Aoi31 #(W) u_aoi31(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi31));
@@ -163,6 +165,8 @@ module TbGate;
             if (xor2  !== (a ^ b))       $fatal(1, "Xor2: a=%b b=%b got=%b", a, b, xor2);
             if (xnor2 !== ~(a ^ b))      $fatal(1, "Xnor2: a=%b b=%b got=%b", a, b, xnor2);
             if (xor3  !== (a ^ b ^ c))   $fatal(1, "Xor3: a=%b b=%b c=%b got=%b", a, b, c, xor3);
+            if (ao21  !== ((a & b) | c))
+                $fatal(1, "Ao21: a=%b b=%b c=%b got=%b", a, b, c, ao21);
             if (aoi21 !== ~((a & b) | c))
                 $fatal(1, "Aoi21: a=%b b=%b c=%b got=%b", a, b, c, aoi21);
             if (aoi22 !== ~((a & b) | (c & d)))

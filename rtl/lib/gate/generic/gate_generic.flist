@@ -11,6 +11,7 @@ nor3.sv
 xor2.sv
 xnor2.sv
 xor3.sv
+ao21.sv
 aoi21.sv
 aoi22.sv
 aoi31.sv

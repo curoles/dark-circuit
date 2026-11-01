@@ -44,3 +44,5 @@
 -F alu2/struct/alu2.flist
 -F pop_count/struct/pop_count.flist
 -F compute_core_bitmanip/struct/compute_core_bitmanip.flist
+-F noc/noc.flist
+-F noc/noc_virt_ch_out/struct/noc_virt_ch_out.flist

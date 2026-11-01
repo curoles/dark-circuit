@@ -18,6 +18,7 @@ mux4.sv
 mux8.sv
 mux1hot2.sv
 mux1hot3.sv
+ao21.sv
 aoi21.sv
 aoi22.sv
 aoi31.sv
