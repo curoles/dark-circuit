@@ -1,1 +1,2 @@
 noc_pkg.sv
+noc_mux_xbar.sv

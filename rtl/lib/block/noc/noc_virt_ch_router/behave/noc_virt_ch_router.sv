@@ -1,5 +1,4 @@
-/* NoC router of a 2D mesh with virtual channels (skeleton: the input units, the output VC states
- * and VC allocation; switch allocation and the crossbar are placeholders, so no flit moves).
+/* NoC router of a 2D mesh with virtual channels, behavioral (made of the NoC blocks).
  *
  * N ports, each an input and an output link (dark_circuit_noc.svh). The router is input-queued:
  * flits wait only in the input units (NocVirtChRtrInputUnit: a buffer per VC, the XY route of
@@ -8,8 +7,18 @@
  * count, BUF_DEPTH after reset, and whether a packet holds the VC. It follows the link itself:
  * a flit sent on out_fwd takes a credit (its tail frees the VC), a credit on out_bwd returns
  * one; VC allocation (NocVirtChAlloc) gives a waiting head a free output VC of its route's port.
- * Parts to come: switch allocation (active input VCs with a flit, output VCs with a credit; one
- * flit per input and per output each clock), the crossbar (NocMuxXbar).
+ * Switch allocation (NocSwitchAlloc) lets active input VCs with a flit and a credit send, one
+ * flit per input and per output each clock; the popped flits cross the crossbar (NocMuxXbar) to
+ * out_fwd in the same clock.
+ *
+ * The pipeline of a head flit, measured (TbNocVirtChRouter, a lone packet), and the textbook's
+ * stages: a head leaves 3 clocks after it came; a body or tail flit 1 clock after the flit before
+ * it, as it has no route or VC to get (it goes with its head's).
+ *   clock 0   BW      on in_fwd; written into its VC's buffer at the edge
+ *   clock 1   RC      at the front: NocRouteXy gives its route; the VC waits for an output VC
+ *   clock 2   VA      NocVirtChAlloc gives it an output VC; the VC is active
+ *   clock 3   SA, ST  NocSwitchAlloc pops it; the crossbar puts it on out_fwd
+ *   +DELAY    LT      NocLinkWire to the next router
  *
  *              +-----------------------+  xbar_in  +----------+  out_fwd
  *   in_fwd --->| NocVirtChRtrInputUnit |---------->| crossbar |---+-------> next router
@@ -20,7 +29,7 @@
  *                            v  |                       |   | NocVirtChOut |<--- out_bwd
  *              +----------------------------------------+   | [N][NUM_VCS] |    (credits)
  *              | NocVirtChAlloc (VC allocation),        |<--| credits, free|
- *              | switch allocation (to come)            |-->|              |
+ *              | NocSwitchAlloc (switch allocation)     |-->|              |
  *              +----------------------------------------+   +--------------+
  *              (allocation reads out_vc_state and drives vc_alloc)
  *
@@ -42,6 +51,7 @@ module NocVirtChRouter #(
     parameter  MY_Y       = 0,
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
+    localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
     localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
     localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH),
@@ -60,10 +70,7 @@ module NocVirtChRouter #(
     // Input side: per input port, the state of its VCs, the grants of VC allocation, the pop of
     // switch allocation and the flit it sends to the crossbar.
     VC_STATE_T [N-1:0][NUM_VCS-1:0] in_vc_state;
-    // The crossbar, to come, reads the flits.
-    /* verilator lint_off UNUSEDSIGNAL */
     FLIT_VLD_T [N-1:0]              xbar_in;
-    /* verilator lint_on UNUSEDSIGNAL */
     VC_VLD_T   [N-1:0][NUM_VCS-1:0] vc_grant;
     VC_VLD_T   [N-1:0]              pop;
 
@@ -101,8 +108,30 @@ module NocVirtChRouter #(
     NocVirtChAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_vc_alloc(
         .clk, .rst_n, .in_vc_state, .out_vc_state, .vc_grant, .vc_alloc);
 
-    // Placeholders until switch allocation and the crossbar: nothing is sent.
-    assign pop     = '0;
-    assign out_fwd = '0;
+    // Switch allocation and the crossbar: the popped flits go to their outputs.
+    //   pop[p] ---> input unit p ---> xbar_in[p].flit ---> NocMuxXbar ---> out_fwd[r].flit
+    //   xbar_sel[r] (the input of output r) ------------------^        xbar_valid[r] -> .valid
+    logic  [N-1:0][PORT_WIDTH-1:0] xbar_sel;
+    logic  [N-1:0]                 xbar_valid;
+    FLIT_T [N-1:0]                 xbar_flit;   // the flits into the crossbar
+    FLIT_T [N-1:0]                 xbar_out;    // its outputs
+
+    NocSwitchAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_sw_alloc(
+        .clk, .rst_n, .in_vc_state, .out_vc_state, .pop, .xbar_sel, .xbar_valid);
+
+    for (genvar p = 0; p < N; p++) begin: g_xbar_in
+        assign xbar_flit[p] = xbar_in[p].flit;
+
+        // The input unit sends a flit exactly when it is popped.
+        `DC_ASSERT(a_sends_when_popped, xbar_in[p].valid == pop[p].valid)
+    end
+
+    NocMuxXbar #(.N(N), .WIDTH($bits(FLIT_T))) u_xbar(.in(xbar_flit), .sel(xbar_sel),
+                                                     .out(xbar_out));
+
+    for (genvar r = 0; r < N; r++) begin: g_out_fwd
+        assign out_fwd[r].valid = xbar_valid[r];
+        assign out_fwd[r].flit  = xbar_out[r];
+    end
 
 endmodule
