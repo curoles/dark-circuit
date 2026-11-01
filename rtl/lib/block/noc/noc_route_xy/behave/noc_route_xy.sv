@@ -2,7 +2,8 @@
  *
  * East or west until the destination's x is reached, then north or south, then the local port
  * (NocPkg port numbers). Deadlock-free in a mesh: no packet turns from a y direction back to x.
- * West and south are "not east, not here": x < MY_X would be constant on the west edge.
+ * The direction is the sign of destination - MY_X, one bit wider, not a comparison with MY_X:
+ * x > MY_X is constant on the system's east edge, x < MY_X on its west edge (lint).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -23,10 +24,14 @@ module NocRouteXy #(
 );
     function automatic logic [PORT_WIDTH-1:0] xy_port(input logic [X_WIDTH-1:0] x,
                                                       input logic [Y_WIDTH-1:0] y);
-        if (x >  X_WIDTH'(MY_X)) return PORT_WIDTH'(NocPkg::PORT_EAST);
-        if (x != X_WIDTH'(MY_X)) return PORT_WIDTH'(NocPkg::PORT_WEST);
-        if (y >  Y_WIDTH'(MY_Y)) return PORT_WIDTH'(NocPkg::PORT_NORTH);
-        if (y != Y_WIDTH'(MY_Y)) return PORT_WIDTH'(NocPkg::PORT_SOUTH);
+        logic [X_WIDTH:0] dx;                   // top bit: x < MY_X
+        logic [Y_WIDTH:0] dy;
+        dx = {1'b0, x} - {1'b0, X_WIDTH'(MY_X)};
+        dy = {1'b0, y} - {1'b0, Y_WIDTH'(MY_Y)};
+        if (dx[X_WIDTH]) return PORT_WIDTH'(NocPkg::PORT_WEST);
+        if (dx != '0)    return PORT_WIDTH'(NocPkg::PORT_EAST);
+        if (dy[Y_WIDTH]) return PORT_WIDTH'(NocPkg::PORT_SOUTH);
+        if (dy != '0)    return PORT_WIDTH'(NocPkg::PORT_NORTH);
         return PORT_WIDTH'(NocPkg::PORT_LOCAL);
     endfunction
 
