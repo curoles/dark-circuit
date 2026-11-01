@@ -1,5 +1,5 @@
-/* NoC router of a 2D mesh with virtual channels (skeleton: the input units and the output VC
- * states; VC allocation, switch allocation and the crossbar are placeholders, so no flit moves).
+/* NoC router of a 2D mesh with virtual channels (skeleton: the input units, the output VC states
+ * and VC allocation; switch allocation and the crossbar are placeholders, so no flit moves).
  *
  * N ports, each an input and an output link (dark_circuit_noc.svh). The router is input-queued:
  * flits wait only in the input units (NocVirtChRtrInputUnit: a buffer per VC, the XY route of
@@ -7,9 +7,9 @@
  * the state of the next router's input VCs (NocVirtChOut per VC of each output link): a credit
  * count, BUF_DEPTH after reset, and whether a packet holds the VC. It follows the link itself:
  * a flit sent on out_fwd takes a credit (its tail frees the VC), a credit on out_bwd returns
- * one; VC allocation takes a free output VC for a packet's head. Parts to come: VC allocation
- * (waiting input VCs, free output VCs), switch allocation (active input VCs with a flit, output
- * VCs with a credit; one flit per input and per output each clock), the crossbar (NocMuxXbar).
+ * one; VC allocation (NocVirtChAlloc) gives a waiting head a free output VC of its route's port.
+ * Parts to come: switch allocation (active input VCs with a flit, output VCs with a credit; one
+ * flit per input and per output each clock), the crossbar (NocMuxXbar).
  *
  *              +-----------------------+  xbar_in  +----------+  out_fwd
  *   in_fwd --->| NocVirtChRtrInputUnit |---------->| crossbar |---+-------> next router
@@ -19,8 +19,8 @@
  *                in_vc_state |  ^ vc_grant, pop         |   +--------------+
  *                            v  |                       |   | NocVirtChOut |<--- out_bwd
  *              +----------------------------------------+   | [N][NUM_VCS] |    (credits)
- *              | VC allocation, switch allocation       |<--| credits, free|
- *              | (to come)                              |-->|              |
+ *              | NocVirtChAlloc (VC allocation),        |<--| credits, free|
+ *              | switch allocation (to come)            |-->|              |
  *              +----------------------------------------+   +--------------+
  *              (allocation reads out_vc_state and drives vc_alloc)
  *
@@ -59,9 +59,9 @@ module NocVirtChRouter #(
 
     // Input side: per input port, the state of its VCs, the grants of VC allocation, the pop of
     // switch allocation and the flit it sends to the crossbar.
-    // The allocators and the crossbar, to come, read the states and the flits.
-    /* verilator lint_off UNUSEDSIGNAL */
     VC_STATE_T [N-1:0][NUM_VCS-1:0] in_vc_state;
+    // The crossbar, to come, reads the flits.
+    /* verilator lint_off UNUSEDSIGNAL */
     FLIT_VLD_T [N-1:0]              xbar_in;
     /* verilator lint_on UNUSEDSIGNAL */
     VC_VLD_T   [N-1:0][NUM_VCS-1:0] vc_grant;
@@ -80,10 +80,7 @@ module NocVirtChRouter #(
     //   out_fwd[p] (flit on VC v, its tail) ---> NocVirtChOut [p][v] ---> out_vc_state[p][v]
     //   out_bwd[p] (credit for VC v) -----------^     ^                   (free, has_credit)
     //   vc_alloc[p][v] (VC allocation) ---------------+
-    // VC and switch allocation, to come, read the states.
-    /* verilator lint_off UNUSEDSIGNAL */
     NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state;
-    /* verilator lint_on UNUSEDSIGNAL */
     logic                  [N-1:0][NUM_VCS-1:0] vc_alloc;
 
     for (genvar p = 0; p < N; p++) begin: g_out
@@ -100,10 +97,12 @@ module NocVirtChRouter #(
         end
     end
 
-    // Placeholders until the allocators and the crossbar: nothing is granted, taken or sent.
-    assign vc_grant = '0;
-    assign pop      = '0;
-    assign vc_alloc = '0;
-    assign out_fwd  = '0;
+    // VC allocation: a waiting head gets a free output VC of its route's port.
+    NocVirtChAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_vc_alloc(
+        .clk, .rst_n, .in_vc_state, .out_vc_state, .vc_grant, .vc_alloc);
+
+    // Placeholders until switch allocation and the crossbar: nothing is sent.
+    assign pop     = '0;
+    assign out_fwd = '0;
 
 endmodule
