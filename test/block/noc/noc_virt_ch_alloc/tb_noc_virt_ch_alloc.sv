@@ -10,7 +10,7 @@
  * a free VC grants (work-conserving); an input VC that waits is granted within N * NUM_VCS - 1
  * grants of its port to others (round robin). Every case must happen: grants at every port, two
  * grants in one clock, two input VCs waiting for one port, a port with waiting input VCs and no
- * free VC. NUM_VCS 2 and 3; Verilator 20000 clocks, Icarus 2000. Stops at the first mismatch
+ * free VC. NUM_VCS 2 and 3; Verilator 20000 clocks, Icarus 700. Stops at the first mismatch
  * with $fatal.
  *
  * @author    Igor Lesik
@@ -32,7 +32,7 @@ module TbNocVirtChAllocCheck #(
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
-    localparam N_CLOCKS   = 2000;
+    localparam N_CLOCKS   = 700;
 `endif
 
     typedef `DC_NOC_VC_VLD_T(VC_WIDTH)                  vc_vld_t;

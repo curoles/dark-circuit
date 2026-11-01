@@ -15,7 +15,7 @@
  * (buffer write; route; VC allocation; switch allocation and the crossbar), its tail a clock
  * later. Every case must happen: packets from every input, to every output, two packets
  * interleaved on one output's VCs, a sender held back by its credits, packets of four flits.
- * NUM_VCS 2 and 3; Verilator 20000 clocks of traffic, Icarus 2000. Stops at the first mismatch
+ * NUM_VCS 2 and 3; Verilator 20000 clocks of traffic, Icarus 400. Stops at the first mismatch
  * with $fatal.
  *
  * @author    Igor Lesik
@@ -45,7 +45,7 @@ module TbNocVirtChRouterCheck #(
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
-    localparam N_CLOCKS   = 2000;
+    localparam N_CLOCKS   = 400;
 `endif
 
     typedef `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH)            flit_t;

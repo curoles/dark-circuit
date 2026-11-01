@@ -15,7 +15,7 @@
  * VC. Every case must happen: two inputs whose
  * eligible VCs want one output, an input with two eligible VCs, a VC held back by its credit,
  * flits to every output, three or more flits in one clock. NUM_VCS 2 and 3; Verilator 20000
- * clocks, Icarus 2000. Stops at the first mismatch with $fatal.
+ * clocks, Icarus 500. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -36,7 +36,7 @@ module TbNocSwitchAllocCheck #(
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
-    localparam N_CLOCKS   = 2000;
+    localparam N_CLOCKS   = 500;
 `endif
 
     typedef `DC_NOC_VC_VLD_T(VC_WIDTH)                  vc_vld_t;

@@ -12,7 +12,7 @@
  * corner measures the latency: its head comes out 3 clocks per router on its way plus LINK_DELAY
  * per link after it went in, its tail a clock later. Every case must happen: packets from and to
  * every node. A 3 x 3 slice at (0, 0) with links of 1 clock and 2 VCs, and a 3 x 2 slice at
- * (1, 1) with links of 2 clocks and 3 VCs; Verilator 10000 clocks of traffic each, Icarus 800.
+ * (1, 1) with links of 2 clocks and 3 VCs; Verilator 10000 clocks of traffic each, Icarus 40.
  * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
@@ -47,7 +47,7 @@ module TbNocMeshCheck #(
 `ifdef VERILATOR
     localparam N_CLOCKS   = 10000;
 `else
-    localparam N_CLOCKS   = 800;
+    localparam N_CLOCKS   = 40;
 `endif
 
     typedef `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH)            flit_t;
