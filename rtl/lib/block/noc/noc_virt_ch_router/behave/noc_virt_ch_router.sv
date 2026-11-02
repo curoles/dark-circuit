@@ -3,8 +3,9 @@
  * N ports, each an input and an output link (dark_circuit_noc.svh). The router is input-queued:
  * flits wait only in the input units (NocVirtChRtrInputUnit: a buffer per VC, the XY route of
  * each head, a credit back for every flit that leaves). The output side keeps no flits, only
- * the state of the next router's input VCs (NocVirtChOut per VC of each output link): a credit
- * count, BUF_DEPTH after reset, and whether a packet holds the VC. It follows the link itself:
+ * the state of the next router's input VCs (NocVirtChRtrOutputUnit per output link: a
+ * NocVirtChOut per VC): a credit count, BUF_DEPTH after reset, and whether a packet holds the
+ * VC. It follows the link itself:
  * a flit sent on out_fwd takes a credit (its tail frees the VC), a credit on out_bwd returns
  * one; VC allocation (NocVirtChAlloc) gives a waiting head a free output VC of its route's port.
  * Switch allocation (NocSwitchAlloc) lets active input VCs with a flit and a credit send, one
@@ -26,10 +27,10 @@
  *   (credits)  | routes, credits back  |                ^ sel     | flits sent
  *              +-----------------------+                |         v
  *                in_vc_state |  ^ vc_grant, pop         |   +--------------+
- *                            v  |                       |   | NocVirtChOut |<--- out_bwd
- *              +----------------------------------------+   | [N][NUM_VCS] |    (credits)
- *              | NocVirtChAlloc (VC allocation),        |<--| credits, free|
- *              | NocSwitchAlloc (switch allocation)     |-->|              |
+ *                            v  |                       |   | NocVirtChRtr |<--- out_bwd
+ *              +----------------------------------------+   | OutputUnit   |    (credits)
+ *              | NocVirtChAlloc (VC allocation),        |<--| [N]: credits,|
+ *              | NocSwitchAlloc (switch allocation)     |-->| free per VC  |
  *              +----------------------------------------+   +--------------+
  *              (allocation reads out_vc_state and drives vc_alloc)
  *
@@ -83,25 +84,15 @@ module NocVirtChRouter #(
     end
 
     // Output side: per output port, the state of the next router's input VCs, following the
-    // link: a flit sent on a VC, its tail, a credit back for it; VC allocation takes one.
-    //   out_fwd[p] (flit on VC v, its tail) ---> NocVirtChOut [p][v] ---> out_vc_state[p][v]
-    //   out_bwd[p] (credit for VC v) -----------^     ^                   (free, has_credit)
-    //   vc_alloc[p][v] (VC allocation) ---------------+
+    // link (the flits sent on out_fwd, the credits back on out_bwd); VC allocation takes one.
     NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state;
     logic                  [N-1:0][NUM_VCS-1:0] vc_alloc;
 
     for (genvar p = 0; p < N; p++) begin: g_out
-        for (genvar v = 0; v < NUM_VCS; v++) begin: g_vc
-            logic send;         // a flit goes out on this VC
-
-            assign send = out_fwd[p].valid && out_fwd[p].flit.vc == VC_WIDTH'(v);
-
-            NocVirtChOut #(.BUF_DEPTH(BUF_DEPTH)) u_out_vc(
-                .clk, .rst_n, .alloc(vc_alloc[p][v]), .send,
-                .send_tail(send && out_fwd[p].flit.tail),
-                .credit(out_bwd[p].valid && out_bwd[p].vc == VC_WIDTH'(v)),
-                .state(out_vc_state[p][v]));
-        end
+        NocVirtChRtrOutputUnit #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH),
+                                 .DATA_WIDTH(DATA_WIDTH)) u_output(
+            .clk, .rst_n, .out_fwd(out_fwd[p]), .out_bwd(out_bwd[p]),
+            .vc_alloc(vc_alloc[p]), .vc_state(out_vc_state[p]));
     end
 
     // VC allocation: a waiting head gets a free output VC of its route's port.

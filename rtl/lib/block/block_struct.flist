@@ -51,3 +51,4 @@
 -F noc/noc_virt_ch_rtr_input_unit/struct/noc_virt_ch_rtr_input_unit.flist
 -F noc/noc_virt_ch_alloc/struct/noc_virt_ch_alloc.flist
 -F noc/noc_switch_alloc/struct/noc_switch_alloc.flist
+-F noc/noc_virt_ch_rtr_output_unit/struct/noc_virt_ch_rtr_output_unit.flist
