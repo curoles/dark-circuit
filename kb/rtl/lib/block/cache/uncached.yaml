@@ -55,9 +55,9 @@ evidence: >
   and policies the tests run), the read-only tests unchanged; 20 of 20 mutants of the same
   kinds caught (5 per version per cache).
 code:
-  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#unc_pass
-  - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#a_unc_alone
-  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_mux2_ready
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#unc_pass
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_unc_alone
+  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_mux2_ready
   - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached
   - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_unc_idle_wait
   - rtl/lib/block/cache/direct_cache/behave/direct_cache.sv#unc_pass

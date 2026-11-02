@@ -57,4 +57,6 @@ code:
   - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#READ_ONLY
   - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#g_read_only
   - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#g_read_only
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#g_read_only
+  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#g_read_only
   - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#READ_ONLY

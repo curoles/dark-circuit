@@ -149,6 +149,11 @@ This file has the rules that are not in README.md.
   (a register load, a start, a stall, a write), never data selects: the data of a
   bubble does not matter, and keeping valid out of the datapath keeps stall and flush
   logic off its timing path.
+- Late signals (a cache hit, a compare or ALU result, a memory's ready) do not drive a global
+  control in the same clock: not the enable of several stages' registers, not the select of
+  the next pc, not a ready that comes back into its own request. The decision is registered
+  and acts a clock later, unless the time of a run (cycles x longest path) shows that the
+  same-clock version is faster; that choice gets a kb record.
 - Type parameters: when writing or refactoring, look for modules that store or move
   a value without computing on it (pipeline registers, FIFOs, memories, flip-flops,
   multiplexers). `parameter type T` makes the type part of the interface
