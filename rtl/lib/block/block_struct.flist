@@ -47,3 +47,4 @@
 -F noc/noc.flist
 -F noc/noc_virt_ch_out/struct/noc_virt_ch_out.flist
 -F noc/noc_route_xy/struct/noc_route_xy.flist
+-F noc/noc_virt_ch_in/struct/noc_virt_ch_in.flist
