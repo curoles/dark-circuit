@@ -64,7 +64,5 @@ code:
   - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#u_mux2_ready
   - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#req_uncached
   - test/block/cache/direct_cache/tb_direct_cache.sv#n_unc_idle_wait
-  - rtl/lib/block/cache/set_assoc_cache/behave/set_assoc_cache.sv#unc_pass
-  - rtl/lib/block/cache/set_assoc_cache/struct/set_assoc_cache.sv#u_mux2_ready
   - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#req_uncached
   - test/block/cache/set_assoc_cache/tb_set_assoc_cache.sv#n_unc_idle_wait
