@@ -1,4 +1,5 @@
-/* NoC router of a 2D mesh with virtual channels, behavioral (made of the NoC blocks).
+/* NoC router of a 2D mesh with virtual channels, made of the NoC blocks (behave or struct,
+ * whichever versions the flist has).
  *
  * N ports, each an input and an output link (dark_circuit_noc.svh). The router is input-queued:
  * flits wait only in the input units (NocVirtChRtrInputUnit: a buffer per VC, the XY route of
@@ -11,6 +12,10 @@
  * Switch allocation (NocSwitchAlloc) lets active input VCs with a flit and a credit send, one
  * flit per input and per output each clock; the popped flits cross the crossbar (NocMuxXbar) to
  * out_fwd in the same clock.
+ *
+ * The router has no logic of its own, only its parts and the wiring between them: a feature
+ * that needs logic (a bypass, lookahead routing, a pipeline stage) gets a block of its own,
+ * with behave and struct versions, so this one file serves both flists.
  *
  * The pipeline of a head flit, measured (TbNocVirtChRouter, a lone packet), and the textbook's
  * stages: a head leaves 3 clocks after it came; a body or tail flit 1 clock after the flit before

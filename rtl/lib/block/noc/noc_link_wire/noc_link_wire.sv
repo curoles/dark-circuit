@@ -8,7 +8,8 @@
  * credit's vc through stages without (they mean nothing while not valid). The delay counts
  * twice in the credit round trip, flit forward and credit back: a VC streams a flit every clock
  * only when its buffer (BUF_DEPTH) covers the whole round trip. Routers are always connected
- * through a NocLinkWire, also with DELAY 0, so a mesh can give its links any delay.
+ * through a NocLinkWire, also with DELAY 0, so a mesh can give its links any delay. Made of
+ * library blocks only (DelayLine, DelayLineT): behave or struct, whichever the flist has.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License

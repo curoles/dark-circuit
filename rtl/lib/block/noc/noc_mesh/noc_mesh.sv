@@ -1,4 +1,5 @@
-/* NoC mesh, one slice: X_SIZE x Y_SIZE routers (NocVirtChRouter), behavioral (made of NoC blocks).
+/* NoC mesh, one slice: X_SIZE x Y_SIZE routers (NocVirtChRouter), made of NoC blocks (behave
+ * or struct, whichever versions the flist has).
  *
  * Router (x, y) of the slice is at the global coordinates (X0 + x, Y0 + y): X_WIDTH and Y_WIDTH
  * cover the whole system, so slices stitched edge to edge form one bigger mesh and XY routing

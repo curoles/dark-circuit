@@ -52,3 +52,6 @@
 -F noc/noc_virt_ch_alloc/struct/noc_virt_ch_alloc.flist
 -F noc/noc_switch_alloc/struct/noc_switch_alloc.flist
 -F noc/noc_virt_ch_rtr_output_unit/struct/noc_virt_ch_rtr_output_unit.flist
+-F noc/noc_link_wire/struct/noc_link_wire.flist
+-F noc/noc_virt_ch_router/struct/noc_virt_ch_router.flist
+-F noc/noc_mesh/struct/noc_mesh.flist
