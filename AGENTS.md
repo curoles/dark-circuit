@@ -372,10 +372,9 @@ document intent and stop the simulation in the cycle a rule breaks.
 - A test that is slow on event-driven Icarus (big struct versions) checks many cases
   under `` `ifdef VERILATOR `` and a few otherwise, so that it runs in about 1-2 s on
   Icarus; exhaustive small widths on both.
-- The struct version of a big composed block (thousands of gates: the NoC router and mesh)
-  is tested on Verilator only, `dc_add_verilator_test` with a comment why: event-driven
-  Icarus takes many seconds there even for a short run, while its behave version and its
-  parts' tests still run on the main simulator.
+- A test of a big composed block (the NoC mesh, the NoC router's struct version) runs on
+  Verilator only, `dc_add_verilator_test` with a comment why: event-driven Icarus takes
+  seconds there even for a short run, while its parts' tests still run on the main simulator.
 - Block tests run the same testbench with `block_behave.flist` and `block_struct.flist`.
 
 ## Adding things
