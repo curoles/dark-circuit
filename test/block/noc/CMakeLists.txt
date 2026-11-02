@@ -1,5 +1,6 @@
 add_subdirectory(noc_virt_ch_in)
 add_subdirectory(noc_virt_ch_out)
+add_subdirectory(noc_route_xy)
 add_subdirectory(noc_virt_ch_rtr_input_unit)
 add_subdirectory(noc_link_wire)
 add_subdirectory(noc_virt_ch_alloc)
