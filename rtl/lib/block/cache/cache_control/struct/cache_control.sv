@@ -201,6 +201,13 @@ module CacheControl #(
     // See the behave version.
     `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
 
+    // A lookup whose memory request is not taken offers it again, unchanged, in the next
+    // clock (held: the lookup and the RAM outputs stay). Not uncached requests: they
+    // follow the CPU side, which may withdraw (kb rtl/lib/block/cache/uncached).
+    `DC_ASSERT_NEXT(a_look_req_held, look_req && !mem_req_ready,
+                    look_req && $stable(mem_req_addr) && $stable(mem_req_we) &&
+                    (!mem_req_we || ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
+
     // Uncached read served from the clock memory takes it until the answer comes.
     Inv  #(1) u_inv_mem_we    (.in(mem_req_we), .out(mem_we_n));
     And3 #(1) u_and3_unc_start(.in1(unc_pass), .in2(mem_req_ready), .in3(mem_we_n),

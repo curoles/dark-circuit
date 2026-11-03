@@ -27,4 +27,7 @@ module SkidBufferT #(
     // Valid/ready rule 2 on channel in: an offered item stays until it is taken.
     `DC_ASSERT_NEXT(a_in_held, in_valid && !in_ready, in_valid && $stable(in_data))
 
+    // Valid/ready rule 2 on channel out: an item offered and not taken stays.
+    `DC_ASSERT_NEXT(a_out_held, out_valid && !out_ready, out_valid && $stable(out_data))
+
 endmodule

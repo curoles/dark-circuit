@@ -156,6 +156,12 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     assign icache_rsp_data = mem_rsp_data;
     assign dcache_rsp_data = mem_rsp_data;
 
+    // A request presented to memory and not taken stays, its fields unchanged (the caches
+    // keep theirs, rule 2; a read's wdata and wstrb mean nothing).
+    `DC_ASSERT_NEXT(a_mem_req_held, mem_req_valid && !mem_req_ready,
+                    mem_req_valid && $stable(mem_req_we) && $stable(mem_req_addr) &&
+                    (!mem_req_we || ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
+
     `DC_ASSERT(a_answer_expected, !mem_rsp_valid || !empty)
     `DC_ASSERT(a_prio_known, prio != 2'd3)
 
