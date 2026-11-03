@@ -145,11 +145,16 @@ module Mig2Core import Mig2Pkg::*; #(
     iaddr_t       halt_pc;          // address of the EBREAK that halted the core
     word_t        dbg_reg_rdata;
 
-    // Caches, between the pipeline and the memory port.
+    // Caches, between the pipeline and the memory port. When fetch and data want memory
+    // together, the instruction side goes first while ID has no instruction (after a
+    // redirect, or while fetch waits): then every stage starves; else data first.
     // @kb: rtl/design/mig2/caches_in_core
+    // @kb: rtl/design/mig2/single_memory
+    logic [1:0] mem_prio;             // the arbiter's tie
+    assign mem_prio = id_fetch.valid ? CachePkg::PRIO_NONE : CachePkg::PRIO_INSN;
     Mig2Caches #(.CFG(CFG)) u_caches(
-        .clk, .rst_n, .uncached, .icache_req, .icache_rsp, .dcache_req, .dcache_rsp,
-        .mem_req, .mem_rsp);
+        .clk, .rst_n, .uncached, .prio(mem_prio), .icache_req, .icache_rsp, .dcache_req,
+        .dcache_rsp, .mem_req, .mem_rsp);
 
     // IF
     Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(

@@ -1,5 +1,5 @@
 type: decision
-title: Mig2's caches share one memory through InsnDataCacheArbiter, data first
+title: Mig2's caches share one memory; the instruction side first while ID is empty
 date: 2026-11-02
 question: >
   Mig2 had two memories (imem, dmem) behind its caches. A CPU has one: how do the I-cache
@@ -9,8 +9,9 @@ decision: >
   InsnDataCacheArbiter (u_arbiter) inside Mig2Caches, between the memory sides of the two
   caches and the one memory port of Mig2Core (mem_req/mem_rsp, types mem_req_t/mem_rsp_t:
   the former dmem types, also the D-cache's CPU side; imem_req_t stays for fetch to the
-  I-cache). POLICY ARB_DATA_FIRST, prio never set: a load that waits stalls the whole
-  pipeline, a fetch that waits only IF. Each side's request goes through the arbiter's
+  I-cache). POLICY ARB_DATA_FIRST, prio from Mig2Core (2026-11-02): PRIO_INSN while ID
+  has no instruction (id_fetch.valid is 0: after a redirect, or while fetch waits), else
+  none, so the data cache first. Each side's request goes through the arbiter's
   flow-through buffer, which cuts the loop through the merge (kb pattern
   rtl/lib/block/flow_through_buffer/design). Mig2Cpu has one SimLatencyRAM (u_mem), the
   image of sw/riscv/mig2.ld (one RAM for code and data); TbMig2's +mem_latency replaces
@@ -22,14 +23,21 @@ decision: >
 why: >
   One memory is what a CPU has; with it, fetch and data compete, and the core's cycles say
   what that costs. The arbiter and its buffers were built for this step (kb
-  rtl/lib/block/cache/insn_data_cache_arbiter/design). Data first: the stall of a load
-  stops every stage, a fetch miss only starves IF, which has its IF/ID slot. The renamed
+  rtl/lib/block/cache/insn_data_cache_arbiter/design). The policy is measured (evidence):
+  while ID has no instruction every stage starves, so the instruction side goes first;
+  otherwise a load that waits stalls every stage, so data first. The renamed
   types: the D-side shape is the memory request in general.
 rejected:
+  - choice: Data first always, prio never set (the first version of this step)
+    why_not: >
+      Cached, 3.7 % more cycles for Dhrystone and 7.4 % for towers than the policy chosen;
+      uncached the same or 0.1 % more.
   - choice: Round-robin (the arbiter's default)
-    why_not: A load would wait for a fetch every other time, the whole pipeline with it.
-  - choice: prio driven by the core (instruction first after a redirect)
-    why_not: Not measured yet; a later step if the numbers ask for it.
+    why_not: Cached, 3.5 % (Dhrystone) and 5.1 % (towers) more than the policy chosen.
+  - choice: Instruction first always
+    why_not: >
+      The same as the policy chosen when cached; uncached up to 0.4 % more (a load waits
+      for every fetch).
   - choice: The cut inside the caches (a registered ready of uncached requests)
     why_not: The cached lookup's held carries memory's ready too; see the pattern record.
 evidence: >
@@ -47,12 +55,20 @@ evidence: >
   Synthesis (sky130): 244 790 um2, 29 772 cells (+1.4 %), 6.2 ns, the I-cache's path as
   before. The tests branch_slow_imem and load_store_slow_dmem of kb fetch_waits and
   data_waits are branch_slow_mem and load_store_slow_mem now.
+  The policy, 2026-11-02, cycles of the benchmarks (uncached Dhrystone, qsort, towers;
+  cached the same): data first 2 457 883, 200 550, 385 535; 3 274 438, 179 877, 428 922.
+  Round-robin 2 457 883, 200 550, 385 185; 3 269 220, 179 873, 419 425. Instruction
+  first 2 460 894, 200 549, 386 684; 3 157 339, 179 845, 399 210. Instruction first
+  while ID is empty (chosen) 2 457 883, 200 550, 385 185; 3 157 339, 179 845, 399 210:
+  cached CPI 1.880 and 1.808 for Dhrystone and towers, as with two memories (1.877,
+  1.808). Every policy passes the whole suite.
 relies_on:
   - rtl/lib/block/cache/insn_data_cache_arbiter/design
   - rtl/lib/block/flow_through_buffer/design
   - rtl/design/mig2/caches_in_core
 code:
   - rtl/design/mig2/mig2_caches.sv#u_arbiter
+  - rtl/design/mig2/mig2_core.sv#mem_prio
   - rtl/design/mig2/mig2_cpu.sv#u_mem
   - test/design/mig2/tb/tb_mig2_retire_check.sv#dmem_has
   - rtl/design/mig2/mig2_fetch.sv#a_id_held

@@ -137,8 +137,10 @@ the tag and data RAMs as black boxes, memory macros in a chip. Why:
 Code and data share one memory, as in a CPU: Mig2Cpu's SimLatencyRAM `u_mem` holds the
 image of `sw/riscv/mig2.ld` (one RAM), and Mig2Core has one memory port (`mem_req_t`,
 `mem_rsp_t`). Mig2Caches passes the memory sides of both caches through
-InsnDataCacheArbiter, the data cache first when both ask (a load that waits stalls every
-stage, a fetch only IF); each side goes through a flow-through buffer, which keeps
+InsnDataCacheArbiter: when both ask, the instruction cache first while ID has no
+instruction (after a redirect, or while fetch waits: every stage starves), else the data
+cache (a load that waits stalls every stage); each side goes through a flow-through buffer,
+which keeps
 memory's ready and the other side's valid off the caches (kb pattern
 `rtl/lib/block/flow_through_buffer/design`). TbMig2's `+mem_latency` sets the memory's
 timing. A fetch and a load or store now meet when both need memory in the same clock:
@@ -146,15 +148,18 @@ uncached, every load and store meets the fetch of its clock. Cycles with gcc 12.
 
 | Benchmark | Instructions | Two memories, uncached: cycles | CPI | One memory, uncached: cycles | CPI | One memory, cached: cycles | CPI |
 |---|---|---|---|---|---|---|---|
-| Dhrystone | 1 679 605 | 1 926 750 | 1.147 | 2 457 883 | 1.463 | 3 274 438 | 1.950 |
-| qsort | 134 801 | 160 149 | 1.188 | 200 550 | 1.488 | 179 877 | 1.334 |
-| towers | 220 745 | 231 862 | 1.050 | 385 535 | 1.747 | 428 922 | 1.943 |
+| Dhrystone | 1 679 605 | 1 926 750 | 1.147 | 2 457 883 | 1.463 | 3 157 339 | 1.880 |
+| qsort | 134 801 | 160 149 | 1.188 | 200 550 | 1.488 | 179 845 | 1.334 |
+| towers | 220 745 | 231 862 | 1.050 | 385 185 | 1.745 | 399 210 | 1.808 |
 
 Uncached costs 25 to 66 %, towers the most (its recursion loads and stores on the stack):
 the data side goes first, and after the instruction side's buffer held a request it takes
-the next one a clock later. Cached at latency 1 the caches still only add cycles (their
-misses), as with two memories (CPI 1.877, 1.334, 1.808 then): 3.9 % more for Dhrystone,
-7.5 % for towers, qsort the same. Of the tests that count cycles only ras_id changes
+the next one a clock later; no policy changes that (all within 0.4 %). Cached at latency 1
+the caches still only add cycles (their misses), but one memory costs about nothing over
+two (CPI 1.877, 1.334, 1.808 then): an instruction miss starves every stage, so its side
+goes first while ID is empty. Data first always cost 3.7 % (Dhrystone) and 7.4 % (towers)
+more, round-robin 3.5 % and 5.1 %, instruction first always the same cached and up to
+0.4 % more uncached. Of the tests that count cycles only ras_id changes
 (401 -> 430 cycles); csr, muldiv, branch_id and btb_if keep their counts. The benchmark
 ceilings for gcc 10.2.0 were dropped, not measured again: that compiler gets only the
 guard of twice the largest ceiling. Why: `kb/rtl/design/mig2/single_memory.yaml`.

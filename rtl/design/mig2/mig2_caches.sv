@@ -8,8 +8,9 @@
  * unit, and their answers): a hit answers in the clock after the request, as a memory of
  * latency 1; a miss asks memory for the word and answers when it comes; a store goes to
  * memory in any case. Their memory sides share one memory through InsnDataCacheArbiter
- * (u_arbiter): the data cache first when both ask (a load that waits stalls the whole
- * pipeline, a fetch that waits only IF), and each side's request goes through the
+ * (u_arbiter): when both ask, the instruction cache first while prio says so (Mig2Core:
+ * while ID has no instruction, every stage starves), else the data cache (a load that
+ * waits stalls every stage); each side's request goes through the
  * arbiter's flow-through buffer, so neither cache sees memory's ready or the other cache's
  * valid without a flop (kb pattern rtl/lib/block/flow_through_buffer/design). uncached=1
  * makes every request bypass both caches: it passes to the arbiter as it comes
@@ -20,7 +21,8 @@
  *
  *   icache_req (fetch) --> SkewedCacheRdOnly u_icache --+
  *                                                       +--> InsnDataCacheArbiter --> mem_req
- *   dcache_req (lsu) ----> SkewedCache u_dcache --------+    u_arbiter (data first) <-- mem_rsp
+ *   dcache_req (lsu) ----> SkewedCache u_dcache --------+    u_arbiter (prio, else  <-- mem_rsp
+ *                                                                   data first)
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -31,6 +33,7 @@ module Mig2Caches import Mig2Pkg::*; #(
     input  wire       clk,
     input  wire       rst_n,            // synchronous reset, active low
     input  wire       uncached,         // every request bypasses the caches
+    input  wire [1:0] prio,             // the arbiter's tie (CachePkg): PRIO_INSN or none
 
     // Pipeline side: fetch and the load/store unit
     input  imem_req_t icache_req,
@@ -85,11 +88,11 @@ module Mig2Caches import Mig2Pkg::*; #(
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
     // @kb: rtl/design/mig2/single_memory
-    // The data cache first in a tie, prio never set (the package name: Icarus takes an
-    // imported name alone as a port expression for an implicit wire).
+    // A tie: prio's side, else the data cache (the package name: Icarus takes an imported
+    // name alone as a port expression for an implicit wire).
     InsnDataCacheArbiter #(.ADDR_WIDTH(WIDTH), .DATA_WIDTH($bits(word_t)),
                            .POLICY(CachePkg::ARB_DATA_FIRST)) u_arbiter(
-        .clk, .rst_n, .prio(CachePkg::PRIO_NONE),
+        .clk, .rst_n, .prio,
         .icache_req_valid(i_mem_valid), .icache_req_ready(i_mem_ready),
         .icache_req_addr(i_mem_addr), .icache_rsp_valid(i_mem_rsp_valid),
         .icache_rsp_data(i_mem_rsp_data),
