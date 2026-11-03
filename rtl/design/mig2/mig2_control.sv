@@ -229,6 +229,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     // not the adder of id_target and a compare: it has no carry chain, and this check is on
     // the path of ID's redirect. Word addresses: the offset of a branch or JAL is even, so
     // imm[1] + 0 does not carry into bit 2 (a misaligned target traps anyway).
+    // @kb: rtl/lib/block/add_cmp/design
     // @kb: rtl/design/mig2/addcmp_id_check
     AddCmp #(.WIDTH($bits(iaddr_t))) u_add_cmp(
         .a(id_fetch.pc), .b(id_dec.imm[WIDTH-1:IADDR_START]), .c(if_pc), .eq(id_at_target));
@@ -262,6 +263,7 @@ module Mig2Control import Mig2Pkg::*, RiscvPkg::*; (
     assign id_go          = id_taken || id_ret;
     assign id_redirect    = id_moves && (id_btb.hit ? id_btb_fix && (id_go || id_btb.taken)
                                                     : id_go);
+    // @kb: rtl/design/mig2/late_input_last_mux
     // @kb: rtl/design/mig2/id_target_mux_order
     // The target from the adder comes last (decode, then pc + imm): it enters the last mux;
     // the top of the return stack and pc + 1 are ready early (id_taken and id_ret never hold

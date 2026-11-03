@@ -22,3 +22,4 @@ code:
   - rtl/design/mig2/mig2_control.sv#id_redirect_pc
 relies_on:
   - rtl/design/mig2/ras_in_id
+  - rtl/design/mig2/late_input_last_mux

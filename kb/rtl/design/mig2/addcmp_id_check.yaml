@@ -24,3 +24,4 @@ code:
   - rtl/lib/block/add_cmp
 relies_on:
   - rtl/design/mig2/btb_in_if
+  - rtl/lib/block/add_cmp/design

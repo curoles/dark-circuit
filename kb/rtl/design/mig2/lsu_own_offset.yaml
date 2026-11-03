@@ -31,3 +31,5 @@ evidence: >
 code:
   - rtl/design/mig2/mig2_lsu.sv#offset
   - rtl/design/mig2/mig2_core.sv#a_lsu_offset
+relies_on:
+  - rtl/design/mig2/narrow_local_compute

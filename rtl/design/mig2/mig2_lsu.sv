@@ -42,6 +42,7 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     logic                   odd;        // odd byte address
     logic [7:0]             rs2_b;
     logic [15:0]            rs2_h;
+    // @kb: rtl/design/mig2/narrow_local_compute
     // @kb: rtl/design/mig2/lsu_own_offset
     assign offset = rs1_data[DADDR_START-1:0] + dec.imm[DADDR_START-1:0];
     assign odd    = offset[0];

@@ -50,6 +50,7 @@ module SetAssocCacheRdOnly import CachePkg::*; #(
     wire [STRB_WIDTH-1:0] mem_req_wstrb;
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // @kb: rtl/lib/block/cache/variant_parameter
     // @kb: rtl/lib/block/cache/read_only
     SetAssocCache #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET),
                     .WAYS(WAYS), .REPLACEMENT(REPLACEMENT), .READ_ONLY(1)) u_set_assoc_cache(

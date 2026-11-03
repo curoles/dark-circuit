@@ -49,6 +49,7 @@ module SkewedCacheRdOnly #(
     wire [STRB_WIDTH-1:0] mem_req_wstrb;
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // @kb: rtl/lib/block/cache/variant_parameter
     // @kb: rtl/lib/block/cache/read_only
     SkewedCache #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET),
                   .READ_ONLY(1)) u_skewed_cache(

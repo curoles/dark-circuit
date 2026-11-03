@@ -60,3 +60,5 @@ code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#g_read_only
   - rtl/lib/block/cache/cache_control/struct/cache_control.sv#g_read_only
   - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#READ_ONLY
+relies_on:
+  - rtl/lib/block/cache/variant_parameter

@@ -26,6 +26,7 @@ module AddCmp #(
     wire [WIDTH:0]   sc_shift;
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // @kb: rtl/lib/block/add_cmp/design
     Inv            #(WIDTH)         u_inv             (.in(c), .out(c_inv));
     CarrySaveAdder #(.WIDTH(WIDTH)) u_carry_save_adder(.in1(a), .in2(b), .in3(c_inv), .ps(ps), .sc(sc));
     assign sc_shift = {sc, 1'b0};

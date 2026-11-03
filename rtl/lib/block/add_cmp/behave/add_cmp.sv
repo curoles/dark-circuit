@@ -1,6 +1,7 @@
 /* Adder-comparator: eq = (a + b == c), mod 2^WIDTH, behavioral.
  *
- * a + b wraps around like a WIDTH-bit adder, its carry out is not compared.
+ * a + b wraps around like a WIDTH-bit adder, its carry out is not compared. The struct
+ * version computes eq without the sum (carry save): kb pattern rtl/lib/block/add_cmp/design.
  *
  * @author    Igor Lesik
  * @copyright 2019 Igor Lesik, MIT License
