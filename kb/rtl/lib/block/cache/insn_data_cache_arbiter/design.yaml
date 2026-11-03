@@ -12,14 +12,20 @@ decision: >
   parameter POLICY (ARB_DATA_FIRST, ARB_INSN_FIRST, ARB_ROUND_ROBIN, the default); a side
   alone gets memory. A request presented and not taken stays until memory takes it. Memory
   answers reads in order; a queue (Fifo) of the sides of the reads in memory routes the
-  answers, and while it is full no read is presented, writes are.
+  answers, and while it is full no read is presented, writes are. Each side's request
+  first goes through a FlowThroughBuffer (2026-11-02): a cache's ready is its buffer's
+  "empty", a flop, so one side's valid and memory's ready never reach a cache without
+  one; a request flows through when memory takes it at once, else waits in its buffer.
 why: >
   Split instruction and data caches with one memory behind them is the structure of a
   pipelined core: on hits fetch and loads do not meet, on misses they meet here. The
   caches' own protocol on every port needs no adapters. prio first (user): the CPU knows
   what the arbiter cannot (a load miss stalls the pipeline; fetch is empty after a
   redirect). A held request must not change under memory (valid/ready). The queue keeps
-  the memory protocol as it is.
+  the memory protocol as it is. The buffers (2026-11-02): with one memory behind a CPU,
+  the I-side's valid decided the D-side's ready, which reaches the CPU's stall and from
+  there fetch's valid, a combinational loop (kb pattern
+  rtl/lib/block/flow_through_buffer/design); the cut costs no clock when nothing waits.
 rejected:
   - choice: The protocol of the sketch, grant and bus_ready at the end of a transaction
     why_not: >
@@ -41,10 +47,17 @@ rejected:
 evidence: >
   Behave version and its unit test (three arbiters: round-robin, data first, instruction
   first; queues of 2 and 4; every case of the decision must happen), 2026-10-29: 9 of 9
-  mutants caught. The struct version against the same test, 2026-10-29.
+  mutants caught. The struct version against the same test, 2026-10-29. With the buffers,
+  2026-11-02: the test's model has a buffer per side and checks that a cache's ready is
+  its buffer's empty and does not move when the other side's valid or memory's ready
+  changes within the clock; requests flowed through and were buffered.
 code:
   - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#tie_winner
   - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#u_fifo
   - rtl/lib/block/cache/insn_data_cache_arbiter/struct/insn_data_cache_arbiter.sv#tie_d
   - rtl/lib/block/cache/cache_pkg.sv#ARB_ROUND_ROBIN
   - test/block/cache/insn_data_cache_arbiter/tb_insn_data_cache_arbiter.sv#tie_side
+  - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#u_icache_flow
+  - test/block/cache/insn_data_cache_arbiter/tb_insn_data_cache_arbiter.sv#check_cut
+relies_on:
+  - rtl/lib/block/flow_through_buffer/design

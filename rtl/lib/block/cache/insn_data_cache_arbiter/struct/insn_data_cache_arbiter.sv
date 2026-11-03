@@ -5,7 +5,8 @@
  * decided by prio (two CmpEq), else by POLICY (generate: a constant side, or round-robin with
  * a flip-flop of the side served last, which only round-robin has); muxes select the side
  * presented, held while memory does not take it (two flip-flops: the hold and its side); a
- * Fifo keeps the sides of the reads in memory.
+ * Fifo keeps the sides of the reads in memory. Each side's request first goes through a
+ * FlowThroughBufferT (see the behave version: the cut of the ready paths).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -87,6 +88,33 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     wire almost_empty;
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // Each side's request goes through a flow-through buffer: the cache's ready comes from a
+    // flop (its buffer is empty), never from memory's ready or the other cache's valid.
+    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + DATA_WIDTH + STRB_WIDTH; // {we, addr, wdata, wstrb}
+    typedef logic [ADDR_WIDTH-1:0]  i_req_t;
+    typedef logic [D_REQ_WIDTH-1:0] d_req_t;
+
+    wire                  i_valid;      // the instruction cache's request, behind its buffer
+    wire                  i_ready;
+    wire [ADDR_WIDTH-1:0] i_addr;
+    wire                  d_valid;      // the data cache's request, behind its buffer
+    wire                  d_ready;
+    wire                  d_we;
+    wire [ADDR_WIDTH-1:0] d_addr;
+    wire [DATA_WIDTH-1:0] d_wdata;
+    wire [STRB_WIDTH-1:0] d_wstrb;
+
+    // @kb: rtl/lib/block/flow_through_buffer/design
+    FlowThroughBufferT #(.T(i_req_t)) u_icache_flow(
+        .clk, .rst_n,
+        .in_valid(icache_req_valid), .in_ready(icache_req_ready), .in_data(icache_req_addr),
+        .out_valid(i_valid), .out_ready(i_ready), .out_data(i_addr));
+    FlowThroughBufferT #(.T(d_req_t)) u_dcache_flow(
+        .clk, .rst_n,
+        .in_valid(dcache_req_valid), .in_ready(dcache_req_ready),
+        .in_data({dcache_req_we, dcache_req_addr, dcache_req_wdata, dcache_req_wstrb}),
+        .out_valid(d_valid), .out_ready(d_ready), .out_data({d_we, d_addr, d_wdata, d_wstrb}));
+
     // @kb: rtl/lib/block/cache/insn_data_cache_arbiter/design
     // The tie: prio first (PRIO_DATA and PRIO_INSN never hold together), else POLICY. The
     // package name is needed: Icarus takes an imported name alone as a port expression for an
@@ -112,9 +140,9 @@ module InsnDataCacheArbiter import CachePkg::*; #(
 
     // A read goes only while the queue has room.
     Inv  #(1) u_inv_full   (.in(full), .out(full_n));
-    And2 #(1) u_and2_i_ok  (.in1(icache_req_valid), .in2(full_n), .out(i_ok));
-    Or2  #(1) u_or2_d_room (.in1(dcache_req_we), .in2(full_n), .out(write_or_room));
-    And2 #(1) u_and2_d_ok  (.in1(dcache_req_valid), .in2(write_or_room), .out(d_ok));
+    And2 #(1) u_and2_i_ok  (.in1(i_valid), .in2(full_n), .out(i_ok));
+    Or2  #(1) u_or2_d_room (.in1(d_we), .in2(full_n), .out(write_or_room));
+    And2 #(1) u_and2_d_ok  (.in1(d_valid), .in2(write_or_room), .out(d_ok));
 
     // The side: the held one, else the tie's winner when both ask, else the one that asks.
     And2 #(1) u_and2_both  (.in1(i_ok), .in2(d_ok), .out(both));
@@ -123,17 +151,17 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     Inv  #(1) u_inv_side   (.in(side), .out(side_n));
 
     Mux2 #(1) u_mux2_valid (.in0(i_ok), .in1(d_ok), .sel(side), .out(mem_req_valid));
-    And2 #(1) u_and2_we    (.in1(side), .in2(dcache_req_we), .out(mem_req_we));
-    Mux2 #(ADDR_WIDTH) u_mux2_addr(.in0(icache_req_addr), .in1(dcache_req_addr), .sel(side),
+    And2 #(1) u_and2_we    (.in1(side), .in2(d_we), .out(mem_req_we));
+    Mux2 #(ADDR_WIDTH) u_mux2_addr(.in0(i_addr), .in1(d_addr), .sel(side),
                                    .out(mem_req_addr));
-    assign mem_req_wdata = dcache_req_wdata;    // a write is always the data cache's
-    assign mem_req_wstrb = dcache_req_wstrb;
+    assign mem_req_wdata = d_wdata;             // a write is always the data cache's
+    assign mem_req_wstrb = d_wstrb;
 
     And2 #(1) u_and2_taken (.in1(mem_req_valid), .in2(mem_req_ready), .out(taken));
     And3 #(1) u_and3_i_rdy (.in1(mem_req_ready), .in2(side_n), .in3(i_ok),
-                            .out(icache_req_ready));
+                            .out(i_ready));
     And3 #(1) u_and3_d_rdy (.in1(mem_req_ready), .in2(side), .in3(d_ok),
-                            .out(dcache_req_ready));
+                            .out(d_ready));
 
     // The hold and its side.
     Inv  #(1) u_inv_ready  (.in(mem_req_ready), .out(ready_n));

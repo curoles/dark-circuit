@@ -1,0 +1,26 @@
+type: pattern
+title: A late input goes into the last mux of a select chain
+date: 2026-11-02
+problem: >
+  A value is chosen from several inputs by a chain of 2:1 muxes, and one input comes late
+  (the sum of an adder, the result of decode). Every mux the late input passes is on the
+  longest path. The project's synthesis maps the logic as written (no restructuring, see
+  cmake/yosys_tech_sky130.ys.in), so the order of the selects in the RTL decides the path.
+solution: >
+  Order the chain so that the late input enters the last mux: the early inputs are muxed
+  first, while the late one is still on its way, and one 2:1 mux at the end chooses between
+  that result and the late input; its select comes from early signals. Selects that never
+  hold together may be ordered freely, so the late one can always go last.
+why: >
+  The late input pays for one mux instead of every level of the chain, in any technology;
+  the early inputs' extra levels use time they have to spare. Mig2's ID redirect target
+  (pc + imm, the return stack's top, pc + 1): 5.9 ns with pc + imm through two muxes, 5.7 ns
+  with it in the last one (sky130, ABC estimate).
+known_as: >
+  Late-arriving-signal ordering (critical-path-aware mux ordering): synthesis tools do it
+  themselves when they may restructure the logic; with a flow that keeps the structure, the
+  RTL does it.
+evidence: >
+  kb rtl/design/mig2/id_target_mux_order: the measurement and the first order.
+code:
+  - rtl/design/mig2/mig2_control.sv#id_redirect_pc

@@ -5,18 +5,22 @@
  * until it is taken (valid/ready), may have several reads in memory and check every answer:
  * it is theirs (the oldest read they wait for) and its line is the line of its address.
  * Memory takes requests when ready (random) and answers reads in order, 1 to 6 clocks after
- * taking them; prio is random. Checks in every clock, before the rising edge:
- * - memory takes a request exactly when one cache does, and it is that cache's request;
+ * taking them; prio is random. The model has the arbiter's two flow-through buffers: a
+ * cache's request is taken when its buffer is empty and goes on from there (in the same
+ * clock when memory takes it, else from the buffer). Checks in every clock, before the
+ * rising edge:
+ * - a cache's ready is exactly "its buffer is empty", and it does not move when the other
+ *   side's valid or memory's ready changes within the clock (the cut, check_cut);
+ * - memory gets the request of the side the arbiter presents: the held one, else prio's or
+ *   POLICY's when both may go (round-robin: not the side taken last), else the one that
+ *   may go (a read only with fewer than 1 << PENDING_WIDTH reads in memory);
  * - a request presented and not taken is still presented, unchanged;
- * - memory gets a request exactly when a cache asks and its request may go (a read only
- *   with fewer than 1 << PENDING_WIDTH reads in memory);
- * - when both may go and nothing is held, the taken one is prio's, else POLICY's
- *   (round-robin: not the side taken last);
  * - an answer goes to the side of the oldest read in memory, and only then.
  * Runs with POLICY round-robin (PENDING_WIDTH 1), data first (1) and instruction first (2);
  * 20000 clocks on Verilator, 2000 on Icarus. In the end every case must have happened: ties
  * decided by each prio and by POLICY, a held request, a full queue that stops a read while a
- * write goes, answers to both sides. Stops at the first mismatch with $fatal.
+ * write goes, answers to both sides, a request that flowed through its buffer and one that
+ * waited in it, on both sides. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -89,18 +93,33 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
     integer        mq_time [Q];
     integer        ih, it, dh, dt, mh, mt;  // heads and tails, counts of pushes and pops
 
+    // The model of the buffers: a request taken from a cache that memory did not take yet.
+    logic          ib_full;
+    logic [AW-1:0] ib_addr;
+    logic          db_full;
+    logic          db_we;
+    logic [AW-1:0] db_addr;
+    logic [DW-1:0] db_wdata;
+    logic [SW-1:0] db_wstrb;
+    // Behind the buffers: the request of each side the arbiter sees.
+    logic          ci_valid, cd_valid, cd_we;
+    logic [AW-1:0] ci_addr, cd_addr;
+    logic [DW-1:0] cd_wdata;
+    logic [SW-1:0] cd_wstrb;
+
     integer        now;
     integer        seed;
     logic          last;        // the side memory took the last request from
     logic          held;        // the request presented in the clock before was not taken
-    logic          h_we;        // that request
+    logic          h_side;      // that request
+    logic          h_we;
     logic [AW-1:0] h_addr;
     logic [DW-1:0] h_wdata;
     logic [SW-1:0] h_wstrb;
-    logic          i_take, d_take, m_take, i_ok, d_ok, rsp, rsp_d, exp_d;
-    logic [AW-1:0] take_addr;
-    logic          take_we;
+    logic          side;        // the side presented now
+    logic          i_take, d_take, m_take, ci_take, cd_take, ci_ok, cd_ok, rsp, rsp_d, exp_valid;
     integer        n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d;
+    integer        n_flow_i, n_flow_d, n_wait_i, n_wait_d;
     // Random word, only some of its bits are used.
     /* verilator lint_off UNUSEDSIGNAL */
     logic [31:0]   rnd;
@@ -122,41 +141,55 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
 
     // Before the rising edge: checks, and what the edge does.
     task automatic check();
-        i_take = i_valid && i_ready;
-        d_take = d_valid && d_ready;
-        m_take = m_valid && m_ready;
-        if (m_take != (i_take || d_take) || (i_take && d_take))
-            $fatal(1, "Arbiter %0d: memory takes %b, instruction cache %b, data cache %b",
-                   POLICY, m_take, i_take, d_take);
-        if (i_take && (m_we || m_addr !== i_addr))
+        if (i_ready !== !ib_full || d_ready !== !db_full)
+            $fatal(1, "Arbiter %0d: ready instruction %b data %b, buffers full %b %b",
+                   POLICY, i_ready, d_ready, ib_full, db_full);
+        i_take   = i_valid && i_ready;
+        d_take   = d_valid && d_ready;
+        ci_valid = ib_full || i_valid;
+        ci_addr  = ib_full ? ib_addr : i_addr;
+        cd_valid = db_full || d_valid;
+        cd_we    = db_full ? db_we : d_we;
+        cd_addr  = db_full ? db_addr : d_addr;
+        cd_wdata = db_full ? db_wdata : d_wdata;
+        cd_wstrb = db_full ? db_wstrb : d_wstrb;
+        ci_ok    = ci_valid && (mt - mh) < CAP;
+        cd_ok    = cd_valid && (cd_we || (mt - mh) < CAP);
+        if (held)                side = h_side;
+        else if (ci_ok && cd_ok) side = tie_side(prio, last);
+        else                     side = cd_ok ? SIDE_D : SIDE_I;
+        exp_valid = (side == SIDE_D) ? cd_ok : ci_ok;
+        if (m_valid !== exp_valid)
+            $fatal(1, "Arbiter %0d: memory request %b, expected %b of side %b (%0d reads in memory)",
+                   POLICY, m_valid, exp_valid, side, mt - mh);
+        if (m_valid && side == SIDE_I && (m_we || m_addr !== ci_addr))
             $fatal(1, "Arbiter %0d: instruction read %h, memory got we=%b %h",
-                   POLICY, i_addr, m_we, m_addr);
-        if (d_take && (m_we !== d_we || m_addr !== d_addr ||
-                       (d_we && (m_wdata !== d_wdata || m_wstrb !== d_wstrb))))
+                   POLICY, ci_addr, m_we, m_addr);
+        if (m_valid && side == SIDE_D &&
+            (m_we !== cd_we || m_addr !== cd_addr ||
+             (cd_we && (m_wdata !== cd_wdata || m_wstrb !== cd_wstrb))))
             $fatal(1, "Arbiter %0d: data request we=%b %h %h %h, memory got we=%b %h %h %h",
-                   POLICY, d_we, d_addr, d_wdata, d_wstrb, m_we, m_addr, m_wdata, m_wstrb);
+                   POLICY, cd_we, cd_addr, cd_wdata, cd_wstrb, m_we, m_addr, m_wdata, m_wstrb);
         if (held && (m_valid !== 1'b1 || m_we !== h_we || m_addr !== h_addr ||
                      (h_we && (m_wdata !== h_wdata || m_wstrb !== h_wstrb))))
             $fatal(1, "Arbiter %0d: the request held changed: valid=%b we=%b %h, was we=%b %h",
                    POLICY, m_valid, m_we, m_addr, h_we, h_addr);
-        i_ok = i_valid && (mt - mh) < CAP;
-        d_ok = d_valid && (d_we || (mt - mh) < CAP);
-        if (m_valid !== (i_ok || d_ok))
-            $fatal(1, "Arbiter %0d: memory request %b, instruction %b data %b (we %b), %0d reads in memory",
-                   POLICY, m_valid, i_valid, d_valid, d_we, mt - mh);
-        if (m_take && !held && i_ok && d_ok) begin
-            exp_d = tie_side(prio, last);
-            if (exp_d != d_take)
-                $fatal(1, "Arbiter %0d: tie with prio %0d, last %b: took data %b, expected %b",
-                       POLICY, prio, last, d_take, exp_d);
+        m_take  = m_valid && m_ready;
+        ci_take = m_take && side == SIDE_I;
+        cd_take = m_take && side == SIDE_D;
+        if (m_take && !held && ci_ok && cd_ok) begin
             if (prio == PRIO_DATA)      n_prio_d = n_prio_d + 1;
             else if (prio == PRIO_INSN) n_prio_i = n_prio_i + 1;
             else                        n_policy = n_policy + 1;
         end
         if (held)
             n_held = n_held + 1;
-        if ((mt - mh) == CAP && d_take && d_we && i_valid)
+        if ((mt - mh) == CAP && cd_take && cd_we && ci_valid)
             n_full = n_full + 1;
+        if (i_take && ci_take)  n_flow_i = n_flow_i + 1;
+        if (i_take && !ci_take) n_wait_i = n_wait_i + 1;
+        if (d_take && cd_take)  n_flow_d = n_flow_d + 1;
+        if (d_take && !cd_take) n_wait_d = n_wait_d + 1;
         // Answers.
         rsp   = m_rsp_valid;
         rsp_d = mq_side[mh % Q];
@@ -169,13 +202,32 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
         if (rsp && rsp_d && (dh == dt || d_rsp_data !== line_of(dq[dh % Q])))
             $fatal(1, "Arbiter %0d: data cache answer %h, expected the line of %h",
                    POLICY, d_rsp_data, dq[dh % Q]);
-        take_addr = m_addr;
-        take_we   = m_we;
-        held      = m_valid && !m_ready;
-        h_we      = m_we;
-        h_addr    = m_addr;
-        h_wdata   = m_wdata;
-        h_wstrb   = m_wstrb;
+        held    = m_valid && !m_ready;
+        h_side  = side;
+        h_we    = m_we;
+        h_addr  = m_addr;
+        h_wdata = m_wdata;
+        h_wstrb = m_wstrb;
+    endtask
+
+    // The cut: within the clock, the other side's valid and memory's ready do not move a
+    // cache's ready (they are put back before the edge).
+    task automatic check_cut();
+        logic ir, dr;
+        ir = i_ready;
+        dr = d_ready;
+        d_valid = !d_valid;
+        #1 if (i_ready !== ir)
+            $fatal(1, "Arbiter %0d: the data cache's valid moved the instruction cache's ready", POLICY);
+        d_valid = !d_valid;
+        i_valid = !i_valid;
+        #1 if (d_ready !== dr)
+            $fatal(1, "Arbiter %0d: the instruction cache's valid moved the data cache's ready", POLICY);
+        i_valid = !i_valid;
+        m_ready = !m_ready;
+        #1 if (i_ready !== ir || d_ready !== dr)
+            $fatal(1, "Arbiter %0d: memory's ready moved a cache's ready", POLICY);
+        m_ready = !m_ready;
     endtask
 
     // After the rising edge: the models do what the edge did and drive the next clock.
@@ -185,6 +237,14 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
             else       begin ih = ih + 1; n_rsp_i = n_rsp_i + 1; end
             mh = mh + 1;
         end
+        // The buffers: an empty one loads the cache's request; a request offered behind it and
+        // not taken by memory is in it after the edge.
+        if (!ib_full)
+            ib_addr = i_addr;
+        if (!db_full)
+            {db_we, db_addr, db_wdata, db_wstrb} = {d_we, d_addr, d_wdata, d_wstrb};
+        ib_full = ci_valid && !ci_take;
+        db_full = cd_valid && !cd_take;
         if (i_take) begin
             i_valid = 1'b0;
             iq[it % Q] = i_addr;
@@ -198,11 +258,11 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
             end
         end
         if (m_take) begin
-            last = d_take;
-            if (!take_we) begin
+            last = side;
+            if (!h_we) begin
                 rnd = $random(seed);
-                mq_addr[mt % Q] = take_addr;
-                mq_side[mt % Q] = d_take;
+                mq_addr[mt % Q] = h_addr;
+                mq_side[mt % Q] = side;
                 mq_time[mt % Q] = now + 1 + int'(rnd[2:0]) % 6;
                 mt = mt + 1;
             end
@@ -234,9 +294,14 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
         seed = 1 + POLICY + 8 * PENDING_WIDTH;
         {ih, it, dh, dt, mh, mt} = '0;
         {n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d} = '0;
+        {n_flow_i, n_flow_d, n_wait_i, n_wait_d} = '0;
         now = 0;
         last = SIDE_D;          // the arbiter after reset: the instruction cache first
         held = 1'b0;
+        h_side = SIDE_I;
+        {h_we, h_addr, h_wdata, h_wstrb} = '0;
+        {ib_full, db_full} = '0;
+        {ib_addr, db_we, db_addr, db_wdata, db_wstrb} = '0;
         rst_n = 1'b0;
         prio = PRIO_NONE;
         {i_valid, d_valid, d_we, m_ready, m_rsp_valid} = '0;
@@ -246,13 +311,17 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*; #(
         for (int c = 0; c < N_CLOCKS; c++) begin
             @(negedge clk);
             check();
+            check_cut();
             @(posedge clk);
             #1 advance();
         end
         if (n_prio_d == 0 || n_prio_i == 0 || n_policy == 0 || n_held == 0 || n_full == 0 ||
-            n_rsp_i == 0 || n_rsp_d == 0)
-            $fatal(1, "Arbiter %0d: a case did not happen: prio %0d %0d policy %0d held %0d full %0d rsp %0d %0d",
-                   POLICY, n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d);
+            n_rsp_i == 0 || n_rsp_d == 0 || n_flow_i == 0 || n_flow_d == 0 || n_wait_i == 0 ||
+            n_wait_d == 0)
+            $fatal(1, {"Arbiter %0d: a case did not happen: prio %0d %0d policy %0d held %0d ",
+                       "full %0d rsp %0d %0d flow %0d %0d wait %0d %0d"},
+                   POLICY, n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d,
+                   n_flow_i, n_flow_d, n_wait_i, n_wait_d);
         done = 1'b1;
     end
 endmodule

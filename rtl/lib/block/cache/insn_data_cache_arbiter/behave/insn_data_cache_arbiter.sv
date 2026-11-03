@@ -17,6 +17,19 @@
  *   full no read is presented (a write is).
  * Order between the two caches is not kept: a store and a later fetch of its address are
  * ordered by software (FENCE.I).
+ * Each side's request goes through a FlowThroughBuffer first (u_icache_flow,
+ * u_dcache_flow): a cache's ready is "its buffer is empty", a flip-flop, so neither cache
+ * sees memory's ready or the other cache's valid without one. Without the cut one side's
+ * valid decides the other side's ready, and through a CPU's stall that ready can come back
+ * into the first valid: a loop (kb pattern rtl/lib/block/flow_through_buffer/design). A
+ * request flows through in the clock memory takes it at once; else its buffer keeps it and
+ * the logic below presents it, held as before. So a cache's request is taken by its buffer
+ * (its answer comes later) while the other side holds memory.
+ *
+ *   icache_req --> FlowThroughBuffer --> i_* --+
+ *                                              +--> side (hold, prio, POLICY) --> mem_req
+ *   dcache_req --> FlowThroughBuffer --> d_* --+
+ *   mem_rsp --> owner: the Fifo of the sides of the reads --> icache_rsp or dcache_rsp
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -85,6 +98,33 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     wire  almost_empty;
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // Each side's request goes through a flow-through buffer: the cache's ready comes from a
+    // flop (its buffer is empty), never from memory's ready or the other cache's valid.
+    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + DATA_WIDTH + STRB_WIDTH; // {we, addr, wdata, wstrb}
+    typedef logic [ADDR_WIDTH-1:0]  i_req_t;
+    typedef logic [D_REQ_WIDTH-1:0] d_req_t;
+
+    wire                  i_valid;      // the instruction cache's request, behind its buffer
+    wire                  i_ready;
+    wire [ADDR_WIDTH-1:0] i_addr;
+    wire                  d_valid;      // the data cache's request, behind its buffer
+    wire                  d_ready;
+    wire                  d_we;
+    wire [ADDR_WIDTH-1:0] d_addr;
+    wire [DATA_WIDTH-1:0] d_wdata;
+    wire [STRB_WIDTH-1:0] d_wstrb;
+
+    // @kb: rtl/lib/block/flow_through_buffer/design
+    FlowThroughBufferT #(.T(i_req_t)) u_icache_flow(
+        .clk, .rst_n,
+        .in_valid(icache_req_valid), .in_ready(icache_req_ready), .in_data(icache_req_addr),
+        .out_valid(i_valid), .out_ready(i_ready), .out_data(i_addr));
+    FlowThroughBufferT #(.T(d_req_t)) u_dcache_flow(
+        .clk, .rst_n,
+        .in_valid(dcache_req_valid), .in_ready(dcache_req_ready),
+        .in_data({dcache_req_we, dcache_req_addr, dcache_req_wdata, dcache_req_wstrb}),
+        .out_valid(d_valid), .out_ready(d_ready), .out_data({d_we, d_addr, d_wdata, d_wstrb}));
+
     // @kb: rtl/lib/block/cache/insn_data_cache_arbiter/design
     // The side that gets memory when both want it: prio, else POLICY. The only place that
     // decides between the sides (a generic arbiter would take it over).
@@ -99,8 +139,8 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     endfunction
 
     // A read goes only while the queue has room for its side.
-    assign i_ok = icache_req_valid && !full;
-    assign d_ok = dcache_req_valid && (dcache_req_we || !full);
+    assign i_ok = i_valid && !full;
+    assign d_ok = d_valid && (d_we || !full);
 
     always_comb
         if (hold_q)
@@ -111,14 +151,14 @@ module InsnDataCacheArbiter import CachePkg::*; #(
             side = d_ok ? SIDE_D : SIDE_I;
 
     assign mem_req_valid = (side == SIDE_D) ? d_ok : i_ok;
-    assign mem_req_we    = (side == SIDE_D) && dcache_req_we;
-    assign mem_req_addr  = (side == SIDE_D) ? dcache_req_addr : icache_req_addr;
-    assign mem_req_wdata = dcache_req_wdata;    // a write is always the data cache's
-    assign mem_req_wstrb = dcache_req_wstrb;
+    assign mem_req_we    = (side == SIDE_D) && d_we;
+    assign mem_req_addr  = (side == SIDE_D) ? d_addr : i_addr;
+    assign mem_req_wdata = d_wdata;             // a write is always the data cache's
+    assign mem_req_wstrb = d_wstrb;
 
     assign taken            = mem_req_valid && mem_req_ready;
-    assign icache_req_ready = mem_req_ready && side == SIDE_I && i_ok;
-    assign dcache_req_ready = mem_req_ready && side == SIDE_D && d_ok;
+    assign i_ready = mem_req_ready && side == SIDE_I && i_ok;
+    assign d_ready = mem_req_ready && side == SIDE_D && d_ok;
 
     always_ff @(posedge clk)
         if (!rst_n) begin

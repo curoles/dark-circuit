@@ -1,0 +1,30 @@
+type: pattern
+title: The few bits a late decision needs are computed next to it, from the operands
+date: 2026-11-02
+problem: >
+  A control decision (a trap, a redirect, a stall) needs a few bits of a wide result that
+  comes late: the low bits of an address behind the ALU's operand muxes, its adder and its
+  result mux. The decision then waits for the whole result, and everything it drives
+  (flushes, the next pc) waits too.
+solution: >
+  Compute just those bits from the same bits of the operands, next to the decision: the low
+  k bits of a sum depend only on the low k bits of the operands, so a k-bit adder gives them
+  at once. The decision uses the narrow copy; the wide result stays the data (the address to
+  memory). An assertion checks that the two agree wherever both exist.
+why: >
+  The decision no longer waits for the wide path, for a few gates: Mig2Lsu's alignment check
+  (rs1[1:0] + imm[1:0]) took the misaligned trap off the ALU's result: 6.2 -> 5.9 ns (sky130,
+  ABC estimate).
+known_as: >
+  Logic duplication to cut a path; for addresses, early (partial) address generation of the
+  low bits for alignment and bank selection.
+rejected:
+  - choice: A full-width adder of its own
+    why_not: Only the few bits are on the path; the rest would be area for nothing.
+  - choice: The bits from the adder inside the wide unit, before its result mux
+    why_not: Still behind the unit's operand muxes.
+evidence: >
+  kb rtl/design/mig2/lsu_own_offset: the measurement and the path.
+code:
+  - rtl/design/mig2/mig2_lsu.sv#offset
+  - rtl/design/mig2/mig2_core.sv#a_lsu_offset

@@ -1,0 +1,29 @@
+type: pattern
+title: Compare a sum with a value without the sum (carry-save equality)
+date: 2026-11-02
+problem: >
+  A check a + b == c on a select or control path (a branch target against the address fetch
+  asked for, a base plus an offset against a bound): an adder's carry chain and then a
+  comparator make a long path, though only the equality is needed, not the sum.
+solution: >
+  a + b == c exactly when a + b + ~c is all ones (mod 2^WIDTH). A carry-save adder turns
+  a + b + ~c into ps + (sc << 1) with no carry chain, and X + Y is all ones exactly when
+  X == ~Y, so eq is the AND of all bits of ps ^ (sc << 1): a full adder, an XOR and an AND
+  tree, whose delay does not grow with a carry chain. Library block AddCmp (its struct
+  version); a real adder stays only where the sum is data (Mig2 keeps pc + imm for the
+  redirect target and checks it with AddCmp).
+why: >
+  The compare leaves the carry chain off the path: Mig2's ID check of a BTB target (the
+  select of ID's redirect) went from 6.7 to 5.6 ns (sky130, ABC estimate).
+known_as: >
+  D. R. Lutz, The Power of Carry-Save Addition (1994); the trick behind sum-addressed
+  memories, which compare base + offset with an address without adding.
+rejected:
+  - choice: An adder and a comparator after it
+    why_not: The carry chain and the compare in series on the path (6.7 ns in Mig2's ID).
+evidence: >
+  kb rtl/design/mig2/addcmp_id_check: the measurement; a_at_target checks the equivalence in
+  every Mig2 simulation.
+code:
+  - rtl/lib/block/add_cmp/struct/add_cmp.sv#u_carry_save_adder
+  - rtl/design/mig2/mig2_control.sv#u_add_cmp

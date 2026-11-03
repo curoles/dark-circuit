@@ -52,3 +52,5 @@ code:
   - rtl/lib/block/flow_through_buffer/flow_through_buffer_t.sv#a_out_held
   - rtl/lib/block/flow_through_buffer/flow_through_buffer_t.sv#a_empty_after_take
   - test/block/flow_through_buffer/tb_flow_through_buffer.sv#probe
+  - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#u_icache_flow
+  - rtl/lib/block/cache/insn_data_cache_arbiter/struct/insn_data_cache_arbiter.sv#u_dcache_flow

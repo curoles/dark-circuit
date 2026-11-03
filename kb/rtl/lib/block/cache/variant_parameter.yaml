@@ -1,0 +1,37 @@
+type: pattern
+title: A variant that leaves logic out is a parameter of the full block, with a thin wrapper
+date: 2026-11-02
+problem: >
+  Two versions of a block where one is the other with some logic left out (a read-only and a
+  read-write cache): separate implementations drift apart and double the work in behave and
+  struct; the full block instantiating the small one needs the small one's internals as
+  ports.
+solution: >
+  The full block gets a parameter (READ_ONLY); one generate branch (g_read_only) ties what
+  the variant does not have to constants, the other (g_store) holds the logic, so the
+  variant has no such gates by construction. The variant's module is a thin wrapper with its
+  own, smaller port list: the full block with the parameter set and the unused inputs tied.
+  It is one file above behave/ and struct/, listed by both flists, so the full block of the
+  library it is built with gives the version. Both testbenches run: the variant's on the
+  wrapper, the full block's on the full block.
+why: >
+  One implementation to keep and fix; the parameter leaves the logic out instead of relying
+  on synthesis to fold constants (flops of tied inputs included); the wrapper keeps the
+  variant's ports and its testbench. The caches: the same flops as the separate read-only
+  versions, cells within 0.1 %.
+known_as: >
+  A feature parameter with generate-based stripping, and a wrapper per configuration (how
+  configurable IP is usually packaged).
+rejected:
+  - choice: The full block instantiating the small one
+    why_not: The small one would need ports for what the full one adds inside it.
+  - choice: The wrapper alone, the logic left to synthesis (inputs tied to 0)
+    why_not: Relies on the optimizer, also for the flops of the tied inputs.
+evidence: >
+  kb rtl/lib/block/cache/read_only: the three caches, tests, mutants and synthesis; AGENTS
+  "Library idioms" (logic only one parameter value needs).
+code:
+  - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#READ_ONLY
+  - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#READ_ONLY
+  - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#READ_ONLY
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#g_read_only
