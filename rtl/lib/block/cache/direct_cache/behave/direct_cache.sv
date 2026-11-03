@@ -1,36 +1,26 @@
 /* Direct-mapped read-write cache (a data cache), write-through, behavioral.
  *
- * A byte address is tag | set | offset, as in DirectCacheRdOnly: each set holds one line of
- * 1 << SETS_OFFSET bytes (CacheValidRam, CacheTagRam, CacheDataRam, read 1 clock after the
- * request).
- *
- * CPU side: requests on a valid/ready channel (AGENTS.md): a load or a store (req_we; for a
- * store req_wdata, the line with its new bytes, and req_wstrb, one bit per byte to write) is
- * taken at a rising edge with req_valid=1 and req_ready=1, and looked up in the clock after.
- * A load that hits answers then (rsp_valid with the line); a load that misses reads its line
- * from memory, answers with it in the clock it comes and writes it. A store is done when it
- * is taken: it gets no answer.
- * Write-through, no write-allocate: every store goes to memory, from its lookup; a store that
- * hits also merges its bytes into the line, written when memory takes the store; a store
- * that misses leaves the cache as it is.
- * Memory side: requests on one valid/ready channel, in program order (mem_req_we, the
- * address of the line, for a write the line and its strobes), so a read sees every store
- * before it. A write gets no answer; a read is answered by mem_rsp_valid with the line one
- * or more clocks after memory took it (no ready: the cache always takes the answer). While
- * memory does not take a request, the lookup holds it and req_ready is 0.
+ * A byte address is tag | set | offset: each set holds one line of 1 << SETS_OFFSET bytes
+ * (CacheValidRam, CacheTagRam, CacheDataRam, read 1 clock after the request). The protocol,
+ * the write policy (write-through, no write-allocate), uncached requests and READ_ONLY are
+ * CacheControl's (see there): it takes the requests, asks memory and answers; this module has
+ * the line of each set and finds the hit.
  * Forwarding: a store that hits writes the data RAM at the rising edge where the next
  * request may read it; when that request is of the same set, the RAM reads the old line,
  * so the merged line is used instead.
  * invalidate=1 makes every line invalid; allowed while no load miss is served. Reset makes
  * every line invalid.
- * Uncached: a request with req_uncached=1 does not use the lines (no lookup, fill or
- * update) and passes straight to the memory side: it is taken when nothing is looked up or
- * served, in the clock memory takes it, so req_ready then follows mem_req_ready without a
- * flop; a load is answered in the clock memory answers, with memory's line. An address is
- * used either cached or uncached, never both: the cache does not check.
- * READ_ONLY=1 makes an instruction cache (DirectCacheRdOnly): no stores (req_we, req_wdata
- * and req_wstrb are not used; mem_req_we, mem_req_wdata and mem_req_wstrb are 0), so the
- * logic only stores need (their fields of the request, the merge, forwarding) is left out.
+ * READ_ONLY=1 makes an instruction cache (DirectCacheRdOnly): forwarding is left out too.
+ *
+ *   CPU side <---> +--------------+ <---> memory side
+ *                  | CacheControl |
+ *                  +--------------+
+ *        accept, look, look_line |  ^ hit, hit_line (= line)
+ *        store_write, refill,    v  |
+ *        ram_wr_line, merged  +------------------------------------------+
+ *                             | CacheValidRam, CacheTagRam, CacheDataRam |
+ *                             | at the set; hit, forwarding              |
+ *                             +------------------------------------------+
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -79,45 +69,32 @@ module DirectCache #(
     logic                  accept;      // a request is taken in this clock
     logic                  look;        // a request taken before is looked up now (or held)
     logic [ADDR_WIDTH-1:SETS_OFFSET] look_line;  // its address without the offset in the line
-    logic                  look_we;
     logic                  valid;       // of the set of look_line, read with the request
     logic [TAG_WIDTH-1:0]  tag;
     logic [DATA_WIDTH-1:0] ram_line;    // line of the set as the RAM read it
     logic [DATA_WIDTH-1:0] line;        // line of the set now: forwarded or ram_line
     logic                  hit;
-    logic                  store;       // a store is looked up
-    logic                  load_hit;
-    logic                  load_miss;
-    logic                  look_req;    // the lookup asks memory: a store or a load miss
-    logic                  held;        // its memory request is not taken: the lookup stays
     logic                  store_write; // a store that hits is taken by memory: write merged
-    logic                  waiting;     // a load miss is served: memory has not answered yet
     logic                  refill;      // the line from memory comes: write it
     logic                  ram_wr_en;
     logic [DATA_WIDTH-1:0] ram_wr_line;
-    logic                  unc_waiting; // memory took an uncached read, has not answered yet
-    logic                  unc_busy;    // ... and does not answer now
-    logic                  idle;        // nothing looked up or served: uncached may pass
-    logic                  unc_pass;    // an uncached request goes to memory now
+    // A direct-mapped cache has no replacement state: no touch, no victim. Only forwarding
+    // reads merged (none when READ_ONLY).
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic                  load_hit;
+    logic                  miss_taken;
+    logic [DATA_WIDTH-1:0] merged;
+    /* verilator lint_on UNUSEDSIGNAL */
 
-    // A cached request is taken only when the lookup is done: no load miss found or served,
-    // memory took the lookup's own request, no uncached read waits. An uncached one passes to
-    // memory when the cache is idle and is taken when memory takes it.
-    // @kb: rtl/lib/block/cache/uncached
-    assign unc_busy  = unc_waiting && !mem_rsp_valid;
-    assign idle      = !look && !waiting && !unc_busy;
-    assign unc_pass  = req_valid && req_uncached && idle;
-    assign req_ready = req_uncached ? idle && mem_req_ready
-                                    : !waiting && !load_miss && !held && !unc_busy;
-    assign accept    = req_valid && !req_uncached && req_ready;
-
-    always_ff @(posedge clk)
-        if (!rst_n) look <= 1'b0;
-        else        look <= accept || held;
-
-    always_ff @(posedge clk)
-        if (accept)
-            look_line <= req_addr[ADDR_WIDTH-1:SETS_OFFSET];
+    CacheControl #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_OFFSET(SETS_OFFSET), .READ_ONLY(READ_ONLY))
+        u_control(
+            .clk, .rst_n,
+            .req_valid, .req_ready, .req_uncached, .req_we, .req_addr, .req_wdata, .req_wstrb,
+            .rsp_valid, .rsp_data,
+            .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
+            .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data,
+            .accept, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
+            .ram_wr_line, .merged, .hit, .hit_line(line));
 
     // The RAMs read the set of the request; their answers come with look and hold while a
     // lookup is held (no request is taken). Refills write valid, tag and data; a store that
@@ -140,65 +117,14 @@ module DirectCache #(
         .wr_data(ram_wr_line));
 
     assign hit       = look && valid && tag == look_line[ADDR_WIDTH-1 -: TAG_WIDTH];
-    assign store     = look && look_we;
-    assign load_hit  = look && !look_we && hit;
-    assign load_miss = look && !look_we && !hit;
+    assign ram_wr_en = refill || store_write;
 
-    // Write-through: a store always goes to memory; a load only when it misses. A cached
-    // request comes from the lookup's registers; an uncached one straight from the CPU side
-    // (only while idle: never both); valid does not depend on mem_req_ready (rule 3). The
-    // fields of a write are set in the branches below.
-    assign look_req      = store || load_miss;
-    assign mem_req_valid = unc_pass || look_req;
-    assign held          = look_req && !mem_req_ready;
-    assign mem_req_addr  = unc_pass ? {req_addr[ADDR_WIDTH-1:SETS_OFFSET], {SETS_OFFSET{1'b0}}}
-                                    : {look_line, {SETS_OFFSET{1'b0}}};
-
-    // The merged line goes into the cache once: in the clock memory takes the store.
-    function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,
-                                              input [DATA_WIDTH-1:0] new_bytes,
-                                              input [STRB_WIDTH-1:0] strb);
-        merge = old;
-        for (int b = 0; b < STRB_WIDTH; b++)
-            if (strb[b])
-                merge[8*b +: 8] = new_bytes[8*b +: 8];
-    endfunction
-
-    // The logic only stores need; a read-only cache has none of it. Both branches drive
-    // look_we, store_write, ram_wr_line, line and the fields of a memory write (mem_req_we,
-    // mem_req_wdata, mem_req_wstrb).
-    // @kb: rtl/lib/block/cache/read_only
+    // Forwarding needs stores; a read-only cache has none of it.
     if (READ_ONLY) begin: g_read_only
-        assign look_we     = 1'b0;
-        assign store_write = 1'b0;
-        assign ram_wr_line = mem_rsp_data;
-        assign line        = ram_line;
-
-        assign mem_req_we    = 1'b0;
-        assign mem_req_wdata = '0;
-        assign mem_req_wstrb = '0;
+        assign line = ram_line;
     end else begin: g_store
-        logic [DATA_WIDTH-1:0] look_wdata;
-        logic [STRB_WIDTH-1:0] look_wstrb;
         logic                  fwd;         // ram_line is older than a store's write
         logic [DATA_WIDTH-1:0] fwd_line;
-        logic [DATA_WIDTH-1:0] merged;      // line with the bytes of the store
-
-        always_ff @(posedge clk)
-            if (accept) begin
-                look_we    <= req_we;
-                look_wdata <= req_wdata;
-                look_wstrb <= req_wstrb;
-            end
-
-        // A memory write: an uncached store as it comes, else the lookup's store.
-        assign mem_req_we    = unc_pass ? req_we    : look_we;
-        assign mem_req_wdata = unc_pass ? req_wdata : look_wdata;
-        assign mem_req_wstrb = unc_pass ? req_wstrb : look_wstrb;
-
-        assign merged      = merge(line, look_wdata, look_wstrb);
-        assign store_write = store && hit && mem_req_ready;
-        assign ram_wr_line = refill ? mem_rsp_data : merged;
 
         // Forwarding: the request taken at the edge of a store's write read the old line
         // when it is of the same set. Only the edge of a read decides: no store completes
@@ -216,34 +142,5 @@ module DirectCache #(
 
         assign line = fwd ? fwd_line : ram_line;
     end
-
-    // A load miss is served from the clock memory takes its read until the answer comes
-    // (look_line holds: no request is taken meanwhile).
-    always_ff @(posedge clk)
-        if (!rst_n)                          waiting <= 1'b0;
-        else if (load_miss && mem_req_ready) waiting <= 1'b1;
-        else if (mem_rsp_valid)              waiting <= 1'b0;
-
-    assign refill = waiting && mem_rsp_valid;
-
-    // A lookup ends when memory takes its read, and no request is taken while the miss is
-    // served: so a refill (while waiting) never meets a store's write (in a lookup) on the
-    // data RAM's one write port, and the refill writes the set of look_line.
-    `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))
-
-    assign ram_wr_en = refill || store_write;
-
-    // An uncached read is served from the clock memory takes it until the answer comes; its
-    // line is not written into the cache.
-    always_ff @(posedge clk)
-        if (!rst_n)                                        unc_waiting <= 1'b0;
-        else if (unc_pass && mem_req_ready && !mem_req_we) unc_waiting <= 1'b1;
-        else if (mem_rsp_valid)                            unc_waiting <= 1'b0;
-
-    // It passed while idle, and nothing is taken while it waits: alone with memory.
-    `DC_ASSERT(a_unc_alone, !(unc_waiting && (look || waiting)))
-
-    assign rsp_valid = load_hit || refill || (unc_waiting && mem_rsp_valid);
-    assign rsp_data  = (waiting || unc_waiting) ? mem_rsp_data : line;
 
 endmodule

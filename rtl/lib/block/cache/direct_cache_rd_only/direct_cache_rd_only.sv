@@ -7,7 +7,7 @@
  * for the line (mem_req_valid with the address of the line, held until mem_req_ready),
  * answers with the line in the clock memory's answer comes (mem_rsp_valid) and writes it.
  * invalidate=1 makes every line invalid (FENCE.I); allowed while no miss is served. See
- * DirectCache for the protocol in full. req_uncached=1: the request bypasses the lines and
+ * CacheControl for the protocol in full. req_uncached=1: the request bypasses the lines and
  * goes straight to memory.
  * One file for the behave and the struct library: the DirectCache of the library it is
  * built with gives the version.

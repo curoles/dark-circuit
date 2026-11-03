@@ -2,17 +2,23 @@
  * SetAssocCache and SkewedCache share. The cache keeps its ways (the RAMs, hit detection,
  * forwarding, replacement) and gives this block whether the lookup hits and the line that hits.
  *
- * Protocol: a load or a store is taken at a rising edge with req_valid=1 and req_ready=1 and
- * looked up in the clock after (look); a load that hits answers then; a load that misses reads
- * its line from memory, answers with it and has it written (refill); a store is done when it
- * is taken and gets no answer. Write-through, no write-allocate: every store goes to memory
- * from its lookup; a store that hits also merges its bytes into the line that hits (merged),
- * written when memory takes the store (store_write); a store that misses leaves the cache as
- * it is. Memory side: one valid/ready channel in program order, a read answered by
- * mem_rsp_valid one or more clocks after memory took it. A lookup whose memory request is not
- * taken stays (held): the cache's RAM outputs hold, no request is taken. A load miss is served
- * from the clock memory takes its read (miss_taken, when the cache takes its victim) until the
- * answer comes; no request is taken meanwhile, so look_line holds for the refill.
+ * CPU side: requests on a valid/ready channel (AGENTS.md): a load or a store (req_we; for a
+ * store req_wdata, the line with its new bytes, and req_wstrb, one bit per byte to write) is
+ * taken at a rising edge with req_valid=1 and req_ready=1, and looked up in the clock after
+ * (look). A load that hits answers then (rsp_valid with the line); a load that misses reads
+ * its line from memory, answers with it in the clock it comes and has it written (refill). A
+ * store is done when it is taken: it gets no answer.
+ * Write-through, no write-allocate: every store goes to memory, from its lookup; a store that
+ * hits also merges its bytes into the line that hits (merged), written when memory takes the
+ * store (store_write); a store that misses leaves the cache as it is.
+ * Memory side: requests on one valid/ready channel, in program order (mem_req_we, the
+ * address of the line, for a write the line and its strobes), so a read sees every store
+ * before it. A write gets no answer; a read is answered by mem_rsp_valid with the line one
+ * or more clocks after memory took it (no ready: the cache always takes the answer). While
+ * memory does not take a request, the lookup holds it (held: the cache's RAM outputs hold)
+ * and req_ready is 0. A load miss is served from the clock memory takes its read
+ * (miss_taken, when the cache takes its victim) until the answer comes; no request is taken
+ * meanwhile, so look_line holds for the refill.
  * Uncached: a request with req_uncached=1 does not use the lines (no lookup, fill or update)
  * and passes straight to the memory side: it is taken when nothing is looked up or served, in
  * the clock memory takes it, so req_ready then follows mem_req_ready without a flop; a load is

@@ -60,8 +60,6 @@ code:
   - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_mux2_ready
   - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached
   - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_unc_idle_wait
-  - rtl/lib/block/cache/direct_cache/behave/direct_cache.sv#unc_pass
-  - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#u_mux2_ready
   - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#req_uncached
   - test/block/cache/direct_cache/tb_direct_cache.sv#n_unc_idle_wait
   - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#req_uncached
