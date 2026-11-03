@@ -197,7 +197,8 @@ the chunk that establishes it:
   one-hot `Decoder`, count of ones `PopCount`, sum of many rows `WallaceTree` and
   `KoggeStoneAdder`, a small storage read combinationally `RegFile`, a queue `Fifo`, one of
   N inputs by a binary select `MuxN`, a value N clocks later `DelayLine`, an arbiter
-  `RoundRobinArbiter` (by position) or `MatrixLruArbiter` (least recently granted).
+  `RoundRobinArbiter` (by position) or `MatrixLruArbiter` (least recently granted), a
+  channel's ready path cut without a clock more `FlowThroughBuffer`.
 - Logic only one parameter value needs: a generate branch `g_<variant>`, so the other
   variants do not have it (the round-robin flop in `block/cache/insn_data_cache_arbiter/struct`).
   A variant that is another block with some logic left out: a parameter of that block
@@ -298,10 +299,14 @@ Ports: a library block has three ports per channel, `<ch>_valid`, `<ch>_ready`,
 direction for its port groups (`<group>_req_t`, `<group>_rsp_t`) and connects their
 fields to the channels of the blocks.
 
-Build with the library blocks instead of new handshake logic: FifoVldRdyT (block/fifo),
-SkidBufferT (block/skid_buffer: a register stage that cuts combinational paths in both
-directions). A missing block (arbiter, credit counter, ...) is added to the library
-with these rules. Test every channel under random stalls with SimVldRdySource and
+Build with the library blocks instead of new handshake logic: FifoVldRdyT (block/fifo)
+and the stages that cut a channel's combinational paths, chosen by what must be cut:
+SkidBufferT (block/skid_buffer) cuts valid, data and ready, a clock more;
+FlowThroughBufferT (block/flow_through_buffer) cuts only ready (in_ready from a flop)
+with no clock more, where channels merge (an arbiter) and a ready could come back into
+a sender's valid (kb pattern rtl/lib/block/flow_through_buffer/design). A missing block
+(arbiter, credit counter, ...) is added to the library with these rules. Test every
+channel under random stalls with SimVldRdySource and
 SimVldRdySink (sim/sim_vld_rdy.sv): the sink checks rules 2 and 4, the testbench checks
 that every item arrives once, in order, unchanged (see test/block/skid_buffer).
 
@@ -357,9 +362,17 @@ document intent and stop the simulation in the cycle a rule breaks.
   1. A comment that states a rule ("at most one source applies", "nothing is in flight
      while halted"): put the assertion under it, and the comment becomes executable.
   2. Contracts at ports: what a module assumes about its inputs (every block that
-     receives a valid/ready channel asserts rule 2 on it).
+     receives a valid/ready channel asserts rule 2 on it, unless it is built to take an
+     offer that is withdrawn, which its comment says: FlowThroughBufferT).
   3. Facts that span modules or cycles (EX is empty while halted; a stalled instruction
      stays in EX): they catch bugs no single module's code shows.
+  4. Timing promises, with `DC_ASSERT_NEXT` (cause at an edge, effect at the next one):
+     every valid/ready channel a block sends asserts rule 2 on it (an offer not taken
+     stays, unchanged); every hold or stall asserts what it keeps (a held lookup offers
+     the same request, a stalled stage keeps its instruction); a block whose point is a
+     one-clock rule asserts it (a credit back a clock after the pop; the entry empties
+     when its item is taken). These are the facts a waveform shows and a check of one
+     clock can not state; the timing of a design pattern goes into its block's assertions.
 - What not to assert: a restatement of the line above it (it can not fail), or behavior
   the module defines as legal (Fifo ignores a write when full).
 - Name `a_<what holds>`, so the failure message reads as the broken rule.

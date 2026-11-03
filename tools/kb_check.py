@@ -29,6 +29,7 @@ TYPES = {
     "invariant":   ({"statement", "why"}, {"checked_by"}),
     "measurement": ({"what", "result", "how"}, {"guarded_by"}),
     "dropped":     ({"tried", "result", "why_dropped"}, set()),
+    "pattern":     ({"problem", "solution", "why"}, {"known_as", "rejected"}),
 }
 ANCHOR_FIELDS = ("code", "checked_by", "guarded_by")
 # Where @kb: tags may be: the repository without kb/ itself, old code and build output.

@@ -1,0 +1,54 @@
+type: pattern
+title: A one-entry flow-through buffer cuts a ready path without adding a clock
+date: 2026-11-02
+problem: >
+  Where valid/ready channels merge (an arbiter in front of one memory), the ready of one
+  sender depends on the valid of another, and a ready that runs combinationally from the
+  receiver through the merge into a sender's control can come back into a sender's valid: a
+  combinational loop. Mig2 with one memory: fetch's request -> the I-cache's uncached pass ->
+  the arbiter -> the D-cache's ready (the cached lookup's held) -> EX stall -> ID stall ->
+  fetch's request. Even where it never oscillates (both caches uncached together), the path
+  is in the netlist: Verilator warns (UNOPTFLAT) and Yosys's loop check fails. AGENTS'
+  late-signals rule forbids it: a ready must not come back into its own request.
+solution: >
+  Per sender, at the merge, a buffer of one entry whose in_ready is "the entry is empty", a
+  flip-flop: out_valid = full or in_valid, out_data = full ? entry : in_data; an item flows
+  through in the same clock while the entry is empty and the receiver takes it, else it waits
+  in the entry and is offered from there; full <= out_valid and not out_ready. The sender
+  sees a ready from a flop; valid and data still pass forward without one (rule 3 forbids
+  only valid depending on ready). An offer is taken at once (empty) or not at all (full),
+  so a sender may withdraw an offer that was not taken: no rule 2 is needed at in (Mig2's
+  fetch withdraws, kb rtl/design/mig2/fetch_waits). Library block FlowThroughBuffer (typed
+  FlowThroughBufferT, whose timing assertions state the pattern: a_out_held,
+  a_empty_after_take).
+why: >
+  It cuts only the path that closes the loop, and costs no clock while nothing waits: an
+  uncached access keeps the memory's own timing and a cache miss is not slower unless the
+  other side holds the memory. One entry fits senders with one request at a time (Mig2's
+  caches). Cost: a flop per bit of the item, a mux and two gates; after the entry held an
+  item the next one is taken a clock later, since in_ready stays 0 in the clock the held item
+  leaves (taking one then would make in_ready follow out_ready again).
+known_as: >
+  Chisel's Queue(1, flow = true) (with pipe = false); also called a bypass or fall-through
+  buffer. Its relatives cut other paths: SkidBuffer (library) cuts valid, data and ready, a
+  clock more; Chisel's Queue(1, pipe = true) cuts valid and data and lets ready through (not
+  in the library).
+rejected:
+  - choice: Register the ready of uncached requests inside each cache (CacheControl)
+    why_not: >
+      The cached lookup carries the receiver's ready as well (held: its store or miss not
+      taken, so the cache takes nothing), so the loop stays; the cut belongs where the
+      channels merge, once for cached and uncached requests.
+  - choice: A SkidBuffer per sender at the merge
+    why_not: It registers valid and data too, a clock more on every memory access.
+  - choice: A registered grant in the arbiter (decided from the requests of the clock before)
+    why_not: A clock more per access as well, and new arbiter logic; the buffers leave the
+      arbiter as it is.
+relies_on:
+  - rtl/lib/block/cache/uncached
+code:
+  - rtl/lib/block/flow_through_buffer/behave/flow_through_buffer.sv#in_ready
+  - rtl/lib/block/flow_through_buffer/struct/flow_through_buffer.sv#u_inv_in_ready
+  - rtl/lib/block/flow_through_buffer/flow_through_buffer_t.sv#a_out_held
+  - rtl/lib/block/flow_through_buffer/flow_through_buffer_t.sv#a_empty_after_take
+  - test/block/flow_through_buffer/tb_flow_through_buffer.sv#probe

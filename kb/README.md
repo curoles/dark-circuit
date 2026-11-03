@@ -40,9 +40,16 @@ was decided or measured, YYYY-MM-DD). Each type has its own fields:
 | `invariant` | `statement`, `why` | `checked_by`: anchors of the assertions or tests that check it |
 | `measurement` | `what`, `result`, `how` (to reproduce) | `guarded_by`: anchors of the tests that keep it |
 | `dropped` | `tried`, `result`, `why_dropped` | |
+| `pattern` | `problem`, `solution`, `why` | `known_as` (its names elsewhere), `rejected`: list of `choice`, `why_not` |
 
 Every type may have `evidence` (text: numbers, where they come from), `code` (anchors) and
 `relies_on` (ids of records this one builds on). No other fields.
+
+A `decision` says what was chosen here; a `pattern` says what to do for a kind of problem
+wherever it comes up (a design pattern of RTL), with the names it has elsewhere. A pattern
+lives at its canonical place (the library block that is the pattern, or the first code
+that uses it); its `code` lists where it is used, and decisions that use it name it in
+`relies_on`.
 
 An anchor is a path from the repository root, `rtl/design/mig2/mig2_fetch.sv`, or a path and
 a name in that file, `rtl/design/mig2/mig2_control.sv#id_moves`: the name must be in the
