@@ -57,3 +57,6 @@
 -F noc/noc_switch_alloc/behave/noc_switch_alloc.flist
 -F noc/noc_virt_ch_router/behave/noc_virt_ch_router.flist
 -F noc/noc_mesh/behave/noc_mesh.flist
+-F line_code/enc_5b6b/behave/enc_5b6b.flist
+-F line_code/enc_3b4b/behave/enc_3b4b.flist
+-F line_code/enc_8b10b/behave/enc_8b10b.flist

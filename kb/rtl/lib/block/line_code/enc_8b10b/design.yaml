@@ -1,0 +1,49 @@
+type: decision
+title: 8b/10b encoder from the standard's RD- columns and one complement rule, in two halves
+date: 2026-11-03
+question: >
+  How should the library's 8b/10b encoder (IEEE 802.3 clause 36) be written so that it can be
+  checked against the standard, and how is it tested? The user's sketches (Enc3b4b, Enc5b6b,
+  boolean equations from the web) were wrong for 25 of the 32 inputs of the 3b/4b half.
+decision: >
+  Three blocks in rtl/lib/block/line_code (the family of line codes: 8b/10b now, 64b/66b or
+  scramblers later): Enc5b6b (x = EDCBA to abcdei), Enc3b4b (y = HGF to fghj) and Enc8b10b
+  (the two, combinational; the running disparity register is the user's). Each half keeps one
+  table, the standard's column for RD-, as the standard writes it; the RD+ column follows from
+  one rule: a code with disparity +-2 is sent complemented at RD+, as are D.07, D.x.3 and every
+  control code's 4-bit part; the running disparity after a half comes from the ones of the code
+  itself. Enc5b6b tells Enc3b4b when a .7 takes D.x.A7 (alt7). Enc8b10b sends a first:
+  code[0] = a ... code[9] = j. k with a byte that is no control code sets k_err. Behavioral
+  only for now. One test, of Enc8b10b, covers the halves (no tests of their own, as
+  CacheControl and the cache RAMs).
+why: >
+  A table can be read line by line against the standard; boolean equations cannot (the web
+  versions checked were wrong, one with the disparity reversed). One column halves the table
+  and leaves nothing to keep in sync; the rule is the standard's own (codes of disparity +-2
+  alternate). Synthesis reduces a table of a five- or six-input function as well as hand
+  equations, which mattered when gates were placed by hand (Widmer and Franaszek, 1983).
+  The halves are the paper's partition; the test of the whole reaches every input of each
+  half that can occur.
+rejected:
+  - choice: Boolean equations (the Widmer-Franaszek gate equations, or the web's versions)
+    why_not: Not checkable against the table by reading; the versions tried were wrong.
+  - choice: Both columns of each table in the RTL
+    why_not: Twice the entries and two columns that must agree; the test's model has them.
+  - choice: One table of 10-bit codes (536 entries)
+    why_not: Large, and the structure of the code (the halves, the rule) is lost.
+evidence: >
+  2026-11-03: test/block/line_code/enc_8b10b passes on Verilator (0.03 s) and Icarus
+  (0.45 s): all 536 valid inputs (256 data and 12 control codes at RD- and RD+) match a model
+  built from both columns of the standard's tables and keep the rules (five ones and the
+  running disparity kept, or four or six and the other), 488 invalid control inputs set
+  k_err, eight codes written out from the standard (K.28.5, K.28.7, D.21.5, D.0.0, D.17.7
+  and D.11.7 with A7, K.23.7), and a stream (20000 codes on Verilator, 5000 on Icarus) has no
+  run of more than five equal bits and a comma exactly at each K.28.5. Mutants, all caught:
+  a table bit, D.07 or D.x.3 not alternating, control codes not alternating, A7 missing for
+  x = 20, K.28 as D.28, K.x.5 as D.x.5, j sent first, K.30.7 flagged.
+code:
+  - rtl/lib/block/line_code/enc_5b6b/behave/enc_5b6b.sv#flip
+  - rtl/lib/block/line_code/enc_5b6b/behave/enc_5b6b.sv#alt7
+  - rtl/lib/block/line_code/enc_3b4b/behave/enc_3b4b.sv#flip
+  - rtl/lib/block/line_code/enc_8b10b/behave/enc_8b10b.sv#k_err
+  - test/block/line_code/enc_8b10b/tb_enc_8b10b.sv#model
