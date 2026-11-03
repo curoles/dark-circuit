@@ -37,7 +37,7 @@ hit, taken, counter) goes with the instruction through ID to EX.
   before, two bubbles (`cond_branch`); `id_ex_t.redirected` now means that fetch went to
   the target, from IF or from ID.
 - Size, in `cfg/mig2_config.yaml`: `btb_index_width` 4 (16 entries), `btb_tag_width` 10.
-  Index and tag cover the word address of the 64 KiB imem, so no two pcs share an entry and
+  Index and tag cover the word address of the 64 KiB memory, so no two pcs share an entry and
   ID never corrects the BTB; TbMig2BubbleCheck fails a run with a `btb_fix` bubble while
   that holds. With a shorter tag the corrections happen: a one-time run with a 2-bit tag
   passed every test, with 66 946 of them.
@@ -117,20 +117,47 @@ and without it they are skipped with a message.
 ## Caches
 
 Mig2Core has an instruction and a data cache (Mig2Caches) between the pipeline and its
-memory ports, which stay the channels they were (`imem_req_t`, `dmem_req_t`): Mig2Cpu and
-its SimLatencyRAMs did not change. Both are skewed-associative caches of the library
+memory port (see One memory). Both are skewed-associative caches of the library
 (`rtl/lib/block/cache`): the I-cache SkewedCacheRdOnly, the D-cache SkewedCache,
 write-through without write-allocate; 2 ways of 64 one-word lines each, 512 bytes
 (`icache_sets_width`, `dcache_sets_width` in `cfg/mig2_config.yaml`). A hit answers in the
 clock after the request, as memory of latency 1 does; a miss costs two clocks more (its word
 comes a clock later, and the cache takes no request in the clock the word comes), so with
-latency-1 memory the caches only add cycles: they pay off with slow memory (`+imem_latency`,
-`+dmem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
-of the library caches), so a program sees the memories' own timing: the tests that count
+latency-1 memory the caches only add cycles: they pay off with slow memory
+(`+mem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
+of the library caches), so a program sees the memory's own timing: the tests that count
 cycles (csr, muldiv, branch_id, btb_if, ras_id) and the benchmarks run uncached, the others
-cached. No FENCE.I: imem is not written, the caches are never invalidated. Synthesis keeps
+cached. No FENCE.I: the caches are never invalidated (a fetch that hits does not see a later store
+to its address). Synthesis keeps
 the tag and data RAMs as black boxes, memory macros in a chip. Why:
 `kb/rtl/design/mig2/caches_in_core.yaml`.
+
+## One memory
+
+Code and data share one memory, as in a CPU: Mig2Cpu's SimLatencyRAM `u_mem` holds the
+image of `sw/riscv/mig2.ld` (one RAM), and Mig2Core has one memory port (`mem_req_t`,
+`mem_rsp_t`). Mig2Caches passes the memory sides of both caches through
+InsnDataCacheArbiter, the data cache first when both ask (a load that waits stalls every
+stage, a fetch only IF); each side goes through a flow-through buffer, which keeps
+memory's ready and the other side's valid off the caches (kb pattern
+`rtl/lib/block/flow_through_buffer/design`). TbMig2's `+mem_latency` sets the memory's
+timing. A fetch and a load or store now meet when both need memory in the same clock:
+uncached, every load and store meets the fetch of its clock. Cycles with gcc 12.2.0:
+
+| Benchmark | Instructions | Two memories, uncached: cycles | CPI | One memory, uncached: cycles | CPI | One memory, cached: cycles | CPI |
+|---|---|---|---|---|---|---|---|
+| Dhrystone | 1 679 605 | 1 926 750 | 1.147 | 2 457 883 | 1.463 | 3 274 438 | 1.950 |
+| qsort | 134 801 | 160 149 | 1.188 | 200 550 | 1.488 | 179 877 | 1.334 |
+| towers | 220 745 | 231 862 | 1.050 | 385 535 | 1.747 | 428 922 | 1.943 |
+
+Uncached costs 25 to 66 %, towers the most (its recursion loads and stores on the stack):
+the data side goes first, and after the instruction side's buffer held a request it takes
+the next one a clock later. Cached at latency 1 the caches still only add cycles (their
+misses), as with two memories (CPI 1.877, 1.334, 1.808 then): 3.9 % more for Dhrystone,
+7.5 % for towers, qsort the same. Of the tests that count cycles only ras_id changes
+(401 -> 430 cycles); csr, muldiv, branch_id and btb_if keep their counts. The benchmark
+ceilings for gcc 10.2.0 were dropped, not measured again: that compiler gets only the
+guard of twice the largest ceiling. Why: `kb/rtl/design/mig2/single_memory.yaml`.
 
 ## Benchmarks
 
@@ -162,13 +189,13 @@ and towers do not divide; rv32um div and rem 457 → 349 cycles, divu and remu 4
 
 ## Area and speed (sky130)
 
-Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-10-30, the tag
+Mig2Core with the flow of Mig1's README (`make mig2_synth TECH=sky130`), 2026-11-02, the tag
 and data RAMs of the caches as black boxes:
 
 | Mig2Core | |
 |---|---|
-| Area | 241 295 µm² (0.241 mm²), 29 371 cells |
-| Longest logic path (ABC estimate) | 6.1 ns, about 163 MHz |
+| Area | 244 790 µm² (0.245 mm²), 29 772 cells |
+| Longest logic path (ABC estimate) | 6.2 ns, about 162 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -184,6 +211,7 @@ and data RAMs of the caches as black boxes:
 | Mig2Alu: the operands and the library block Alu2 | 207 034 | 5.5 |
 | Memory channels that wait (fetch and data) | 207 763 | 5.4 |
 | Caches, without their tag and data RAMs | 241 295 | 6.1 |
+| One memory: InsnDataCacheArbiter, its flow-through buffers | 244 790 | 6.2 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit

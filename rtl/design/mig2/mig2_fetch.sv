@@ -145,5 +145,8 @@ module Mig2Fetch import Mig2Pkg::*; #(
     `DC_ASSERT(a_imem_answer_expected, !answer || pending)
     // The request imem takes goes into IF/ID at the same edge: nothing to keep elsewhere.
     `DC_ASSERT(a_taken_enters_ifid, !taken || !id_keep)
+    // While ID stalls, the instruction in ID stays: its pc, and its word (kept from the answer).
+    `DC_ASSERT_NEXT(a_id_held, ctrl.stall && fetch.valid,
+                    fetch.valid && $stable(fetch.pc) && $stable(insn))
 
 endmodule

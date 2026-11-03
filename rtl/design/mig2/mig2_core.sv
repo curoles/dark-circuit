@@ -1,11 +1,11 @@
 /* Mig2 core: RISC-V RV32IM with Zicsr and Zicntr, synthesizable, with an instruction and a
- * data cache; the memories are outside.
+ * data cache that share one memory port; the memory is outside.
  *
  * Instruction fetch and data access are valid/ready channels with the answers of reads
- * after them (imem_req_t, Mig2Pkg), to the caches (Mig2Caches), and from them to the memory
- * ports. Fetch waits for the I-cache (Mig2Fetch); a load or store waits in EX until the
- * D-cache takes its request, a load waits in MEM/WB for its word (one data request in
- * flight). uncached=1 makes every request bypass the caches (tests that count cycles).
+ * after them (imem_req_t, mem_req_t, Mig2Pkg), to the caches (Mig2Caches), and from them to
+ * the one memory port. Fetch waits for the I-cache (Mig2Fetch); a load or store waits in EX
+ * until the D-cache takes its request, a load waits in MEM/WB for its word (one data request
+ * in flight). uncached=1 makes every request bypass the caches (tests that count cycles).
  * Faults (ECALL, illegal instruction, misaligned
  * jump target or load/store address, ...) trap to mtvec in machine mode, MRET returns.
  * EBREAK traps too, or halts the core (halt=1) when the debugger sets
@@ -13,7 +13,7 @@
  * resume continues after EBREAK.
  *
  * Mig2Core only connects its parts:
- * - Mig2Caches: the I-cache and the D-cache, between the pipeline and the memory ports;
+ * - Mig2Caches: the I-cache and the D-cache, between the pipeline and the memory port;
  * - Mig2Fetch: PC, I-cache requests, the IF/ID register;
  * - Mig2Control: run, stall, redirect, traps, halt;
  * - Mig2Decode: the instruction taken apart, with the controls of every part;
@@ -41,7 +41,7 @@
  * Every slot without an instruction carries its reason (bubble_e); retire reports it
  * (retire.bubble), so each cycle retires an instruction or a bubble.
  *
- * Mig2Cpu instantiates it, with simulation memories; synthesis (make mig2_synth) takes
+ * Mig2Cpu instantiates it, with a simulation memory; synthesis (make mig2_synth) takes
  * Mig2Core as its top.
  *
  * @author    Igor Lesik
@@ -56,11 +56,9 @@ module Mig2Core import Mig2Pkg::*; #(
     input  wire         clk,
     input  wire         rst_n,             // synchronous reset, active low
 
-    // Memories, behind the caches: requests out, answers of reads back later.
-    output imem_req_t   imem_req,
-    input  imem_rsp_t   imem_rsp,
-    output dmem_req_t   dmem_req,
-    input  dmem_rsp_t   dmem_rsp,
+    // Memory, code and data, behind the caches: requests out, answers of reads back later.
+    output mem_req_t    mem_req,
+    input  mem_rsp_t    mem_rsp,
     input  wire         uncached,          // every request bypasses the caches (Mig2Caches)
 
     // Retire trace, pipeline view and halt.
@@ -75,8 +73,8 @@ module Mig2Core import Mig2Pkg::*; #(
     // The pipeline's channels to the caches
     imem_req_t    icache_req;       // Fetch -> I-cache
     imem_rsp_t    icache_rsp;
-    dmem_req_t    dcache_req;       // Lsu -> D-cache
-    dmem_rsp_t    dcache_rsp;
+    mem_req_t    dcache_req;       // Lsu -> D-cache
+    mem_rsp_t    dcache_rsp;
 
     // IF and control
     fetch_ctrl_t  if_ctrl;          // Control -> Fetch
@@ -147,11 +145,11 @@ module Mig2Core import Mig2Pkg::*; #(
     iaddr_t       halt_pc;          // address of the EBREAK that halted the core
     word_t        dbg_reg_rdata;
 
-    // Caches, between the pipeline and the memory ports.
+    // Caches, between the pipeline and the memory port.
     // @kb: rtl/design/mig2/caches_in_core
     Mig2Caches #(.CFG(CFG)) u_caches(
         .clk, .rst_n, .uncached, .icache_req, .icache_rsp, .dcache_req, .dcache_rsp,
-        .imem_req, .imem_rsp, .dmem_req, .dmem_rsp);
+        .mem_req, .mem_rsp);
 
     // IF
     Mig2Fetch #(.CFG(CFG)) u_mig2_fetch(
@@ -361,5 +359,8 @@ module Mig2Core import Mig2Pkg::*; #(
                     dcache_req.valid && $stable(dcache_req))
     // The D-cache answers only the load in MEM/WB (one request in flight).
     `DC_ASSERT(a_dmem_answer_expected, !dcache_rsp.valid || (ex_mem_q.valid && ex_mem_q.load))
+    // A load that waits in MEM/WB for its word stays there, unchanged, until the word comes.
+    `DC_ASSERT_NEXT(a_load_wait_held, mem_wait,
+                    ex_mem_q.valid && ex_mem_q.load && $stable(ex_mem_q))
 
 endmodule

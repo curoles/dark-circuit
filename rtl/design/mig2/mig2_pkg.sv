@@ -85,11 +85,13 @@ package Mig2Pkg;
     // Ports of Mig2Core
 
     // @kb: rtl/design/mig2/memory_channels
-    // Memories: a request channel (valid/ready, AGENTS.md) and the answers to reads (valid,
-    // no ready: the core takes every answer), in order, one or more clocks after the request
-    // was taken; the memory side of the caches (DirectCache), SimLatencyRAM in Mig2Cpu. A
-    // struct per direction: req_t from the core, rsp_t to it (ready of the request channel,
-    // the answer). Mig2Fetch waits for imem, EX and MEM/WB wait for dmem (Mig2Control).
+    // Memory channels: a request channel (valid/ready, AGENTS.md) and the answers to reads
+    // (valid, no ready: every answer is taken), in order, one or more clocks after the
+    // request was taken. A struct per direction: req_t from the requester, rsp_t to it (ready
+    // of the request channel, the answer). imem_req_t: Mig2Fetch to the I-cache; mem_req_t:
+    // Mig2Lsu to the D-cache, and the one memory port of Mig2Core behind both caches
+    // (SimLatencyRAM in Mig2Cpu). Mig2Fetch waits for the I-cache, EX and MEM/WB for the
+    // D-cache (Mig2Control).
 
     // Instruction fetch: the word at addr.
     typedef struct packed {
@@ -103,21 +105,21 @@ package Mig2Pkg;
         insn_t  data;
     } imem_rsp_t;
 
-    // Data: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0 reads the
-    // word at addr.
+    // Data and memory: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0
+    // reads the word at addr.
     typedef struct packed {
         logic   valid;
         logic   we;
         daddr_t addr;
         word_t  wdata;
         strb_t  wstrb;
-    } dmem_req_t;
+    } mem_req_t;
 
     typedef struct packed {
         logic   ready;      // the request is taken when valid and ready
         logic   valid;      // data is the answer to a read
         word_t  data;
-    } dmem_rsp_t;
+    } mem_rsp_t;
 
     // Retire: one entry per retired instruction, RVFI (riscv-formal) fields and names.
     // Unlike other ports, addresses are byte addresses, as in RVFI. A register or

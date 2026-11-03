@@ -37,6 +37,8 @@ evidence: >
   207034 (the instruction word kept), 5.5 ns as before. Step 2 (kb fetch_waits): the kept
   word moved into Mig2Fetch, and the imem assertions gave way to its waiting. Step 3 (kb
   data_waits): the dmem ones gave way to MEM/WB waiting.
+  2026-11-02: one memory (Mig2Cpu's u_mem) and one port of Mig2Core, mem_req_t (kb
+  rtl/design/mig2/single_memory).
 code:
   - rtl/design/mig2/mig2_pkg.sv#imem_rsp_t
   - rtl/design/mig2/mig2_fetch.sv#word_q

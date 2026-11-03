@@ -1,7 +1,7 @@
-/* Test of Mig2Cpu memories: load() puts program mem.S into instruction and data memory.
+/* Test of Mig2Cpu's memory: load() puts program mem.S into the memory.
  *
  * mem.S is linked with sw/riscv/mig2.ld: 5 instructions at 0x00..0x10 and data word
- * 0x12345678 in .rodata at 0x14. After load() of +hex=<file>, both memories must
+ * 0x12345678 in .rodata at 0x14. After load() of +hex=<file>, the memory must
  * hold these words, read with peek() as little-endian bytes. Running programs is
  * tested by TbMig2.
  * Stops at the first mismatch with $fatal.
@@ -39,15 +39,10 @@ module TbMig2Mem;
     Mig2Cpu u_mig2_cpu(.clk, .rst_n, .uncached(1'b0), .halt, .retire, .pipe_trace, .dbg_req,
                        .dbg_rsp);
 
-    // Word at byte address a of instruction or data memory, little-endian.
-    function automatic word_t imem_word(input logic [AW-1:0] a);
+    // Word at byte address a of the memory, little-endian.
+    function automatic word_t mem_word(input logic [AW-1:0] a);
         for (int b = 0; b < 4; b++)
-            imem_word[8*b +: 8] = u_mig2_cpu.u_imem.peek(a + b[AW-1:0]);
-    endfunction
-
-    function automatic word_t dmem_word(input logic [AW-1:0] a);
-        for (int b = 0; b < 4; b++)
-            dmem_word[8*b +: 8] = u_mig2_cpu.u_dmem.peek(a + b[AW-1:0]);
+            mem_word[8*b +: 8] = u_mig2_cpu.u_mem.peek(a + b[AW-1:0]);
     endfunction
 
     initial begin
@@ -65,12 +60,9 @@ module TbMig2Mem;
 
         for (i = 0; i < NR; i = i + 1) begin
             addr = AW'(4 * i);
-            if (imem_word(addr) !== word[i])
-                $fatal(1, "Mig2 mem: imem word at %h got %h, expected %h",
-                       addr, imem_word(addr), word[i]);
-            if (dmem_word(addr) !== word[i])
-                $fatal(1, "Mig2 mem: dmem word at %h got %h, expected %h",
-                       addr, dmem_word(addr), word[i]);
+            if (mem_word(addr) !== word[i])
+                $fatal(1, "Mig2 mem: word at %h got %h, expected %h",
+                       addr, mem_word(addr), word[i]);
         end
 
         $display("PASS");

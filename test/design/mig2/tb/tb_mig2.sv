@@ -13,8 +13,8 @@
  * - with +expect_regs: the shadow registers have the values of the table that the
  *   program puts right after the halting EBREAK: number of entries n, then n pairs of
  *   words register, value; a register in the table that was never written fails,
- * - with +expect_mem_unchanged: dmem equals imem byte for byte; Mig2Cpu loads the
- *   same image into both, so this shows that nothing was stored,
+ * - with +expect_mem_unchanged: the memory equals the image load() put into it, byte for
+ *   byte, so this shows that nothing was stored,
  * - with +riscv_test: the program is a riscv-tests test with its standard environment
  *   (env/p). It ends with a store to the word tohost, address from +symbols=<file> (nm
  *   output of the program): 1 is pass, (case << 1) | 1 is case `case` failed. The run
@@ -35,11 +35,10 @@
  * Other plusargs: +trace=<file> writes every retired instruction, register write,
  * debug action and semihosting call into <file>, +trace alone prints them;
  * +max_cycles=<n> (default 100000);
- * +imem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how imem of
- * Mig2Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready;
- * +dmem_latency the same for dmem.
+ * +mem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how the memory
+ * of Mig2Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready.
  * +uncached: every request of the core bypasses its caches (Mig2Caches), so the program sees
- * the memories' own timing: for tests that count cycles.
+ * the memory's own timing: for tests that count cycles.
  * Bubbles, their checks, their trace lines and the count per reason at the end:
  * TbMig2BubbleCheck.
  * Pipeline view, checked against pipe_trace, and its Konata log (+kanata=<file>):
@@ -68,7 +67,7 @@ module TbMig2;
     string       hex;
     string       trace_file;
     integer      trace_fd;              // 0: no trace
-    string       mem_latency;           // +imem_latency, +dmem_latency
+    string       mem_latency;           // +mem_latency
     logic        uncached;              // +uncached
     int          lat [6];               // its six numbers
     logic        expect_trap;
@@ -124,11 +123,14 @@ module TbMig2;
 
     // Memories, symbols, checks at the end of the run
 
-    // Instruction in imem at byte address a, little-endian; imem has AW address bits.
+    // Word in the memory at byte address a, little-endian; the memory has AW address bits.
     function automatic insn_t imem_word(input logic [AW-1:0] a);
         for (int b = 0; b < 4; b++)
-            imem_word[8*b +: 8] = u_mig2_cpu.u_imem.peek(a + b[AW-1:0]);
+            imem_word[8*b +: 8] = u_mig2_cpu.u_mem.peek(a + b[AW-1:0]);
     endfunction
+
+    // The image load() put into the memory, for +expect_mem_unchanged.
+    logic [7:0] image [1 << AW];
 
     // Address of symbol `name` in file, the nm output of the program: lines of
     // address, type and name; lines without an address (undefined symbols) are skipped.
@@ -152,15 +154,14 @@ module TbMig2;
         $fclose(fd);
     endtask
 
-    // +expect_mem_unchanged: every byte of dmem equals the byte of imem.
+    // +expect_mem_unchanged: every byte of the memory equals the byte of the image.
     task automatic check_mem_unchanged;
-        logic [7:0] i;
-        logic [7:0] d;
+        logic [7:0] m;
         for (int a = 0; a < (1 << AW); a++) begin
-            i = u_mig2_cpu.u_imem.peek(a[AW-1:0]);
-            d = u_mig2_cpu.u_dmem.peek(a[AW-1:0]);
-            if (d !== i)
-                $fatal(1, "Mig2: dmem byte at %h is %h, image has %h", a[AW-1:0], d, i);
+            m = u_mig2_cpu.u_mem.peek(a[AW-1:0]);
+            if (m !== image[a])
+                $fatal(1, "Mig2: memory byte at %h is %h, image has %h", a[AW-1:0], m,
+                       image[a]);
         end
     endtask
 
@@ -239,19 +240,12 @@ module TbMig2;
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles     = 100000;
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
         ebreak_halt = !first_ebreak_traps && !no_debugger;
-        if ($value$plusargs("imem_latency=%s", mem_latency)) begin
+        if ($value$plusargs("mem_latency=%s", mem_latency)) begin
             if ($sscanf(mem_latency, "%d,%d,%d,%d,%d,%d", lat[0], lat[1], lat[2], lat[3], lat[4],
                         lat[5]) != 6)
-                $fatal(1, "Mig2: +imem_latency=%s: expected six numbers with commas",
+                $fatal(1, "Mig2: +mem_latency=%s: expected six numbers with commas",
                        mem_latency);
-            u_mig2_cpu.u_imem.configure(lat[0], lat[1], lat[2], lat[3], lat[4], lat[5]);
-        end
-        if ($value$plusargs("dmem_latency=%s", mem_latency)) begin
-            if ($sscanf(mem_latency, "%d,%d,%d,%d,%d,%d", lat[0], lat[1], lat[2], lat[3], lat[4],
-                        lat[5]) != 6)
-                $fatal(1, "Mig2: +dmem_latency=%s: expected six numbers with commas",
-                       mem_latency);
-            u_mig2_cpu.u_dmem.configure(lat[0], lat[1], lat[2], lat[3], lat[4], lat[5]);
+            u_mig2_cpu.u_mem.configure(lat[0], lat[1], lat[2], lat[3], lat[4], lat[5]);
         end
 
         // +trace=<file> writes the trace into <file>, +trace alone prints it.
@@ -267,6 +261,7 @@ module TbMig2;
 
         if (!$value$plusargs("hex=%s", hex))
             $fatal(1, "Mig2: plusarg +hex=<file> is missing");
+        $readmemh(hex, image);
         if (u_mig2_cpu.load(hex) != 1)
             $fatal(1, "Mig2: load() of %s returned 0", hex);
         if (riscv_test) begin

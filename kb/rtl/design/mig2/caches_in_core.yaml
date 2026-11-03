@@ -53,6 +53,8 @@ evidence: >
   or later; it now pairs each retired store with the next write dmem takes, at most one
   waiting on either side. A D-cache writing a wrong byte to memory and one that never sends
   stores both fail it, cached and uncached.
+  2026-11-02: the arbiter came, as planned here: one memory behind both caches (kb
+  rtl/design/mig2/single_memory).
 code:
   - rtl/design/mig2/mig2_caches.sv#u_icache
   - rtl/design/mig2/mig2_caches.sv#u_dcache

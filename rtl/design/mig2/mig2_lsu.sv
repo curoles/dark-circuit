@@ -33,7 +33,7 @@ module Mig2Lsu import Mig2Pkg::*, RiscvPkg::*; (
     input  word_t            addr,       // rs1 + imm, from Mig2Alu
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t            rs2_data,   // store data
-    output dmem_req_t        dmem_req,
+    output mem_req_t        dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
     output lsu_mem_t         mem         // access for the retire trace
 );

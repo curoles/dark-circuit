@@ -55,13 +55,13 @@ module TbMig2Debugger import Mig2Pkg::*; (
                        ebreak_halt: ebreak_halt};
     assign halt_pc = {dbg_rsp.halt_pc, {IADDR_START{1'b0}}};
 
-    // The only access to the memories of Mig2Cpu: byte at address a of imem or dmem.
+    // The only access to the memory of Mig2Cpu (code and data): byte at address a; imem
+    // only says which of the two the caller means.
     // Memories wrap around: only the AW low bits of an address are used. A port of a
     // debug module (system bus access) can replace the hierarchical reference later.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic logic [7:0] mem_byte(input logic imem, input word_t a);
-        return imem ? TbMig2.u_mig2_cpu.u_imem.peek(a[AW-1:0])
-                    : TbMig2.u_mig2_cpu.u_dmem.peek(a[AW-1:0]);
+        return TbMig2.u_mig2_cpu.u_mem.peek(a[AW-1:0]);
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 

@@ -42,6 +42,9 @@ evidence: >
   branch_slow_imem. Mutants: asking imem while ID stalls fires a_taken_enters_ifid, an imem
   that answers twice a_imem_answer_expected. Synthesis of Mig2Core (sky130): 208432 um2
   against 207175, 5.5 ns as before.
+  2026-11-02: the known limit is met: the I-cache and the arbiter's flow-through buffer
+  stand between fetch and the one memory (kb rtl/design/mig2/single_memory), and a fetch
+  request that is withdrawn reaches neither memory nor the arbiter.
 code:
   - rtl/design/mig2/mig2_fetch.sv#imem_req.valid
   - rtl/design/mig2/mig2_fetch.sv#id_keep

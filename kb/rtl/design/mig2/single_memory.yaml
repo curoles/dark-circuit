@@ -1,0 +1,59 @@
+type: decision
+title: Mig2's caches share one memory through InsnDataCacheArbiter, data first
+date: 2026-11-02
+question: >
+  Mig2 had two memories (imem, dmem) behind its caches. A CPU has one: how do the I-cache
+  and the D-cache share it, what does the core's port look like, and what happens to the
+  cycle counts and to the tests that count cycles?
+decision: >
+  InsnDataCacheArbiter (u_arbiter) inside Mig2Caches, between the memory sides of the two
+  caches and the one memory port of Mig2Core (mem_req/mem_rsp, types mem_req_t/mem_rsp_t:
+  the former dmem types, also the D-cache's CPU side; imem_req_t stays for fetch to the
+  I-cache). POLICY ARB_DATA_FIRST, prio never set: a load that waits stalls the whole
+  pipeline, a fetch that waits only IF. Each side's request goes through the arbiter's
+  flow-through buffer, which cuts the loop through the merge (kb pattern
+  rtl/lib/block/flow_through_buffer/design). Mig2Cpu has one SimLatencyRAM (u_mem), the
+  image of sw/riscv/mig2.ld (one RAM for code and data); TbMig2's +mem_latency replaces
+  +imem_latency and +dmem_latency, the stress tests are branch_slow_mem and
+  load_store_slow_mem. The tests that count cycles stay uncached: deterministic, but a
+  fetch and a load or store that want memory in the same clock now meet, so their counts
+  and ceilings change once. A store is now seen by a later fetch of its address that misses
+  the I-cache; Mig2 has no FENCE.I and does not support self-modifying code.
+why: >
+  One memory is what a CPU has; with it, fetch and data compete, and the core's cycles say
+  what that costs. The arbiter and its buffers were built for this step (kb
+  rtl/lib/block/cache/insn_data_cache_arbiter/design). Data first: the stall of a load
+  stops every stage, a fetch miss only starves IF, which has its IF/ID slot. The renamed
+  types: the D-side shape is the memory request in general.
+rejected:
+  - choice: Round-robin (the arbiter's default)
+    why_not: A load would wait for a fetch every other time, the whole pipeline with it.
+  - choice: prio driven by the core (instruction first after a redirect)
+    why_not: Not measured yet; a later step if the numbers ask for it.
+  - choice: The cut inside the caches (a registered ready of uncached requests)
+    why_not: The cached lookup's held carries memory's ready too; see the pattern record.
+evidence: >
+  2026-11-02, Verilator: all Mig2 tests pass (114 with the benchmarks). Traces against
+  two memories: 82 of 105 identical; the 23 others are runs where a fetch and a load or
+  store meet (cached programs with misses, the slow-memory test, ras_id 401 -> 430
+  cycles); csr, muldiv, branch_id and btb_if keep their counts. Benchmarks, gcc 12.2.0,
+  uncached, two memories -> one: Dhrystone 1 926 750 -> 2 457 883 cycles, qsort
+  160 149 -> 200 550, towers 231 862 -> 385 535; cached with one memory 3 274 438,
+  179 877, 428 922. New ceilings; gcc 10.2.0 ceilings dropped (not measured again).
+  TbMig2RetireCheck compares a load with memory plus the retired stores memory has not
+  taken (one may wait in the arbiter's buffer and one in the D-cache while a later load
+  hits). Two hold assertions, each fired by its mutant: a_id_held (fetch's kept word
+  overwritten while ID stalls), a_load_wait_held (EX/MEM moving while a load waits).
+  Synthesis (sky130): 244 790 um2, 29 772 cells (+1.4 %), 6.2 ns, the I-cache's path as
+  before. The tests branch_slow_imem and load_store_slow_dmem of kb fetch_waits and
+  data_waits are branch_slow_mem and load_store_slow_mem now.
+relies_on:
+  - rtl/lib/block/cache/insn_data_cache_arbiter/design
+  - rtl/lib/block/flow_through_buffer/design
+  - rtl/design/mig2/caches_in_core
+code:
+  - rtl/design/mig2/mig2_caches.sv#u_arbiter
+  - rtl/design/mig2/mig2_cpu.sv#u_mem
+  - test/design/mig2/tb/tb_mig2_retire_check.sv#dmem_has
+  - rtl/design/mig2/mig2_fetch.sv#a_id_held
+  - rtl/design/mig2/mig2_core.sv#a_load_wait_held

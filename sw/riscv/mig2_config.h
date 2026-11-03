@@ -8,6 +8,6 @@
 /* PC after reset. */
 #define MIG2_RST_ADDR 0x00000000u
 
-/* imem and dmem: 1 << MIG2_MEM_ADDR_WIDTH = MIG2_MEM_SIZE bytes each. */
+/* The memory, code and data: 1 << MIG2_MEM_ADDR_WIDTH = MIG2_MEM_SIZE bytes. */
 #define MIG2_MEM_ADDR_WIDTH 16
 #define MIG2_MEM_SIZE 65536u

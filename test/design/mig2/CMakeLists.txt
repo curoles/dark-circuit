@@ -111,17 +111,17 @@ if(DARK_CIRCUIT_RISCV)
 
     # Branches and jumps: every branch type taken and not taken, JAL, JALR.
     mig2_program_test(branch SOURCES branch.S ARGS +expect_regs)
-    # The same with a slow imem: ready withheld, answers after 1 to 3 clocks, now and then 5
-    # to 10; fetch waits.
-    mig2_program_test(branch_slow_imem SOURCES branch.S
-                      ARGS +expect_regs +imem_latency=70,80,1,3,5,10)
+    # The same with a slow memory: ready withheld, answers after 1 to 3 clocks, now and then
+    # 5 to 10; fetch waits.
+    mig2_program_test(branch_slow_mem SOURCES branch.S
+                      ARGS +expect_regs +mem_latency=70,80,1,3,5,10)
 
     # Loads and stores: every size and offset, sign extension, strobes.
     mig2_program_test(load_store SOURCES load_store.S ARGS +expect_sequential +expect_regs)
-    # The same with a slow dmem: ready withheld, words after 1 to 3 clocks, now and then 5 to
-    # 10; EX and MEM/WB wait.
-    mig2_program_test(load_store_slow_dmem SOURCES load_store.S
-                      ARGS +expect_sequential +expect_regs +dmem_latency=70,80,1,3,5,10)
+    # The same with a slow memory: ready withheld, words after 1 to 3 clocks, now and then 5
+    # to 10; EX and MEM/WB wait.
+    mig2_program_test(load_store_slow_mem SOURCES load_store.S
+                      ARGS +expect_sequential +expect_regs +mem_latency=70,80,1,3,5,10)
 
     # Faults trap: a handler checks mcause, mepc and mtval; rd and memory are not
     # written. One build of the program per case (-DCASE_<case>):
@@ -180,7 +180,7 @@ if(DARK_CIRCUIT_RISCV)
     # division), an indirect call, a return to a changed ra, a call on the wrong path, calls
     # that wait in ID, a swap (coroutine), calls in a trap handler. With a cycle ceiling.
     mig2_program_test(ras_id SOURCES ras_id.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=401 +uncached)
+                      ARGS +expect_trap +expect_regs +max_cycles=430 +uncached)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
@@ -255,20 +255,20 @@ if(DARK_CIRCUIT_RISCV)
             # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
             mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6
-                            CEILINGS 10.2.0 1868000 12.2.0 1947000
+                            CEILINGS 12.2.0 2483000
                             SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
                             FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
 
             # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
             # sort is in place, a second run would sort sorted numbers.
             set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
-            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 10.2.0 162000 12.2.0 162000
+            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 12.2.0 203000
                             SOURCES ${QSORT}/qsort_main.c)
 
             # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
             # sets up the towers again.
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
-            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 10.2.0 268000 12.2.0 235000
+            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 390000
                             SOURCES ${TOWERS}/towers_main.c)
         endif()
 

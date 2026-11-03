@@ -8,12 +8,13 @@
  * - rs1_rdata, rs2_rdata are the shadow registers (registers read), 0 for x0,
  * - load or store: mem_addr and the mask are the access of the instruction:
  *   address rs1_rdata + imm, size by funct3 (computed here from insn),
- * - load: bytes of mem_rdata under mem_rmask are the bytes of dmem (an older store is in
- *   dmem by then: the D-cache takes no request while a store waits for dmem),
- * - store: it is the next write dmem takes, in program order: mem_addr, mem_wmask and the
- *   bytes of mem_wdata under it (the D-cache writes through: dmem takes the store in the
- *   cycle it retires or later, uncached in EX, before it retires; a store still in the
- *   D-cache when the run ends is not checked),
+ * - load: bytes of mem_rdata under mem_rmask are the bytes of the memory with the retired
+ *   stores the memory has not taken yet on top (a store may wait in the arbiter's buffer
+ *   and one in the D-cache while a later load hits the line they wrote),
+ * - store: it is the next write the memory takes, in program order: mem_addr, mem_wmask and
+ *   the bytes of mem_wdata under it (the D-cache writes through: the memory takes the store
+ *   in the cycle it retires or later, uncached in EX, before it retires; a store still on
+ *   its way when the run ends is not checked),
  * - traps only with allow_trap,
  * - nothing retires while halted,
  * - no X or Z in retire (Icarus only, Verilator is 2-state),
@@ -21,8 +22,8 @@
  * Register writes of retire (rd_addr, rd_wdata) and of the debugger (dbg_req while halt)
  * are kept in a shadow copy of the registers. The trace gets a line per retired
  * instruction, debugger register write and resume. Memory is read with peek() of the
- * memories of Mig2Cpu, all in mem_byte(), and the writes dmem takes are seen in
- * dmem_write(): the two places that name them. Stops at the first failure with $fatal.
+ * memory of Mig2Cpu, all in mem_byte(), and the writes the memory takes are seen in
+ * dmem_write(): the two places that name it. Stops at the first failure with $fatal.
  *
  * TbMig2 instantiates it; it reads its ports, TbMig2 reads its outputs.
  *
@@ -76,12 +77,12 @@ module TbMig2RetireCheck import Mig2Pkg::*, RiscvPkg::*; (
 
     assign retire_pc = retire.pc_rdata;
 
-    // The only access to the memories of Mig2Cpu: byte at address a of imem or dmem.
+    // The only access to the memory of Mig2Cpu (code and data): byte at address a; imem
+    // only says which of the two the caller means.
     // Memories wrap around: only the AW low bits of an address are used.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic logic [7:0] mem_byte(input logic imem, input word_t a);
-        return imem ? TbMig2.u_mig2_cpu.u_imem.peek(a[AW-1:0])
-                    : TbMig2.u_mig2_cpu.u_dmem.peek(a[AW-1:0]);
+        return TbMig2.u_mig2_cpu.u_mem.peek(a[AW-1:0]);
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 
@@ -132,25 +133,32 @@ module TbMig2RetireCheck import Mig2Pkg::*, RiscvPkg::*; (
     assign access_addr = mem_byte_addr(retire.insn, retire.rs1_rdata);
     assign access_mask = mem_mask(retire.insn, access_addr[DADDR_START-1:0]);
 
-    // Bytes of data under mask are the bytes of dmem in the word at a.
+    // Bytes of data under mask are the bytes of the memory in the word at a, with the
+    // retired stores it has not taken yet on top, oldest first.
     function automatic logic dmem_has(input word_t a, input strb_t mask, input word_t data);
-        word_t ab;
+        word_t      ab;
+        logic [7:0] m;
         for (int b = 0; b < STRB_WIDTH; b++) begin
             ab = a + b;
-            if (mask[b] && mem_byte(1'b0, ab) !== data[8*b +: 8])
+            m  = mem_byte(1'b0, ab);
+            foreach (retired_stores[i])
+                if (retired_stores[i].addr[WIDTH-1:DADDR_START] == ab[WIDTH-1:DADDR_START] &&
+                    retired_stores[i].mask[ab[DADDR_START-1:0]])
+                    m = retired_stores[i].data[8*ab[DADDR_START-1:0] +: 8];
+            if (mask[b] && m !== data[8*b +: 8])
                 return 1'b0;
         end
         return 1'b1;
     endfunction
 
-    // The write dmem of Mig2Cpu takes at this edge: 1 and the write in w, or 0.
+    // The write the memory of Mig2Cpu takes at this edge: 1 and the write in w, or 0.
     function automatic logic dmem_write(output store_t w);
         w.pc   = '0;
-        w.addr = {TbMig2.u_mig2_cpu.dmem_req.addr, {DADDR_START{1'b0}}};
-        w.mask = TbMig2.u_mig2_cpu.dmem_req.wstrb;
-        w.data = TbMig2.u_mig2_cpu.dmem_req.wdata;
-        return TbMig2.u_mig2_cpu.dmem_req.valid && TbMig2.u_mig2_cpu.dmem_req.we &&
-               TbMig2.u_mig2_cpu.dmem_rsp.ready;
+        w.addr = {TbMig2.u_mig2_cpu.mem_req.addr, {DADDR_START{1'b0}}};
+        w.mask = TbMig2.u_mig2_cpu.mem_req.wstrb;
+        w.data = TbMig2.u_mig2_cpu.mem_req.wdata;
+        return TbMig2.u_mig2_cpu.mem_req.valid && TbMig2.u_mig2_cpu.mem_req.we &&
+               TbMig2.u_mig2_cpu.mem_rsp.ready;
     endfunction
 
     // Each retired store is the next write dmem takes: pairs them in order.
@@ -170,10 +178,10 @@ module TbMig2RetireCheck import Mig2Pkg::*, RiscvPkg::*; (
                 $fatal(1, "Mig2: store at %h to %h mask %b data %h, dmem took %h mask %b data %h",
                        s.pc, s.addr, s.mask, s.data, w.addr, w.mask, w.data);
         end
-        // The D-cache holds one store at most and takes no request until dmem takes it;
-        // uncached, dmem takes a store one cycle before it retires: one store may wait on
-        // either side, not more (also: no store is lost).
-        if (retired_stores.size() > 1 || dmem_writes.size() > 1)
+        // A retired store may wait in the arbiter's buffer and one more in the D-cache (held:
+        // it takes no request then); uncached, the memory takes a store one cycle before it
+        // retires. So two on the retired side, one on the other, not more (no store is lost).
+        if (retired_stores.size() > 2 || dmem_writes.size() > 1)
             $fatal(1, "Mig2: %0d retired stores not taken by dmem, %0d writes of dmem not retired",
                    retired_stores.size(), dmem_writes.size());
     endtask
