@@ -30,8 +30,12 @@ evidence: >
   The program tests with a ceiling or a cycle check (branch_id, btb_if, ras_id, csr, muldiv)
   are assembly: all 168 tests other than the benchmarks gave the same cycles with gcc 10.2.0
   and 12.2.0 (2026-10-28), so their ceilings stay single numbers.
+  2026-11-02: the ceilings are on pipeline cycles now (kb
+  test/design/mig2/pipeline_cycles), +max_cycles twice the ceiling as a guard.
 code:
   - cmake/riscv.cmake#dc_riscv_cycle_ceiling
   - test/design/mig2/CMakeLists.txt#mig2_bench_test
   - cmake/dark_circuit.cmake#DARK_CIRCUIT_BENCHMARKS
   - sw/riscv/bench/bench.c#bench_main
+relies_on:
+  - test/design/mig2/pipeline_cycles

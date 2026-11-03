@@ -160,9 +160,18 @@ two (CPI 1.877, 1.334, 1.808 then): an instruction miss starves every stage, so 
 goes first while ID is empty. Data first always cost 3.7 % (Dhrystone) and 7.4 % (towers)
 more, round-robin 3.5 % and 5.1 %, instruction first always the same cached and up to
 0.4 % more uncached. Of the tests that count cycles only ras_id changes
-(401 -> 430 cycles); csr, muldiv, branch_id and btb_if keep their counts. The benchmark
+(401 -> 430 cycles, 400 of them pipeline cycles); csr, muldiv, branch_id and btb_if keep
+their counts. The benchmark
 ceilings for gcc 10.2.0 were dropped, not measured again: that compiler gets only the
 guard of twice the largest ceiling. Why: `kb/rtl/design/mig2/single_memory.yaml`.
+
+Cycle ceilings are on pipeline cycles (`+max_pipeline_cycles` of TbMig2, and the
+benchmarks'): the cycles minus the imem and dmem bubbles. TbMig2BubbleCheck counts
+every empty slot by its reason and prints both numbers, so a ceiling judges the pipeline
+and the memory's share is reported next to it. A pipeline bubble in a cycle that also
+waits for memory counts as memory (ras_id: one load-use bubble), so pipeline cycles can
+be a little below the pipeline's own cost, never above. `+max_cycles` only stops a run
+that does not end. Why: `kb/test/design/mig2/pipeline_cycles.yaml`.
 
 ## Benchmarks
 
@@ -174,8 +183,8 @@ Besides Dhrystone (see Mig1's README), Mig2 runs qsort and towers of riscv-tests
 - towers: Towers of Hanoi with 7 discs, recursive: calls and returns; 50 runs.
 
 The exit status of a benchmark is its own check (`verify` of riscv-tests), so a benchmark
-also tests the CPU. Each has a cycle ceiling per compiler version (see Mig1's README, Cycle
-ceilings). The cycles below were measured with gcc 10.2.0; gcc 12.2.0 compiles other code
+also tests the CPU. Each has a ceiling of pipeline cycles per compiler version (see One
+memory; the rule: Mig1's README, Cycle ceilings). The cycles below were measured with gcc 10.2.0; gcc 12.2.0 compiles other code
 (Dhrystone 4.2 % more cycles, qsort 2 cycles more, towers 12.3 % fewer).
 
 | Benchmark | Instructions | Static guess: cycles | CPI | BTB: cycles | CPI | + return stack: cycles | CPI | + early division: cycles | CPI |

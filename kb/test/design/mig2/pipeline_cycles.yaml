@@ -1,0 +1,46 @@
+type: decision
+title: Cycle ceilings are on pipeline cycles, the cycles minus the waits for memory
+date: 2026-11-02
+question: >
+  With one memory behind both caches (kb rtl/design/mig2/single_memory), uncached cycles mix
+  the pipeline with fetch and data meeting at memory: a ceiling raised for memory could hide
+  a pipeline regression. What should the cycle ceilings of the tests that count cycles and of
+  the benchmarks measure?
+decision: >
+  Pipeline cycles: the cycles minus the imem and dmem bubbles (ID waits for its instruction,
+  a load or store waits for the D-cache), which TbMig2BubbleCheck counts by reason anyway;
+  report() gives them and prints them with the memory's share. TbMig2's
+  +max_pipeline_cycles=<n> is the ceiling (branch_id 147, btb_if 458, ras_id 401; the
+  benchmarks' per gcc version, the pipeline cycles + 1 % rounded up to 1000); +max_cycles
+  only stops a run that does not end (twice the ceiling for the benchmarks). The tests stay
+  uncached. Known limit: a pipeline bubble in a cycle that also waits for memory counts as
+  memory, so pipeline cycles can be a little below the pipeline's own cost, never above.
+why: >
+  Every empty slot already carries its reason, so the memory's share is exact and the rest is
+  the pipeline: no new hardware, deterministic, and memory's cost is still reported next to
+  it. The ceilings judge what they were made for, the pipeline (the branch predictors, the
+  hazards). The limit only lowers the number, so a ceiling never fails for memory, and a
+  pipeline regression shows unless all of it hides behind memory waits.
+rejected:
+  - choice: Ceilings on cycles, raised for one memory (the step before)
+    why_not: A pipeline regression could hide inside the margin memory added (towers 66 %).
+  - choice: The cycle tests cached
+    why_not: >
+      Cached runs change more than the bubbles (a store waits in the D-cache, a miss blocks
+      the next request); possible later with this same measure, since misses are imem and
+      dmem bubbles too.
+  - choice: A memory with two ports for the tests (no conflicts)
+    why_not: A testbench-only Mig2 that differs from the real one, and memory's cost unseen.
+evidence: >
+  2026-11-02, one memory, uncached: branch_id 147 pipeline cycles (memory 0), btb_if 458
+  (0), ras_id 400 of 430 (memory 30: imem 29, dmem 1; its 401 with two memories, one
+  load-use bubble now counted as memory). Benchmarks, gcc 12.2.0: Dhrystone 1 923 732
+  pipeline cycles (memory 534 151) against 1 926 750 cycles with two memories (-0.16 %),
+  qsort 159 856 (40 694) against 160 149 (-0.18 %), towers 229 712 (155 473) against
+  231 862 (-0.93 %): the hidden bubbles. The whole suite passes with the new ceilings.
+relies_on:
+  - rtl/design/mig2/single_memory
+code:
+  - test/design/mig2/tb/tb_mig2_bubble_check.sv#report
+  - test/design/mig2/tb/tb_mig2.sv#max_pipeline_cycles
+  - test/design/mig2/CMakeLists.txt#mig2_bench_test

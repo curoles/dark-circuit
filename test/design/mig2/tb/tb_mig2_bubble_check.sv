@@ -14,7 +14,11 @@
  * waits for imem) at any time; dmem bubbles come right before a load or store. The trace
  * gets a
  * line per bubble; report() at the end of the run prints the count per reason and checks
- * that every counted cycle retired an instruction or a bubble. Stops at the first failure
+ * that every counted cycle retired an instruction or a bubble. It also gives the pipeline
+ * cycles: the cycles minus the imem and dmem bubbles (waits for memory, through the
+ * caches), the number cycle ceilings judge. A pipeline bubble in a cycle that also waits
+ * for memory counts as memory, so they can be a little below the pipeline's own cost,
+ * never above (kb test/design/mig2/pipeline_cycles). Stops at the first failure
  * with $fatal.
  *
  * TbMig2 instantiates it; it reads its ports, and TbMig2 calls report().
@@ -138,10 +142,12 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
     endtask
 
     // End of the run (TbMig2 calls it): bubbles per reason; every counted cycle retired an
-    // instruction or a bubble.
-    task automatic report;
+    // instruction or a bubble; the pipeline cycles (cycles minus the waits for memory).
+    // @kb: test/design/mig2/pipeline_cycles
+    task automatic report(output integer pipeline);
         string  s;
         integer total;
+        integer memory;
         total = 0;
         s     = "";
         for (int k = 0; k < (1 << $bits(bubble_e)); k++)
@@ -156,6 +162,13 @@ module TbMig2BubbleCheck import Mig2Pkg::*, RiscvPkg::*, TbMig2Pkg::*; (
         if (trace_fd != 0)
             $fdisplay(trace_fd, "%0d cycles = %0d retired + %0d bubbles:%s",
                       core_cycles, retired, total, s);
+        memory   = bubbles[BUBBLE_IMEM] + bubbles[BUBBLE_DMEM];
+        pipeline = core_cycles - memory;
+        $display("Mig2: pipeline %0d cycles, memory %0d (imem %0d + dmem %0d bubbles)",
+                 pipeline, memory, bubbles[BUBBLE_IMEM], bubbles[BUBBLE_DMEM]);
+        if (trace_fd != 0)
+            $fdisplay(trace_fd, "pipeline %0d cycles, memory %0d (imem %0d + dmem %0d bubbles)",
+                      pipeline, memory, bubbles[BUBBLE_IMEM], bubbles[BUBBLE_DMEM]);
     endtask
 
     // Values of the cycle before the rising edge.

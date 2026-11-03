@@ -34,7 +34,9 @@
  * The debug port and the semihosting calls: TbMig2Debugger.
  * Other plusargs: +trace=<file> writes every retired instruction, register write,
  * debug action and semihosting call into <file>, +trace alone prints them;
- * +max_cycles=<n> (default 100000);
+ * +max_pipeline_cycles=<n>: the pipeline cycles (TbMig2BubbleCheck: the cycles minus the
+ * imem and dmem bubbles) must be at most n, the cycle ceiling of a test that counts cycles;
+ * +max_cycles=<n> (default 100000) only stops a run that does not end;
  * +mem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how the memory
  * of Mig2Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready.
  * +uncached: every request of the core bypasses its caches (Mig2Caches), so the program sees
@@ -82,6 +84,9 @@ module TbMig2;
     logic        check_exit;
     integer      expect_exit;
     integer      max_cycles;
+    logic        check_pipeline;        // +max_pipeline_cycles given
+    integer      max_pipeline_cycles;
+    integer      pipeline_cycles;       // TbMig2BubbleCheck at the end
     integer      expect_retired;        // -1: not checked
 
     // State of the run
@@ -238,6 +243,7 @@ module TbMig2;
         check_exit           = $value$plusargs("expect_exit=%d", expect_exit);
         if (!$value$plusargs("resumes=%d", resumes))               resumes        = 0;
         if (!$value$plusargs("max_cycles=%d", max_cycles))         max_cycles     = 100000;
+        check_pipeline = $value$plusargs("max_pipeline_cycles=%d", max_pipeline_cycles);
         if (!$value$plusargs("expect_retired=%d", expect_retired)) expect_retired = -1;
         ebreak_halt = !first_ebreak_traps && !no_debugger;
         if ($value$plusargs("mem_latency=%s", mem_latency)) begin
@@ -328,7 +334,11 @@ module TbMig2;
         if (riscv_test && !tohost_in_body)
             $fatal(1, "Mig2: riscv-tests: tohost=%h before the test body (no MRET of the environment)",
                    tohost_value);
-        u_bubble_check.report();
+        u_bubble_check.report(pipeline_cycles);
+        // @kb: test/design/mig2/pipeline_cycles
+        if (check_pipeline && pipeline_cycles > max_pipeline_cycles)
+            $fatal(1, "Mig2: %0d pipeline cycles, above the ceiling %0d (+max_pipeline_cycles)",
+                   pipeline_cycles, max_pipeline_cycles);
         if (riscv_test && tohost_value != 1)
             $fatal(1, "Mig2: riscv-tests: case %0d failed (tohost=%h)",
                    tohost_value >> 1, tohost_value);

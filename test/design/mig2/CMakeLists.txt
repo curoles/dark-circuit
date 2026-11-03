@@ -163,24 +163,24 @@ if(DARK_CIRCUIT_RISCV)
 
     # Conditional branches in the corners of the pipeline: every pair of guess and outcome
     # of a static guess, waiting in ID (load-use, division), on the wrong path, back to back,
-    # to misaligned targets. +max_cycles is a cycle ceiling (Mig2 README): lower it when a
-    # change makes the test faster.
+    # to misaligned targets. +max_pipeline_cycles is a cycle ceiling on the pipeline cycles
+    # (Mig2 README): lower it when a change makes the test faster.
     mig2_program_test(branch_id SOURCES branch_id.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=147 +uncached)
+                      ARGS +expect_trap +expect_regs +max_pipeline_cycles=147 +uncached)
 
     # Jumps and conditional branches that a BTB learns, in the corners of the pipeline:
     # loops, calls, branches taken every time and every other time, two branches sharing an
     # entry, waiting in ID (load-use, division), back to back, a loop of two instructions, on
     # the wrong path, to a misaligned target. With a cycle ceiling (Mig2 README).
     mig2_program_test(btb_if SOURCES btb_if.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=458 +uncached)
+                      ARGS +expect_trap +expect_regs +max_pipeline_cycles=458 +uncached)
 
     # Calls and returns in the corners of the pipeline, for the return-address stack: deep
     # recursion (the stack wraps), an empty function, a return waiting in ID (load-use,
     # division), an indirect call, a return to a changed ra, a call on the wrong path, calls
     # that wait in ID, a swap (coroutine), calls in a trap handler. With a cycle ceiling.
     mig2_program_test(ras_id SOURCES ras_id.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_cycles=430 +uncached)
+                      ARGS +expect_trap +expect_regs +max_pipeline_cycles=401 +uncached)
 
     # Semihosting: the C program of test/sw/riscv/semihosting (QEMU) prints and exits
     # with 3 on Mig2 too; crt0.S and the semihosting library of sw/riscv.
@@ -229,15 +229,17 @@ if(DARK_CIRCUIT_RISCV)
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
         # calls, to measure cycles (their own results are not printed; the exit status is
         # their own check). DIR is the directory of the benchmark, REPEAT the runs of its
-        # main (BENCH_REPEAT), CEILINGS its cycle ceiling per gcc version (Mig2 README,
-        # dc_riscv_cycle_ceiling): the cycles + 1 %, rounded up to 1000. Lower it when a
+        # main (BENCH_REPEAT), CEILINGS its ceiling of pipeline cycles per gcc version
+        # (Mig2 README, dc_riscv_cycle_ceiling): the pipeline cycles + 1 %, rounded up to 1000
+        # (+max_cycles is twice that, a guard against a hang). Lower it when a
         # change makes the benchmark faster; add the version of a new compiler. They run
         # uncached (+uncached): the cycles of the pipeline, as before the caches.
         # @kb: test/design/mig2/benchmarks
         if(DARK_CIRCUIT_BENCHMARKS)
             function(mig2_bench_test NAME)
                 cmake_parse_arguments(P "" "DIR;REPEAT" "SOURCES;FLAGS;CEILINGS" ${ARGN})
-                dc_riscv_cycle_ceiling(max_cycles design_mig2_${NAME} ${P_CEILINGS})
+                dc_riscv_cycle_ceiling(ceiling design_mig2_${NAME} ${P_CEILINGS})
+                math(EXPR guard "2 * ${ceiling}")
                 mig2_program_test(${NAME}
                                   SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
                                           ${SW}/bench/bench.c ${P_SOURCES}
@@ -248,27 +250,28 @@ if(DARK_CIRCUIT_RISCV)
                                         -I${SW}/bench/include -I${SW}/semihosting -I${P_DIR}
                                         -I${RISCV_TESTS}/benchmarks/common
                                         -I${RISCV_TESTS}/env ${P_FLAGS}
-                                  ARGS +expect_exit=0 +max_cycles=${max_cycles} +uncached
+                                  ARGS +expect_exit=0 +max_pipeline_cycles=${ceiling}
+                                       +max_cycles=${guard} +uncached
                                   LABELS benchmark)
             endfunction()
 
             # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
             mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6
-                            CEILINGS 12.2.0 2483000
+                            CEILINGS 12.2.0 1943000
                             SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
                             FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
 
             # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
             # sort is in place, a second run would sort sorted numbers.
             set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
-            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 12.2.0 203000
+            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 12.2.0 162000
                             SOURCES ${QSORT}/qsort_main.c)
 
             # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
             # sets up the towers again.
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
-            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 390000
+            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 233000
                             SOURCES ${TOWERS}/towers_main.c)
         endif()
 
