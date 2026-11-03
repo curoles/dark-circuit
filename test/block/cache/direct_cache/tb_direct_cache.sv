@@ -24,6 +24,10 @@
  * Verilator only, 64 sets with 32-bit addresses; 20000 clocks on Verilator, 2000 on Icarus.
  * Stops at the first mismatch with $fatal.
  *
+ * The refill clock (CacheControl): a request is taken in the clock a miss's line comes; one
+ * at the place the refill writes is replayed (no lookup in the next clock, then its lookup);
+ * both must happen.
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
@@ -99,6 +103,7 @@ module TbDirectCacheCheck #(
     data_t  look_data;      // its line, when it hits
     logic   req_taken;      // the cache took the request at the edge before
     logic   waiting;        // a load miss is served
+    logic   replay;         // taken at the fill place in the refill clock: read again now
     logic   unc_waiting;    // memory took an uncached read, has not answered yet
     tag_t   wait_tag;       // its line
     set_t   wait_set;
@@ -125,6 +130,8 @@ module TbDirectCacheCheck #(
     integer n_lost;
     integer n_lat1;
     integer n_lat_more;
+    integer n_refill_take;      // a request taken in the clock a miss's line comes
+    integer n_refill_replay;    // ... at the place the refill writes: replayed
     integer n_unc_load;
     integer n_unc_store;
     integer n_unc_idle_wait;    // an uncached request waits for the cache to become idle
@@ -191,7 +198,7 @@ module TbDirectCacheCheck #(
 
     // Nothing looked up or served: an uncached request may pass.
     function automatic logic exp_idle;
-        return !look && !waiting && !exp_unc_busy();
+        return !look && !replay && !waiting && !exp_unc_busy();
     endfunction
 
     function automatic logic exp_unc_pass;
@@ -202,11 +209,17 @@ module TbDirectCacheCheck #(
         return exp_unc_pass() || exp_look_req();
     endfunction
 
+    // The request is at the place the refill writes: taken in the refill clock, its lookup
+    // is replayed.
+    function automatic logic exp_fill_conflict;
+        return req_addr.set == wait_set;
+    endfunction
+
     function automatic logic exp_ready;
         if (req_uncached)
             return exp_idle() && mem_req_ready;
-        return !waiting && !exp_load_miss() && !(exp_look_req() && !mem_req_ready) &&
-               !exp_unc_busy();
+        return !(waiting && !mem_rsp_valid) && !replay && !exp_load_miss() &&
+               !(exp_look_req() && !mem_req_ready) && !exp_unc_busy();
     endfunction
 
     // After the inputs of this clock settled: the outputs are those of the model.
@@ -238,12 +251,20 @@ module TbDirectCacheCheck #(
     task automatic model_edge;
         logic   taken;          // memory takes the lookup's request
         logic   accept;
+        logic   replay_next;
         logic   held;
         logic   unc_taken;      // memory takes an uncached request
         set_t   s;
         taken     = exp_look_req() && mem_req_ready;
         held      = exp_look_req() && !mem_req_ready;
         accept    = req_valid && !req_uncached && exp_ready();
+        // Taken in the refill clock at the place the refill writes: the cache reads it again
+        // in the next clock (replay), then looks it up.
+        replay_next = accept && waiting && mem_rsp_valid && exp_fill_conflict();
+        if (accept && waiting && mem_rsp_valid) begin
+            if (replay_next) n_refill_replay = n_refill_replay + 1;
+            else             n_refill_take   = n_refill_take + 1;
+        end
         unc_taken = exp_unc_pass() && mem_req_ready;
         stored    = 1'b0;
         if (req_valid && req_uncached && !exp_idle())
@@ -321,7 +342,8 @@ module TbDirectCacheCheck #(
             end
         end
         req_taken = accept || unc_taken;    // req_valid stays until after the edge
-        look = accept || held;
+        look = (accept && !replay_next) || held || replay;
+        replay = replay_next;
         if (invalidate) begin
             for (int i = 0; i < SETS; i++) begin
                 m_lost[i]  = m_valid[i];
@@ -410,6 +432,8 @@ module TbDirectCacheCheck #(
         n_lost          = 0;
         n_lat1          = 0;
         n_lat_more      = 0;
+        n_refill_take   = 0;
+        n_refill_replay = 0;
         n_unc_load      = 0;
         n_unc_store     = 0;
         n_unc_idle_wait = 0;
@@ -437,6 +461,7 @@ module TbDirectCacheCheck #(
         look_data     = '0;
         req_taken     = 1'b0;
         waiting       = 1'b0;
+        replay        = 1'b0;
         unc_waiting   = 1'b0;
         wait_tag      = '0;
         wait_set      = '0;
@@ -475,6 +500,10 @@ module TbDirectCacheCheck #(
         if (n_unc_load == 0 || n_unc_store == 0 || n_unc_idle_wait == 0 || n_unc_mem_wait == 0)
             $fatal(1, "DirectCache %0d: uncached cases: load %0d, store %0d, idle wait %0d, memory wait %0d",
                    SETS_OFFSET, n_unc_load, n_unc_store, n_unc_idle_wait, n_unc_mem_wait);
+        // The refill clock (CacheControl): a request taken in it, one replayed.
+        if (n_refill_take == 0 || n_refill_replay == 0)
+            $fatal(1, "%m: refill-clock cases: taken %0d, replayed %0d", n_refill_take,
+                   n_refill_replay);
         done = 1'b1;
     end
 endmodule

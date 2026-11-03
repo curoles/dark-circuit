@@ -20,6 +20,10 @@
  * addresses, 20000 clocks each; Icarus 8 lines, 600 clocks. Stops at the first mismatch with
  * $fatal.
  *
+ * The refill clock (CacheControl): a request is taken in the clock a miss's line comes; one
+ * at the place the refill writes is replayed (no lookup in the next clock, then its lookup);
+ * both must happen.
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
@@ -82,6 +86,7 @@ module TbSkewedCacheCheck #(
     data_t  look_data;      // its line, when it hits
     bit     look_valid [2]; // valid bits of its candidates as read with the request
     logic   waiting;        // a miss is served
+    logic   replay;         // taken at the fill place in the refill clock: read again now
     addr_t  wait_line;      // its line address
     integer wait_way;       // the way its line goes into
     integer mem_count;      // clocks until memory answers, 0: no line request in flight
@@ -104,6 +109,8 @@ module TbSkewedCacheCheck #(
     integer n_mem_held;         // a line request waits for memory
     integer n_lat1;
     integer n_lat_more;
+    integer n_refill_take;      // a request taken in the clock a miss's line comes
+    integer n_refill_replay;    // ... at the place the refill writes: replayed
 
     SkewedCacheRdOnly #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH),
                         .SETS_OFFSET(SETS_OFFSET))
@@ -137,8 +144,14 @@ module TbSkewedCacheCheck #(
         return d;
     endfunction
 
+    // The request is at the place the refill writes: taken in the refill clock, its lookup
+    // is replayed.
+    function automatic logic exp_fill_conflict;
+        return index_of(wait_way, req_addr) == index_of(wait_way, wait_line);
+    endfunction
+
     function automatic logic model_ready;
-        return !waiting && !(look && !look_hit);
+        return !(waiting && !mem_rsp_valid) && !replay && !(look && !look_hit);
     endfunction
 
     // The way a miss replaces: an invalid candidate as read with the request (way 1 first),
@@ -183,10 +196,18 @@ module TbSkewedCacheCheck #(
     // Model of one rising edge with the inputs of this clock.
     task automatic model_edge;
         logic   accept;
+        logic   replay_next;
         logic   held;
         logic   was_look_hit;
         set_t   ix;
         accept       = req_valid && model_ready();
+        // Taken in the refill clock at the place the refill writes: the cache reads it again
+        // in the next clock (replay), then looks it up.
+        replay_next = accept && waiting && mem_rsp_valid && exp_fill_conflict();
+        if (accept && waiting && mem_rsp_valid) begin
+            if (replay_next) n_refill_replay = n_refill_replay + 1;
+            else             n_refill_take   = n_refill_take + 1;
+        end
         held         = look && !look_hit && !mem_req_ready;
         was_look_hit = look && look_hit;
         if (req_valid && !model_ready())
@@ -214,7 +235,8 @@ module TbSkewedCacheCheck #(
         end
         // A request is looked up with the lines as they are before this edge; a held lookup
         // stays as it is.
-        look      = accept || held;
+        look      = (accept && !replay_next) || held || replay;
+        replay    = replay_next;
         req_taken = accept;     // req_valid stays until after the edge
         if (accept) begin
             look_addr = req_addr;
@@ -314,6 +336,8 @@ module TbSkewedCacheCheck #(
         n_mem_held    = 0;
         n_lat1        = 0;
         n_lat_more    = 0;
+        n_refill_take = 0;
+        n_refill_replay = 0;
         // Different tags, with random high bits and different low bits (the skew of way 1).
         for (int t = 0; t < TAGS; t++)
             pool[t] = (TAG_WIDTH'($random(seed)) & ~TAG_WIDTH'(7)) | TAG_WIDTH'(t);
@@ -331,6 +355,7 @@ module TbSkewedCacheCheck #(
         look_way    = 0;
         look_data   = '0;
         waiting     = 1'b0;
+        replay      = 1'b0;
         wait_line   = '0;
         wait_way    = 0;
         mem_count   = 0;
@@ -356,6 +381,10 @@ module TbSkewedCacheCheck #(
             $fatal(1, "Skewed cache %0d: a case did not happen: %0d %0d %0d %0d, %0d %0d %0d %0d, %s %0d %0d %0d %0d",
                    SETS, n_hit0, n_hit1, n_hit1_skewed, n_hit_b2b, n_miss, n_by_recent, n_by_tie,
                    n_lost, "waited, held, latency", n_waited, n_mem_held, n_lat1, n_lat_more);
+        // The refill clock (CacheControl): a request taken in it, one replayed.
+        if (n_refill_take == 0 || n_refill_replay == 0)
+            $fatal(1, "%m: refill-clock cases: taken %0d, replayed %0d", n_refill_take,
+                   n_refill_replay);
         done = 1'b1;
     end
 endmodule

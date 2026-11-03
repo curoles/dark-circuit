@@ -1,0 +1,56 @@
+type: decision
+title: A cache takes the next request in the clock a miss's line comes
+date: 2026-11-02
+question: >
+  A load miss blocked every request until the clock after its line came: one clock per miss
+  with nothing done. Can the cache take a request in the refill clock, and what about a
+  request at the place the refill writes?
+decision: >
+  CacheControl takes a cached request in the clock memory answers a load miss
+  (waiting && mem_rsp_valid): the cached ready has wait_busy = waiting && !mem_rsp_valid
+  instead of waiting. A request taken then at the place the refill writes is replayed
+  (kb pattern rtl/lib/block/cache/cache_control/replay): the cache says fill_conflict, its
+  index in the way filled is look_line's (direct and set-associative: the same set; skewed:
+  the same index in fill_way, the other way may share the request's set and is not written),
+  and the lookup reads the RAMs again in the next clock. CacheControl's port accept became
+  ram_rd (a request taken, or a replay) and it has an output replay; the caches read their
+  RAMs and replacement state on ram_rd, at the lookup's index on a replay. Uncached
+  requests keep waiting for idle (no change).
+why: >
+  One clock per miss is one clock of the core per miss, with the pipeline stalled waiting
+  for it; every request not at the fill place reads lines the refill does not change, so
+  taking it is exact. The RAMs are read-first, so a request at the fill place reads the old
+  line: a load would miss the line being written (a second refill of it, in a skewed or
+  set-associative cache possibly into another way), and a store that hits the evicted line
+  would write its bytes into the new one. The guard is the place, not the line, and needs
+  only the indexes the cache computes for its RAMs anyway (the struct versions share the
+  CmpEq of the store forwarding).
+rejected:
+  - choice: The guard by the whole line address (request's line == look_line)
+    why_not: >
+      Misses the evicted line: a store to it has another line address but the same place,
+      and would write into the new line.
+relies_on:
+  - rtl/lib/block/cache/uncached
+  - rtl/lib/block/cache/cache_control/replay
+code:
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#wait_busy
+  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_nor_reduce_ready_cached
+  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_mux2_fill_conflict
+  - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#u_cmp_eq_set
+  - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_refill_take
+evidence: >
+  2026-11-02, Verilator and Icarus: the six cache tests (direct, set-associative, skewed;
+  read-write and read-only; behave and struct) pass, their models taking a request in the
+  refill clock and replaying one at the fill place; each test must see both. Mutants
+  (Verilator), all caught: never a replay (behave, struct: 6 tests each; on Mig2
+  rv32mi_ma_addr and rv32mi_sw-misaligned fail), a replay that does not read the RAMs again
+  (6 tests; the same two Mig2 programs), a replay clock that looks up (6), the replay
+  reading the request's index (skewed struct) or set (direct struct), the conflict in the
+  other way (skewed), never a conflict (set-associative). Mig2: 111 of 111; traces: the
+  five tests that count cycles (uncached) unchanged, the 100 cached ones 25 to 33 % shorter
+  (rv32ui_add 1348 -> 969 cycles). Benchmarks, gcc 12.2.0: uncached unchanged; cached
+  Dhrystone 3 157 339 -> 2 598 076 cycles (-17.7 %), qsort 179 845 -> 178 456 (-0.8 %),
+  towers 399 210 -> 317 317 (-20.5 %). sky130 (Mig2Core): 244 804 -> 245 259 um2, longest
+  path 6.2 -> 6.1 ns. Refusing the request instead (the first version) gave the same
+  cycles (105 of 105 traces identical) at 241 807 um2 and 6.7 ns.

@@ -25,7 +25,7 @@
  *   CPU side <---> +--------------+ <---> memory side
  *                  | CacheControl |
  *                  +--------------+
- *        accept, look, look_line |  ^ hit, hit_line
+ *        ram_rd, look, look_line |  ^ hit, hit_line
  *        store_write, refill,    v  |
  *        ram_wr_line, merged  +------------------------------------------+
  *                             | 2 ways: CacheValidRam, CacheTagRam,      |
@@ -82,11 +82,13 @@ module SkewedCache #(
 
     typedef logic [ADDR_WIDTH-1:SETS_OFFSET] line_t;    // an address without the offset
 
-    logic                  accept;      // a request is taken in this clock
+    logic                  ram_rd;      // the RAMs read: a request taken, or a replay
+    logic                  replay;      // the lookup reads its RAMs again (CacheControl)
     logic                  look;        // a request taken before is looked up now (or held)
     line_t                 look_line;   // its line
     logic [1:0][SETS_WIDTH-1:0] look_index;  // its index in each way
     logic [1:0][SETS_WIDTH-1:0] req_index;   // the index of the request in each way
+    logic [1:0][SETS_WIDTH-1:0] rd_index;    // the RAMs read it, or look_index on a replay
     logic [1:0]            valid;       // of the candidates of look_line
     logic [1:0][TAG_WIDTH-1:0]  tag;
     logic [1:0][DATA_WIDTH-1:0] ram_line;    // line of each candidate as its RAM read it
@@ -99,6 +101,7 @@ module SkewedCache #(
     logic                  store_write; // a store that hits is taken by memory: write merged
     logic                  refill;      // the line from memory comes: write it
     logic                  miss_taken;  // memory takes the read of a load miss
+    logic                  fill_conflict;   // the request is at the place the refill writes
     logic [DATA_WIDTH-1:0] ram_wr_line; // what a data RAM write writes: the fill or merged
     // The hit line with the store's bytes: only forwarding reads it (none when READ_ONLY).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -118,8 +121,8 @@ module SkewedCache #(
             .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
             .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data,
-            .accept, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
-            .ram_wr_line, .merged, .hit, .hit_line);
+            .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
+            .replay, .ram_wr_line, .merged, .hit, .hit_line, .fill_conflict);
 
     // @kb: rtl/lib/block/cache/skewed_cache_rd_only/design
     // The index of line l in way w: f0 = set, f1 = set ^ the low bits of the tag (the higher
@@ -143,23 +146,24 @@ module SkewedCache #(
 
         assign req_index[w]  = index_of(w, req_addr[ADDR_WIDTH-1:SETS_OFFSET]);
         assign look_index[w] = index_of(w, look_line);
+        assign rd_index[w]   = replay ? look_index[w] : req_index[w];
         assign fill_wr       = refill && fill_way == 1'(w);
         assign data_wr       = fill_wr || (store_write && hits[w]);
 
         CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
             .clk, .rst_n, .invalidate,
-            .rd_en(accept), .rd_set(req_index[w]), .valid(valid[w]),
+            .rd_en(ram_rd), .rd_set(rd_index[w]), .valid(valid[w]),
             .wr_en(fill_wr), .wr_set(look_index[w]), .wr_val(1'b1));
 
         CacheTagRam #(.SETS_WIDTH(SETS_WIDTH), .TAG_WIDTH(TAG_WIDTH)) u_cache_tag_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_index[w]), .tag(tag[w]),
+            .rd_en(ram_rd), .rd_set(rd_index[w]), .tag(tag[w]),
             .wr_en(fill_wr), .wr_set(look_index[w]),
             .wr_tag(look_line[ADDR_WIDTH-1 -: TAG_WIDTH]));
 
         CacheDataRam #(.SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET)) u_cache_data_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_index[w]), .data(ram_line[w]),
+            .rd_en(ram_rd), .rd_set(rd_index[w]), .data(ram_line[w]),
             .wr_en(data_wr), .wr_set(look_index[w]),
             .wr_data(ram_wr_line));
 
@@ -173,6 +177,10 @@ module SkewedCache #(
     assign hit       = |hits;
     assign hit_way   = hits[1];
     assign hit_line  = hit_way ? line[1] : line[0];
+
+    // The request is at the place the refill writes (taken in the refill clock, CacheControl
+    // replays its lookup): its index in fill_way is look_line's.
+    assign fill_conflict = req_index[fill_way] == look_index[fill_way];
 
     // Forwarding needs stores; a read-only cache has none of it.
     if (READ_ONLY) begin: g_read_only
@@ -192,7 +200,7 @@ module SkewedCache #(
             always_ff @(posedge clk)
                 if (!rst_n)
                     fwd <= 1'b0;
-                else if (accept)
+                else if (ram_rd)
                     fwd <= store_write && hits[w] && look_index[w] == req_index[w];
 
             assign line[w] = fwd ? fwd_line : ram_line[w];

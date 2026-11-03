@@ -55,6 +55,8 @@ evidence: >
   stores both fail it, cached and uncached.
   2026-11-02: the arbiter came, as planned here: one memory behind both caches (kb
   rtl/design/mig2/single_memory).
+  2026-11-02: a miss costs one clock more, not two: the caches take a request in the
+  refill clock (kb rtl/lib/block/cache/cache_control/refill_take).
 code:
   - rtl/design/mig2/mig2_caches.sv#u_icache
   - rtl/design/mig2/mig2_caches.sv#u_dcache

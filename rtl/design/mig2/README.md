@@ -121,10 +121,11 @@ memory port (see One memory). Both are skewed-associative caches of the library
 (`rtl/lib/block/cache`): the I-cache SkewedCacheRdOnly, the D-cache SkewedCache,
 write-through without write-allocate; 2 ways of 64 one-word lines each, 512 bytes
 (`icache_sets_width`, `dcache_sets_width` in `cfg/mig2_config.yaml`). A hit answers in the
-clock after the request, as memory of latency 1 does; a miss costs two clocks more (its word
-comes a clock later, and the cache takes no request in the clock the word comes), so with
-latency-1 memory the caches only add cycles: they pay off with slow memory
-(`+mem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
+clock after the request, as memory of latency 1 does; a miss costs one clock more (its word
+comes a clock later; the cache takes the next request in the clock the word comes, and one
+at the place the word is written is replayed: kb
+`rtl/lib/block/cache/cache_control/refill_take`), so with latency-1 memory the caches
+still add the cycles of their misses: they pay off with slow memory (`+mem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
 of the library caches), so a program sees the memory's own timing: the tests that count
 cycles (csr, muldiv, branch_id, btb_if, ras_id) and the benchmarks run uncached, the others
 cached. No FENCE.I: the caches are never invalidated (a fetch that hits does not see a later store
@@ -148,15 +149,16 @@ uncached, every load and store meets the fetch of its clock. Cycles with gcc 12.
 
 | Benchmark | Instructions | Two memories, uncached: cycles | CPI | One memory, uncached: cycles | CPI | One memory, cached: cycles | CPI |
 |---|---|---|---|---|---|---|---|
-| Dhrystone | 1 679 605 | 1 926 750 | 1.147 | 2 457 883 | 1.463 | 3 157 339 | 1.880 |
-| qsort | 134 801 | 160 149 | 1.188 | 200 550 | 1.488 | 179 845 | 1.334 |
-| towers | 220 745 | 231 862 | 1.050 | 385 185 | 1.745 | 399 210 | 1.808 |
+| Dhrystone | 1 679 605 | 1 926 750 | 1.147 | 2 457 883 | 1.463 | 2 598 076 | 1.547 |
+| qsort | 134 801 | 160 149 | 1.188 | 200 550 | 1.488 | 178 456 | 1.324 |
+| towers | 220 745 | 231 862 | 1.050 | 385 185 | 1.745 | 317 317 | 1.437 |
 
 Uncached costs 25 to 66 %, towers the most (its recursion loads and stores on the stack):
 the data side goes first, and after the instruction side's buffer held a request it takes
-the next one a clock later; no policy changes that (all within 0.4 %). Cached at latency 1
-the caches still only add cycles (their misses), but one memory costs about nothing over
-two (CPI 1.877, 1.334, 1.808 then): an instruction miss starves every stage, so its side
+the next one a clock later; no policy changes that (all within 0.4 %). Cached at latency 1,
+before the caches took a request in the clock a miss's word comes (CPI 1.880, 1.334, 1.808;
+the table has the cycles after it: 17.7, 0.8 and 20.5 % fewer), one memory cost about
+nothing over two (CPI 1.877, 1.334, 1.808 then): an instruction miss starves every stage, so its side
 goes first while ID is empty. Data first always cost 3.7 % (Dhrystone) and 7.4 % (towers)
 more, round-robin 3.5 % and 5.1 %, instruction first always the same cached and up to
 0.4 % more uncached. Of the tests that count cycles only ras_id changes
@@ -208,8 +210,8 @@ and data RAMs of the caches as black boxes:
 
 | Mig2Core | |
 |---|---|
-| Area | 244 790 µm² (0.245 mm²), 29 772 cells |
-| Longest logic path (ABC estimate) | 6.2 ns, about 162 MHz |
+| Area | 245 259 µm² (0.245 mm²), 29 844 cells |
+| Longest logic path (ABC estimate) | 6.1 ns, about 163 MHz |
 
 | Change | Area (µm²) | Longest path (ns) |
 |---|---|---|
@@ -226,6 +228,7 @@ and data RAMs of the caches as black boxes:
 | Memory channels that wait (fetch and data) | 207 763 | 5.4 |
 | Caches, without their tag and data RAMs | 241 295 | 6.1 |
 | One memory: InsnDataCacheArbiter, its flow-through buffers | 244 790 | 6.2 |
+| A miss's refill clock takes a request, a lookup there replayed | 245 259 | 6.1 |
 
 The BTB adds 16 % of area: 688 flops with the hold mux of each, the read trees, two tag
 comparators. Its first longest path was ID's check: decode, the adder of pc + imm, a 30-bit
@@ -283,6 +286,11 @@ also does not wait for the TLB. For Mig2 now it gives about what 8-bit tags give
 repair path in Fetch (a redirect to the same pc) and in the load path: a redesign for later.
 The estimate starts a path at a RAM's output without its clock-to-output time: with real RAMs
 this path is longer.
+Taking a request in the clock a miss's word comes keeps the cache's ready on flops: a
+request at the place the word is written is taken and its lookup replayed a clock later
+(kb pattern `rtl/lib/block/cache/cache_control/replay`). Refusing it instead gave the same
+cycles at 6.7 ns: the request's address reached the I-cache's ready through an index
+compare, and from there Fetch's pc.
 
 Not planned for now: the GShare predictor of `rtl/lib/block/gshare_branch_predictor`. A
 trace model on top of the BTB and the return stack gives at most 1.9 % of Dhrystone

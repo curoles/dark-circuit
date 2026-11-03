@@ -18,7 +18,7 @@
  *   CPU side <---> +--------------+ <---> memory side
  *                  | CacheControl |
  *                  +--------------+
- *        accept, look, look_line |  ^ hit, hit_line
+ *        ram_rd, look, look_line |  ^ hit, hit_line
  *        store_write, refill,    v  |
  *        ram_wr_line, merged  +------------------------------------------+
  *                             | WAYS ways: CacheValidRam, CacheTagRam,   |
@@ -73,7 +73,9 @@ module SetAssocCache import CachePkg::*; #(
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
 );
-    logic                  accept;      // a request is taken in this clock
+    logic                  ram_rd;      // the RAMs read: a request taken, or a replay
+    logic                  replay;      // the lookup reads its RAMs again (CacheControl)
+    logic [SETS_WIDTH-1:0] rd_set;      // the set read: the request's, the lookup's on a replay
     logic                  look;        // a request taken before is looked up now (or held)
     logic [ADDR_WIDTH-1:SETS_OFFSET] look_line;  // its address without the offset in the line
     logic [WAYS-1:0]       valid;       // of the ways of the set of look_line
@@ -88,6 +90,7 @@ module SetAssocCache import CachePkg::*; #(
     logic                  store_write; // a store that hits is taken by memory: write merged
     logic                  refill;      // the line from memory comes: write it
     logic                  miss_taken;  // memory takes the read of a load miss
+    logic                  fill_conflict;   // the request is at the place the refill writes
     logic [DATA_WIDTH-1:0] ram_wr_line; // what a data RAM write writes: the fill or merged
     // The hit line with the store's bytes: only forwarding reads it (none when READ_ONLY).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -103,8 +106,12 @@ module SetAssocCache import CachePkg::*; #(
             .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
             .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data,
-            .accept, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
-            .ram_wr_line, .merged, .hit, .hit_line);
+            .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
+            .replay, .ram_wr_line, .merged, .hit, .hit_line, .fill_conflict);
+
+    // The RAMs read the request's set, or the lookup's on a replay (CacheControl).
+    assign rd_set = replay ? look_line[SETS_OFFSET +: SETS_WIDTH]
+                           : req_addr[SETS_OFFSET +: SETS_WIDTH];
 
     // The RAMs of every way read the set of the request; their answers come with look and
     // hold while a lookup is held (no request is taken). A refill writes valid, tag and data
@@ -118,18 +125,18 @@ module SetAssocCache import CachePkg::*; #(
 
         CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
             .clk, .rst_n, .invalidate,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]), .valid(valid[w]),
+            .rd_en(ram_rd), .rd_set(rd_set), .valid(valid[w]),
             .wr_en(fill_wr), .wr_set(look_line[SETS_OFFSET +: SETS_WIDTH]), .wr_val(1'b1));
 
         CacheTagRam #(.SETS_WIDTH(SETS_WIDTH), .TAG_WIDTH(TAG_WIDTH)) u_cache_tag_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]), .tag(tag[w]),
+            .rd_en(ram_rd), .rd_set(rd_set), .tag(tag[w]),
             .wr_en(fill_wr), .wr_set(look_line[SETS_OFFSET +: SETS_WIDTH]),
             .wr_tag(look_line[ADDR_WIDTH-1 -: TAG_WIDTH]));
 
         CacheDataRam #(.SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET)) u_cache_data_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]), .data(ram_line[w]),
+            .rd_en(ram_rd), .rd_set(rd_set), .data(ram_line[w]),
             .wr_en(data_wr), .wr_set(look_line[SETS_OFFSET +: SETS_WIDTH]),
             .wr_data(ram_wr_line));
 
@@ -159,6 +166,11 @@ module SetAssocCache import CachePkg::*; #(
     assign hit_way  = index_of(hits);
     assign hit_line = line_of(hits, line);
 
+    // The request is at the place the refill writes (taken in the refill clock, CacheControl
+    // replays its lookup): the same set.
+    assign fill_conflict =
+        req_addr[SETS_OFFSET +: SETS_WIDTH] == look_line[SETS_OFFSET +: SETS_WIDTH];
+
     // Forwarding needs stores; a read-only cache has none of it.
     if (READ_ONLY) begin: g_read_only
         assign line = ram_line;
@@ -172,7 +184,7 @@ module SetAssocCache import CachePkg::*; #(
         always_ff @(posedge clk)
             if (!rst_n)
                 fwd <= 1'b0;
-            else if (accept)
+            else if (ram_rd)
                 fwd <= store_write &&
                        look_line[SETS_OFFSET +: SETS_WIDTH] == req_addr[SETS_OFFSET +: SETS_WIDTH];
 
@@ -193,7 +205,7 @@ module SetAssocCache import CachePkg::*; #(
     CacheReplacement #(.WAYS(WAYS), .SETS_WIDTH(SETS_WIDTH), .POLICY(REPLACEMENT))
         u_cache_replacement(
             .clk, .rst_n,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]),
+            .rd_en(ram_rd), .rd_set(rd_set),
             .touch(load_hit || store_write || refill),
             .touch_way(refill ? fill_way : hit_way),
             .valid, .victim_way);

@@ -22,6 +22,10 @@
  * ways with LRU and 4 ways random on 8 sets, 600 clocks (the struct version is slow
  * there). Stops at the first mismatch with $fatal.
  *
+ * The refill clock (CacheControl): a request is taken in the clock a miss's line comes; one
+ * at the place the refill writes is replayed (no lookup in the next clock, then its lookup);
+ * both must happen.
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
@@ -93,6 +97,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     data_t  look_data;      // its line, when it hits
     bit     look_valid [WAYS];  // valid bits of its set as read with the request
     logic   waiting;        // a miss is served
+    logic   replay;         // taken at the fill place in the refill clock: read again now
     addr_t  wait_line;      // its line address
     // An index below WAYS: its high bits are always 0.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -119,6 +124,8 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     integer n_mem_held;         // a line request waits for memory
     integer n_lat1;
     integer n_lat_more;
+    integer n_refill_take;      // a request taken in the clock a miss's line comes
+    integer n_refill_replay;    // ... at the place the refill writes: replayed
 
     SetAssocCacheRdOnly #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH),
                           .SETS_OFFSET(SETS_OFFSET), .WAYS(WAYS), .REPLACEMENT(REPLACEMENT))
@@ -146,8 +153,14 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         return d;
     endfunction
 
+    // The request is at the place the refill writes: taken in the refill clock, its lookup
+    // is replayed.
+    function automatic logic exp_fill_conflict;
+        return req_addr.set == wait_line.set;
+    endfunction
+
     function automatic logic model_ready;
-        return !waiting && !(look && !look_hit);
+        return !(waiting && !mem_rsp_valid) && !replay && !(look && !look_hit);
     endfunction
 
     // The way a miss of set s replaces: the highest invalid way as read with the request,
@@ -185,11 +198,19 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     // Model of one rising edge with the inputs of this clock.
     task automatic model_edge;
         logic accept;
+        logic replay_next;
         logic held;
         logic was_look_hit;
         logic all_valid;
         set_t s;
         accept       = req_valid && model_ready();
+        // Taken in the refill clock at the place the refill writes: the cache reads it again
+        // in the next clock (replay), then looks it up.
+        replay_next = accept && waiting && mem_rsp_valid && exp_fill_conflict();
+        if (accept && waiting && mem_rsp_valid) begin
+            if (replay_next) n_refill_replay = n_refill_replay + 1;
+            else             n_refill_take   = n_refill_take + 1;
+        end
         held         = look && !look_hit && !mem_req_ready;
         was_look_hit = look && look_hit;
         if (req_valid && !model_ready())
@@ -224,7 +245,8 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         end
         // A request is looked up with the lines as they are before this edge; a held lookup
         // stays as it is.
-        look      = accept || held;
+        look      = (accept && !replay_next) || held || replay;
+        replay    = replay_next;
         req_taken = accept;     // req_valid stays until after the edge
         if (accept) begin
             s         = req_addr.set;
@@ -324,6 +346,8 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         n_mem_held     = 0;
         n_lat1         = 0;
         n_lat_more     = 0;
+        n_refill_take  = 0;
+        n_refill_replay = 0;
         // Different tags, with random high bits.
         for (int t = 0; t < TAGS; t++)
             pool[t] = (TAG_WIDTH'($random(seed)) & ~TAG_WIDTH'(7)) | TAG_WIDTH'(t);
@@ -342,6 +366,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         look_way       = 0;
         look_data      = '0;
         waiting        = 1'b0;
+        replay         = 1'b0;
         wait_line      = '0;
         wait_way       = 0;
         mem_count      = 0;
@@ -371,6 +396,10 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
             $fatal(1, "Cache %0d ways %0d: a case did not happen: hit %0d %0d %0d, miss %0d %0d %0d, %s %0d %0d %0d %0d",
                    WAYS, REPLACEMENT, n_hit, n_hit_b2b, n_hit_b2b_ways, n_miss, n_evict, n_lost,
                    "waited, held, latency", n_waited, n_mem_held, n_lat1, n_lat_more);
+        // The refill clock (CacheControl): a request taken in it, one replayed.
+        if (n_refill_take == 0 || n_refill_replay == 0)
+            $fatal(1, "%m: refill-clock cases: taken %0d, replayed %0d", n_refill_take,
+                   n_refill_replay);
         done = 1'b1;
     end
 endmodule

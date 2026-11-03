@@ -63,7 +63,9 @@ module SetAssocCache import CachePkg::*; #(
     localparam LINE_WIDTH = ADDR_WIDTH - SETS_OFFSET;   // address bits above the offset
     localparam WAYS_POW2  = 1 << WAY_WIDTH;             // ways rounded up to a power of 2
 
-    wire                  accept;       // a request is taken in this clock
+    wire                  ram_rd;       // the RAMs read: a request taken, or a replay
+    wire                  replay;       // the lookup reads its RAMs again (CacheControl)
+    wire [SETS_WIDTH-1:0] rd_set;       // the set read: the request's, the lookup's on a replay
     wire                  look;         // a request taken before is looked up now (or held)
     wire [LINE_WIDTH-1:0] look_line;    // its address without the offset in the line
     wire [WAYS-1:0]       valid;        // of the ways of the set of look_line
@@ -84,6 +86,7 @@ module SetAssocCache import CachePkg::*; #(
     wire                  store_write;  // a store that hits is taken by memory: write merged
     wire                  refill;       // the line from memory comes: write it
     wire                  miss_taken;   // memory takes the read of a load miss
+    wire                  same_set;     // the request is of the lookup's set
     wire [DATA_WIDTH-1:0] ram_wr_line;  // what a data RAM write writes: the fill or merged
     // The hit line with the store's bytes: only forwarding reads it (none when READ_ONLY).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -101,8 +104,12 @@ module SetAssocCache import CachePkg::*; #(
             .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
             .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data,
-            .accept, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
-            .ram_wr_line, .merged, .hit, .hit_line);
+            .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
+            .replay, .ram_wr_line, .merged, .hit, .hit_line, .fill_conflict(same_set));
+
+    // The RAMs read the request's set, or the lookup's on a replay (CacheControl).
+    Mux2 #(SETS_WIDTH) u_mux2_rd_set(.in0(req_addr[SETS_OFFSET +: SETS_WIDTH]),
+                                     .in1(look_line[SETS_WIDTH-1:0]), .sel(replay), .out(rd_set));
 
     Decoder #(.SIZE(WAY_WIDTH)) u_decoder_fill(.in(fill_way), .en(refill), .out(fill_wr));
 
@@ -114,12 +121,12 @@ module SetAssocCache import CachePkg::*; #(
 
         CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
             .clk, .rst_n, .invalidate,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]), .valid(valid[w]),
+            .rd_en(ram_rd), .rd_set(rd_set), .valid(valid[w]),
             .wr_en(fill_wr[w]), .wr_set(look_line[SETS_WIDTH-1:0]), .wr_val(1'b1));
 
         CacheTagRam #(.SETS_WIDTH(SETS_WIDTH), .TAG_WIDTH(TAG_WIDTH)) u_cache_tag_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]), .tag,
+            .rd_en(ram_rd), .rd_set(rd_set), .tag,
             .wr_en(fill_wr[w]), .wr_set(look_line[SETS_WIDTH-1:0]),
             .wr_tag(look_line[LINE_WIDTH-1:SETS_WIDTH]));
 
@@ -127,7 +134,7 @@ module SetAssocCache import CachePkg::*; #(
         Or2  #(1) u_or2_data_wr  (.in1(fill_wr[w]), .in2(store_wr), .out(data_wr));
         CacheDataRam #(.SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET)) u_cache_data_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]), .data(ram_line[w]),
+            .rd_en(ram_rd), .rd_set(rd_set), .data(ram_line[w]),
             .wr_en(data_wr), .wr_set(look_line[SETS_WIDTH-1:0]), .wr_data(ram_wr_line));
 
         CmpEq #(TAG_WIDTH) u_cmp_eq(.in1(tag), .in2(look_line[LINE_WIDTH-1:SETS_WIDTH]),
@@ -157,11 +164,15 @@ module SetAssocCache import CachePkg::*; #(
         OrReduce #(WAYS) u_or_reduce_line(.in(ways_bit), .out(hit_line[b]));
     end
 
+    // The request is of the lookup's set: CacheControl's fill_conflict (taken in the refill
+    // clock, its lookup is replayed), and forwarding.
+    CmpEq #(SETS_WIDTH) u_cmp_eq_set(.in1(look_line[SETS_WIDTH-1:0]),
+                                     .in2(req_addr[SETS_OFFSET +: SETS_WIDTH]), .eq(same_set));
+
     // Forwarding needs stores; a read-only cache has none of it.
     if (READ_ONLY) begin: g_read_only
         assign line = ram_line;
     end else begin: g_store
-        wire                  same_set;     // the request taken is of the lookup's set
         wire                  fwd_new;      // the request taken at a store's write, same set
         wire                  fwd;          // a RAM line is older than a store's write
         wire [WAYS-1:0]       fwd_hits;     // one-hot: the way of that store
@@ -169,11 +180,8 @@ module SetAssocCache import CachePkg::*; #(
 
         // Forwarding (see the behave version): decided at the edge of a read; the line and
         // the way of the store kept at its write.
-        CmpEq #(SETS_WIDTH) u_cmp_eq_set(.in1(look_line[SETS_WIDTH-1:0]),
-                                         .in2(req_addr[SETS_OFFSET +: SETS_WIDTH]),
-                                         .eq(same_set));
         And2  #(1) u_and2_fwd (.in1(store_write), .in2(same_set), .out(fwd_new));
-        DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(accept), .in(fwd_new),
+        DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(ram_rd), .in(fwd_new),
                                                         .out(fwd));
         DffEn #(WAYS) u_dff_en_fwd_hits(.clk, .en(store_write), .in(hits), .out(fwd_hits));
         DffEn #(DATA_WIDTH) u_dff_en_fwd_line(.clk, .en(store_write), .in(merged), .out(fwd_line));
@@ -197,7 +205,7 @@ module SetAssocCache import CachePkg::*; #(
     CacheReplacement #(.WAYS(WAYS), .SETS_WIDTH(SETS_WIDTH), .POLICY(REPLACEMENT))
         u_cache_replacement(
             .clk, .rst_n,
-            .rd_en(accept), .rd_set(req_addr[SETS_OFFSET +: SETS_WIDTH]),
+            .rd_en(ram_rd), .rd_set(rd_set),
             .touch, .touch_way, .valid, .victim_way);
 
     // The victim is taken when memory takes the read of the load miss: the random way changes

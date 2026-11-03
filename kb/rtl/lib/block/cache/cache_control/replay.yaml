@@ -1,0 +1,47 @@
+type: pattern
+title: Replay a stale lookup instead of refusing the request at the input
+date: 2026-11-02
+problem: >
+  A cache reads its RAMs in the clock it takes a request (read-first RAMs). When a write to
+  the same place happens at that edge, the request reads the old contents: in the clock a
+  miss's line comes, a request at the place the refill writes would miss the line being
+  written, or hit the line it evicts and (a store) write its bytes into the new line.
+  Refusing such a request at the input makes req_ready depend on the request's address (a
+  compare of indexes), and the cache's ready is a global control in the CPU: fetch's pc and
+  the pipeline's stall follow it in the same clock (AGENTS' late-signals rule). In Mig2 that
+  compare made the longest path 6.7 ns instead of 6.2.
+solution: >
+  Take the request; register the hazard at the edge it is taken: replay <= accept && refill
+  && fill_conflict, so the compare ends in a flop. In the clock after, the lookup does
+  nothing (look_ok = look && !replay: no hit, no miss, no store write, no memory request,
+  req_ready 0) and the RAMs read again, at the lookup's place (ram_rd = accept || replay,
+  rd_set the lookup's index on a replay); in the clock after that it is looked up with the
+  new contents. CacheControl's timing assertion a_replay_one_clock states it: a replay takes
+  one clock and the lookup follows.
+why: >
+  The same cycles as refusing (a request at the fill place costs one clock, every other is
+  taken in the refill clock), but req_ready comes from flops only, so the cache can sit in
+  front of any requester without adding a path. The cost: a flop, an Or of the RAM read
+  enable and a mux on the RAMs' read index (per way). Later caches meet the same question
+  more often (hit under miss: is the new request at a place that is busy?); answering it in
+  the lookup stage, from flops, scales, while each compare added to the ready lengthens it.
+known_as: >
+  Replay (or re-execute) in cache and load/store pipelines: a request that met a hazard in
+  its access stage repeats the access instead of being stalled at the input; here the
+  hazard is read-during-write on the cache's RAMs.
+rejected:
+  - choice: Refuse the request in the refill clock (req_ready 0 when fill_conflict)
+    why_not: >
+      The first version of the refill-clock step: same cycles, but req_addr reached req_ready
+      through an index compare (Mig2 sky130: 6.2 -> 6.7 ns longest path, from the I-cache's
+      look_line through req_ready into fetch's pc).
+  - choice: Forward the refill line to a request at the same place (write-first RAMs)
+    why_not: >
+      Tags, valid bits and the line of the filled way forwarded into the hit logic: a mux on
+      the late path of every lookup, to save one clock only for a request at the fill place.
+code:
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#replay
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_replay_one_clock
+  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_dff_sync_rst_replay
+  - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_mux2_rd_index
+  - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_refill_replay

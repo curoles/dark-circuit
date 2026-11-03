@@ -4,13 +4,14 @@
  * Same ports, parameters and behavior as the behave version (see there). The request taken is
  * a DffEn (accept) for the line address and, unless READ_ONLY, one for the fields of a store
  * (we, wdata, wstrb).
- *   look        = DffSyncRst(accept OR held)
- *   store       = look AND look_we             load = look AND ~look_we
+ *   look        = DffSyncRst(accept OR held OR replay)     look_ok = look AND ~replay
+ *   store       = look_ok AND look_we          load = look_ok AND ~look_we
  *   load_hit    = load AND hit                 load_miss = load AND ~hit
  *   look_req    = store OR load_miss           held = look_req AND ~mem_req_ready
  *   miss_taken  = load_miss AND mem_req_ready  waiting = DffSyncRst(miss_taken OR
  *                                                         (waiting AND ~mem_rsp_valid))
  *   refill      = waiting AND mem_rsp_valid
+ *   replay      = DffSyncRst(accept AND refill AND fill_conflict)   ram_rd = accept OR replay
  *   store_write = store AND hit AND mem_req_ready (g_store); merged: per byte a Mux2 of the hit
  *                 line and the store's byte on its strobe; ram_wr_line = Mux2(merged,
  *                 mem_rsp_data, refill)
@@ -18,8 +19,8 @@
  *   rsp_data    = Mux2(hit_line, mem_rsp_data, waiting OR unc_waiting)
  * Uncached (see the behave version):
  *   idle      = Nor3(look, waiting, unc_busy)      unc_busy = unc_waiting AND ~mem_rsp_valid
- *   req_ready = Mux2(NorReduce(waiting, load_miss, held, unc_busy), idle AND mem_req_ready,
- *                    req_uncached)
+ *   req_ready = Mux2(NorReduce(waiting_kept, replay, load_miss, held, unc_busy),
+ *                    idle AND mem_req_ready, req_uncached)
  *   unc_pass  = req_valid AND req_uncached AND idle; the memory line a Mux2 of look_line and
  *               the request's on unc_pass, the fields of a write (g_store) one of the store kept
  *               and the request's; unc_waiting a DffSyncRst like waiting
@@ -66,7 +67,8 @@ module CacheControl #(
     input  wire [DATA_WIDTH-1:0] mem_rsp_data,
 
     // The cache's ways: the lookup, and what it found
-    output wire                  accept,        // a request is taken: the RAMs read it
+    output wire                  ram_rd,        // the RAMs read: a request taken, or a replay
+    output wire                  replay,        // the lookup reads its RAMs again: no hit, no miss
     output wire                  look,          // a request taken before is looked up (or held)
     output wire [ADDR_WIDTH-1:SETS_OFFSET] look_line,   // its line: address without the offset
     output wire                  load_hit,      // a load hits now: replacement touch
@@ -76,11 +78,16 @@ module CacheControl #(
     output wire [DATA_WIDTH-1:0] ram_wr_line,   // what a data RAM write writes: refill or merged
     output wire [DATA_WIDTH-1:0] merged,        // the hit line with the store's bytes
     input  wire                  hit,           // a way hits the lookup
+    input  wire                  fill_conflict, // the request is at the place the refill writes
     input  wire [DATA_WIDTH-1:0] hit_line       // the line of the way that hits
 );
     localparam LINE_WIDTH  = ADDR_WIDTH - SETS_OFFSET;      // address bits above the offset
     localparam STORE_WIDTH = 1 + DATA_WIDTH + STRB_WIDTH;   // the fields of a store kept
 
+    wire                  accept;       // a cached request is taken
+    wire                  look_ok;      // the lookup is no replay: its RAM outputs are its own
+    wire                  replay_n;
+    wire                  replay_next;
     wire                  look_next;
     wire [LINE_WIDTH-1:0] req_line;     // the request's address without the offset
     wire                  look_we;
@@ -115,8 +122,9 @@ module CacheControl #(
     // @kb: rtl/lib/block/cache/uncached
     And2 #(1) u_and2_unc_busy (.in1(unc_waiting), .in2(mem_rsp_n), .out(unc_busy));
     Nor3 #(1) u_nor3_idle     (.in1(look), .in2(waiting), .in3(unc_busy), .out(idle));
-    NorReduce #(4) u_nor_reduce_ready_cached(.in({waiting, load_miss, held, unc_busy}),
-                                             .out(ready_cached));
+    // @kb: rtl/lib/block/cache/cache_control/refill_take
+    NorReduce #(5) u_nor_reduce_ready_cached(
+        .in({waiting_kept, replay, load_miss, held, unc_busy}), .out(ready_cached));
     And2 #(1) u_and2_ready_unc(.in1(idle), .in2(mem_req_ready), .out(ready_unc));
     Mux2 #(1) u_mux2_ready    (.in0(ready_cached), .in1(ready_unc), .sel(req_uncached),
                                .out(req_ready));
@@ -126,7 +134,7 @@ module CacheControl #(
     And3 #(1) u_and3_unc_pass (.in1(req_valid), .in2(req_uncached), .in3(idle),
                                .out(unc_pass));
 
-    Or2 #(1) u_or2_look(.in1(accept), .in2(held), .out(look_next));
+    Or3 #(1) u_or3_look(.in1(accept), .in2(held), .in3(replay), .out(look_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_look(.clk, .rst_n, .in(look_next), .out(look));
 
     // The line address of the request taken, kept for its lookup.
@@ -136,8 +144,10 @@ module CacheControl #(
     // Lookup.
     Inv  #(1) u_inv_hit       (.in(hit), .out(hit_n));
     Inv  #(1) u_inv_we        (.in(look_we), .out(look_we_n));
-    And2 #(1) u_and2_store    (.in1(look), .in2(look_we), .out(store));
-    And2 #(1) u_and2_load     (.in1(look), .in2(look_we_n), .out(load));
+    Inv  #(1) u_inv_replay    (.in(replay), .out(replay_n));
+    And2 #(1) u_and2_look_ok  (.in1(look), .in2(replay_n), .out(look_ok));
+    And2 #(1) u_and2_store    (.in1(look_ok), .in2(look_we), .out(store));
+    And2 #(1) u_and2_load     (.in1(look_ok), .in2(look_we_n), .out(load));
     And2 #(1) u_and2_load_hit (.in1(load), .in2(hit), .out(load_hit));
     And2 #(1) u_and2_load_miss(.in1(load), .in2(hit_n), .out(load_miss));
 
@@ -197,6 +207,14 @@ module CacheControl #(
     Or2  #(1) u_or2_wait       (.in1(miss_taken), .in2(waiting_kept), .out(waiting_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_wait(.clk, .rst_n, .in(waiting_next), .out(waiting));
     And2 #(1) u_and2_refill    (.in1(waiting), .in2(mem_rsp_valid), .out(refill));
+
+    // Replay (see the behave version).
+    // @kb: rtl/lib/block/cache/cache_control/refill_take
+    // @kb: rtl/lib/block/cache/cache_control/replay
+    And3 #(1) u_and3_replay(.in1(accept), .in2(refill), .in3(fill_conflict), .out(replay_next));
+    DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_replay(.clk, .rst_n, .in(replay_next), .out(replay));
+    Or2  #(1) u_or2_ram_rd (.in1(accept), .in2(replay), .out(ram_rd));
+    `DC_ASSERT_NEXT(a_replay_one_clock, replay, look_ok)
 
     // See the behave version.
     `DC_ASSERT(a_no_look_while_waiting, !(look && waiting))

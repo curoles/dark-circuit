@@ -13,7 +13,7 @@
  * and per way w:
  *   valid and tag RAM write: refill AND fill_way == w
  *   data RAM write: that OR (store_write AND hits[w]), of CacheControl's ram_wr_line
- *   fwd[w]  = DffSyncRstEn(en accept) of store_write AND hits[w] AND (index of the lookup
+ *   fwd[w]  = DffSyncRstEn(en ram_rd) of store_write AND hits[w] AND (index of the lookup
  *             in w == index of the request in w)
  *   line[w] = Mux2(ram_line[w], fwd_line, fwd[w])
  *
@@ -65,7 +65,8 @@ module SkewedCache #(
 
     localparam LINE_WIDTH = ADDR_WIDTH - SETS_OFFSET;   // address bits above the offset
 
-    wire                  accept;       // a request is taken in this clock
+    wire                  ram_rd;       // the RAMs read: a request taken, or a replay
+    wire                  replay;       // the lookup reads its RAMs again (CacheControl)
     wire                  look;         // a request taken before is looked up now (or held)
     wire [2*SETS_WIDTH-1:0] req_low;    // the request's set and the low bits of its tag
     wire [LINE_WIDTH-1:0] look_line;    // the lookup's address without the offset in the line
@@ -84,6 +85,8 @@ module SkewedCache #(
     wire                  store_write;  // a store that hits is taken by memory: write merged
     wire                  refill;       // the line from memory comes: write it
     wire                  miss_taken;   // memory takes the read of a load miss
+    wire [1:0]            same_index;   // per way: the request has look_line's index there
+    wire                  fill_conflict;    // the request is at the place the refill writes
     wire [DATA_WIDTH-1:0] ram_wr_line;  // what a data RAM write writes: the fill or merged
     // The hit line with the store's bytes: only forwarding reads it (none when READ_ONLY).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -106,8 +109,8 @@ module SkewedCache #(
             .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
             .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data,
-            .accept, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
-            .ram_wr_line, .merged, .hit, .hit_line);
+            .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
+            .replay, .ram_wr_line, .merged, .hit, .hit_line, .fill_conflict);
 
     assign req_low = req_addr[SETS_OFFSET +: 2*SETS_WIDTH];
 
@@ -137,15 +140,19 @@ module SkewedCache #(
         wire                  tag_eq;
         wire                  store_wr;     // a store's merged line writes this way
         wire                  data_wr;
+        wire [SETS_WIDTH-1:0] rd_index;     // the RAMs read it: req_index, look_index on a replay
+
+        Mux2 #(SETS_WIDTH) u_mux2_rd_index(.in0(req_index[w]), .in1(look_index[w]), .sel(replay),
+                                           .out(rd_index));
 
         CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
             .clk, .rst_n, .invalidate,
-            .rd_en(accept), .rd_set(req_index[w]), .valid(valid[w]),
+            .rd_en(ram_rd), .rd_set(rd_index), .valid(valid[w]),
             .wr_en(fill_wr[w]), .wr_set(look_index[w]), .wr_val(1'b1));
 
         CacheTagRam #(.SETS_WIDTH(SETS_WIDTH), .TAG_WIDTH(TAG_WIDTH)) u_cache_tag_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_index[w]), .tag,
+            .rd_en(ram_rd), .rd_set(rd_index), .tag,
             .wr_en(fill_wr[w]), .wr_set(look_index[w]),
             .wr_tag(look_line[LINE_WIDTH-1:SETS_WIDTH]));
 
@@ -153,12 +160,14 @@ module SkewedCache #(
         Or2  #(1) u_or2_data_wr  (.in1(fill_wr[w]), .in2(store_wr), .out(data_wr));
         CacheDataRam #(.SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET)) u_cache_data_ram(
             .clk,
-            .rd_en(accept), .rd_set(req_index[w]), .data(ram_line[w]),
+            .rd_en(ram_rd), .rd_set(rd_index), .data(ram_line[w]),
             .wr_en(data_wr), .wr_set(look_index[w]), .wr_data(ram_wr_line));
 
         CmpEq #(TAG_WIDTH) u_cmp_eq(.in1(tag), .in2(look_line[LINE_WIDTH-1:SETS_WIDTH]),
                                     .eq(tag_eq));
         And3  #(1) u_and3_hit(.in1(look), .in2(valid[w]), .in3(tag_eq), .out(hits[w]));
+        CmpEq #(SETS_WIDTH) u_cmp_eq_index(.in1(look_index[w]), .in2(req_index[w]),
+                                           .eq(same_index[w]));
 
         // The recent bits of the way: written by the fill that makes a line valid, read only
         // when both candidates are valid, so no reset.
@@ -170,6 +179,11 @@ module SkewedCache #(
 
     // A line is filled only on a miss, so it is in at most one way.
     `DC_ASSERT(a_hits_onehot0, $onehot0(hits))
+
+    // The request is at the place the refill writes (taken in the refill clock, CacheControl
+    // replays its lookup): its index in fill_way is look_line's.
+    Mux2 #(1) u_mux2_fill_conflict(.in0(same_index[0]), .in1(same_index[1]), .sel(fill_way),
+                                   .out(fill_conflict));
 
     Or2  #(1) u_or2_hit(.in1(hits[0]), .in2(hits[1]), .out(hit));
     Mux2 #(DATA_WIDTH) u_mux2_hit_line(.in0(line[0]), .in1(line[1]), .sel(hits[1]),
@@ -184,17 +198,14 @@ module SkewedCache #(
         DffEn #(DATA_WIDTH) u_dff_en_fwd_line(.clk, .en(store_write), .in(merged), .out(fwd_line));
 
         for (genvar w = 0; w < 2; w++) begin: g_line
-            wire same_index;   // the request taken has the lookup's index here
             wire fwd_new;      // the request taken at a store's write here
             wire fwd;          // this way's RAM read a line older than a store
 
             // Forwarding (see the behave version): decided at the edge of a read, per way.
             // @kb: rtl/lib/block/cache/skewed_cache/design
-            CmpEq #(SETS_WIDTH) u_cmp_eq_index(.in1(look_index[w]), .in2(req_index[w]),
-                                               .eq(same_index));
-            And3  #(1) u_and3_fwd(.in1(store_write), .in2(hits[w]), .in3(same_index),
+            And3  #(1) u_and3_fwd(.in1(store_write), .in2(hits[w]), .in3(same_index[w]),
                                   .out(fwd_new));
-            DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(accept), .in(fwd_new),
+            DffSyncRstEn #(.WIDTH(1)) u_dff_sync_rst_en_fwd(.clk, .rst_n, .en(ram_rd), .in(fwd_new),
                                                             .out(fwd));
             Mux2 #(DATA_WIDTH) u_mux2_line(.in0(ram_line[w]), .in1(fwd_line), .sel(fwd),
                                            .out(line[w]));

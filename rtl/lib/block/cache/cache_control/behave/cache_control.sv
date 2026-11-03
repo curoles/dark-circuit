@@ -18,7 +18,12 @@
  * memory does not take a request, the lookup holds it (held: the cache's RAM outputs hold)
  * and req_ready is 0. A load miss is served from the clock memory takes its read
  * (miss_taken, when the cache takes its victim) until the answer comes; no request is taken
- * meanwhile, so look_line holds for the refill.
+ * meanwhile, so look_line holds for the refill. In the clock the answer comes a request is
+ * taken; one at the place the refill writes (fill_conflict, from the cache: its index in the
+ * way filled is the line's) reads the old line there (read-first RAMs), so in the next clock
+ * its lookup reads the RAMs again (replay: no hit, no miss, req_ready 0; ram_rd with the
+ * lookup's place) and is looked up in the clock after. req_ready does not depend on the
+ * request's address.
  * Uncached: a request with req_uncached=1 does not use the lines (no lookup, fill or update)
  * and passes straight to the memory side: it is taken when nothing is looked up or served, in
  * the clock memory takes it, so req_ready then follows mem_req_ready without a flop; a load is
@@ -28,7 +33,7 @@
  * mem_req_we, mem_req_wdata and mem_req_wstrb are 0; store_write and merged are 0), so the
  * logic only stores need is left out.
  *
- *   CPU side ---> accept, look_line (lookup) ---> the cache's ways ---> hit, hit_line ---+
+ *   CPU side ---> ram_rd, replay, look_line  ---> the cache's ways ---> hit, hit_line ---+
  *                                                                                        |
  *   +------------------------------------------------------------------------------------+
  *   v
@@ -78,7 +83,8 @@ module CacheControl #(
     input  wire [DATA_WIDTH-1:0] mem_rsp_data,
 
     // The cache's ways: the lookup, and what it found
-    output wire                  accept,        // a request is taken: the RAMs read it
+    output wire                  ram_rd,        // the RAMs read: a request taken, or a replay
+    output logic                 replay,        // the lookup reads its RAMs again: no hit, no miss
     output logic                 look,          // a request taken before is looked up (or held)
     output logic [ADDR_WIDTH-1:SETS_OFFSET] look_line,  // its line: address without the offset
     output wire                  load_hit,      // a load hits now: replacement touch
@@ -88,8 +94,12 @@ module CacheControl #(
     output wire [DATA_WIDTH-1:0] ram_wr_line,   // what a data RAM write writes: refill or merged
     output wire [DATA_WIDTH-1:0] merged,        // the hit line with the store's bytes
     input  wire                  hit,           // a way hits the lookup
+    input  wire                  fill_conflict, // the request is at the place the refill writes
     input  wire [DATA_WIDTH-1:0] hit_line       // the line of the way that hits
 );
+    logic                  accept;      // a cached request is taken
+    logic                  look_ok;     // the lookup is no replay: its RAM outputs are its own
+    logic                  wait_busy;   // a load miss is served, memory does not answer now
     logic                  look_we;
     logic                  store;       // a store is looked up
     logic                  load_miss;
@@ -101,28 +111,45 @@ module CacheControl #(
     logic                  idle;        // nothing looked up or served: uncached may pass
     logic                  unc_pass;    // an uncached request goes to memory now
 
-    // A cached request is taken only when the lookup is done: no load miss found or served,
-    // memory took the lookup's own request, no uncached read waits. An uncached one passes to
-    // memory when the cache is idle and is taken when memory takes it.
+    // A cached request is taken only when the lookup is done: no load miss found, none served
+    // (the clock its line comes counts as done), no replay, memory took the lookup's own
+    // request, no uncached read waits. An uncached one passes to memory when the cache is
+    // idle and is taken when memory takes it.
     // @kb: rtl/lib/block/cache/uncached
     assign unc_busy  = unc_waiting && !mem_rsp_valid;
     assign idle      = !look && !waiting && !unc_busy;
     assign unc_pass  = req_valid && req_uncached && idle;
+    assign wait_busy = waiting && !mem_rsp_valid;
     assign req_ready = req_uncached ? idle && mem_req_ready
-                                    : !waiting && !load_miss && !held && !unc_busy;
+                                    : !wait_busy && !replay && !load_miss && !held && !unc_busy;
     assign accept    = req_valid && !req_uncached && req_ready;
 
     always_ff @(posedge clk)
         if (!rst_n) look <= 1'b0;
-        else        look <= accept || held;
+        else        look <= accept || held || replay;
 
     always_ff @(posedge clk)
         if (accept)
             look_line <= req_addr[ADDR_WIDTH-1:SETS_OFFSET];
 
-    assign store     = look && look_we;
-    assign load_hit  = look && !look_we && hit;
-    assign load_miss = look && !look_we && !hit;
+    // A request taken in the refill clock at the place the refill writes read the old line
+    // there: in the next clock its lookup reads the RAMs again and does nothing else, then is
+    // looked up. fill_conflict goes only into this flop, not into req_ready.
+    // @kb: rtl/lib/block/cache/cache_control/refill_take
+    // @kb: rtl/lib/block/cache/cache_control/replay
+    always_ff @(posedge clk)
+        if (!rst_n) replay <= 1'b0;
+        else        replay <= accept && refill && fill_conflict;
+
+    assign ram_rd  = accept || replay;
+    assign look_ok = look && !replay;
+
+    // A replay takes one clock: the lookup follows, with the RAM outputs it read.
+    `DC_ASSERT_NEXT(a_replay_one_clock, replay, look_ok)
+
+    assign store     = look_ok && look_we;
+    assign load_hit  = look_ok && !look_we && hit;
+    assign load_miss = look_ok && !look_we && !hit;
 
     // Write-through: a store always goes to memory; a load only when it misses. A cached
     // request comes from the lookup's registers; an uncached one straight from the CPU side
