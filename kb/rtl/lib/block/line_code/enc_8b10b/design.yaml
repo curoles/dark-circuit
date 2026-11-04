@@ -8,11 +8,13 @@ question: >
 decision: >
   Three blocks in rtl/lib/block/line_code (the family of line codes: 8b/10b now, 64b/66b or
   scramblers later): Enc5b6b (x = EDCBA to abcdei), Enc3b4b (y = HGF to fghj) and Enc8b10b
-  (the two, combinational; the running disparity register is the user's). Each half keeps one
-  table, the standard's column for RD-, as the standard writes it; the RD+ column follows from
+  (the two, combinational; the running disparity register is the user's). Each half has one
+  table, the standard's column for RD-, as the standard writes it (in LineCodePkg since
+  2026-11-03, shared with the decoder: kb dec_8b10b/design); the RD+ column follows from
   one rule: a code with disparity +-2 is sent complemented at RD+, as are D.07, D.x.3 and every
-  control code's 4-bit part; the running disparity after a half comes from the ones of the code
-  itself. Enc5b6b tells Enc3b4b when a .7 takes D.x.A7 (alt7). Enc8b10b sends a first:
+  control code's 4-bit part; the running disparity after a half comes from the code itself
+  (LineCodePkg rd_after6, rd_after4, the standard's rule). Enc5b6b tells Enc3b4b when a .7
+  takes D.x.A7 (alt7). Enc8b10b sends a first:
   code[0] = a ... code[9] = j. k with a byte that is no control code sets k_err. Behavioral
   only for now. One test, of Enc8b10b, covers the halves (no tests of their own, as
   CacheControl and the cache RAMs).
@@ -42,8 +44,9 @@ evidence: >
   a table bit, D.07 or D.x.3 not alternating, control codes not alternating, A7 missing for
   x = 20, K.28 as D.28, K.x.5 as D.x.5, j sent first, K.30.7 flagged.
 code:
-  - rtl/lib/block/line_code/enc_5b6b/behave/enc_5b6b.sv#flip
+  - rtl/lib/block/line_code/line_code_pkg.sv#code6
+  - rtl/lib/block/line_code/line_code_pkg.sv#code4
+  - rtl/lib/block/line_code/line_code_pkg.sv#alt7_of
   - rtl/lib/block/line_code/enc_5b6b/behave/enc_5b6b.sv#alt7
-  - rtl/lib/block/line_code/enc_3b4b/behave/enc_3b4b.sv#flip
   - rtl/lib/block/line_code/enc_8b10b/behave/enc_8b10b.sv#k_err
   - test/block/line_code/enc_8b10b/tb_enc_8b10b.sv#model

@@ -1,0 +1,49 @@
+type: decision
+title: 8b/10b decoder from the encoder's tables; a code is valid if encoding its byte gives it back
+date: 2026-11-03
+question: >
+  How does the library's 8b/10b decoder find the byte of a received code, and how does it tell
+  valid codes from invalid ones (code errors) and from codes of the wrong running disparity
+  (disparity errors), without a second table that could disagree with the encoder's?
+decision: >
+  Dec6b5b, Dec4b3b and Dec8b10b in rtl/lib/block/line_code, combinational. The tables move
+  from the encoder halves into LineCodePkg (the RD- columns, the rule for RD+, alt7_of,
+  valid_k, rd_after6/rd_after4), used by encoder and decoder. Dec6b5b and Dec4b3b search
+  them: x (y) is the one whose code matches, y at the running disparity after the 6-bit part
+  first (the control column has codes equal across disparities). k: K.28's 6-bit part, or
+  K.x.7's 4-bit part after x = 23, 27, 29, 30. Validity: the byte decoded is encoded again by
+  two Enc8b10b, at rd_in and at the other running disparity; equal at rd_in: valid; only at
+  the other: disp_err (the byte is still given); neither: code_err. rd_out is the standard's
+  rule on the bits received (more ones +1, more zeros -1, 000111 and 0011 +1, 111000 and 1100
+  -1, else kept), not the encoder's. Behavioral only, as the encoder.
+why: >
+  One source for the tables, so encoder and decoder cannot disagree (user's choice over
+  inverse tables in the decoder). Re-encoding is the definition of a valid code: no rules of
+  its own for A7, runs or illegal pairs of halves to get wrong, and the halves need to be
+  right only for valid codes. The standard's rule for rd_out recovers by itself after a bit
+  error. Searching a table of constants synthesizes to the same lookup as an inverse table.
+rejected:
+  - choice: Inverse tables in the decoder halves (64 and 2 x 16 rows, sorted by code)
+    why_not: The table twice; the user chose one source.
+  - choice: Validity rules written out (own checks of runs, A7, the disparity of each half)
+    why_not: More logic to get wrong; encoding again gives the exact answer.
+  - choice: rd_out from the encoders' running disparity
+    why_not: Undefined after a code error; the standard's rule holds for any bits.
+relies_on:
+  - rtl/lib/block/line_code/enc_8b10b/design
+code:
+  - rtl/lib/block/line_code/line_code_pkg.sv#rd_after6
+  - rtl/lib/block/line_code/dec_6b5b/behave/dec_6b5b.sv#k28
+  - rtl/lib/block/line_code/dec_4b3b/behave/dec_4b3b.sv#rd_in
+  - rtl/lib/block/line_code/dec_8b10b/behave/dec_8b10b.sv#u_enc_other
+  - test/block/line_code/dec_8b10b/tb_dec_8b10b.sv#rd_rule
+evidence: >
+  2026-11-03: test/block/line_code/dec_8b10b passes on Verilator (every 10-bit value at both
+  running disparities: 536 valid codes, 392 disparity errors, 1120 code errors; 0.04 s) and
+  Icarus (at RD- only, 0.43 s); the valid codes come from Enc8b10b, and rd_out is checked
+  against the standard's rule computed in the test. The encoder test passes unchanged with
+  the tables in LineCodePkg. Mutants, all caught: K.28 at RD+ not found, the 4-bit search
+  preferring the other running disparity, no A7, K.x.7 not a control code, the second
+  encoder at rd_in, rd_out from the encoder, the bit order reversed, the rule without
+  000111; D.07 not alternating in LineCodePkg is caught by the encoder test (the decoder
+  test, its codes from the encoder, cannot see an error of the shared table).
