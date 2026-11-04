@@ -1,0 +1,13 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Configuration of Mig3 for programs, also usable in assembly (.S).
+ */
+#pragma once
+
+/* PC after reset. */
+#define MIG3_RST_ADDR {{ rst_addr | c_hex }}u
+
+/* The memory, code and data: 1 << MIG3_MEM_ADDR_WIDTH = MIG3_MEM_SIZE bytes. */
+#define MIG3_MEM_ADDR_WIDTH {{ mem_addr_width }}
+#define MIG3_MEM_SIZE {{ 2 ** mem_addr_width }}u

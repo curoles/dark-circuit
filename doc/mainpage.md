@@ -12,6 +12,7 @@ A library of SystemVerilog gates, parts and blocks, and RISC-V CPUs built from t
 | @ref sim     | simulation models |
 | @ref mig1    | Mig1, a RISC-V CPU |
 | @ref mig2    | Mig2, where bigger changes of Mig1 go first |
+| @ref mig3    | Mig3, a copy of Mig2 that grows floating point |
 
 A module often exists in several versions, one per directory; each version is in a
 namespace named after its directory: Behave and Struct (blocks, arithmetic units), Generic

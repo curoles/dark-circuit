@@ -1,0 +1,30 @@
+// THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+// {{ generated_note }}
+//
+// Configuration of Mig3: struct mig3_cfg_t, its default MIG3_CFG has the values of
+// cfg/mig3_config.yaml. Modules that read a knob take `parameter mig3_cfg_t CFG`.
+// A new knob: a line in the YAML and a field here.
+package Mig3ConfigPkg;
+
+    typedef struct packed {
+        logic [31:0] rst_addr;         // PC after reset, byte address
+        int unsigned mem_addr_width;   // Mig3Cpu memories: 1 << mem_addr_width bytes each
+        int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
+        int unsigned btb_tag_width;    // BTB tag; with the index it should cover the word
+                                       // address of imem: then no two pcs share an entry
+        int unsigned ras_addr_width;   // return-address stack: 1 << ras_addr_width entries
+        int unsigned icache_sets_width;    // I-cache: 2 ways of 1 << icache_sets_width lines
+        int unsigned dcache_sets_width;    // D-cache: 2 ways of 1 << dcache_sets_width lines
+    } mig3_cfg_t;
+
+    localparam mig3_cfg_t MIG3_CFG = '{
+        rst_addr:        {{ rst_addr | sv_hex(32) }},
+        mem_addr_width:  {{ mem_addr_width }},   // {{ 2 ** mem_addr_width }} bytes each
+        btb_index_width: {{ btb_index_width }},    // {{ 2 ** btb_index_width }} entries
+        btb_tag_width:   {{ btb_tag_width }},
+        ras_addr_width:  {{ ras_addr_width }},    // {{ 2 ** ras_addr_width }} entries
+        icache_sets_width: {{ icache_sets_width }},  // {{ 2 ** icache_sets_width }} lines a way
+        dcache_sets_width: {{ dcache_sets_width }}   // {{ 2 ** dcache_sets_width }} lines a way
+    };
+
+endpackage

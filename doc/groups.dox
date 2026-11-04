@@ -30,3 +30,7 @@
 /** @defgroup mig2 Mig2
  * RISC-V CPU (rtl/design/mig2), where bigger changes of Mig1 go first.
  */
+
+/** @defgroup mig3 Mig3
+ * RISC-V CPU (rtl/design/mig3), a copy of Mig2 that grows floating point.
+ */
