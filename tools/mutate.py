@@ -95,10 +95,12 @@ def replace(src, path, old, new):
 
 def refresh(root, src):
     """The scratch copy: the repository as it is, without .git (the build does not read it;
-    its build directories are outside it). The files rsync copies (all the first time, then
-    those the last mutant changed) get a fresh time, so that the build sees them."""
+    its build directories are outside it). rsync compares contents (-c), not times, and the
+    files it copies (all the first time, then those the last mutant changed) get a fresh
+    time, so that the build sees them: comparing times, every file touched once would be
+    copied and touched again on each refresh, and the build would rebuild everything."""
     os.makedirs(src, exist_ok=True)
-    code, out = run(["rsync", "-a", "--delete", "--exclude=/.git", "--out-format=%i %n",
+    code, out = run(["rsync", "-a", "-c", "--delete", "--exclude=/.git", "--out-format=%i %n",
                      root + "/", src + "/"])
     if code:
         sys.exit("rsync failed:\n" + out)
@@ -201,13 +203,14 @@ def main():
         sys.exit("no mutants records" + (f" matching {args.filters}" if args.filters else ""))
 
     refresh(root, src)
-    if not os.path.exists(os.path.join(build, "CMakeCache.txt")):
-        code, out = run(["cmake", "-S", src, "-B", build, "-DDARK_CIRCUIT_DESIGNS=",
-                         "-DDARK_CIRCUIT_LIB_TESTS=ON",
-                         "-DDARK_CIRCUIT_MAIN_SIMULATOR=" +
-                         ("icarus" if args.sim == "icarus" else "AUTO")])
-        if code:
-            sys.exit("cmake failed:\n" + out[-2000:])
+    # Configure on every run (a few seconds when nothing changed), so that a test added
+    # since the last run is a target the build knows.
+    code, out = run(["cmake", "-S", src, "-B", build, "-DDARK_CIRCUIT_DESIGNS=",
+                     "-DDARK_CIRCUIT_LIB_TESTS=ON",
+                     "-DDARK_CIRCUIT_MAIN_SIMULATOR=" +
+                     ("icarus" if args.sim == "icarus" else "AUTO")])
+    if code:
+        sys.exit("cmake failed:\n" + out[-2000:])
 
     # Every test unmutated first: a test that already fails would catch every mutant.
     tests = sorted({t for _, rec in recs for m in rec["mutants"]

@@ -1,0 +1,37 @@
+type: mutants
+title: Mutants of the SignalClockSync test
+date: 2026-11-03
+tests: [part_signal_clock_sync]
+mutants:
+  - name: one stage of clk2 short (out from the stage before the last)
+    edits:
+      - file: rtl/lib/part/signal_clock_sync.sv
+        old: "assign out = chain[STAGES];"
+        new: "assign out = chain[STAGES - 1] | (chain[STAGES] & '0);"
+    expect: model
+  - name: the source flop on clk2
+    edits:
+      - file: rtl/lib/part/signal_clock_sync.sv
+        old: ".clk(clk1), .in, .out(chain[0])"
+        new: ".clk(clk2 | (clk1 & 1'b0)), .in, .out(chain[0])"
+    expect: model
+  - name: the stages on clk1
+    edits:
+      - file: rtl/lib/part/signal_clock_sync.sv
+        old: ".clk(clk2), .in(chain[i])"
+        new: ".clk(clk1 | (clk2 & 1'b0)), .in(chain[i])"
+    expect: model
+  - name: the source flop also when SRC_FLOP = 0
+    edits:
+      - file: rtl/lib/part/signal_clock_sync.sv
+        old: "if (SRC_FLOP) begin: g_src_flop"
+        new: "if (SRC_FLOP || 1'b1) begin: g_src_flop"
+    expect: model
+  - name: a bit of out stuck at 0, seen by the latency check alone
+    verilog_code: |
+      initial force u_slow.u_signal_clock_sync.out[2] = 1'b0;
+    quiet: [model]
+    expect: latency
+    why: >
+      With the model check quiet, the latency check must see that a settled in does not
+      reach out.

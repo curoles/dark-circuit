@@ -5,4 +5,5 @@ brent_kung_adder.sv
 gated_clk.sv
 lim_dff.sv
 edge_detector.sv
+signal_clock_sync.sv
 crc8_ccitt_lfsr.sv
