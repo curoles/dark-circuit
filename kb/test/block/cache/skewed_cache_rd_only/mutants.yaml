@@ -1,0 +1,22 @@
+type: mutants
+title: Mutants of the SkewedCacheRdOnly test (lines of one and two words)
+date: 2026-11-04
+tests: [block_skewed_cache_rd_only_behave]
+mutants:
+  - name: the index from a hard-coded bit 2, as if lines were one word (struct)
+    edits:
+      - file: rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv
+        old: "assign req_low = req_addr[SETS_OFFSET +: 2*SETS_WIDTH];"
+        new: "assign req_low = req_addr[2 +: 2*SETS_WIDTH];"
+    tests: [block_skewed_cache_rd_only_struct]
+    why: >
+      Only a configuration with lines of two words can see it: the reason the test has
+      them.
+  - name: a bit of the line's second word stuck at 0 in the answer
+    verilog_code: |
+      initial force u_check_2w.u_skewed_cache_rd_only.rsp_data[40] = 1'b0;
+  - name: the index one bit too low (an offset bit in it)
+    edits:
+      - file: rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv
+        old: "assign req_index[w]  = index_of(w, req_addr[ADDR_WIDTH-1:SETS_OFFSET]);"
+        new: "assign req_index[w]  = index_of(w, req_addr[ADDR_WIDTH-2:SETS_OFFSET-1]);"

@@ -24,6 +24,8 @@ set(DARK_CIRCUIT_RTL_DESIGN ${PROJECT_SOURCE_DIR}/rtl/design)
 # Include path of every tool that reads RTL: macro headers, `include "<name>.svh".
 set(DARK_CIRCUIT_RTL_MACRO  ${DARK_CIRCUIT_RTL_LIB}/macro)
 set(DARK_CIRCUIT_ASSERT_SVH ${DARK_CIRCUIT_RTL_MACRO}/dark_circuit_assert.svh)
+# Test macros: simulations depend on them too (a mutant run of tools/mutate.py edits them).
+set(DARK_CIRCUIT_TEST_SVH   ${DARK_CIRCUIT_RTL_MACRO}/dark_circuit_test.svh)
 
 # dc_use_tool(<NAME> <program>...)
 #

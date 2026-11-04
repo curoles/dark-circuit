@@ -49,7 +49,7 @@ function(dc_add_verilator_build NAME)
         COMMAND ${VERILATOR_BIN} --binary --timing -Wall -Wno-DECLFILENAME
                 -I${DARK_CIRCUIT_RTL_MACRO} -DDARK_CIRCUIT_USE_SVA
                 ${defines} --top-module ${T_TOP} -Mdir ${dir} -o ${sim} ${T_SOURCES}
-        DEPENDS ${T_SOURCES} ${DARK_CIRCUIT_ASSERT_SVH}
+        DEPENDS ${T_SOURCES} ${DARK_CIRCUIT_ASSERT_SVH} ${DARK_CIRCUIT_TEST_SVH}
         COMMENT "Verilator: building ${sim}"
         VERBATIM
     )

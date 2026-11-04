@@ -29,7 +29,7 @@ function(dc_add_icarus_build NAME)
         OUTPUT ${vvp}
         COMMAND ${IVERILOG_BIN} -g2012 -Wall -I${DARK_CIRCUIT_RTL_MACRO} ${defines}
                 -s ${T_TOP} -o ${vvp} ${T_SOURCES}
-        DEPENDS ${T_SOURCES} ${DARK_CIRCUIT_ASSERT_SVH}
+        DEPENDS ${T_SOURCES} ${DARK_CIRCUIT_ASSERT_SVH} ${DARK_CIRCUIT_TEST_SVH}
         COMMENT "Icarus Verilog: compiling ${sim}"
         VERBATIM
     )

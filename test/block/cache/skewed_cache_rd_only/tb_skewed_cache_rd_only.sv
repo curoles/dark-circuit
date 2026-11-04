@@ -17,8 +17,9 @@
  * tie rule, misses on a line an invalidate cleared, requests that wait for req_ready, a line
  * request that waits for memory, both memory latencies.
  * Verilator runs 8 lines per way with 12-bit addresses and 64 lines per way with 32-bit
- * addresses, 20000 clocks each; Icarus 8 lines, 600 clocks. Stops at the first mismatch with
- * $fatal.
+ * addresses, each with lines of one word and of two words (the second: Mig3's I-cache),
+ * 20000 clocks each; Icarus 8 lines of one and of two words, 600 clocks. Stops at the first
+ * mismatch with $fatal. Mutants: kb test/block/cache/skewed_cache_rd_only/mutants.
  *
  * The refill clock (CacheControl): a request is taken in the clock a miss's line comes; one
  * at the place the refill writes is replayed (no lookup in the next clock, then its lookup);
@@ -27,6 +28,8 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+`include "dark_circuit_test.svh"
+
 module TbSkewedCacheCheck #(
     parameter ADDR_WIDTH  = 12,
     parameter SETS_WIDTH  = 3,      // up to 8
@@ -397,19 +400,26 @@ module TbSkewedCacheRdOnly;
 `endif
     wire clk;
     wire done_8;
+    wire done_2w;
     wire done_64;
+    wire done_64_2w;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
     TbSkewedCacheCheck u_check_8(.clk, .done(done_8));
+    TbSkewedCacheCheck #(.SETS_OFFSET(3)) u_check_2w(.clk, .done(done_2w));
     if (WIDE) begin: g_wide
         TbSkewedCacheCheck #(.ADDR_WIDTH(32), .SETS_WIDTH(6)) u_check_64(.clk, .done(done_64));
+        TbSkewedCacheCheck #(.ADDR_WIDTH(32), .SETS_WIDTH(6), .SETS_OFFSET(3)) u_check_64_2w(
+            .clk, .done(done_64_2w));
     end else begin: g_narrow
-        assign done_64 = 1'b1;
+        assign done_64    = 1'b1;
+        assign done_64_2w = 1'b1;
     end
+    `DC_TEST_MUTANT_HOOK(top)
 
     initial begin
-        wait (done_8 && done_64);
+        wait (done_8 && done_2w && done_64 && done_64_2w);
         $display("PASS");
         $finish;
     end
