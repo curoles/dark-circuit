@@ -4,9 +4,14 @@
 blocks and the small RISC-V cores built from them.*
 
 I made my CPU's caches faster by one clock per miss, and the obvious way to do it made the
-whole CPU 8 % slower. The fix is a small, well-known trick: instead of refusing a request
-that would see stale data, take it, and let it look again one clock later. This is the
-story, with the numbers.
+whole CPU 8 % slower, because its longest path became longer: the clock had to slow down for
+every instruction, not only for the misses. The fix is a small, well-known trick called
+*replay*. Sometimes a request arrives in the very clock the cache is writing new data into
+the place that request reads, and the request would get the place's old contents. Instead of
+turning such a request away, the cache takes it and reads that place once more in the next
+clock, when the new data is already stored there, and answers from that second read. That
+costs one clock, only for such a request; every other request goes through as before. This
+is the story, with the numbers.
 
 The CPU is Mig2, a 5-stage in-order RISC-V core (RV32IM with Zbb, branch prediction). It has
 an instruction cache and a data cache, both 2-way skewed-associative with 64 lines of one
@@ -133,6 +138,11 @@ A request away from the refilled place is taken and looked up as in fix 1. A req
 that place gets its lookup in clock 5 in both fixes: in fix 1 it waited a clock before being
 taken, here it is taken and replays. So the cycles are the same, clock for clock: all 105
 traces of Mig2's test programs are identical between the two fixes.
+
+The CPU does not notice anything special. It never counts on a fixed delay: it waits for the
+cache's answer signal, as it already does for every miss, and the replayed request just gets
+its answer one clock later. In the replay clock the cache takes no new request, so the CPU's
+next request waits, and nothing overtakes the replayed one.
 
 The cost is one flip-flop, one gate on the RAMs' read enable and a multiplexer on their read
 index (one per way). The longest path is **6.1 ns**, the same as before the change within
