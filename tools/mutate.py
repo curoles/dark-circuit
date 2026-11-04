@@ -7,10 +7,11 @@ Usage:
 A mutant changes the design (or forces a signal) the way a bug would; the test must catch
 it. Each mutant of the selected records (every kb/**/mutants.yaml, or those whose id
 contains a FILTER) runs in a scratch copy of the repository, never in the repository:
-the copy is refreshed (rsync), the mutant applied, every file of rtl/ and test/ touched
-(rsync keeps the repository's times, and a build older than them would not rebuild), and
-the record's tests built and run in the scratch build directory. Before the mutants, each
-test runs once unmutated and must pass. Results:
+the copy is refreshed (rsync, without .git), the files rsync copied touched (it keeps the
+repository's times, and a build older than them would not rebuild; touching every file
+would make Verilator rebuild its whole model), the mutant applied, and the record's tests
+built and run in the scratch build directory: a few seconds a mutant. Before the
+mutants, each test runs once unmutated and must pass. Results:
   caught    a test failed; with expect: <name>, by the check DC_TEST_FAIL <name> or the
             assertion <name> (in the test's output)
   wrong     a test failed, but not by the check or assertion that expect names
@@ -38,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 import yaml
 
@@ -92,18 +94,18 @@ def replace(src, path, old, new):
 
 
 def refresh(root, src):
-    """The scratch copy: the repository as it is (its build directories are outside it)."""
+    """The scratch copy: the repository as it is, without .git (the build does not read it;
+    its build directories are outside it). The files rsync copies (all the first time, then
+    those the last mutant changed) get a fresh time, so that the build sees them."""
     os.makedirs(src, exist_ok=True)
-    code, out = run(["rsync", "-a", "--delete", root + "/", src + "/"])
+    code, out = run(["rsync", "-a", "--delete", "--exclude=/.git", "--out-format=%i %n",
+                     root + "/", src + "/"])
     if code:
         sys.exit("rsync failed:\n" + out)
-
-
-def touch(src):
-    for top in ("rtl", "test"):
-        for dirpath, _, files in os.walk(os.path.join(src, top)):
-            for f in files:
-                os.utime(os.path.join(dirpath, f))
+    for line in out.splitlines():
+        item, _, path = line.partition(" ")
+        if item.startswith(">f"):       # a file received
+            os.utime(os.path.join(src, path))
 
 
 def apply(src, m):
@@ -210,7 +212,6 @@ def main():
     # Every test unmutated first: a test that already fails would catch every mutant.
     tests = sorted({t for _, rec in recs for m in rec["mutants"]
                     for t in m.get("tests", rec["tests"])})
-    touch(src)
     state, results = build_and_run(build, args.sim, tests, args.j)
     if state == "invalid" or any(f for _, f, _ in results):
         sys.exit("the tests fail unmutated: " +
@@ -221,10 +222,10 @@ def main():
     for rid, rec in recs:
         print(f"== {rid}: {rec['title']}")
         for i, m in enumerate(rec["mutants"]):
+            start = time.time()
             refresh(root, src)
             try:
                 apply(src, m)
-                touch(src)
                 state, results = build_and_run(build, args.sim, m.get("tests", rec["tests"]),
                                                args.j)
                 if state == "invalid":
@@ -236,8 +237,8 @@ def main():
             ok = result in ("caught", "survived (expected)") and \
                 not detail.startswith("expected to survive")
             bad += not ok
-            print(f"  {i:2} {result:20} {m['name']}")
-            print(f"     {detail}")
+            print(f"  {i:2} {result:20} {m['name']} ({time.time() - start:.1f} s)")
+            print(f"     {detail}", flush=True)
     refresh(root, src)
     print(f"mutants: {'all as expected' if not bad else f'{bad} not as expected'}")
     return 1 if bad else 0

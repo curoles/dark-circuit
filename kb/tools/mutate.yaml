@@ -56,6 +56,11 @@ evidence: >
   K.28 as D.28 with model and known quiet, caught by commas (0 commas for 1272 K.28.5). Both
   tests pass on Verilator and Icarus with named checks; block_fifo unchanged with DcTestPkg in
   sim.flist.
+  Speed, 2026-11-03: about 30 s a mutant at first, of it 13 s for rsync (with .git) and
+  27 s for Verilator rebuilding its whole model after every file was touched; a one-file
+  mutant rebuilds in about 2.4 s (ccache or -O0 C++ gain a few tenths, not used; Icarus
+  0.7 s). With rsync without .git and only the files it copied touched: both line-code
+  records, 19 mutants, in 78 s, about 3 s a mutant.
 code:
   - tools/mutate.py#verdict
   - tools/kb_check.py#check_mutants
