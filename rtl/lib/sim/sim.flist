@@ -1,3 +1,4 @@
+dc_test_pkg.sv
 sim_clk_gen.sv
 sim_rst_gen.sv
 sim_ram.sv

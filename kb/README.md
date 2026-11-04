@@ -41,6 +41,7 @@ was decided or measured, YYYY-MM-DD). Each type has its own fields:
 | `measurement` | `what`, `result`, `how` (to reproduce) | `guarded_by`: anchors of the tests that keep it |
 | `dropped` | `tried`, `result`, `why_dropped` | |
 | `pattern` | `problem`, `solution`, `why` | `known_as` (its names elsewhere), `rejected`: list of `choice`, `why_not` |
+| `mutants` | `tests`, `mutants` (list, see Mutants below) | |
 
 Every type may have `evidence` (text: numbers, where they come from), `code` (anchors) and
 `relies_on` (ids of records this one builds on). No other fields.
@@ -65,6 +66,26 @@ why: >
   The commit point is EX: ...
 code:
   - rtl/design/mig2/mig2_control.sv#id_moves
+```
+
+## Mutants
+
+A record of type `mutants`, at the path of a test
+(`kb/test/block/line_code/enc_8b10b/mutants.yaml`), lists changes of the design the way
+bugs would make them; the test must catch each. `make mutants` (`tools/mutate.py`, whose
+help says every field) runs them in a scratch copy; `make kb` reports a mutant whose `old`
+text is no longer in its file exactly once (stale: the code changed, review the mutant).
+A mutant:
+
+```yaml
+  - name: D.07 does not alternate
+    edits:                        # or python_code, or verilog_code at a hook
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "($countones(n) != 3 || x == 5'd7)"
+        new: "($countones(n) != 3)"
+    quiet: [known]                # checks of the test that print instead of stopping
+    expect: model                 # caught (default), survives (with why), or the check
+                                  # (DC_TEST_FAIL) or assertion that must catch it
 ```
 
 ## Checking

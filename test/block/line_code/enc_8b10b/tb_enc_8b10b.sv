@@ -5,14 +5,16 @@
  * ones and the running disparity kept, or four or six ones and the other one), and, for a few,
  * against codes written out from the standard. k with any other byte must set k_err, a valid
  * input must not. Then a stream of codes (Verilator 20000, Icarus 5000), random data and now
- * and then K.28.5, each at
- * the running disparity the one before left: no run of more than five equal bits, and a comma
- * (0011111 or 1100000) exactly where a K.28.5 starts, nowhere else. Stops at the first mismatch
- * with $fatal.
+ * and then K.28.5, each at the running disparity the one before left: no run of more than
+ * five equal bits, and a comma (0011111 or 1100000) exactly where a K.28.5 starts, nowhere
+ * else. Checks named with DC_TEST_FAIL (model, rules, k_err, count, known, run, comma,
+ * commas); stops at the first mismatch. Mutants: kb test/block/line_code/enc_8b10b/mutants.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+`include "dark_circuit_test.svh"
+
 module TbEnc8b10b;
 `ifdef VERILATOR
     localparam N_STREAM = 20000;
@@ -28,6 +30,7 @@ module TbEnc8b10b;
     wire        k_err;
 
     Enc8b10b u_enc_8b10b(.data, .k, .rd_in, .code, .rd_out, .k_err);
+    `DC_TEST_MUTANT_HOOK(top)
 
     // The standard's 5b/6b table, both columns (abcdei as written, a first).
     function automatic logic [5:0] six(input logic [4:0] x, input logic kc, input logic rd);
@@ -150,8 +153,8 @@ module TbEnc8b10b;
                          input logic [9:0] written, input string name);
         apply(d, kc, rd);
         if (code !== sent(written))
-            $fatal(1, "%s at RD%s: code %b (a first), expected %b", name, rd ? "+" : "-",
-                   sent(code), written);
+            `DC_TEST_FAIL(known, $sformatf("%s at RD%s: code %b (a first), expected %b", name,
+                                           rd ? "+" : "-", sent(code), written))
     endtask
 
     integer     n_valid;
@@ -175,24 +178,28 @@ module TbEnc8b10b;
             if (k && !valid_k(data)) begin
                 n_kerr = n_kerr + 1;
                 if (k_err !== 1'b1)
-                    $fatal(1, "K byte %h: k_err %b, expected 1", data, k_err);
+                    `DC_TEST_FAIL(k_err, $sformatf("K byte %h: k_err %b, expected 1", data,
+                                                   k_err))
             end else begin
                 n_valid = n_valid + 1;
                 model(data, k, rd_in, exp_code, exp_rd);
                 if (k_err !== 1'b0 || code !== exp_code || rd_out !== exp_rd)
-                    $fatal(1, "%s byte %h at RD%s: code %b rd %b k_err %b, expected %b %b 0",
-                           k ? "K" : "D", data, rd_in ? "+" : "-", code, rd_out, k_err,
-                           exp_code, exp_rd);
+                    `DC_TEST_FAIL(model, $sformatf(
+                        "%s byte %h at RD%s: code %b rd %b k_err %b, expected %b %b 0",
+                        k ? "K" : "D", data, rd_in ? "+" : "-", code, rd_out, k_err,
+                        exp_code, exp_rd))
                 if (!(($countones(code) == 5 && rd_out == rd_in) ||
                       ($countones(code) == 6 && !rd_in && rd_out) ||
                       ($countones(code) == 4 && rd_in && !rd_out)))
-                    $fatal(1, "%s byte %h at RD%s: %0d ones and RD%s after: not a valid code",
-                           k ? "K" : "D", data, rd_in ? "+" : "-", $countones(code),
-                           rd_out ? "+" : "-");
+                    `DC_TEST_FAIL(rules, $sformatf(
+                        "%s byte %h at RD%s: %0d ones and RD%s after: not a valid code",
+                        k ? "K" : "D", data, rd_in ? "+" : "-", $countones(code),
+                        rd_out ? "+" : "-"))
             end
         end
         if (n_valid != 536 || n_kerr != 488)
-            $fatal(1, "inputs: %0d valid, %0d with k_err; expected 536 and 488", n_valid, n_kerr);
+            `DC_TEST_FAIL(count, $sformatf(
+                "inputs: %0d valid, %0d with k_err; expected 536 and 488", n_valid, n_kerr))
 
         known(8'hBC, 1'b1, 1'b0, 10'b001111_1010, "K.28.5");
         known(8'hBC, 1'b1, 1'b1, 10'b110000_0101, "K.28.5");
@@ -221,19 +228,22 @@ module TbEnc8b10b;
                 window = {window[5:0], code[b]};
                 n_bits = n_bits + 1;
                 if (run > 5)
-                    $fatal(1, "stream code %0d (byte %h, k %b): a run of %0d equal bits", s,
-                           data, k, run);
+                    `DC_TEST_FAIL(run, $sformatf(
+                        "stream code %0d (byte %h, k %b): a run of %0d equal bits", s, data,
+                        k, run))
                 if (n_bits >= 7 && (window == 7'b0011111 || window == 7'b1100000)) begin
                     if (!(is_k285 && b == 6))
-                        $fatal(1, "stream code %0d (byte %h, k %b): a comma ending at bit %0d",
-                               s, data, k, b);
+                        `DC_TEST_FAIL(comma, $sformatf(
+                            "stream code %0d (byte %h, k %b): a comma ending at bit %0d", s,
+                            data, k, b))
                     n_comma = n_comma + 1;
                 end
             end
             rd_in = rd_out;
         end
         if (n_comma != n_k285 || n_k285 == 0)
-            $fatal(1, "stream: %0d commas for %0d K.28.5", n_comma, n_k285);
+            `DC_TEST_FAIL(commas, $sformatf("stream: %0d commas for %0d K.28.5", n_comma,
+                                            n_k285))
         $display("PASS: %0d valid inputs, %0d with k_err, a stream of %0d codes with %0d commas",
                  n_valid, n_kerr, N_STREAM, n_comma);
         $finish;

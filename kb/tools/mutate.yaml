@@ -1,0 +1,64 @@
+type: decision
+title: Mutation testing as kb records of the tests, run by tools/mutate.py in a scratch copy
+date: 2026-11-03
+question: >
+  Every chunk checks its tests with mutants (a change the way a bug would make it; the test
+  must catch it), but the mutants lived in throw-away scripts: nobody could run them again,
+  and "9 of 9 caught" in a record could not be checked. How should the mutants and the method
+  become part of the repository, and how does a mutant show that an assertion works?
+decision: >
+  The mutants of a test are a kb record of type mutants at the test's path
+  (kb/test/block/<b>/mutants.yaml): the record's tests and a list of mutants, each with a
+  name and edits (file, old, new: old exactly once), python_code (for what edits can not
+  say) or verilog_code (SystemVerilog at a named hook of the test, e.g. a force that models a
+  stuck signal), and optionally quiet (checks of the test that print instead of stopping),
+  tests, expect (caught, survives with why, or the name of the check or assertion that must
+  catch it). tools/mutate.py (make mutants, M=<filter>, SIM=icarus) runs them in a scratch
+  copy with its own build directory: the tests once unmutated, then each mutant; caught,
+  wrong (another check caught it), survived, stale (an edit's old text is not there exactly
+  once: the code changed), invalid (does not build, or builds with warnings). make kb finds
+  stale mutants without running anything. Tests name their checks with DC_TEST_FAIL(name, msg)
+  (dark_circuit_test.svh, DcTestPkg): $fatal with the name; a mutant run quiets the names it
+  lists. DC_TEST_MUTANT_HOOK(hook) includes dc_mutant_<hook>.svh in a mutant run, nothing
+  otherwise. New and changed tests get their records; old tests as they are touched.
+why: >
+  As data next to the knowledge, mutants can be run again by anyone and reviewed; anchoring
+  edits by exact text turns a change of the code under a mutant into a signal (stale) instead
+  of a mutant that silently tests nothing. Naming the catching check shows that a mutant is
+  caught for the right reason, and quieting the checks that fire first is how an assertion is
+  seen to work (AGENTS: every new assertion gets a mutant that sees it fire). A force at a
+  hook breaks a signal the same way in behave and struct versions without touching their
+  text. Running in a scratch copy keeps the repository and its builds as they are.
+rejected:
+  - choice: Mutants as macros in the RTL (DC_MUTATE(id, normal, mutant), off by default)
+    why_not: >
+      Clutters the code meant to be read, puts test concerns in synthesizable files, and
+      many mutants are port or gate changes that read badly inside a macro.
+  - choice: Mutant files next to each test instead of kb records
+    why_not: >
+      kb records get make kb's checks (fields, stale edits) and can be pointed to from the
+      decisions whose evidence they are; their path mirrors the test's, as the kb rule says.
+  - choice: Automatic netlist mutants (MCY, Mutation Cover with Yosys) as the method
+    why_not: >
+      Machine-made mutants of the netlist are many and hard to judge; a later complement to
+      find blind spots, not the main method.
+  - choice: The quiet list as a plusarg (+dc_quiet=...)
+    why_not: >
+      The tests run with fixed command lines from CMake; a define in the scratch copy needs no
+      change of the build.
+evidence: >
+  2026-11-03: Verilator and Icarus take a macro-built include name and a force from the top
+  into a submodule (probe in scratch); Icarus 13 does not take a package task called as a
+  statement, so DC_TEST_FAIL calls DcTestPkg functions inside its expressions. First records,
+  the 8b/10b tests, run by tools/mutate.py (Verilator): decoder 8 caught, each by the check
+  it names (disp, valid, rd_rule), and the shared-table mutant survives as recorded; encoder
+  10 caught by model, among them a force at the hook (alt7 stuck at 0, caught at D.17.7) and
+  K.28 as D.28 with model and known quiet, caught by commas (0 commas for 1272 K.28.5). Both
+  tests pass on Verilator and Icarus with named checks; block_fifo unchanged with DcTestPkg in
+  sim.flist.
+code:
+  - tools/mutate.py#verdict
+  - tools/kb_check.py#check_mutants
+  - rtl/lib/macro/dark_circuit_test.svh#DC_TEST_MUTANT_HOOK
+  - rtl/lib/sim/dc_test_pkg.sv#stops
+  - Makefile#mutants

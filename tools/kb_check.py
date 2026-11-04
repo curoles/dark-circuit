@@ -11,7 +11,10 @@ Checks:
   #name is in the file as a whole word;
 - every relies_on is the id of an existing record;
 - every `@kb: <id>` in the files of the repository names an existing record;
-- every directory of kb/ mirrors a directory of the repository.
+- every directory of kb/ mirrors a directory of the repository;
+- every mutant of a record of type mutants has a name and something to change, and
+  every old text of its edits is in its file exactly once (else stale: the code
+  changed under it); tools/mutate.py runs them.
 Lists the records that no @kb: tag points to (not an error). Exits 1 on errors.
 """
 import argparse
@@ -30,7 +33,11 @@ TYPES = {
     "measurement": ({"what", "result", "how"}, {"guarded_by"}),
     "dropped":     ({"tried", "result", "why_dropped"}, set()),
     "pattern":     ({"problem", "solution", "why"}, {"known_as", "rejected"}),
+    "mutants":     ({"tests", "mutants"}, set()),
 }
+# The fields of one mutant (tools/mutate.py says what they do).
+MUTANT_KEYS = {"name", "edits", "python_code", "verilog_code", "hook", "quiet", "tests",
+               "expect", "why"}
 ANCHOR_FIELDS = ("code", "checked_by", "guarded_by")
 # Where @kb: tags may be: the repository without kb/ itself, old code and build output.
 SKIP_DIRS = {".git", "kb", "old2020", "build", "__pycache__"}
@@ -81,6 +88,42 @@ def check_fields(rid, rec, errors):
             errors.append(f"kb/{rid}.yaml: rejected item without choice and why_not: {item!r}")
 
 
+def check_mutants(root, rid, rec, errors):
+    """The mutants of a record of type mutants: each has a name and something to change; a
+    survivor says why; every edit's old text is in its file exactly once."""
+    where = f"kb/{rid}.yaml"
+    if not isinstance(rec.get("tests"), list) or not rec["tests"]:
+        errors.append(f"{where}: tests is not a list of test names")
+    mutants = rec.get("mutants")
+    if not isinstance(mutants, list) or not mutants:
+        errors.append(f"{where}: mutants is not a list")
+        return
+    for i, m in enumerate(mutants):
+        if not isinstance(m, dict) or "name" not in m:
+            errors.append(f"{where}: mutant {i} without a name")
+            continue
+        label = f"{where}: mutant {i} ({m['name']})"
+        unknown = sorted(set(m) - MUTANT_KEYS)
+        if unknown:
+            errors.append(f"{label}: unknown fields {', '.join(unknown)}")
+        if not {"edits", "python_code", "verilog_code"} & m.keys():
+            errors.append(f"{label}: no edits, python_code or verilog_code")
+        if m.get("expect") == "survives" and not m.get("why"):
+            errors.append(f"{label}: expect survives without why")
+        for e in m.get("edits") or []:
+            if not isinstance(e, dict) or set(e) != {"file", "old", "new"}:
+                errors.append(f"{label}: an edit without file, old and new")
+                continue
+            full = os.path.join(root, e["file"])
+            if not os.path.isfile(full):
+                errors.append(f"{label}: no {e['file']}")
+                continue
+            with open(full, errors="replace") as fh:
+                n = fh.read().count(e["old"])
+            if n != 1:
+                errors.append(f"{label}: stale: its old text is {n} times in {e['file']}")
+
+
 def check_anchor(root, rid, anchor, errors):
     path, _, name = str(anchor).partition("#")
     full = os.path.join(root, path)
@@ -122,6 +165,8 @@ def main():
     records = load_records(root, errors)
     for rid, rec in sorted(records.items()):
         check_fields(rid, rec, errors)
+        if rec.get("type") == "mutants":
+            check_mutants(root, rid, rec, errors)
         for field in ANCHOR_FIELDS:
             for anchor in rec.get(field) or []:
                 check_anchor(root, rid, anchor, errors)

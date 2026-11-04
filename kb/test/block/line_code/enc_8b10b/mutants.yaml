@@ -1,0 +1,67 @@
+type: mutants
+title: Mutants of the 8b/10b encoder test (Enc8b10b, Enc5b6b, Enc3b4b, LineCodePkg)
+date: 2026-11-03
+tests: [block_enc_8b10b_behave]
+mutants:
+  - name: one table bit wrong (D.13)
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "5'd13:   return 6'b101100;"
+        new: "5'd13:   return 6'b101101;"
+    expect: model
+  - name: D.07 does not alternate
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "($countones(n) != 3 || x == 5'd7)"
+        new: "($countones(n) != 3)"
+    expect: model
+  - name: A7 not for x = 20
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "x == 5'd18 || x == 5'd20;"
+        new: "x == 5'd18;"
+    expect: model
+  - name: D.x.3 does not alternate
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "($countones(n) != 2 || y == 3'd3 || k)"
+        new: "($countones(n) != 2 || k)"
+    expect: model
+  - name: control codes do not alternate
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "($countones(n) != 2 || y == 3'd3 || k)"
+        new: "($countones(n) != 2 || y == 3'd3)"
+    expect: model
+  - name: K.x.5 as D.x.5
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "4'b1_101: return 4'b0101;"
+        new: "4'b1_101: return 4'b1010;"
+    expect: model
+  - name: j sent first
+    edits:
+      - file: rtl/lib/block/line_code/enc_8b10b/behave/enc_8b10b.sv
+        old: "assign code[i] = written[9 - i];"
+        new: "assign code[i] = written[i];"
+    expect: model
+  - name: K.30.7 flagged as no control code
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "x == 5'd29 || x == 5'd30"
+        new: "x == 5'd29"
+    expect: model
+  - name: alt7 stuck at 0 (A7 never sent)
+    verilog_code: |
+      initial force u_enc_8b10b.u_enc_5b6b.alt7 = 1'b0;
+    expect: model
+  - name: K.28 as D.28, seen by the stream's commas alone
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "return 6'b001111;"
+        new: "return 6'b001110;"
+    quiet: [model, known]
+    expect: commas
+    why: >
+      Without its own 6-bit part K.28.5 has no comma; with the model and the known codes
+      quiet, the count of commas in the stream must be the check that catches it.

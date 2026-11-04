@@ -215,8 +215,10 @@ the chunk that establishes it:
 - Testbenches: a check module per configuration and a top that waits for all of them
   (`test/block/alu2`); a model that computes differently from the RTL; counters of the cases,
   each must happen by the end; inputs change after the rising edge and are checked before the
-  next; fewer cases on Icarus under `` `ifdef VERILATOR ``; mutants in a scratch copy, each one
-  must build.
+  next; fewer cases on Icarus under `` `ifdef VERILATOR ``; checks named with
+  `` `DC_TEST_FAIL(name, msg) `` (`test/block/line_code/enc_8b10b`); mutants as a kb record
+  of type `mutants` at the test's path, run by `make mutants` in a scratch copy, each one
+  must build and be caught (or survive with a why).
 
 ## Simulator traps (measured)
 
@@ -377,7 +379,8 @@ document intent and stop the simulation in the cycle a rule breaks.
   the module defines as legal (Fifo ignores a write when full).
 - Name `a_<what holds>`, so the failure message reads as the broken rule.
 - Every new assertion gets a mutation check that breaks exactly the rule it states and
-  sees this assertion fire, not only a later test failure (a mutation that only breaks
+  sees this assertion fire (a mutant with `expect: a_<name>`, the test's checks that fire
+  first in `quiet`), not only a later test failure (a mutation that only breaks
   nearby logic may never violate the rule). An assertion catches only what the tests
   drive; it does not replace a test.
 

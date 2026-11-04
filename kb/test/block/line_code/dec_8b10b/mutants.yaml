@@ -1,0 +1,63 @@
+type: mutants
+title: Mutants of the 8b/10b decoder test (Dec8b10b, Dec6b5b, Dec4b3b, LineCodePkg)
+date: 2026-11-03
+tests: [block_dec_8b10b_behave]
+mutants:
+  - name: K.28 at RD+ not found
+    edits:
+      - file: rtl/lib/block/line_code/dec_6b5b/behave/dec_6b5b.sv
+        old: "abcdei == LineCodePkg::code6(5'd28, 1'b1, 1'b1);"
+        new: "abcdei == LineCodePkg::code6(5'd28, 1'b1, 1'b0);"
+    expect: disp
+  - name: the 4-bit search prefers the other running disparity
+    edits:
+      - file: rtl/lib/block/line_code/dec_4b3b/behave/dec_4b3b.sv
+        old: "r == 0 ? !rd_in : rd_in"
+        new: "r == 0 ? rd_in : !rd_in"
+    expect: disp
+  - name: no A7 in the 4-bit search
+    edits:
+      - file: rtl/lib/block/line_code/dec_4b3b/behave/dec_4b3b.sv
+        old: "k, a == 1, r == 0"
+        new: "k, a == 2, r == 0"
+    expect: disp
+  - name: K.x.7 not a control code
+    edits:
+      - file: rtl/lib/block/line_code/dec_8b10b/behave/dec_8b10b.sv
+        old: "assign k = k28 || (LineCodePkg::valid_k(x, 3'd7) &&"
+        new: "assign k = k28 || (1'b0 && LineCodePkg::valid_k(x, 3'd7) &&"
+    expect: valid
+  - name: the second encoder at rd_in too
+    edits:
+      - file: rtl/lib/block/line_code/dec_8b10b/behave/dec_8b10b.sv
+        old: ".rd_in(!rd_in), .code(code_other)"
+        new: ".rd_in(rd_in), .code(code_other)"
+    expect: disp
+  - name: rd_out from the encoder, not the rule
+    edits:
+      - file: rtl/lib/block/line_code/dec_8b10b/behave/dec_8b10b.sv
+        old: "assign rd_out = LineCodePkg::rd_after4(fghj, rd_mid);"
+        new: "assign rd_out = rd_same | (rd_other & 1'b0);"
+    expect: rd_rule
+  - name: a received first at the top
+    edits:
+      - file: rtl/lib/block/line_code/dec_8b10b/behave/dec_8b10b.sv
+        old: "assign written[i] = code[9 - i];"
+        new: "assign written[i] = code[i];"
+    expect: rd_rule
+  - name: the rule without 000111
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "if (s == 6'b000111 || s == 6'b111000)"
+        new: "if (s == 6'b111000)"
+    expect: rd_rule
+  - name: D.07 does not alternate (in the shared tables)
+    edits:
+      - file: rtl/lib/block/line_code/line_code_pkg.sv
+        old: "($countones(n) != 3 || x == 5'd7)"
+        new: "($countones(n) != 3)"
+    expect: survives
+    why: >
+      The test takes its valid codes from Enc8b10b, which reads the same tables: an error
+      there makes encoder and decoder agree. The encoder test, with its own model of the
+      standard, catches it (kb test/block/line_code/enc_8b10b/mutants, D.07).
