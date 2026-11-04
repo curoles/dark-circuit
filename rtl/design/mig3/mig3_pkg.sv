@@ -30,6 +30,11 @@ package Mig3Pkg;
     typedef Mig3ConfigPkg::mig3_cfg_t mig3_cfg_t;
     localparam mig3_cfg_t MIG3_CFG = Mig3ConfigPkg::MIG3_CFG;
 
+    // Cache lines: what both caches hold and the one memory moves (cfg cache_line_words).
+    localparam LINE_WORDS = MIG3_CFG.cache_line_words;  // words in a line: 1 or 2
+    localparam LINE_SIZE  = STRB_WIDTH * LINE_WORDS;     // bytes in a line
+    localparam LINE_START = $clog2(LINE_SIZE);           // line addresses start at this bit
+
     typedef logic [WIDTH-1:0]           word_t;        // register value, data word
     typedef RiscvPkg::riscv_insn_t      insn_t;        // instruction (RiscvPkg)
     typedef logic [WIDTH-1:IADDR_START] iaddr_t;       // instruction address, word address
@@ -37,6 +42,9 @@ package Mig3Pkg;
     typedef logic [STRB_WIDTH-1:0]      strb_t;        // byte enables of data word
     typedef logic [DADDR_START-1:0]     byte_offset_t; // byte in a data word
     typedef logic [REG_ID_WIDTH-1:0]    reg_id_t;      // register number x0..x31
+    typedef logic [8*LINE_SIZE-1:0]     line_t;        // a cache line: what memory moves
+    typedef logic [LINE_SIZE-1:0]       line_strb_t;   // byte enables of a line
+    typedef logic [WIDTH-1:LINE_START]  laddr_t;       // line address
 
     // Two words, hi and lo: a 64-bit value on RV32 (a product, a 64-bit counter).
     typedef struct packed {
@@ -88,10 +96,10 @@ package Mig3Pkg;
     // Memory channels: a request channel (valid/ready, AGENTS.md) and the answers to reads
     // (valid, no ready: every answer is taken), in order, one or more clocks after the
     // request was taken. A struct per direction: req_t from the requester, rsp_t to it (ready
-    // of the request channel, the answer). imem_req_t: Mig3Fetch to the I-cache; mem_req_t:
-    // Mig3Lsu to the D-cache, and the one memory port of Mig3Core behind both caches
-    // (SimLatencyRAM in Mig3Cpu). Mig3Fetch waits for the I-cache, EX and MEM/WB for the
-    // D-cache (Mig3Control).
+    // of the request channel, the answer). imem_req_t: Mig3Fetch to the I-cache, a word;
+    // dmem_req_t: Mig3Lsu to the D-cache, a word; mem_req_t: the one memory port of Mig3Core
+    // behind both caches, a line (SimLatencyRAM in Mig3Cpu). Mig3Fetch waits for the
+    // I-cache, EX and MEM/WB for the D-cache (Mig3Control).
 
     // Instruction fetch: the word at addr.
     typedef struct packed {
@@ -105,20 +113,36 @@ package Mig3Pkg;
         insn_t  data;
     } imem_rsp_t;
 
-    // Data and memory: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0
-    // reads the word at addr.
+    // Data: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0 reads the
+    // word at addr.
     typedef struct packed {
         logic   valid;
         logic   we;
         daddr_t addr;
         word_t  wdata;
         strb_t  wstrb;
-    } mem_req_t;
+    } dmem_req_t;
 
     typedef struct packed {
         logic   ready;      // the request is taken when valid and ready
         logic   valid;      // data is the answer to a read
         word_t  data;
+    } dmem_rsp_t;
+
+    // Memory, behind the caches: the same for a line; a write writes the bytes of wdata
+    // with wstrb=1 (a store's word, or an uncached store's).
+    typedef struct packed {
+        logic       valid;
+        logic       we;
+        laddr_t     addr;
+        line_t      wdata;
+        line_strb_t wstrb;
+    } mem_req_t;
+
+    typedef struct packed {
+        logic   ready;      // the request is taken when valid and ready
+        logic   valid;      // data is the answer to a read
+        line_t  data;
     } mem_rsp_t;
 
     // Retire: one entry per retired instruction, RVFI (riscv-formal) fields and names.

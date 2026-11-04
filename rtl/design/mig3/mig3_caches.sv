@@ -1,32 +1,38 @@
 /* Mig3 caches: the instruction cache and the data cache, between the pipeline and the one
  * memory port of Mig3Core.
  *
- * Both are skewed-associative caches of the library (rtl/lib/block/cache), 2 ways of one-word
- * lines: the I-cache SkewedCacheRdOnly, 1 << CFG.icache_sets_width lines a way; the D-cache
- * SkewedCache, 1 << CFG.dcache_sets_width lines a way, write-through, no write-allocate.
- * Their CPU side is a channel of Mig3Pkg (imem_req_t from fetch, mem_req_t from the load/store
- * unit, and their answers): a hit answers in the clock after the request, as a memory of
- * latency 1; a miss asks memory for the word and answers when it comes; a store goes to
- * memory in any case. Their memory sides share one memory through InsnDataCacheArbiter
- * (u_arbiter): when both ask, the instruction cache first while prio says so (Mig3Core:
- * while ID has no instruction, every stage starves), else the data cache (a load that
- * waits stalls every stage); each side's request goes through the
- * arbiter's flow-through buffer, so neither cache sees memory's ready or the other cache's
- * valid without a flop (kb pattern rtl/lib/block/flow_through_buffer/design). uncached=1
- * makes every request bypass both caches: it passes to the arbiter as it comes
- * (req_uncached of the library caches), so the pipeline sees the memory's own timing, but
- * for a fetch and a load or store that want memory in the same clock (tests that count
- * cycles). invalidate is 0: Mig3 has no FENCE.I; a store to an address the I-cache holds is
- * not seen by a later fetch that hits (self-modifying code is not supported).
+ * Both are skewed-associative caches of the library (rtl/lib/block/cache), 2 ways of lines
+ * of LINE_WORDS words (Mig3Pkg, cfg cache_line_words; both caches and the memory move lines
+ * of one size): the I-cache SkewedCacheRdOnly, 1 << CFG.icache_sets_width lines a way; the
+ * D-cache SkewedCache, 1 << CFG.dcache_sets_width lines a way, write-through, no
+ * write-allocate. Their CPU side is a channel of Mig3Pkg (imem_req_t from fetch, dmem_req_t
+ * from the load/store unit, and their answers), one word: a fetch or a load takes its word
+ * of the line the cache answers (the word index of the request, kept when the cache takes
+ * it); a store writes its word into every word of the line, with its strobes only in its
+ * own. A hit answers in the clock after the request, as a memory of latency 1; a miss asks
+ * memory for the line and answers when it comes; a store goes to memory in any case. Their
+ * memory sides share one memory through InsnDataCacheArbiter (u_arbiter): when both ask,
+ * the instruction cache first while prio says so (Mig3Core: while ID has no instruction,
+ * every stage starves), else the data cache (a load that waits stalls every stage); each
+ * side's request goes through the arbiter's flow-through buffer, so neither cache sees
+ * memory's ready or the other cache's valid without a flop (kb pattern
+ * rtl/lib/block/flow_through_buffer/design). uncached=1 makes every request bypass both
+ * caches: it passes to the arbiter as it comes (req_uncached of the library caches; the line
+ * that holds its word), so the pipeline sees the memory's own timing, but for a fetch and a
+ * load or store that want memory in the same clock (tests that count cycles). invalidate is
+ * 0: Mig3 has no FENCE.I; a store to an address the I-cache holds is not seen by a later
+ * fetch that hits (self-modifying code is not supported).
  *
- *   icache_req (fetch) --> SkewedCacheRdOnly u_icache --+
- *                                                       +--> InsnDataCacheArbiter --> mem_req
- *   dcache_req (lsu) ----> SkewedCache u_dcache --------+    u_arbiter (prio, else  <-- mem_rsp
- *                                                                   data first)
+ *   icache_req (fetch) --> word in line --> SkewedCacheRdOnly u_icache --+
+ *                      <-- word of line <--                              +--> InsnDataCache-
+ *   dcache_req (lsu) ----> word in line --> SkewedCache u_dcache --------+    Arbiter --> mem_req
+ *                      <-- word of line <--                                   u_arbiter <-- mem_rsp
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+`include "dark_circuit_assert.svh"
+
 module Mig3Caches import Mig3Pkg::*; #(
     parameter mig3_cfg_t CFG = MIG3_CFG     // configuration, see Mig3ConfigPkg
 )(
@@ -35,62 +41,102 @@ module Mig3Caches import Mig3Pkg::*; #(
     input  wire       uncached,         // every request bypasses the caches
     input  wire [1:0] prio,             // the arbiter's tie (CachePkg): PRIO_INSN or none
 
-    // Pipeline side: fetch and the load/store unit
+    // Pipeline side: fetch and the load/store unit, one word
     input  imem_req_t icache_req,
     output imem_rsp_t icache_rsp,
-    input  mem_req_t  dcache_req,
-    output mem_rsp_t  dcache_rsp,
+    input  dmem_req_t dcache_req,
+    output dmem_rsp_t dcache_rsp,
 
-    // Memory side: the memory port of Mig3Core
+    // Memory side: the memory port of Mig3Core, one line
     output mem_req_t  mem_req,
     input  mem_rsp_t  mem_rsp
 );
-    // The caches' memory sides, to the arbiter: byte addresses of words (offset 0).
+    `DC_STATIC_ASSERT(a_line_words, LINE_WORDS == 1 || LINE_WORDS == 2)
+
+    // The caches' memory sides, to the arbiter: byte addresses of lines (offset 0).
     logic             i_mem_valid;
     logic             i_mem_ready;
     logic [WIDTH-1:0] i_mem_addr;
     logic             i_mem_rsp_valid;
-    insn_t            i_mem_rsp_data;
+    line_t            i_mem_rsp_data;
     logic             d_mem_valid;
     logic             d_mem_ready;
     logic             d_mem_we;
     logic [WIDTH-1:0] d_mem_addr;
-    word_t            d_mem_wdata;
-    strb_t            d_mem_wstrb;
+    line_t            d_mem_wdata;
+    line_strb_t       d_mem_wstrb;
     logic             d_mem_rsp_valid;
-    word_t            d_mem_rsp_data;
-    // The word address goes to the memory port: the offset of the byte address is 0.
+    line_t            d_mem_rsp_data;
+    // The caches' CPU sides, lines.
+    line_t            i_line;           // the I-cache's answer
+    line_t            d_line;           // the D-cache's answer
+    line_t            d_wdata;          // a store's word in every word of the line
+    line_strb_t       d_wstrb;          // its strobes in its own word
+    // The line address goes to the memory port: the offset of the byte address is 0.
     /* verilator lint_off UNUSEDSIGNAL */
     logic [WIDTH-1:0] mem_byte_addr;
     /* verilator lint_on UNUSEDSIGNAL */
 
     // @kb: rtl/design/mig2/caches_in_core
     SkewedCacheRdOnly #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.icache_sets_width),
-                        .SETS_OFFSET(IADDR_START)) u_icache(
+                        .SETS_OFFSET(LINE_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
         .req_uncached(uncached), .req_ready(icache_rsp.ready),
-        .rsp_valid(icache_rsp.valid), .rsp_data(icache_rsp.data),
+        .rsp_valid(icache_rsp.valid), .rsp_data(i_line),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
         .mem_req_addr(i_mem_addr), .mem_rsp_valid(i_mem_rsp_valid),
         .mem_rsp_data(i_mem_rsp_data));
 
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
-                  .SETS_OFFSET(DADDR_START)) u_dcache(
+                  .SETS_OFFSET(LINE_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
-        .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb),
-        .rsp_valid(dcache_rsp.valid), .rsp_data(dcache_rsp.data),
+        .req_wdata(d_wdata), .req_wstrb(d_wstrb),
+        .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
         .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb),
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
+    // The CPU side is one word: a fetch or a load takes its word of the line, a store
+    // writes its word into every word of the line, with its strobes in its own.
+    // @kb: rtl/design/mig3/cache_lines
+    if (LINE_WORDS == 1) begin: g_one_word
+        assign icache_rsp.data = i_line;
+        assign dcache_rsp.data = d_line;
+        assign d_wdata         = dcache_req.wdata;
+        assign d_wstrb         = dcache_req.wstrb;
+    end else begin: g_words
+        localparam WORD_BITS = $clog2(LINE_WORDS);
+        word_t [LINE_WORDS-1:0] i_words;        // the answers as words
+        word_t [LINE_WORDS-1:0] d_words;
+        logic  [WORD_BITS-1:0]  i_word;         // the word of the answer: the request's
+        logic  [WORD_BITS-1:0]  d_word;
+
+        // The answer comes a clock after the request is taken, or later; the next request is
+        // taken at that edge at the earliest, so the index kept still belongs to the answer.
+        always_ff @(posedge clk) begin
+            if (icache_req.valid && icache_rsp.ready)
+                i_word <= icache_req.addr[LINE_START-1:IADDR_START];
+            if (dcache_req.valid && dcache_rsp.ready)
+                d_word <= dcache_req.addr[LINE_START-1:DADDR_START];
+        end
+
+        assign i_words         = i_line;
+        assign d_words         = d_line;
+        assign icache_rsp.data = i_words[i_word];
+        assign dcache_rsp.data = d_words[d_word];
+        assign d_wdata         = {LINE_WORDS{dcache_req.wdata}};
+        assign d_wstrb         = line_strb_t'(dcache_req.wstrb)
+                                 << (STRB_WIDTH * dcache_req.addr[LINE_START-1:DADDR_START]);
+    end
+
     // @kb: rtl/design/mig2/single_memory
     // A tie: prio's side, else the data cache (the package name: Icarus takes an imported
     // name alone as a port expression for an implicit wire).
-    InsnDataCacheArbiter #(.ADDR_WIDTH(WIDTH), .DATA_WIDTH($bits(word_t)),
+    InsnDataCacheArbiter #(.ADDR_WIDTH(WIDTH), .DATA_WIDTH($bits(line_t)),
                            .POLICY(CachePkg::ARB_DATA_FIRST)) u_arbiter(
         .clk, .rst_n, .prio,
         .icache_req_valid(i_mem_valid), .icache_req_ready(i_mem_ready),
@@ -105,6 +151,6 @@ module Mig3Caches import Mig3Pkg::*; #(
         .mem_req_wstrb(mem_req.wstrb), .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 
-    assign mem_req.addr = mem_byte_addr[WIDTH-1:DADDR_START];
+    assign mem_req.addr = mem_byte_addr[WIDTH-1:LINE_START];
 
 endmodule

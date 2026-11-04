@@ -151,12 +151,22 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
         return 1'b1;
     endfunction
 
-    // The write the memory of Mig3Cpu takes at this edge: 1 and the write in w, or 0.
+    // The write the memory of Mig3Cpu takes at this edge: 1 and the write in w, or 0. The
+    // memory moves lines; a store writes one word of it, the one its strobes are in.
     function automatic logic dmem_write(output store_t w);
+        line_t      data;
+        line_strb_t strb;
+        int         k;      // the word of the line
+        data = TbMig3.u_mig3_cpu.mem_req.wdata;
+        strb = TbMig3.u_mig3_cpu.mem_req.wstrb;
+        k    = 0;
+        for (int i = 0; i < LINE_WORDS; i++)
+            if (strb[STRB_WIDTH*i +: STRB_WIDTH] != '0)
+                k = i;
         w.pc   = '0;
-        w.addr = {TbMig3.u_mig3_cpu.mem_req.addr, {DADDR_START{1'b0}}};
-        w.mask = TbMig3.u_mig3_cpu.mem_req.wstrb;
-        w.data = TbMig3.u_mig3_cpu.mem_req.wdata;
+        w.addr = {TbMig3.u_mig3_cpu.mem_req.addr, {LINE_START{1'b0}}} + word_t'(STRB_WIDTH * k);
+        w.mask = strb[STRB_WIDTH*k +: STRB_WIDTH];
+        w.data = data[WIDTH*k +: WIDTH];
         return TbMig3.u_mig3_cpu.mem_req.valid && TbMig3.u_mig3_cpu.mem_req.we &&
                TbMig3.u_mig3_cpu.mem_rsp.ready;
     endfunction

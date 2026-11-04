@@ -2,8 +2,9 @@
  *
  * load() puts the hex image (objcopy -O verilog, see sw/riscv/mig3.ld) into the memory, one
  * SimLatencyRAM behind the memory port of the core (code and data: the caches inside the
- * core share it), with latency 1 and always ready unless the testbench configures it
- * (configure()). uncached=1 makes the core bypass its caches. It has 1 << CFG.mem_addr_width
+ * core share it), a cache line (LINE_SIZE bytes) a request, with latency 1 and always ready
+ * unless the testbench configures it (configure()). uncached=1 makes the core bypass its
+ * caches. It has 1 << CFG.mem_addr_width
  * bytes; the core address bits above them are ignored, so addresses wrap around.
  * The debug port of the core is a port of Mig3Cpu: the testbench (or a semihosting
  * service) reads and writes registers while halted and resumes the core.
@@ -36,12 +37,12 @@ module Mig3Cpu import Mig3Pkg::*; #(
         .dbg_rsp);
 
     // The memory, code and data; latency 1, always ready.
-    SimLatencyRAM #(.DATA_SIZE(STRB_WIDTH), .ADDR_WIDTH(MEM_ADDR_WIDTH),
+    SimLatencyRAM #(.DATA_SIZE(LINE_SIZE), .ADDR_WIDTH(MEM_ADDR_WIDTH),
                     .READY_PERCENT(100), .FAST_PERCENT(100), .FAST_MIN(1), .FAST_MAX(1),
                     .MAX_PENDING(1)) u_mem(
         .clk, .rst_n,
         .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_we(mem_req.we),
-        .req_addr({mem_req.addr[MEM_ADDR_WIDTH-1:DADDR_START], {DADDR_START{1'b0}}}),
+        .req_addr({mem_req.addr[MEM_ADDR_WIDTH-1:LINE_START], {LINE_START{1'b0}}}),
         .req_wdata(mem_req.wdata), .req_wstrb(mem_req.wstrb),
         .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data));
 

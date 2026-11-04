@@ -2,10 +2,11 @@
  * data cache that share one memory port; the memory is outside.
  *
  * Instruction fetch and data access are valid/ready channels with the answers of reads
- * after them (imem_req_t, mem_req_t, Mig3Pkg), to the caches (Mig3Caches), and from them to
- * the one memory port. Fetch waits for the I-cache (Mig3Fetch); a load or store waits in EX
- * until the D-cache takes its request, a load waits in MEM/WB for its word (one data request
- * in flight). uncached=1 makes every request bypass the caches (tests that count cycles).
+ * after them (imem_req_t, dmem_req_t, Mig3Pkg), to the caches (Mig3Caches), and from them to
+ * the one memory port (mem_req_t, cache lines). Fetch waits for the I-cache (Mig3Fetch); a
+ * load or store waits in EX until the D-cache takes its request, a load waits in MEM/WB for
+ * its word (one data request in flight). uncached=1 makes every request bypass the caches
+ * (tests that count cycles).
  * Faults (ECALL, illegal instruction, misaligned
  * jump target or load/store address, ...) trap to mtvec in machine mode, MRET returns.
  * EBREAK traps too, or halts the core (halt=1) when the debugger sets
@@ -73,8 +74,8 @@ module Mig3Core import Mig3Pkg::*; #(
     // The pipeline's channels to the caches
     imem_req_t    icache_req;       // Fetch -> I-cache
     imem_rsp_t    icache_rsp;
-    mem_req_t    dcache_req;       // Lsu -> D-cache
-    mem_rsp_t    dcache_rsp;
+    dmem_req_t    dcache_req;       // Lsu -> D-cache
+    dmem_rsp_t    dcache_rsp;
 
     // IF and control
     fetch_ctrl_t  if_ctrl;          // Control -> Fetch

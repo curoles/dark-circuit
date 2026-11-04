@@ -33,7 +33,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     input  word_t            addr,       // rs1 + imm, from Mig3Alu
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t            rs2_data,   // store data
-    output mem_req_t        dmem_req,
+    output dmem_req_t       dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
     output lsu_mem_t         mem         // access for the retire trace
 );

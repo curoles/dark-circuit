@@ -1,0 +1,51 @@
+type: decision
+title: Mig3's caches hold lines of two words, both caches, and the one memory moves lines
+date: 2026-11-04
+question: >
+  Cached Dhrystone spends 27 % of its cycles waiting for fetch: Mig3's I-cache (2 ways of 64
+  one-word lines, 512 B) misses on almost 40 % of the fetches of Dhrystone and towers. Do
+  longer lines help, in which cache, and at what size?
+decision: >
+  Lines of two words (8 bytes) in both caches, one knob cache_line_words in
+  cfg/mig3_config.yaml (1 or 2), 64 sets a way in each (1 KiB each: only the data RAMs grow).
+  The one memory moves a line a request (SimLatencyRAM 8 bytes wide); Mig3Pkg's mem_req_t and
+  mem_rsp_t are lines, dmem_req_t and dmem_rsp_t the word side of Mig3Lsu. Mig3Caches keeps the
+  pipeline's side one word: a fetch or load takes its word of the line (the word index of the
+  request, kept when the cache takes it), a store writes its word into every word of the
+  line with its strobes in its own. Mig3 first; Mig2 only for a large win.
+why: >
+  A Python model of SkewedCacheRdOnly on the retired pcs of the benchmarks, calibrated against
+  the measured fetch-wait bubbles (1.03 to 1.07 bubbles a modelled miss), predicts I-cache
+  misses x0.53 with two-word lines at 512 B, x0.20 (Dhrystone) and x0.07 (towers) at 1 KiB:
+  about -22 % and -25 % of the cached cycles. The same line size in both caches (user): a
+  shared L2 and directory coherence later refill and track one line size; with one memory
+  width the arbiter and memory stay one width.
+rejected:
+  - choice: Two-word lines in the I-cache only, a width adapter on the D side
+    why_not: >
+      Isolates the I-side gain, but leaves two line sizes for a later L2 and coherence (user).
+  - choice: 32 sets of two-word lines (512 B, the area of today)
+    why_not: Model x0.53 against x0.20 at 1 KiB; the tag and valid RAMs are the same at 64 sets.
+  - choice: 128 sets of one-word lines (1 KiB)
+    why_not: Model x0.34 (Dhrystone), worse than two-word lines at 1 KiB, and bigger tag RAMs.
+  - choice: Keep the second word of a fetched line in fetch (a line buffer) in this step
+    why_not: >
+      No cycles in a one-wide pipeline (a hit answers in the next clock either way); fewer
+      I-cache reads; a step of its own, measured on its own.
+evidence: >
+  2026-11-04, Verilator: Mig3's 111 tests pass; the 19 uncached traces (among them csr, muldiv,
+  branch_id, btb_if, ras_id) are identical, the 86 cached ones shorter; the uncached
+  benchmarks keep 2 457 883, 200 550 and 385 185 cycles. Cached benchmarks, one-word lines ->
+  two: Dhrystone 2 598 076 -> 2 195 494 (-15.5 %; fetch waits 708 341 -> 281 248), qsort
+  178 456 -> 168 216 (-5.7 %; data waits 18 148 -> 7 934: the D-cache's lines), towers
+  317 317 -> 242 993 (-23.4 %; fetch waits 86 451 -> 11 288). Fetch waits x0.40 and x0.13,
+  twice the model's x0.20 and x0.07: after a miss on a line's first word, fetch asks for the
+  second in the refill clock, at the place the refill writes, and the cache replays it (kb
+  rtl/lib/block/cache/cache_control/replay), a clock more a sequential miss. sky130 (make
+  mig3_synth): 249 926 um2 (+1.9 %), longest path 6.8 ns (was 6.1): the I-cache's lookup,
+  the way that hits, then the word select, decode, the return-address stack. Open: the word
+  select before the way select (the hit last), and the line kept in fetch.
+code:
+  - rtl/design/mig3/mig3_caches.sv#g_words
+  - rtl/design/mig3/mig3_pkg.sv#LINE_WORDS
+  - rtl/design/mig3/cfg/mig3_config.yaml#cache_line_words
