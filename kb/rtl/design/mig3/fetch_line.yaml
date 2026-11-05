@@ -1,0 +1,50 @@
+type: decision
+title: Fetch keeps the I-cache's line; the next word in it needs no request (no replay)
+date: 2026-11-04
+question: >
+  With two-word lines, right after an I-cache miss fetch asks for the second word of the
+  line in the clock the line arrives; the cache takes it at the place the refill writes and
+  replays it (kb rtl/lib/block/cache/cache_control/replay): a bubble, about half of the imem
+  bubbles cached Dhrystone still had after the register stage. Avoid the request?
+decision: >
+  The I-cache answers fetch with the whole line (Mig3Caches selects no word for fetch;
+  imem_rsp_t.data is a line). Mig3Fetch keeps the line of every answer it uses (line_q, its
+  line address, line_valid) and selects the word of the slot in IF2 by the slot's pc. When
+  the pc fetch wants is in the kept line, or in the line arriving in this clock, the
+  instruction goes into IF2 with its word at once and no request goes to imem (line_taken);
+  pc, the BTB's prediction and IF2 move as for a request imem takes. While a line arrives only
+  that line counts (line_q takes it at that edge). The kept line stays valid across
+  redirects. Not while uncached: then every instruction is a request (tests that count the
+  memory's cycles).
+why: >
+  The second word of a line never goes to the I-cache: no replay after a miss, and in
+  straight code half the requests are gone. The word select moves out of the cache's path
+  into fetch, before ID's register (kb rtl/design/mig3/fetch_stage): no new late path. Mig3
+  has no FENCE.I and does not support self-modifying code, so the kept line is never stale
+  where the I-cache is not.
+rejected:
+  - choice: Let the I-cache answer the second word from its refill (a bypass of the line
+      being written)
+    why_not: >
+      A change in CacheControl and the three caches for one case; the line in fetch also
+      saves the hits, not only the replays.
+  - choice: Keep the line also while uncached
+    why_not: >
+      The uncached tests count the memory's cycles per request (ceilings, pipeline views);
+      they stay as they were.
+relies_on:
+  - rtl/design/mig3/fetch_stage
+  - rtl/design/mig3/cache_lines
+evidence: >
+  2026-11-04, Verilator: Mig3's 111 tests pass. Uncached tests and benchmarks keep their
+  cycles exactly (csr, muldiv, branch_id, btb_if, ras_id traces identical; Dhrystone 2 572 351,
+  qsort 206 944, towers 390 547). The cached tests run 4..26 % fewer cycles (rv32ui_add
+  986 -> 807, rv32ui_ld_st 2 099 -> 1 619, load_store 97 -> 72). Benchmarks cached: Dhrystone
+  2 305 787 -> 2 210 485 (-4.1 %; I-cache bubbles 285 254 -> 174 196), qsort 179 022 ->
+  178 972 (it fits in the I-cache), towers 250 725 -> 244 818 (-2.4 %). sky130: 5.3 -> 5.4 ns,
+  254 936 -> 258 623 um2 (the kept line and its address); the longest path still starts at
+  the ID/EX register in EX, not in fetch.
+code:
+  - rtl/design/mig3/mig3_fetch.sv#line_hit
+  - rtl/design/mig3/mig3_fetch.sv#a_line_take_has_word
+  - rtl/design/mig3/mig3_caches.sv#icache_rsp

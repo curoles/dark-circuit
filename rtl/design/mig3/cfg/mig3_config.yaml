@@ -1,8 +1,8 @@
 # Mig3 configuration. After a change run: make config
 rst_addr:        0x00000000   # PC after reset, byte address
 mem_addr_width:  16           # the memory, code and data: 1 << 16 = 64 KiB
-btb_index_width: 4            # BTB in IF: 1 << 4 = 16 entries
-btb_tag_width:   10           # BTB tag: index + tag = 14 bits, the word address of 64 KiB
+btb_index_width: 6            # BTB in IF: 1 << 6 = 64 entries (kb rtl/design/mig3/btb_size)
+btb_tag_width:   8            # BTB tag: index + tag = 14 bits, the word address of 64 KiB
 ras_addr_width:  3            # return-address stack in ID: 1 << 3 = 8 entries
 icache_sets_width: 6          # I-cache: skewed, 2 ways of 1 << 6 = 64 lines
 dcache_sets_width: 6          # D-cache: skewed, write-through, 2 ways of 64 lines

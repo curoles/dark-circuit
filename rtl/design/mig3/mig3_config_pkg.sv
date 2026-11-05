@@ -21,8 +21,8 @@ package Mig3ConfigPkg;
     localparam mig3_cfg_t MIG3_CFG = '{
         rst_addr:        32'h0000_0000,
         mem_addr_width:  16,   // 65536 bytes each
-        btb_index_width: 4,    // 16 entries
-        btb_tag_width:   10,
+        btb_index_width: 6,    // 64 entries
+        btb_tag_width:   8,
         ras_addr_width:  3,    // 8 entries
         icache_sets_width: 6,  // 64 lines a way
         dcache_sets_width: 6,  // 64 lines a way

@@ -1,0 +1,45 @@
+type: decision
+title: A BTB of 64 entries in Mig3 (was 16)
+date: 2026-11-04
+question: >
+  Bubbles by reason in cached Dhrystone (after the kept line): 69 606 for JALs the BTB did not
+  know (ID redirects, 2 bubbles each), 25 024 for branches guessed taken in ID, 78 005 for
+  wrong guesses in EX. The BTB had 16 entries, Dhrystone's calls and branches do not fit.
+  Move the redirects of ID into IF2 (a bubble each instead of 2), or a bigger BTB (none on a
+  hit)?
+decision: >
+  btb_index_width 6 (64 entries), btb_tag_width 8: index and tag still cover the 14 bits of
+  the word address of 64 KiB, so two pcs never share an entry by mistake. Only
+  cfg/mig3_config.yaml and the generated Mig3ConfigPkg change. The cycle ceilings are
+  measured again.
+why: >
+  A JAL that hits costs nothing, and a branch that hits is guessed by its 2-bit counter
+  instead of the static guess of ID, which is much worse: in Dhrystone the wrong guesses
+  halve too. 64 is the knee: 32 entries give -1.8 % Dhrystone cycles, 64 -5.4 %, 128 -6.4 %.
+  qsort and towers fit in 16 already. The clock does not suffer (the BTB lookup is not the
+  longest path).
+rejected:
+  - choice: Returns, JALs and branches guessed taken redirected from IF2 (predecode there)
+    why_not: >
+      A bubble saved per redirect, not two, and the check runs on the I-cache's answer of
+      the same clock into pc's mux (the late path the register stage removed); returns alone
+      -2.1 % Dhrystone cycles for new logic in fetch and the return stack's rules. The user:
+      not worth it.
+  - choice: 128 entries
+    why_not: 1 % more than 64 in Dhrystone, for twice the flops.
+relies_on:
+  - rtl/design/mig2/btb_in_if
+  - rtl/design/mig3/fetch_line
+evidence: >
+  2026-11-04, Verilator, cached benchmarks, BTB 16 / 32 / 64 / 128 entries: Dhrystone
+  2 210 485 / 2 171 516 / 2 091 626 / 2 068 439 cycles, qsort 178 972 / 178 264 / 177 596 /
+  177 053, towers 244 818 / 244 584 / 244 437 / 244 294. Dhrystone at 64: dir_jump bubbles
+  69 606 -> 18 572, cond_branch 78 005 -> 36 101, pred_taken 25 024 -> 15 030. Uncached
+  (the ceilings): Dhrystone 2 572 351 -> 2 470 348 cycles, qsort 206 944 -> 205 903, towers
+  390 547 -> 390 051. Mig3's 111 tests pass; of the traces only btb_if (524 -> 506 pipeline
+  cycles, its new ceiling) and rv32mi_ma_fetch (449 -> 452: a branch keeps an entry it lost
+  with 16, and its counter guesses wrong once) change. sky130: 5.2 ns at 32 and 64 entries
+  (5.4 at 16: synthesis varies about 0.2 ns); area 258 623 -> 283 198 (32) -> 331 045 um2
+  (64): the BTB is flops, 41 bits an entry (most of them the 30-bit target).
+code:
+  - rtl/design/mig3/cfg/mig3_config.yaml#btb_index_width

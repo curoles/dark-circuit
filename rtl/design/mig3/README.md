@@ -74,6 +74,22 @@ almost none. The cached tests run 4..26 % fewer cycles (rv32ui_add 986 -> 807): 
 programs, mostly first misses. sky130: 5.4 ns, 258 623 um2 (the longest path still starts
 at the ID/EX register in EX).
 
+### A BTB of 64 entries
+
+The BTB has 64 entries (was 16; `btb_index_width` in `cfg/mig3_config.yaml`). In
+Dhrystone the 16 entries were too few: JALs the BTB did not know made ID redirect (2
+bubbles each), and branches without an entry got the static guess of ID instead of their
+counter. Why 64, and the sizes measured: `kb/rtl/design/mig3/btb_size.yaml`.
+
+| Benchmark (cached) | 16 entries | 64 entries | Change |
+|---|---|---|---|
+| Dhrystone | 2 210 485 | 2 091 626 | -5.4 % |
+| qsort | 178 972 | 177 596 | -0.8 % |
+| towers | 244 818 | 244 437 | -0.2 % |
+
+sky130: 5.2 ns, 331 045 um2 (+28 %: the BTB is flops). The ceilings are measured again:
+btb_if 506; Dhrystone 1 956 000, qsort 168 000, towers 238 000.
+
 ## Notes
 
 - The code keeps its `@kb:` tags to Mig2's kb records (`kb/rtl/design/mig2/`): those decisions

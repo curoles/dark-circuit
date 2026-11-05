@@ -173,7 +173,7 @@ if(DARK_CIRCUIT_RISCV)
     # entry, waiting in ID (load-use, division), back to back, a loop of two instructions, on
     # the wrong path, to a misaligned target. With a cycle ceiling (Mig3 README).
     mig3_program_test(btb_if SOURCES btb_if.S ARCH rv32im
-                      ARGS +expect_trap +expect_regs +max_pipeline_cycles=524 +uncached)
+                      ARGS +expect_trap +expect_regs +max_pipeline_cycles=506 +uncached)
 
     # Calls and returns in the corners of the pipeline, for the return-address stack: deep
     # recursion (the stack wraps), an empty function, a return waiting in ID (load-use,
@@ -258,20 +258,20 @@ if(DARK_CIRCUIT_RISCV)
             # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
             mig3_bench_test(dhrystone DIR ${DHRY} REPEAT 6
-                            CEILINGS 12.2.0 2059000
+                            CEILINGS 12.2.0 1956000
                             SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
                             FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
 
             # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
             # sort is in place, a second run would sort sorted numbers.
             set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
-            mig3_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 12.2.0 169000
+            mig3_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 12.2.0 168000
                             SOURCES ${QSORT}/qsort_main.c)
 
             # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
             # sets up the towers again.
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
-            mig3_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 239000
+            mig3_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 238000
                             SOURCES ${TOWERS}/towers_main.c)
         endif()
 
