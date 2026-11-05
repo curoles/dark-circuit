@@ -45,15 +45,16 @@ if(DARK_CIRCUIT_RISCV)
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig3_mem.hex)
 
-    # Decode: unit test of Mig3Decode with cases encoded by the assembler; the Zbb cases only
-    # when the compiler knows Zbb (DARK_CIRCUIT_RISCV_ZBB, cmake/riscv.cmake).
+    # Decode: unit test of Mig3Decode with cases encoded by the assembler (A for the LR/SC
+    # cases); the Zbb cases only when the compiler knows Zbb (DARK_CIRCUIT_RISCV_ZBB,
+    # cmake/riscv.cmake).
     # +zbb: the testbench then wants a case of KIND_BITMANIP too.
     if(DARK_CIRCUIT_RISCV_ZBB)
-        dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH rv32im_zbb FLAGS -DHAVE_ZBB
+        dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH rv32ima_zbb FLAGS -DHAVE_ZBB
                              LINK_FLAGS -T ${SW}/mig3.ld)
         set(decode_zbb +zbb)
     else()
-        dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH rv32im
+        dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH rv32ima
                              LINK_FLAGS -T ${SW}/mig3.ld)
         set(decode_zbb)
     endif()
@@ -152,6 +153,10 @@ if(DARK_CIRCUIT_RISCV)
 
     # M extension: results used right away, division and branches, cycle cost, minstret.
     mig3_program_test(muldiv SOURCES muldiv.S ARCH rv32im ARGS +expect_regs +uncached)
+
+    # LR.W and SC.W (Zalrsc): the reservation of Mig3Atomic in the corners of the pipeline
+    # (see lrsc.S); the retire check checks every SC against a reservation of its own.
+    mig3_program_test(lrsc SOURCES lrsc.S ARCH rv32ia ARGS +expect_trap +expect_regs)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)

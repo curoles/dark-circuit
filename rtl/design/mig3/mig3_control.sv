@@ -33,8 +33,9 @@
  * misaligned target traps in EX. ex_muldiv_stall (division not done) keeps the
  * instruction in EX: ID and IF hold.
  * Interlock: results are forwarded to ID (Mig3Forward), except load data, which comes
- * in MEM/WB: the instruction in ID waits one cycle while it reads the rd of a load in
- * EX (load-use); EX gets a bubble meanwhile.
+ * in MEM/WB, and an SC's result, which goes there (Mig3Atomic): the instruction in ID
+ * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
+ * bubble meanwhile.
  * Every bubble carries its reason (bubble_e, Mig3Pkg): the redirect class (JAL, branch
  * guessed taken, return, BTB corrected from ID; branch guessed wrong, JALR or return (not
  * predicted, predicted wrong), trap, MRET from EX), fill
@@ -286,14 +287,16 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
 
     // Interlock: other results are forwarded to ID (Mig3Forward), but a load's data comes
     // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
-    // load is in EX. The instruction in ID that reads the load's rd waits one cycle, EX gets
-    // a bubble. uses_rs1/uses_rs2: only real register reads count, not immediate bits in
-    // the rs fields.
-    logic ex_load;          // the instruction in EX is a load that writes a register
+    // load is in EX; an SC's result goes to MEM/WB too (kb rtl/design/mig3/lr_sc). The
+    // instruction in ID that reads the rd of either waits one cycle, EX gets a bubble.
+    // uses_rs1/uses_rs2: only real register reads count, not immediate bits in the rs
+    // fields.
+    logic ex_load;          // the instruction in EX writes a register in MEM/WB: load, SC
     logic id_reads_ex_rd;   // the instruction in ID reads the register EX writes
 
     assign ex_writes      = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
-    assign ex_load        = ex_writes && ex_dec.mem.read;
+    assign ex_load        = ex_writes &&
+                            (ex_dec.rd_src == RD_LOAD || ex_dec.rd_src == RD_ATOMIC);
     assign id_reads_ex_rd = (id_dec.uses_rs1 && id_dec.rs1 == ex_dec.rd) ||
                             (id_dec.uses_rs2 && id_dec.rs2 == ex_dec.rd);
     assign id_load_use    = ex_load && id_reads_ex_rd;

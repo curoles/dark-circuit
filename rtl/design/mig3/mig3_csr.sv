@@ -15,7 +15,8 @@
  *   cycle, Mig3 has no real-time clock). mcycle counts every clock after reset, minstret
  *   every completed instruction (not traps); a CSR write wins over the count of its cycle.
  * - mscratch: read and write, for the trap handler.
- * - misa (RV32IM, writes ignored); mvendorid, marchid, mimpid, mhartid read 0.
+ * - misa (RV32IM, writes ignored: Zbb and the LR/SC of Zalrsc have no bit, B and A stand
+ *   for whole extensions); mvendorid, marchid, mimpid, mhartid read 0.
  * - mstatus: MIE and MPIE; MPP reads 3 (machine mode only), other bits 0; mstatush 0.
  * - mtvec: direct mode only, bits 1:0 read 0; mepc: bits 1:0 read 0 (no C extension).
  * - mcause, mtval: written by traps, and by CSR instructions.

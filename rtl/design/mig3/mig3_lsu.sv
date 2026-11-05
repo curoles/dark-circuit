@@ -11,7 +11,8 @@
  * of a sum depend only on the low bits of the operands, so the trap does not wait for the
  * adder and result mux of Mig3Alu; addr, the same sum, gives the word address.
  * mem describes the access for the retire trace (RVFI): bytes read or written; the word
- * read is added in MEM/WB.
+ * read is added in MEM/WB. cancel=1 (an SC that fails, Mig3Atomic) does not do the store:
+ * no request, no write in mem; a misaligned SC still traps.
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig3Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -33,6 +34,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     input  word_t            addr,       // rs1 + imm, from Mig3Alu
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t            rs2_data,   // store data
+    input  wire              cancel,     // the store is not done: an SC that fails
     output dmem_req_t       dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
     output lsu_mem_t         mem         // access for the retire trace
@@ -50,7 +52,8 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     assign rs2_h  = rs2_data[15:0];
 
     logic  load;
-    logic  store;
+    logic  store;       // a store, also one that is cancelled (it may be misaligned)
+    logic  write;       // a store that writes: not cancelled
     logic  unaligned;   // offset is not aligned to the size of funct3
     word_t wr_data;
     strb_t strb;        // bytes of the access: size of funct3 at offset
@@ -61,6 +64,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
 
     assign load  = valid && dec.mem.read;
     assign store = valid && dec.mem.write;
+    assign write = store && !cancel;
 
     always_comb
         case (dec.funct3)
@@ -87,8 +91,8 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
             default: wr_data = rs2_data;
         endcase
 
-    assign dmem_req.valid = (load || store) && !misaligned;
-    assign dmem_req.we    = store;
+    assign dmem_req.valid = (load || write) && !misaligned;
+    assign dmem_req.we    = write;
     assign dmem_req.addr  = addr[WIDTH-1:DADDR_START];
     assign dmem_req.wdata = wr_data;
     assign dmem_req.wstrb = strb;
@@ -96,7 +100,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
     assign mem.rmask = (load && !misaligned) ? strb : '0;
-    assign mem.wmask = (store && !misaligned) ? strb : '0;
-    assign mem.wdata = (store && !misaligned) ? wr_data : '0;
+    assign mem.wmask = (write && !misaligned) ? strb : '0;
+    assign mem.wdata = (write && !misaligned) ? wr_data : '0;
 
 endmodule

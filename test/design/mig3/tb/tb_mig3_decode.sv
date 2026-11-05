@@ -10,8 +10,9 @@
  * of ComputeCoreBitmanip, else ALU), rs1
  * when uses_rs1, rs2 when uses_rs2, funct3 when the kind has it, alt for OP and OP-IMM
  * shifts, imm when the kind has an immediate (the CSR address for CSR instructions).
- * At the end every kind must have had a case; KIND_BITMANIP only with +zbb (its cases
- * need a compiler that knows Zbb).
+ * LR.W and SC.W: a load and a store with imm 0 and their atomic controls, rd_src LOAD and
+ * ATOMIC. At the end every kind must have had a case; KIND_BITMANIP only with +zbb (its
+ * cases need a compiler that knows Zbb).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -66,7 +67,7 @@ module TbMig3Decode;
     function automatic logic has_funct3(input kind_e kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_FENCE, KIND_CSR, KIND_MULDIV:
+            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -76,7 +77,7 @@ module TbMig3Decode;
     function automatic logic has_imm(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE,
-            KIND_OP_IMM, KIND_CSR:
+            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -92,7 +93,8 @@ module TbMig3Decode;
     function automatic rd_src_e rd_src_of(input kind_e kind);
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
-            KIND_LOAD:           return RD_LOAD;
+            KIND_LOAD, KIND_LR:  return RD_LOAD;
+            KIND_SC:             return RD_ATOMIC;
             KIND_CSR:            return RD_CSR;
             KIND_MULDIV:         return RD_MULDIV;
             KIND_BITMANIP:       return RD_BITMANIP;
@@ -103,8 +105,11 @@ module TbMig3Decode;
     // Controls expected for a kind: a model of its own, not a copy of Mig3Decode's table.
     function automatic logic uses_alu(input kind_e kind);
         case (kind)
-            KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP: return 1'b1;
-            default:                                                         return 1'b0;
+            KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
+            KIND_LR, KIND_SC:   // the address rs1 + 0
+                return 1'b1;
+            default:
+                return 1'b0;
         endcase
     endfunction
 
@@ -191,7 +196,12 @@ module TbMig3Decode;
     endfunction
 
     function automatic mem_ctrl_t mem_of(input kind_e kind);
-        return '{read: kind == KIND_LOAD, write: kind == KIND_STORE};
+        return '{read: kind == KIND_LOAD || kind == KIND_LR,
+                 write: kind == KIND_STORE || kind == KIND_SC};
+    endfunction
+
+    function automatic atomic_ctrl_t atomic_of(input kind_e kind);
+        return '{lr: kind == KIND_LR, sc: kind == KIND_SC};
     endfunction
 
     function automatic sys_ctrl_t sys_of(input kind_e kind);
@@ -239,6 +249,7 @@ module TbMig3Decode;
             check(c, insn, "kind",   32'(dec.kind),   e[0]);
             check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind, e[4][4:0], e[5][4:0])));
             check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
+            check(c, insn, "atomic", 32'(dec.atomic), 32'(atomic_of(exp_kind)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
             check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));
@@ -266,9 +277,9 @@ module TbMig3Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        last_kind = $test$plusargs("zbb") ? KIND_BITMANIP : KIND_MULDIV;
+        last_kind = KIND_SC;
         for (k = 0; k <= last_kind; k = k + 1)
-            if (!tested[k])
+            if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")))
                 $fatal(1, "Mig3Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
         $finish;

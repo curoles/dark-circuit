@@ -10,6 +10,7 @@ mig3_alu.sv
 mig3_branch.sv
 mig3_branch_predict.sv
 mig3_lsu.sv
+mig3_atomic.sv
 mig3_load_data.sv
 mig3_csr.sv
 mig3_muldiv.sv

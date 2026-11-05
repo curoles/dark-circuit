@@ -55,7 +55,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
     bubble_e redirect_class;        // reason of the bubbles the last retired insn makes
     integer  redirect_bubbles;      // bubbles since the last retired instruction
     logic    filling;               // nothing retired since reset or resume
-    reg_id_t load_rd;               // the last retired instruction loads rd, 0: none
+    reg_id_t load_rd;               // the last retired instruction loads rd (or is an SC:
+                                    // its rd also comes in MEM/WB), 0: none
     reg_id_t use_rd;                // after a load-use bubble: the next one reads it
     logic    div_pending;           // after a division bubble: the next one divides
     logic    dmem_pending;          // after a dmem bubble: the next one loads or stores
@@ -210,7 +211,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             redirect_class   <= redirect_class_of(retire.trap, retire.insn);
             prev_ret         <= is_ret(retire.insn);
             redirect_bubbles <= 0;
-            load_rd          <= retire.mem_rmask != 0 ? retire.rd_addr : '0;
+            load_rd          <= retire.mem_rmask != 0 || retire.insn ==? SC_W ?
+                                retire.rd_addr : '0;
             use_rd           <= '0;
             div_pending      <= 1'b0;
             dmem_pending     <= 1'b0;

@@ -294,7 +294,9 @@ package Mig3Pkg;
         KIND_MRET,
         KIND_WFI,
         KIND_MULDIV,    // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
-        KIND_BITMANIP   // Zbb in ComputeCoreBitmanip: SEXT.B/H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP
+        KIND_BITMANIP,  // Zbb in ComputeCoreBitmanip: SEXT.B/H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP
+        KIND_LR,        // LR.W (Zalrsc): a load that reserves its word (Mig3Atomic)
+        KIND_SC         // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
     } kind_e;
 
     // Source of the value written to rd.
@@ -304,7 +306,8 @@ package Mig3Pkg;
         RD_LOAD,        // loaded data
         RD_CSR,         // old value of the CSR: CSR instructions
         RD_MULDIV,      // product or quotient/remainder: M instructions
-        RD_BITMANIP     // ComputeCoreBitmanip result: Zbb with one operand
+        RD_BITMANIP,    // ComputeCoreBitmanip result: Zbb with one operand
+        RD_ATOMIC       // Mig3Atomic: SC's 0 (stored) or 1 (failed)
     } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
@@ -330,9 +333,14 @@ package Mig3Pkg;
     } br_ctrl_t;
 
     typedef struct packed {
-        logic   read;       // LOAD
-        logic   write;      // STORE
+        logic   read;       // LOAD, LR.W
+        logic   write;      // STORE, SC.W
     } mem_ctrl_t;
+
+    typedef struct packed {
+        logic   lr;         // LR.W: reserves its word
+        logic   sc;         // SC.W: stores only when its word is reserved
+    } atomic_ctrl_t;
 
     typedef struct packed {
         logic   csr;        // CSR instruction (Mig3Csr)
@@ -365,6 +373,7 @@ package Mig3Pkg;
         alu_ctrl_t         alu;      // Mig3Alu
         br_ctrl_t          br;       // Mig3Branch
         mem_ctrl_t         mem;      // Mig3Lsu
+        atomic_ctrl_t      atomic;   // Mig3Atomic
         sys_ctrl_t         sys;      // Mig3Control, Mig3Csr
         muldiv_ctrl_t      muldiv;   // Mig3MulDiv
         ComputeCoreBitmanipPkg::bm_op_e bitmanip;   // ComputeCoreBitmanip: the operation

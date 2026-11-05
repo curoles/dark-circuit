@@ -1,0 +1,60 @@
+type: decision
+title: LR.W/SC.W (Zalrsc) in one part, Mig3Atomic; a reservation of one word
+date: 2026-11-05
+question: >
+  Mig3 gets LR/SC before interrupts. Where does its logic go, how large is the
+  reservation, and what ends it?
+decision: >
+  Only LR.W and SC.W (Zalrsc); the AMOs of A stay illegal, misa.A stays 0 (A stands for the
+  whole extension, as B for Zbb). The rest of the core sees a load and a store: decode
+  gives LR mem.read and RD_LOAD, SC mem.write and RD_ATOMIC, both with the address rs1
+  (imm 0), and one control group, atomic {lr, sc}, read only by Mig3Atomic in EX.
+  Mig3Atomic holds the reservation (valid and a word address): an LR that completes
+  reserves its word; an SC succeeds when the reservation is valid and its word is the
+  SC's, compared with rs1_data from the ID/EX register (no wait for the address adder); a
+  failing SC cancels its store (Mig3Lsu input cancel: no request, no write in the retire
+  trace) and gets rd 1, a succeeding one rd 0. The reservation ends when an SC completes,
+  on a trap and when MRET completes; a store of this hart to the reserved word keeps it.
+  aq and rl are ignored: one hart, every access in order. The SC's result goes to MEM/WB
+  only (the retire entry), not into EX's forwarding: Mig3Control holds an instruction that
+  reads it for a clock, as after a load (load-use). The retire check keeps a shadow
+  reservation and checks every SC's result and access.
+why: >
+  One part for what is not a load or a store (user): the rest of the core gets two thin
+  generic signals (cancel, rd_data) and one control group, and the atomics of later Migs
+  grow inside it (AMOs: an operation unit and a read-then-write sequence with a stall
+  output; coherence: a snoop that ends the reservation; a reservation per hart). Only an
+  instruction that completes or traps in EX changes the reservation, so one on a wrong
+  path never touches it. A word is the strictest granule the spec allows; a line would not
+  be simpler (the same compare, one bit less).
+rejected:
+  - choice: The reservation in Mig3Lsu, the SC result in Mig3Control or the core
+    why_not: LR/SC spread over several parts; the AMOs and coherence would spread further.
+  - choice: A reservation of one cache line (two words)
+    why_not: >
+      Not easier; a coherence protocol later ends the reservation by line anyway.
+  - choice: A store of this hart to the reserved word ends the reservation
+    why_not: The spec allows either; keeping it is simpler and code does not rely on it.
+  - choice: The SC's result forwarded from EX like an ALU result
+    why_not: >
+      The reservation compare then sits in front of EX's rd mux and the forwarding into ID:
+      sky130 5.2 -> 5.7 ns. A clock of load-use after an SC that is read at once (the bnez
+      of an LR/SC loop) costs far less.
+  - choice: The AMOs too (the A extension, riscv-tests rv32ua)
+    why_not: >
+      Later if wanted: a read-modify-write in EX and MEM/WB is a larger change. riscv-tests
+      lrsc.S uses amoadd.w, so Mig3 runs a test of its own (lrsc.S).
+evidence: >
+  2026-11-05, Verilator: Mig1, Mig2 and Mig3 suites pass (312 tests; RiscvInstrPkg
+  regenerated with rv_a), every Mig3 trace of before identical; lrsc.S passes (SC without
+  reservation, after SC, to the other word of a line, after a trap, after a wrong-path LR
+  fail; back to back with load-use bubbles after LR and SC; an SC waiting behind a load
+  miss and one after a store of this hart succeed; a counting loop; misaligned LR and SC
+  trap with mcause 4 and 6). sky130: SC's result forwarded from EX 5.7 ns (the reservation
+  compare in the forwarding path; with that case removed from the rd mux 5.4 ns); from
+  MEM/WB 5.2 ns as before, 331 045 -> 331 524 um2.
+code:
+  - rtl/design/mig3/mig3_atomic.sv#sc_ok
+  - rtl/design/mig3/mig3_lsu.sv#cancel
+  - test/design/mig3/lrsc.S
+  - test/design/mig3/tb/tb_mig3_retire_check.sv#check_sc

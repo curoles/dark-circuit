@@ -21,8 +21,9 @@
  * - Mig3Regs: the register file, also for the debug port;
  * - Mig3Forward: results not yet in the register file, for ID;
  * - Mig3Pipe: the ID/EX and EX/MEM registers;
- * - Mig3Alu, Mig3Branch, Mig3Lsu (D-cache requests), Mig3Csr, Mig3MulDiv and the library
- *   block ComputeCoreBitmanip (Zbb with one operand): the parts of EX;
+ * - Mig3Alu, Mig3Branch, Mig3Lsu (D-cache requests), Mig3Atomic (the reservation of LR/SC),
+ *   Mig3Csr, Mig3MulDiv and the library block ComputeCoreBitmanip (Zbb with one
+ *   operand): the parts of EX;
  * - Mig3LoadData: the loaded value, in MEM/WB.
  *
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
@@ -123,6 +124,8 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_muldiv_stall;
     logic         ex_lsu_valid;     // the load or store in EX may send its request
     logic         ex_dmem_wait;     // the D-cache does not take the request of EX
+    logic         ex_sc_cancel;     // the SC in EX fails: no store (Mig3Atomic)
+    word_t        ex_atomic_rd_data; // SC: 0 stored, 1 failed
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
@@ -130,6 +133,7 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_rd_write;      // instruction in EX will write rd (not x0)
     reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
+    word_t        ex_rd_wdata;      // rd value of the retire entry: also an SC's result
     iaddr_t       ex_next_pc;       // next instruction, for retire (Mig3Control)
     retire_t      ex_retire;        // RVFI entry built in EX, completed in MEM/WB
     bubble_e      ex_bubble;        // nothing completes or traps in EX: why
@@ -235,8 +239,18 @@ module Mig3Core import Mig3Pkg::*; #(
 
     Mig3Lsu u_mig3_lsu(
         .valid(ex_lsu_valid), .dec(ex_dec), .rs1_data(ex_rs1_data), .addr(ex_alu_result),
-        .rs2_data(ex_rs2_data), .dmem_req(dcache_req), .misaligned(ex_lsu_misaligned),
-        .mem(ex_lsu_mem));
+        .rs2_data(ex_rs2_data), .cancel(ex_sc_cancel), .dmem_req(dcache_req),
+        .misaligned(ex_lsu_misaligned), .mem(ex_lsu_mem));
+
+    // LR/SC: the reservation; a failing SC cancels its store in Mig3Lsu.
+    // @kb: rtl/design/mig3/lr_sc
+    Mig3Atomic u_atomic(
+        .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
+        .rs1_data(ex_rs1_data), .trap(ex_trap), .cancel(ex_sc_cancel),
+        .rd_data(ex_atomic_rd_data));
+
+    // A failing SC sends nothing to the D-cache.
+    `DC_ASSERT(a_sc_cancel_no_req, !ex_sc_cancel || !dcache_req.valid)
 
     // Mig3Lsu adds the byte offset of its own; it is the low bits of the ALU's address.
     `DC_ASSERT(a_lsu_offset, !(ex_fetch.valid && (ex_dec.mem.read || ex_dec.mem.write)) ||
@@ -271,6 +285,12 @@ module Mig3Core import Mig3Pkg::*; #(
             default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
         endcase
 
+    // rd value of the retire entry: an SC's result goes to MEM/WB only, not into EX's
+    // forwarding (ex_rd_data): the reservation compare stays off that path, and
+    // Mig3Control holds an instruction that reads it, as after a load.
+    // @kb: rtl/design/mig3/lr_sc
+    assign ex_rd_wdata = ex_dec.rd_src == RD_ATOMIC ? ex_atomic_rd_data : ex_rd_data;
+
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not
     // use are 0. MEM/WB adds order, bubble and the load data.
     assign ex_retire  = '{valid:     ex_done || ex_trap.valid,
@@ -285,7 +305,7 @@ module Mig3Core import Mig3Pkg::*; #(
                           rs2_addr:  ex_dec.uses_rs2 ? ex_dec.rs2 : '0,
                           rs2_rdata: ex_dec.uses_rs2 ? ex_rs2_data : '0,
                           rd_addr:   ex_rd_write ? ex_dec.rd : '0,
-                          rd_wdata:  ex_rd_write ? ex_rd_data : '0,
+                          rd_wdata:  ex_rd_write ? ex_rd_wdata : '0,
                           mem_addr:  ex_lsu_mem.addr,
                           mem_rmask: ex_lsu_mem.rmask,
                           mem_wmask: ex_lsu_mem.wmask,

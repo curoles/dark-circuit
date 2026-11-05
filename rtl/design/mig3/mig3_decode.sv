@@ -6,7 +6,9 @@
  * fields (RiscvPkg formats), at the same place for every instruction. Decode
  * computes the controls of every part, grouped in decoded_t (the table below); parts
  * use funct3 and alt only to choose an operation within their part. The immediates come from
- * RiscvPkg (imm_*_of), sign-extended to 32 bits.
+ * RiscvPkg (imm_*_of), sign-extended to 32 bits. LR.W and SC.W (Zalrsc) are a load and
+ * a store whose address is rs1 (imm 0), with dec.atomic for Mig3Atomic; the AMOs of the
+ * A extension are illegal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -40,6 +42,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU:         kind = KIND_MULDIV;
             SEXT_B, SEXT_H, ZEXT_H_RV32, ORC_B, REV8_RV32:          kind = KIND_BITMANIP;
             CLZ, CTZ, CPOP:                                         kind = KIND_BITMANIP;
+            LR_W:                                                   kind = KIND_LR;
+            SC_W:                                                   kind = KIND_SC;
             MRET:                                                   kind = KIND_MRET;
             WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
@@ -69,6 +73,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             BEQ[6:0]:             imm = imm_b_of(insn);     // branches
             SW[6:0]:              imm = imm_s_of(insn);     // stores
             CSRRW[6:0]:           imm = imm_csr;            // SYSTEM: the CSR address
+            LR_W[6:0]:            imm = '0;                 // AMO: the address is rs1
             default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM, FENCE
         endcase
 
@@ -156,6 +161,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.alu      = '{a: A_RS1, b_imm: 1'b1, alu2: ctrl_of(alu_op_of(insn))};
         dec.br       = '0;
         dec.mem      = '0;
+        dec.atomic   = '0;
         dec.sys      = '0;
         dec.muldiv   = '0;
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
@@ -187,6 +193,15 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             KIND_STORE: begin
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;
                 dec.mem.write = 1'b1;
+            end
+            KIND_LR: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_LOAD;  dec.uses_rs1 = 1'b1;  dec.mem.read = 1'b1;
+                dec.atomic.lr = 1'b1;
+            end
+            KIND_SC: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_ATOMIC;
+                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.mem.write = 1'b1;
+                dec.atomic.sc = 1'b1;
             end
             KIND_OP_IMM: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;

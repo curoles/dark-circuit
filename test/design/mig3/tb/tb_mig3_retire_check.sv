@@ -11,6 +11,9 @@
  * - load: bytes of mem_rdata under mem_rmask are the bytes of the memory with the retired
  *   stores the memory has not taken yet on top (a store may wait in the arbiter's buffer
  *   and one in the D-cache while a later load hits the line they wrote),
+ * - LR.W is a load of rs1, SC.W a store of rs1 when it succeeds: a shadow reservation
+ *   (an LR takes it; an SC, a trap and MRET end it) says whether it does; rd must be 0
+ *   then, else 1 and no access,
  * - store: it is the next write the memory takes, in program order: mem_addr, mem_wmask and
  *   the bytes of mem_wdata under it (the D-cache writes through: the memory takes the store
  *   in the cycle it retires or later, uncached in EX, before it retires; a store still on
@@ -62,6 +65,8 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     word_t prev_pc_wdata;                   // next pc told by the previous retired instruction
     word_t access_addr;                     // load or store in retire: byte address
     strb_t access_mask;                     // its bytes
+    logic  resv_valid;                      // shadow reservation of LR/SC: a word is
+    daddr_t resv_addr;                      // reserved, its word address
 
     // A store: retired, or a write dmem takes. Matched in program order.
     typedef struct packed {
@@ -100,20 +105,26 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     typedef enum logic [1:0] {
         MEM_NONE,
         MEM_LOAD,
-        MEM_STORE
+        MEM_STORE,
+        MEM_SC      // a store when it succeeds
     } mem_kind_e;
 
     // Kind of memory access of insn.
     function automatic mem_kind_e mem_kind(input insn_t insn);
         casez (insn)
             LB, LH, LW, LBU, LHU: return MEM_LOAD;
+            LR_W:                 return MEM_LOAD;
             SB, SH, SW:           return MEM_STORE;
+            SC_W:                 return MEM_SC;
             default:              return MEM_NONE;
         endcase
     endfunction
 
-    // Byte address of the load or store insn when rs1 is base: base + S or I immediate.
+    // Byte address of the load or store insn when rs1 is base: base + S or I immediate;
+    // LR and SC have none.
     function automatic word_t mem_byte_addr(input insn_t insn, input word_t base);
+        if (insn ==? LR_W || insn ==? SC_W)
+            return base;
         return base + (mem_kind(insn) == MEM_STORE ? imm_s_of(insn) : imm_i_of(insn));
     endfunction
 
@@ -224,6 +235,36 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
                    access_addr, access_mask);
     endtask
 
+    // SC in retire that did not trap: it succeeds when the shadow reservation holds its
+    // word; then rd gets 0 and it is a store of its word, else rd gets 1 and it accesses
+    // nothing.
+    task automatic check_sc;
+        logic ok;
+        ok = resv_valid && resv_addr == access_addr[WIDTH-1:DADDR_START];
+        if (retire.rd_addr != 0 && retire.rd_wdata !== word_t'(!ok))
+            $fatal(1, "Mig3: SC at pc %h wrote %h, expected %0d (reserved %0d, word %h)",
+                   retire_pc, retire.rd_wdata, !ok, resv_valid, {resv_addr, {DADDR_START{1'b0}}});
+        if (ok)
+            check_access();
+        else if (retire.mem_rmask != 0 || retire.mem_wmask != 0)
+            $fatal(1, "Mig3: SC at pc %h failed, but accesses mem[%h] r %b w %b",
+                   retire_pc, retire.mem_addr, retire.mem_rmask, retire.mem_wmask);
+    endtask
+
+    // The shadow reservation, in program order: an LR takes it; an SC, a trap and MRET
+    // end it.
+    always @(posedge clk)
+        if (!rst_n)
+            resv_valid <= 1'b0;
+        else if (retire.valid) begin
+            if (retire.trap || retire.insn ==? SC_W || retire.insn ==? MRET)
+                resv_valid <= 1'b0;
+            else if (retire.insn ==? LR_W) begin
+                resv_valid <= 1'b1;
+                resv_addr  <= access_addr[WIDTH-1:DADDR_START];
+            end
+        end
+
     // Values of the cycle before the rising edge; also the register writes of the debugger.
     always @(posedge clk) begin
         if (rst_n && retire.valid) begin
@@ -249,7 +290,9 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
                        retire_pc, prev_pc, prev_pc_wdata);
             check_read(retire.rs1_addr, retire.rs1_rdata);
             check_read(retire.rs2_addr, retire.rs2_rdata);
-            if (mem_kind(retire.insn) != MEM_NONE && !retire.trap)
+            if (mem_kind(retire.insn) == MEM_SC && !retire.trap)
+                check_sc();
+            else if (mem_kind(retire.insn) != MEM_NONE && !retire.trap)
                 check_access();
             else if (retire.mem_rmask != 0 || retire.mem_wmask != 0)
                 $fatal(1, "Mig3: pc %h is not a load or store (or trapped), but has a memory access",

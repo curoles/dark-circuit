@@ -42,6 +42,8 @@
     .equ K_WFI,     15
     .equ K_MULDIV,  16
     .equ K_BITMANIP, 17
+    .equ K_LR,      18
+    .equ K_SC,      19
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -125,6 +127,16 @@
     .macro NOARG insn, kind                         /* fence ecall ebreak mret wfi */
     \insn
     EXPECT \kind, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .endm
+
+    .macro LR_ rd, rs1, ord=                        /* lr.w lr.w.aq ...: rs1, imm 0 */
+    lr.w\ord x\rd, (x\rs1)
+    EXPECT K_LR, 1, 1, 0, \rd, \rs1, 0, 2, 0, 0
+    .endm
+
+    .macro SC_ rd, rs2, rs1, ord=                   /* sc.w sc.w.rl ... */
+    sc.w\ord x\rd, x\rs2, (x\rs1)
+    EXPECT K_SC, 1, 1, 1, \rd, \rs1, \rs2, 2, 0, 0
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -262,6 +274,15 @@ cases:
     NOARG  mret,   K_MRET
     NOARG  wfi,    K_WFI
 
+    /*     rd  rs1 ordering (aq, rl: every access of Mig3 is in order) */
+    LR_    1,  2
+    LR_    31, 0,  .aq
+    LR_    0,  31, .aqrl
+    /*     rd  rs2 rs1 */
+    SC_    3,  4,  5
+    SC_    0,  31, 1,  .rl
+    SC_    31, 0,  31, .aqrl
+
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
     ILLEGAL 0xffffffff      /* all ones: defined to be illegal */
     ILLEGAL 0xfe000033      /* OP with funct7 = 0x7f: neither OP nor M */
@@ -269,4 +290,8 @@ cases:
     ILLEGAL 0x00200073      /* like ecall and ebreak, but imm=2 */
     ILLEGAL 0x0000000b      /* custom-0 opcode */
     ILLEGAL 0x60701013      /* like sext.b (OP-IMM, imm[11:5] F7_ROT, funct3 1), rs2 field 7 */
+    ILLEGAL 0x0000202f      /* amoadd.w x0, x0, (x0): the AMOs of A (Zaamo) */
+    ILLEGAL 0x0810202f      /* amoswap.w x0, x1, (x0) */
+    ILLEGAL 0x1010202f      /* like lr.w, but rs2 field 1 */
+    ILLEGAL 0x1000302f      /* lr.d: RV64 */
 cases_end:
