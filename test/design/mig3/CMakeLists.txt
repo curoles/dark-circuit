@@ -232,18 +232,22 @@ if(DARK_CIRCUIT_RISCV)
         # main (BENCH_REPEAT), CEILINGS its ceiling of pipeline cycles per gcc version
         # (Mig3 README, dc_riscv_cycle_ceiling): the pipeline cycles + 1 %, rounded up to 1000
         # (+max_cycles is twice that, a guard against a hang). Lower it when a
-        # change makes the benchmark faster; add the version of a new compiler. They run
-        # uncached (+uncached): the cycles of the pipeline, as before the caches.
+        # change makes the benchmark faster; add the version of a new compiler. ARCH is
+        # -march (default rv32im); FLAGS come after -O2, so an -O there replaces it. They
+        # run uncached (+uncached): the cycles of the pipeline, as before the caches.
         # @kb: test/design/mig2/benchmarks
         if(DARK_CIRCUIT_BENCHMARKS)
             function(mig3_bench_test NAME)
-                cmake_parse_arguments(P "" "DIR;REPEAT" "SOURCES;FLAGS;CEILINGS" ${ARGN})
+                cmake_parse_arguments(P "" "DIR;REPEAT;ARCH" "SOURCES;FLAGS;CEILINGS" ${ARGN})
+                if(NOT P_ARCH)
+                    set(P_ARCH rv32im)
+                endif()
                 dc_riscv_cycle_ceiling(ceiling design_mig3_${NAME} ${P_CEILINGS})
                 math(EXPR guard "2 * ${ceiling}")
                 mig3_program_test(${NAME}
                                   SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
                                           ${SW}/bench/bench.c ${P_SOURCES}
-                                  ARCH rv32im
+                                  ARCH ${P_ARCH}
                                   FLAGS -O2 -ffreestanding -fno-builtin-printf
                                         -include ${SW}/bench/bench_main.h
                                         -DBENCH_REPEAT=${P_REPEAT}
@@ -278,15 +282,36 @@ if(DARK_CIRCUIT_RISCV)
             # performance run (seeds 0, 0, 0x66, 2000 bytes), fetched unchanged, with the
             # port sw/riscv/coremark: ticks are cycles, the exit status is the check of its
             # CRCs, it prints CoreMark/MHz. Simulated: far shorter than a valid score's 10 s.
+            # Three builds of the one source, each a different load on the CPU: coremark
+            # (-O2), code as usually compiled, the regression ceiling; coremark_tuned (the
+            # flags of published RISC-V scores, Zbb), unrolled and inlined, code far larger
+            # than the I-cache, the score to compare with other cores; coremark_O0 (-O0),
+            # every variable on the stack, a load or store in most instructions (load-use).
             # @kb: test/design/mig3/coremark
             dc_coremark()
             if(DARK_CIRCUIT_COREMARK)
                 set(CM ${COREMARK_DIR})
-                mig3_bench_test(coremark DIR ${CM} REPEAT 1 CEILINGS 12.2.0 1820000
-                                SOURCES ${CM}/core_list_join.c ${CM}/core_main.c
-                                        ${CM}/core_matrix.c ${CM}/core_state.c
-                                        ${CM}/core_util.c ${SW}/coremark/core_portme.c
-                                FLAGS -I${SW}/coremark -DITERATIONS=5)
+                function(mig3_coremark NAME)
+                    cmake_parse_arguments(C "" "ITERATIONS;CEILING;ARCH" "FLAGS" ${ARGN})
+                    mig3_bench_test(${NAME} DIR ${CM} REPEAT 1 CEILINGS 12.2.0 ${C_CEILING}
+                                    ARCH ${C_ARCH}
+                                    SOURCES ${CM}/core_list_join.c ${CM}/core_main.c
+                                            ${CM}/core_matrix.c ${CM}/core_state.c
+                                            ${CM}/core_util.c ${SW}/coremark/core_portme.c
+                                    FLAGS -I${SW}/coremark -DITERATIONS=${C_ITERATIONS}
+                                          ${C_FLAGS})
+                endfunction()
+
+                mig3_coremark(coremark ITERATIONS 5 CEILING 1820000)
+                if(DARK_CIRCUIT_RISCV_ZBB)
+                    mig3_coremark(coremark_tuned ITERATIONS 5 CEILING 1407000
+                                  ARCH rv32im_zbb
+                                  FLAGS -funroll-all-loops -finline-limit=600
+                                        -ftree-dominator-opts -fno-if-conversion2
+                                        -fselective-scheduling -fno-code-hoisting
+                                        -falign-functions=4 -falign-jumps=4 -falign-loops=4)
+                endif()
+                mig3_coremark(coremark_O0 ITERATIONS 1 CEILING 1537000 FLAGS -O0)
             endif()
         endif()
 

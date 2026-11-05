@@ -1,9 +1,10 @@
 type: decision
-title: CoreMark on Mig3, fetched unchanged with a port of this project
+title: CoreMark on Mig3, fetched unchanged with a port of this project; three builds
 date: 2026-11-04
 question: >
   Dhrystone, qsort and towers are small and fit Mig3's caches and BTB, and their numbers
-  compare with nothing outside. Add more riscv-tests kernels, or CoreMark?
+  compare with nothing outside. Add more riscv-tests kernels, or CoreMark? And which builds
+  of it?
 decision: >
   CoreMark (github.com/eembc/coremark, pinned commit) is fetched at configure time
   (dc_coremark in cmake/fetch.cmake, like riscv-tests) and compiled unchanged, with a port
@@ -13,12 +14,21 @@ decision: >
   portable_fini compares the run's three CRCs (list, matrix, state) with the known values
   of the performance run and exits with 1 on a difference, because CoreMark's main always
   returns 0 and its own error count also counts a run shorter than 10 s. The port prints
-  one line: iterations, cycles, CoreMark/MHz (iterations * 10^6 / cycles). A benchmark test
-  like the others (uncached, a ceiling of pipeline cycles), DARK_CIRCUIT_BENCHMARKS only.
+  one line: iterations, cycles, CoreMark/MHz (iterations * 10^6 / cycles). Three benchmark
+  tests like the others (uncached, a ceiling of pipeline cycles, DARK_CIRCUIT_BENCHMARKS
+  only), one source built three ways (mig3_coremark): coremark (-O2, 5 iterations),
+  coremark_tuned (the flags of published RISC-V scores and Zbb, 5 iterations; only when
+  the compiler knows Zbb), coremark_O0 (-O0, 1 iteration); about 5 s each.
 why: >
   CoreMark is more real code than the three (lists with pointers, matrix, state machine,
   CRC), and CoreMark/MHz is the number other cores publish. The CRCs do not depend on the
-  number of iterations, so a short simulated run is still checked.
+  number of iterations, so a short simulated run is still checked. The three builds load
+  the CPU differently, almost three benchmarks for free (the user's idea for -O0): -O2 is
+  code as usually compiled, its biggest bubbles the wrong guesses of branches; tuned is
+  unrolled and inlined, 38 KB of code for a 1 KiB I-cache (fetch, BTB), and the score to
+  compare with other cores; -O0 keeps every variable on the stack, a load or store in most
+  instructions, load-use 22 % of its cycles (the load/store path, forwarding, D-cache). -O0
+  is not real code: a magnifying glass, its score is not for comparing.
 rejected:
   - choice: More riscv-tests benchmarks (median, memcpy, multiply, rsort, vvadd)
     why_not: >
@@ -27,15 +37,27 @@ rejected:
   - choice: The exit status from CoreMark's printed report
     why_not: >
       Tests pass or fail by exit code; the port's check of the CRCs needs no output.
+  - choice: Only -O2, the tuned score once in the README
+    why_not: >
+      The tuned build is the comparable number and the load on fetch; kept as a test, its
+      number stays checked (a ceiling) as Mig3 changes.
 relies_on:
   - test/design/mig2/benchmarks
 evidence: >
-  2026-11-04, Verilator, gcc 12.2.0 -O2, Mig3 with two-word lines, the kept line and a BTB
-  of 64 entries: CoreMark (12 KB of code) passes its CRC check; 5 iterations: 2 039 042
-  timed cycles uncached (2.452 CoreMark/MHz, pipeline 1 801 836 cycles: ceiling 1 820 000),
-  1 808 912 cached (2.764 CoreMark/MHz); 1 iteration: 2.451 and 2.762. About 5 s on
-  Verilator. Cached, the big bubbles are wrong guesses of branches (115 072) and load-use
-  (101 755). A port with a wrong list CRC exits with 1 and the test fails.
+  2026-11-04, Verilator, gcc 12.2.0, Mig3 with two-word lines, the kept line and a BTB of
+  64 entries; all three pass their CRC check, a port with a wrong list CRC exits with 1 and
+  the test fails. CoreMark/MHz cached / uncached: coremark 2.764 / 2.452 (12 KB of code;
+  ceiling 1 820 000 pipeline cycles), coremark_tuned 3.445 / 2.963 (38 KB; ceiling
+  1 407 000), coremark_O0 0.653 / 0.570 (18 KB; ceiling 1 537 000). Cached bubbles in % of
+  cycles: coremark wrong guesses 6.3, load-use 5.6; tuned wrong guesses 7.2, load-use 4.5,
+  I-cache 3.0; -O0 load-use 22. The flags, cached, 2 iterations: -O2 2.763, -O3 2.838, -O3
+  -funroll-all-loops -finline-functions -finline-limit=600 3.309, the published set 3.375,
+  with Zbb 2.838 / 3.403 / 3.445 (Zbb about 2.7 % fewer instructions); the gain of the
+  flags is fewer instructions (-21 %). Extensions Mig3 does not have, instructions executed
+  on QEMU 6.2 (1 iteration, -O2 / -O3 unrolled): Zbb 322 672 -> 313 871 / 263 898 ->
+  256 971; Zba on top 312 586 / 254 591 (-0.4 / -0.9 %); Zbs on top no change; gcc 12.2
+  emits no Zicond instruction.
 code:
   - sw/riscv/coremark/core_portme.c#portable_fini
   - cmake/fetch.cmake#dc_coremark
+  - test/design/mig3/CMakeLists.txt#mig3_coremark

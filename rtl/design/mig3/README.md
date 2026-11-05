@@ -92,15 +92,21 @@ btb_if 506; Dhrystone 1 956 000, qsort 168 000, towers 238 000.
 
 ## CoreMark
 
-CoreMark (EEMBC) runs as a benchmark test: its sources unchanged (fetched at configure
-time), a port of this project in `sw/riscv/coremark` (ticks are clock cycles; the exit
-status is the check of its CRCs), the standard performance run, 5 iterations. Why and
-how: `kb/test/design/mig3/coremark.yaml`.
+CoreMark (EEMBC) runs as three benchmark tests: its sources unchanged (fetched at
+configure time), a port of this project in `sw/riscv/coremark` (ticks are clock cycles;
+the exit status is the check of its CRCs), the standard performance run. The three
+builds of the one source load the CPU differently. Why and how:
+`kb/test/design/mig3/coremark.yaml`.
 
-| CoreMark, 5 iterations (gcc 12.2.0, -O2) | Timed cycles | CoreMark/MHz |
-|---|---|---|
-| cached | 1 808 912 | 2.764 |
-| uncached | 2 039 042 | 2.452 |
+| Test (gcc 12.2.0) | Build | What it loads | CoreMark/MHz cached | uncached |
+|---|---|---|---|---|
+| coremark | -O2, rv32im | code as usually compiled; regression ceiling | 2.764 | 2.452 |
+| coremark_tuned | flags of published RISC-V scores, rv32im_zbb | fetch: 38 KB of code for a 1 KiB I-cache; the score to compare | 3.445 | 2.963 |
+| coremark_O0 | -O0, rv32im | loads and stores: every variable on the stack | 0.653 | 0.570 |
+
+Cached, the biggest bubbles: coremark wrong guesses of branches (6.3 % of cycles) and
+load-use (5.6 %); coremark_tuned wrong guesses (7.2 %), load-use (4.5 %) and the I-cache
+(3.0 %); coremark_O0 load-use (22 %).
 
 Simulated: a valid CoreMark score must run at least 10 s; these are not EEMBC-certified
 scores. CoreMark is a trademark of EEMBC.
