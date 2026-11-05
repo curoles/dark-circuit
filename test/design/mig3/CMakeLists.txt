@@ -273,6 +273,21 @@ if(DARK_CIRCUIT_RISCV)
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
             mig3_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 238000
                             SOURCES ${TOWERS}/towers_main.c)
+
+            # CoreMark (EEMBC): list processing, matrix, state machine, CRC; its standard
+            # performance run (seeds 0, 0, 0x66, 2000 bytes), fetched unchanged, with the
+            # port sw/riscv/coremark: ticks are cycles, the exit status is the check of its
+            # CRCs, it prints CoreMark/MHz. Simulated: far shorter than a valid score's 10 s.
+            # @kb: test/design/mig3/coremark
+            dc_coremark()
+            if(DARK_CIRCUIT_COREMARK)
+                set(CM ${COREMARK_DIR})
+                mig3_bench_test(coremark DIR ${CM} REPEAT 1 CEILINGS 12.2.0 1820000
+                                SOURCES ${CM}/core_list_join.c ${CM}/core_main.c
+                                        ${CM}/core_matrix.c ${CM}/core_state.c
+                                        ${CM}/core_util.c ${SW}/coremark/core_portme.c
+                                FLAGS -I${SW}/coremark -DITERATIONS=5)
+            endif()
         endif()
 
         # rv32um: multiply and divide.

@@ -1,0 +1,41 @@
+type: decision
+title: CoreMark on Mig3, fetched unchanged with a port of this project
+date: 2026-11-04
+question: >
+  Dhrystone, qsort and towers are small and fit Mig3's caches and BTB, and their numbers
+  compare with nothing outside. Add more riscv-tests kernels, or CoreMark?
+decision: >
+  CoreMark (github.com/eembc/coremark, pinned commit) is fetched at configure time
+  (dc_coremark in cmake/fetch.cmake, like riscv-tests) and compiled unchanged, with a port
+  of this project in sw/riscv/coremark: no floating point, no stdio (printf of bench.c,
+  silent), seeds of the standard performance run (0, 0, 0x66, 2000 bytes) from volatile
+  variables, ticks are clock cycles (rdcycle). The exit status comes from the port:
+  portable_fini compares the run's three CRCs (list, matrix, state) with the known values
+  of the performance run and exits with 1 on a difference, because CoreMark's main always
+  returns 0 and its own error count also counts a run shorter than 10 s. The port prints
+  one line: iterations, cycles, CoreMark/MHz (iterations * 10^6 / cycles). A benchmark test
+  like the others (uncached, a ceiling of pipeline cycles), DARK_CIRCUIT_BENCHMARKS only.
+why: >
+  CoreMark is more real code than the three (lists with pointers, matrix, state machine,
+  CRC), and CoreMark/MHz is the number other cores publish. The CRCs do not depend on the
+  number of iterations, so a short simulated run is still checked.
+rejected:
+  - choice: More riscv-tests benchmarks (median, memcpy, multiply, rsort, vvadd)
+    why_not: >
+      One loop over a small array each: they fit the caches and the BTB like qsort; little
+      new. mm and spmv use double: useful when Mig3 has floating point.
+  - choice: The exit status from CoreMark's printed report
+    why_not: >
+      Tests pass or fail by exit code; the port's check of the CRCs needs no output.
+relies_on:
+  - test/design/mig2/benchmarks
+evidence: >
+  2026-11-04, Verilator, gcc 12.2.0 -O2, Mig3 with two-word lines, the kept line and a BTB
+  of 64 entries: CoreMark (12 KB of code) passes its CRC check; 5 iterations: 2 039 042
+  timed cycles uncached (2.452 CoreMark/MHz, pipeline 1 801 836 cycles: ceiling 1 820 000),
+  1 808 912 cached (2.764 CoreMark/MHz); 1 iteration: 2.451 and 2.762. About 5 s on
+  Verilator. Cached, the big bubbles are wrong guesses of branches (115 072) and load-use
+  (101 755). A port with a wrong list CRC exits with 1 and the test fails.
+code:
+  - sw/riscv/coremark/core_portme.c#portable_fini
+  - cmake/fetch.cmake#dc_coremark

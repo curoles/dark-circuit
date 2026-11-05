@@ -90,6 +90,21 @@ counter. Why 64, and the sizes measured: `kb/rtl/design/mig3/btb_size.yaml`.
 sky130: 5.2 ns, 331 045 um2 (+28 %: the BTB is flops). The ceilings are measured again:
 btb_if 506; Dhrystone 1 956 000, qsort 168 000, towers 238 000.
 
+## CoreMark
+
+CoreMark (EEMBC) runs as a benchmark test: its sources unchanged (fetched at configure
+time), a port of this project in `sw/riscv/coremark` (ticks are clock cycles; the exit
+status is the check of its CRCs), the standard performance run, 5 iterations. Why and
+how: `kb/test/design/mig3/coremark.yaml`.
+
+| CoreMark, 5 iterations (gcc 12.2.0, -O2) | Timed cycles | CoreMark/MHz |
+|---|---|---|
+| cached | 1 808 912 | 2.764 |
+| uncached | 2 039 042 | 2.452 |
+
+Simulated: a valid CoreMark score must run at least 10 s; these are not EEMBC-certified
+scores. CoreMark is a trademark of EEMBC.
+
 ## Notes
 
 - The code keeps its `@kb:` tags to Mig2's kb records (`kb/rtl/design/mig2/`): those decisions

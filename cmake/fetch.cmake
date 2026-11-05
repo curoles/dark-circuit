@@ -84,6 +84,17 @@ macro(dc_riscv_tests)
         GIT_SUBMODULES env)
 endmacro()
 
+# dc_coremark()
+#
+# CoreMark (EEMBC, Apache 2.0; the name only with its sources unchanged): the benchmark,
+# compiled unchanged with a port of this project (sw/riscv/coremark). A macro: it sets
+# DARK_CIRCUIT_COREMARK and COREMARK_DIR in the directory that calls it.
+macro(dc_coremark)
+    dc_fetch_source(COREMARK
+        GIT_REPOSITORY https://github.com/eembc/coremark.git
+        GIT_TAG        1f483d5b8316753a742cbf5590caf5bd0a4e4777)
+endmacro()
+
 # dc_fetch_file(<NAME> URL <url> SHA256 <hash> FILE <file name>)
 #
 # Define cache variable DARK_CIRCUIT_USE_<NAME> (AUTO, ON or OFF) and download one file
