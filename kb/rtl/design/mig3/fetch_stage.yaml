@@ -1,0 +1,51 @@
+type: decision
+title: A register between the I-cache's answer and ID (IF2); a clock more a redirect
+date: 2026-11-04
+question: >
+  With two-word lines Mig3's longest path became 6.8 ns: ID decoded the I-cache's answer in
+  the clock it came, and the word of the line was selected after the way that hits (a probe
+  with the word fixed: 6.1 ns). Select the word before the way inside the library caches
+  (a parameter for the answer's width), or stop decoding the answer of the same clock?
+decision: >
+  Mig3Fetch keeps its slot that waits for imem's answer (now IF2) and adds a register from
+  IF2 into ID (Mig3PipeReg, with the word, what the BTB said, and id_next_pc): ID decodes from
+  flops. The register stalls with ID, gets a bubble of the redirect's reason on a redirect
+  and a fill bubble while fetch stops (reset, halt). id_next_pc, the address fetch requested
+  after the instruction (the pc register when it leaves IF2), replaces if_pc in Mig3Control's
+  check of a BTB prediction (IF is two instructions ahead of ID now). The pipe view gets the
+  stage IF2; the bubble check allows a redirect 2 bubbles from ID, 3 from EX. The cycle
+  ceilings are measured again. (User's idea: take the whole line, do not select a word in
+  the cache's path.)
+why: >
+  The whole path from the I-cache's lookup into decode leaves the clock: 5.3 ns, better than
+  the 6.1 of Mig3 before two-word lines, with no change of the library. The price is a clock
+  more after every redirect (about 7.5 a 100 instructions in Dhrystone); in straight code
+  nothing, fetch keeps one instruction a clock. Run time is lower on all three benchmarks.
+  The register is also the place where fetch will keep the line (the second word without a
+  request: no replay after a miss), the next step.
+rejected:
+  - choice: Select the word in each way before the way that hits (RSP_WIDTH in the caches)
+    why_not: >
+      Keeps redirects as cheap as before (about 6 % fewer Dhrystone cycles than this), but a
+      parameter through CacheControl and three caches in two versions, for one late mux; the
+      user preferred the register (and a fetch queue later decouples fetch anyway).
+  - choice: Keep 6.8 ns
+    why_not: Run time of qsort 5 % worse than before two-word lines.
+relies_on:
+  - rtl/design/mig3/cache_lines
+evidence: >
+  2026-11-04, Verilator: Mig3's 111 tests pass (ceilings lifted for the measuring run, then
+  the new ones); the cycles grow by the redirects (alu_prog 59 -> 60, branch_id 147 -> 171
+  pipeline cycles, btb_if 458 -> 524, ras_id 401 -> 462). Benchmarks, uncached: Dhrystone
+  2 457 883 -> 2 572 351, qsort 200 550 -> 206 944, towers 385 185 -> 390 547; cached:
+  2 195 494 -> 2 305 787, 168 216 -> 179 022, 242 993 -> 250 725. sky130 (make mig3_synth):
+  longest path 6.8 -> 5.3 ns (189 MHz), now from the ID/EX register in EX; 254 936 um2.
+  Run time cached against two-word lines at 6.8 ns: -18 %, -17 %, -20 %; against Mig3 as
+  copied (one-word lines, 6.1 ns): -23 %, -13 %, -31 %. First version without the fill
+  bubble at a halt: a_halted_ex_empty fired (the instruction of IF2 reached EX after the
+  halt).
+code:
+  - rtl/design/mig3/mig3_fetch.sv#u_mig3_pipe_reg_if2_id
+  - rtl/design/mig3/mig3_fetch.sv#a_if2_to_id
+  - rtl/design/mig3/mig3_control.sv#id_next_pc
+  - test/design/mig3/tb/tb_mig3_pipe_view.sv#S_IF2

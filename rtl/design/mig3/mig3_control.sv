@@ -52,7 +52,7 @@
 module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     input  wire                        clk,
     input  wire                        rst_n,       // synchronous reset, active low
-    input  iaddr_t                     if_pc,       // address IF requests from imem
+    input  iaddr_t                     id_next_pc,  // address fetch requested after ID's
     // Only valid and pc are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  fetch_t                     id_fetch,    // instruction in ID: valid and pc
@@ -124,7 +124,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     logic       ex_jal;      // JAL in EX
     logic       id_jal;      // JAL in ID
     logic       id_taken;    // ID sends fetch to the target: JAL, branch guessed taken
-    logic       id_at_target; // IF requests pc + imm of the instruction in ID now
+    logic       id_at_target; // fetch requested pc + imm after the instruction in ID
     logic       id_btb_ok;   // the BTB hit fits the instruction in ID: ID trusts it
     logic       id_btb_fix;  // the BTB hit does not fit: ID corrects fetch, clears the entry
     logic       id_ret;      // a return in ID: it goes to the top of the return stack
@@ -225,18 +225,19 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     assign id_taken    = (id_jal || (id_fetch.valid && id_pred_taken)) &&
                          !target_misaligned(id_target);
 
-    // Fetch went to pc + imm: IF requests it now (the address holds while ID waits). AddCmp,
+    // Fetch went to pc + imm: the address it requested after the instruction (id_next_pc,
+    // kb rtl/design/mig3/fetch_stage: IF is two instructions ahead of ID by then). AddCmp,
     // not the adder of id_target and a compare: it has no carry chain, and this check is on
     // the path of ID's redirect. Word addresses: the offset of a branch or JAL is even, so
     // imm[1] + 0 does not carry into bit 2 (a misaligned target traps anyway).
     // @kb: rtl/lib/block/add_cmp/design
     // @kb: rtl/design/mig2/addcmp_id_check
     AddCmp #(.WIDTH($bits(iaddr_t))) u_add_cmp(
-        .a(id_fetch.pc), .b(id_dec.imm[WIDTH-1:IADDR_START]), .c(if_pc), .eq(id_at_target));
+        .a(id_fetch.pc), .b(id_dec.imm[WIDTH-1:IADDR_START]), .c(id_next_pc), .eq(id_at_target));
 
     // What the BTB said in IF: a hit fits when the instruction is a branch or a JAL and
-    // fetch went where it says: to pc + imm (the address IF requests now; it holds while ID
-    // waits) when taken; a JAL must be taken. ID trusts a hit that fits, also its direction
+    // fetch went where it says: to pc + imm (the address it requested after the instruction)
+    // when taken; a JAL must be taken. ID trusts a hit that fits, also its direction
     // (no static guess on top: the counter knows the branch). A hit that does not fit (two
     // pcs share an entry; never when the tag covers imem) is corrected as if the BTB had
     // missed, and its entry is cleared. Without a hit, ID decides as before.
@@ -352,6 +353,6 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
                !(ex_fetch.valid && ex_dec.br.target_rs1 && ex_redirected) || ex_dec.br.ret)
     // AddCmp on word addresses gives the compare of the target for a branch or JAL.
     `DC_ASSERT(a_at_target, !(id_dec.br.branch || id_jal) ||
-               id_at_target == (if_pc == id_target[WIDTH-1:IADDR_START]))
+               id_at_target == (id_next_pc == id_target[WIDTH-1:IADDR_START]))
 
 endmodule

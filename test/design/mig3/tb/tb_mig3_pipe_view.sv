@@ -4,13 +4,14 @@
  * pipe_trace (Mig3Pkg) has the slot of every stage and how the slots move at the rising
  * edge. The module keeps the instruction of every stage, moves it as pipe_trace tells,
  * and checks in every cycle out of reset that its stages and the reported slots agree
- * (valid and pc). An instruction is in IF in the cycle imem takes its request; in ID it may
- * wait for its word (id_wait): it stays there and EX gets a bubble; a load in MEM/WB may wait
- * for its word (mem_wait): it stays there and retires a bubble. +kanata=<file> writes
- * the view as a Konata log (Kanata format 0004, tab separated): a row per instruction,
- * stages IF ID EX MEM, the instructions of the wrong path flushed; label: pc and
- * instruction word, tooltip: the bubbles before it. Cycles in messages count from reset,
- * like the log. Stops at the first mismatch with $fatal.
+ * (valid and pc). An instruction is in IF in the cycle imem takes its request; in IF2 it may
+ * wait for its word (if2_wait): it stays there and ID gets a bubble; from IF2 it goes to ID
+ * (a register stage), then EX; a load in MEM/WB may wait for its word (mem_wait): it stays
+ * there and retires a bubble. +kanata=<file> writes the view as a Konata log (Kanata format
+ * 0004, tab separated): a row per instruction, stages IF IF2 ID EX MEM, the instructions of
+ * the wrong path flushed; label: pc and instruction word, tooltip: the bubbles before it.
+ * Cycles in messages count from reset, like the log. Stops at the first mismatch with
+ * $fatal.
  *
  * TbMig3 instantiates it; it only reads its ports.
  *
@@ -27,19 +28,20 @@ module TbMig3PipeView import Mig3Pkg::*, TbMig3Pkg::*; (
     /* verilator lint_on UNUSEDSIGNAL */
     input  pipe_trace_t pipe_trace      // slots and moves, from Mig3Core
 );
-    localparam S_IF = 0, S_ID = 1, S_EX = 2, S_MEM = 3;
+    localparam S_IF = 0, S_IF2 = 1, S_ID = 2, S_EX = 3, S_MEM = 4;
 
     string  kanata_file;
     integer kanata_fd;                  // 0: no Konata log
     integer cycle;                      // cycles out of reset, as in the log
-    integer stage_id [4];               // instruction in IF, ID, EX, MEM/WB; -1: none
-    iaddr_t stage_pc [4];
+    integer stage_id [5];               // instruction in IF, IF2, ID, EX, MEM/WB; -1: none
+    iaddr_t stage_pc [5];
     integer next_id;                    // id of the next instruction IF requests
     integer bubbles [1 << $bits(bubble_e)];     // bubbles since the last retire
 
     function automatic string stage_name(input integer s);
         case (s)
             S_IF:    return "IF";
+            S_IF2:   return "IF2";
             S_ID:    return "ID";
             S_EX:    return "EX";
             default: return "MEM";
@@ -92,12 +94,16 @@ module TbMig3PipeView import Mig3Pkg::*, TbMig3Pkg::*; (
     // request of this cycle, then move the instructions as pipe_trace tells.
     task automatic step;
         integer old_if;
+        integer old_if2;
         integer old_id;
         integer old_ex;
         iaddr_t old_if_pc;
+        iaddr_t old_if2_pc;
         iaddr_t old_id_pc;
         iaddr_t old_ex_pc;
         logic   id_to_ex;   // the instruction in ID goes to EX
+        logic   if2_to_id;  // the instruction in IF2 goes to ID
+        check_slot(S_IF2, pipe_trace.if2.valid, pipe_trace.if2.pc);
         check_slot(S_ID, pipe_trace.id.valid, pipe_trace.id.pc);
         check_slot(S_EX, pipe_trace.ex.valid, pipe_trace.ex.pc);
         check_slot(S_MEM, pipe_trace.mem.valid, pipe_trace.mem.pc);
@@ -118,17 +124,20 @@ module TbMig3PipeView import Mig3Pkg::*, TbMig3Pkg::*; (
             $fdisplay(kanata_fd, "C\t1");
 
         // Moves at the rising edge, MEM/WB first.
-        old_if    = stage_id[S_IF];
-        old_id    = stage_id[S_ID];
-        old_ex    = stage_id[S_EX];
-        old_if_pc = stage_pc[S_IF];
-        old_id_pc = stage_pc[S_ID];
-        old_ex_pc = stage_pc[S_EX];
-        id_to_ex  = !pipe_trace.ex_stall && !pipe_trace.ex_flush && !pipe_trace.id_wait;
+        old_if     = stage_id[S_IF];
+        old_if2    = stage_id[S_IF2];
+        old_id     = stage_id[S_ID];
+        old_ex     = stage_id[S_EX];
+        old_if_pc  = stage_pc[S_IF];
+        old_if2_pc = stage_pc[S_IF2];
+        old_id_pc  = stage_pc[S_ID];
+        old_ex_pc  = stage_pc[S_EX];
+        id_to_ex   = !pipe_trace.ex_stall && !pipe_trace.ex_flush;
+        if2_to_id  = !pipe_trace.id_stall && !pipe_trace.redirect && !pipe_trace.if2_wait;
         if (id_to_ex && pipe_trace.id_stall)
             $fatal(1, "Mig3: cycle %0d: pipe_trace: ID both goes to EX and stalls", cycle);
-        if (old_if >= 0 && pipe_trace.id_stall)
-            $fatal(1, "Mig3: cycle %0d: pipe_trace: IF requests while ID stalls", cycle);
+        if (old_if >= 0 && pipe_trace.if2_stall)
+            $fatal(1, "Mig3: cycle %0d: pipe_trace: IF requests while IF2 stalls", cycle);
         // MEM/WB retires, unless its load waits for its word; EX goes to MEM/WB unless it
         // stalls.
         if (!pipe_trace.mem_wait) begin
@@ -146,16 +155,27 @@ module TbMig3PipeView import Mig3Pkg::*, TbMig3Pkg::*; (
             if (stage_id[S_EX] >= 0)
                 kanata_stage(old_id, S_EX);
         end
-        // ID keeps its instruction (stall), takes the request of IF, or gets a bubble; an
-        // instruction of ID that neither stays nor goes to EX is flushed (wrong path), so
-        // is a request that a redirect drops.
+        // ID keeps its instruction (stall), takes IF2's when its word is here, or gets a
+        // bubble; an instruction of ID that neither stays nor goes to EX is flushed (wrong
+        // path).
         if (old_id >= 0 && !id_to_ex && !pipe_trace.id_stall)
             kanata_flush(old_id);
         if (!pipe_trace.id_stall) begin
-            stage_id[S_ID] = pipe_trace.redirect ? -1 : old_if;
-            stage_pc[S_ID] = old_if_pc;
+            stage_id[S_ID] = if2_to_id ? old_if2 : -1;
+            stage_pc[S_ID] = old_if2_pc;
             if (stage_id[S_ID] >= 0)
-                kanata_stage(old_if, S_ID);
+                kanata_stage(old_if2, S_ID);
+        end
+        // IF2 keeps its slot (ID stalls, or it waits for its word), takes the request of IF,
+        // or gets a bubble; an instruction of IF2 that neither stays nor goes to ID is
+        // flushed, so is a request that a redirect drops.
+        if (old_if2 >= 0 && !pipe_trace.if2_stall && !if2_to_id)
+            kanata_flush(old_if2);
+        if (!pipe_trace.if2_stall) begin
+            stage_id[S_IF2] = pipe_trace.redirect ? -1 : old_if;
+            stage_pc[S_IF2] = old_if_pc;
+            if (stage_id[S_IF2] >= 0)
+                kanata_stage(old_if, S_IF2);
         end
         if (old_if >= 0 && pipe_trace.redirect)
             kanata_flush(old_if);
@@ -186,11 +206,11 @@ module TbMig3PipeView import Mig3Pkg::*, TbMig3Pkg::*; (
             kanata_fd = 0;
     end
 
-    // End of the simulation: instructions still in ID, EX or MEM/WB end as flushed (Konata
-    // needs an end for every instruction; the request in IF has moved on already).
+    // End of the simulation: instructions still in IF2, ID, EX or MEM/WB end as flushed
+    // (Konata needs an end for every instruction; the request in IF has moved on already).
     final
         if (kanata_fd != 0) begin
-            for (int s = S_ID; s <= S_MEM; s++)
+            for (int s = S_IF2; s <= S_MEM; s++)
                 if (stage_id[s] >= 0)
                     kanata_flush(stage_id[s]);
             $fclose(kanata_fd);

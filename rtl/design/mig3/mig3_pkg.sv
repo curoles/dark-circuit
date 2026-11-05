@@ -96,7 +96,8 @@ package Mig3Pkg;
     // Memory channels: a request channel (valid/ready, AGENTS.md) and the answers to reads
     // (valid, no ready: every answer is taken), in order, one or more clocks after the
     // request was taken. A struct per direction: req_t from the requester, rsp_t to it (ready
-    // of the request channel, the answer). imem_req_t: Mig3Fetch to the I-cache, a word;
+    // of the request channel, the answer). imem_req_t: Mig3Fetch to the I-cache, a word
+    // (the answer: the line that holds it, kb rtl/design/mig3/fetch_line);
     // dmem_req_t: Mig3Lsu to the D-cache, a word; mem_req_t: the one memory port of Mig3Core
     // behind both caches, a line (SimLatencyRAM in Mig3Cpu). Mig3Fetch waits for the
     // I-cache, EX and MEM/WB for the D-cache (Mig3Control).
@@ -110,7 +111,7 @@ package Mig3Pkg;
     typedef struct packed {
         logic   ready;      // the request is taken when valid and ready
         logic   valid;      // data is the answer to a request
-        insn_t  data;
+        line_t  data;       // the line of the word asked for
     } imem_rsp_t;
 
     // Data: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0 reads the
@@ -198,7 +199,7 @@ package Mig3Pkg;
     // Control -> Fetch.
     typedef struct packed {
         logic    run;      // 1: request the next instruction, 0: stop (fetch.valid drops)
-        logic    stall;    // 1: keep pc and IF/ID, no request: the instruction in ID stays
+        logic    stall;    // 1: keep pc, IF2 and ID, no request: the instruction in ID stays
         logic    redirect; // 1: next request is at target; the request of this cycle is dropped
         bubble_e why;      // redirect: reason of the bubble of the dropped request
         iaddr_t  target;
@@ -413,14 +414,16 @@ package Mig3Pkg;
     // Mig3Core -> testbench: the pipeline view (Konata): the slot of every stage in this
     // cycle and how the slots move at the rising edge. The core only reports it.
     typedef struct packed {
-        logic   if_req;     // imem takes the request of IF for the instruction at if_pc
+        logic   if_req;     // the instruction at if_pc enters IF2 (asked of imem, or kept)
         iaddr_t if_pc;
-        fetch_t id;         // slots: valid, bubble reason, pc; ID also while it waits
+        fetch_t if2;        // slots: valid, bubble reason, pc; IF2 also while it waits
+        fetch_t id;
         fetch_t ex;
         fetch_t mem;        // MEM/WB
-        logic   redirect;   // the request of this cycle is dropped
-        logic   id_wait;    // the instruction in ID waits for its word from imem
-        logic   id_stall;   // IF/ID keeps its slot (load-use, division, waiting for imem)
+        logic   redirect;   // what would enter IF2 and ID is dropped (redirect, halt)
+        logic   if2_wait;   // the instruction in IF2 waits for its word from imem
+        logic   if2_stall;  // IF2 keeps its slot (ID stalls, or it waits for imem)
+        logic   id_stall;   // ID keeps its instruction (load-use, division)
         logic   ex_stall;   // EX keeps its instruction (division, waiting for dmem)
         logic   ex_flush;   // EX gets a bubble; without id_stall the instruction in ID dies
         logic   mem_wait;   // MEM/WB keeps its load: it waits for its word from dmem

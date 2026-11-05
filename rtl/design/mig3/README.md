@@ -26,15 +26,53 @@ shared L2 and coherence later deal with one size. Why, with the model that predi
 | towers | 317 317 | 242 993 | -23.4 % |
 
 Uncached programs, among them the tests that count cycles, keep their cycles exactly.
-Two things are not done yet:
+With two-word lines the longest path first became 6.8 ns (was 6.1): the word of the line
+was selected after the way that hits, and the late hit went on through decode in the same
+clock. After a miss on the first word of a line, fetch asked for the second
+word in the clock the line came, at the place the refill writes, and the cache replayed it
+(a clock): that doubled the cost of a sequential miss (fetch waits x0.40 in Dhrystone, the
+model x0.20). The line kept in fetch removes it (below).
 
-- After a miss on the first word of a line, fetch asks for the second word in the clock the
-  line comes, at the place the refill writes: the cache replays it (a clock). That doubles
-  the cost of a sequential miss and halves the gain the model predicted for fetch (fetch
-  waits x0.40 instead of x0.20 in Dhrystone). Keeping the line in fetch would remove it.
-- The longest path became 6.8 ns (was 6.1; 249 926 um2, +1.9 %): the word of the line is
-  selected after the way that hits, so the late hit goes through one more multiplexer on
-  its way to decode.
+### A register stage before ID
+
+Mig3Fetch puts a register between the I-cache's answer and ID: the slot that waits for
+the word is IF2, and ID decodes a word from a flop, never the I-cache's answer of the same
+clock. The longest path is 5.3 ns (189 MHz; 254 936 um2), now in EX. The price is a clock
+more after every redirect (taken branch, jump, return, a correction of the BTB, a trap):
+the target goes through both stages before ID. Fetch hands ID the address it requested
+after each instruction (id_next_pc), which Mig3Control checks the BTB's prediction with:
+IF is two instructions ahead of ID by then. Why: `kb/rtl/design/mig3/fetch_stage.yaml`.
+
+| Benchmark (cached) | Two-word lines, 6.8 ns | With the register stage, 5.3 ns | Run time |
+|---|---|---|---|
+| Dhrystone | 2 195 494 | 2 305 787 (+5.0 %) | -18 % |
+| qsort | 168 216 | 179 022 (+6.4 %) | -17 % |
+| towers | 242 993 | 250 725 (+3.2 %) | -20 % |
+
+Against Mig3 as copied (one-word lines, 6.1 ns): -23 %, -13 % and -31 % in run time. The
+tests that count cycles and the benchmark ceilings (pipeline cycles) are measured again:
+branch_id 171, btb_if 524, ras_id 462; Dhrystone 2 059 000, qsort 169 000, towers 239 000.
+
+### Fetch keeps the line
+
+The I-cache answers fetch with the whole line, and Mig3Fetch keeps the line of every
+answer it uses. When the next instruction is in that line (or in the line arriving in this
+clock), it goes into IF2 with its word at once, without a request to the I-cache: the
+second word of a line is never replayed after a miss, and in straight code half the
+requests are gone. Fetch selects the word, before ID's register, so no late path is added.
+Uncached, every instruction is still a request: uncached programs and the tests that count
+cycles keep their cycles exactly. Why: `kb/rtl/design/mig3/fetch_line.yaml`.
+
+| Benchmark (cached) | Register stage | Kept line | Change |
+|---|---|---|---|
+| Dhrystone | 2 305 787 | 2 210 485 | -4.1 % |
+| qsort | 179 022 | 178 972 | -0.0 % |
+| towers | 250 725 | 244 818 | -2.4 % |
+
+Dhrystone's I-cache bubbles go from 285 254 to 174 196; qsort fits in the I-cache and had
+almost none. The cached tests run 4..26 % fewer cycles (rv32ui_add 986 -> 807): small
+programs, mostly first misses. sky130: 5.4 ns, 258 623 um2 (the longest path still starts
+at the ID/EX register in EX).
 
 ## Notes
 

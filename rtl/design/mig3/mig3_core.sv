@@ -15,7 +15,7 @@
  *
  * Mig3Core only connects its parts:
  * - Mig3Caches: the I-cache and the D-cache, between the pipeline and the memory port;
- * - Mig3Fetch: PC, I-cache requests, the IF/ID register;
+ * - Mig3Fetch: PC, I-cache requests, the stages IF2 and the register into ID;
  * - Mig3Control: run, stall, redirect, traps, halt;
  * - Mig3Decode: the instruction taken apart, with the controls of every part;
  * - Mig3Regs: the register file, also for the debug port;
@@ -83,15 +83,18 @@ module Mig3Core import Mig3Pkg::*; #(
     csr_t         csr;              // mtvec, mepc: where traps and MRET go (no stage)
 
     // ID
-    fetch_t       id_fetch;         // instruction in ID: valid, pc; arrives from the I-cache
+    fetch_t       id_fetch;         // instruction in ID: valid, pc; from IF2, a register
     btb_pred_t    id_btb;           // what the BTB said in IF for the instruction in ID
     btb_update_t  btb_update;       // Control -> Fetch: a branch or JAL completed in EX
     btb_inval_t   btb_inval;        // Control -> Fetch: the BTB was wrong for the insn in ID
     ras_ctrl_t    ras_ctrl;         // Control -> return stack: push for a call, pop for a return
     iaddr_t       id_ras_top;       // top of the return stack: where a return in ID goes
     insn_t        id_insn;          // instruction in ID: its word, from Mig3Fetch
-    logic         id_wait;          // the slot in ID waits for its word from the I-cache
-    logic         id_keep;          // IF/ID keeps its slot
+    iaddr_t       id_next_pc;       // the address fetch requested after the insn in ID
+    fetch_t       if2_slot;         // the slot of IF2 (pipeline view)
+    logic         if2_wait;         // the slot in IF2 waits for its word from the I-cache
+    logic         if2_keep;         // IF2 keeps its slot
+    logic         if_taken;         // an instruction enters IF2 (pipeline view)
     decoded_t     id_dec;           // instruction in ID taken apart
     logic         id_pred_taken;    // conditional branch in ID guessed taken
     logic         id_redirected;    // fetch went to the target of the insn in ID (IF or ID)
@@ -159,12 +162,12 @@ module Mig3Core import Mig3Pkg::*; #(
 
     // IF
     Mig3Fetch #(.CFG(CFG)) u_mig3_fetch(
-        .clk, .rst_n, .ctrl(if_ctrl), .btb_update, .btb_inval, .imem_req(icache_req),
-        .imem_rsp(icache_rsp), .fetch(id_fetch), .insn(id_insn), .btb_pred(id_btb), .id_wait,
-        .id_keep);
+        .clk, .rst_n, .uncached, .ctrl(if_ctrl), .btb_update, .btb_inval,
+        .imem_req(icache_req), .imem_rsp(icache_rsp), .fetch(id_fetch), .insn(id_insn),
+        .btb_pred(id_btb), .id_next_pc, .if_taken, .if2(if2_slot), .if2_wait, .if2_keep);
 
     Mig3Control u_mig3_control(
-        .clk, .rst_n, .if_pc(icache_req.addr), .id_fetch, .id_dec, .id_pred_taken, .id_btb,
+        .clk, .rst_n, .id_next_pc, .id_fetch, .id_dec, .id_pred_taken, .id_btb,
         .id_ras_top, .ex_ras_target(id_ex_q.ras_target),
         .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
         .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
@@ -340,18 +343,18 @@ module Mig3Core import Mig3Pkg::*; #(
     end
 
     // Pipeline view: the slots of the stages and their moves (pipe_trace_t, Mig3Pkg).
-    assign pipe_trace = '{if_req:   icache_req.valid && icache_rsp.ready,
+    assign pipe_trace = '{if_req:   if_taken,
                           if_pc:    icache_req.addr,
-                          id:       '{valid:  id_fetch.valid || id_wait,
-                                      bubble: id_fetch.bubble,
-                                      pc:     id_fetch.pc},
+                          if2:      if2_slot,
+                          id:       id_fetch,
                           ex:       ex_fetch,
                           mem:      '{valid:  ex_mem_q.valid,
                                       bubble: mem_wait ? BUBBLE_DMEM : ex_mem_q.bubble,
                                       pc:     mem_ret.pc_rdata[WIDTH-1:IADDR_START]},
-                          redirect: if_ctrl.redirect,
-                          id_wait:  id_wait,
-                          id_stall: id_keep,
+                          redirect: if_ctrl.redirect || !if_ctrl.run,
+                          if2_wait:  if2_wait,
+                          if2_stall: if2_keep,
+                          id_stall:  if_ctrl.stall,
                           ex_stall: pipe_ctrl.ex_stall,
                           ex_flush: pipe_ctrl.ex_flush,
                           mem_wait: mem_wait};

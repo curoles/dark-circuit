@@ -6,25 +6,26 @@
  * of one size): the I-cache SkewedCacheRdOnly, 1 << CFG.icache_sets_width lines a way; the
  * D-cache SkewedCache, 1 << CFG.dcache_sets_width lines a way, write-through, no
  * write-allocate. Their CPU side is a channel of Mig3Pkg (imem_req_t from fetch, dmem_req_t
- * from the load/store unit, and their answers), one word: a fetch or a load takes its word
- * of the line the cache answers (the word index of the request, kept when the cache takes
- * it); a store writes its word into every word of the line, with its strobes only in its
- * own. A hit answers in the clock after the request, as a memory of latency 1; a miss asks
- * memory for the line and answers when it comes; a store goes to memory in any case. Their
- * memory sides share one memory through InsnDataCacheArbiter (u_arbiter): when both ask,
- * the instruction cache first while prio says so (Mig3Core: while ID has no instruction,
- * every stage starves), else the data cache (a load that waits stalls every stage); each
- * side's request goes through the arbiter's flow-through buffer, so neither cache sees
- * memory's ready or the other cache's valid without a flop (kb pattern
- * rtl/lib/block/flow_through_buffer/design). uncached=1 makes every request bypass both
- * caches: it passes to the arbiter as it comes (req_uncached of the library caches; the line
- * that holds its word), so the pipeline sees the memory's own timing, but for a fetch and a
- * load or store that want memory in the same clock (tests that count cycles). invalidate is
- * 0: Mig3 has no FENCE.I; a store to an address the I-cache holds is not seen by a later
- * fetch that hits (self-modifying code is not supported).
+ * from the load/store unit, and their answers), one word; a fetch gets the whole line the
+ * cache answers (Mig3Fetch selects the word and keeps the line, kb
+ * rtl/design/mig3/fetch_line), a load takes its word of the line (the word index of the
+ * request, kept when the cache takes it); a store writes its word into every word of the
+ * line, with its strobes only in its own. A hit answers in the clock after the request, as a
+ * memory of latency 1; a miss asks memory for the line and answers when it comes; a store
+ * goes to memory in any case. Their memory sides share one memory through
+ * InsnDataCacheArbiter (u_arbiter): when both ask, the instruction cache first while prio
+ * says so (Mig3Core: while ID has no instruction, every stage starves), else the data cache
+ * (a load that waits stalls every stage); each side's request goes through the arbiter's
+ * flow-through buffer, so neither cache sees memory's ready or the other cache's valid
+ * without a flop (kb pattern rtl/lib/block/flow_through_buffer/design). uncached=1 makes
+ * every request bypass both caches: it passes to the arbiter as it comes (req_uncached of
+ * the library caches; the line that holds its word), so the pipeline sees the memory's own
+ * timing, but for a fetch and a load or store that want memory in the same clock (tests that
+ * count cycles). invalidate is 0: Mig3 has no FENCE.I; a store to an address the I-cache
+ * holds is not seen by a later fetch that hits (self-modifying code is not supported).
  *
  *   icache_req (fetch) --> word in line --> SkewedCacheRdOnly u_icache --+
- *                      <-- word of line <--                              +--> InsnDataCache-
+ *                      <-- line <--------                                +--> InsnDataCache-
  *   dcache_req (lsu) ----> word in line --> SkewedCache u_dcache --------+    Arbiter --> mem_req
  *                      <-- word of line <--                                   u_arbiter <-- mem_rsp
  *
@@ -100,33 +101,29 @@ module Mig3Caches import Mig3Pkg::*; #(
         .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb),
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
-    // The CPU side is one word: a fetch or a load takes its word of the line, a store
-    // writes its word into every word of the line, with its strobes in its own.
+    // A fetch gets the line (fetch selects its word, after a register: kb
+    // rtl/design/mig3/fetch_line).
+    assign icache_rsp.data = i_line;
+
+    // The data side is one word: a load takes its word of the line, a store writes its
+    // word into every word of the line, with its strobes in its own.
     // @kb: rtl/design/mig3/cache_lines
     if (LINE_WORDS == 1) begin: g_one_word
-        assign icache_rsp.data = i_line;
         assign dcache_rsp.data = d_line;
         assign d_wdata         = dcache_req.wdata;
         assign d_wstrb         = dcache_req.wstrb;
     end else begin: g_words
         localparam WORD_BITS = $clog2(LINE_WORDS);
-        word_t [LINE_WORDS-1:0] i_words;        // the answers as words
-        word_t [LINE_WORDS-1:0] d_words;
-        logic  [WORD_BITS-1:0]  i_word;         // the word of the answer: the request's
-        logic  [WORD_BITS-1:0]  d_word;
+        word_t [LINE_WORDS-1:0] d_words;        // the answer as words
+        logic  [WORD_BITS-1:0]  d_word;         // the word of the answer: the request's
 
         // The answer comes a clock after the request is taken, or later; the next request is
         // taken at that edge at the earliest, so the index kept still belongs to the answer.
-        always_ff @(posedge clk) begin
-            if (icache_req.valid && icache_rsp.ready)
-                i_word <= icache_req.addr[LINE_START-1:IADDR_START];
+        always_ff @(posedge clk)
             if (dcache_req.valid && dcache_rsp.ready)
                 d_word <= dcache_req.addr[LINE_START-1:DADDR_START];
-        end
 
-        assign i_words         = i_line;
         assign d_words         = d_line;
-        assign icache_rsp.data = i_words[i_word];
         assign dcache_rsp.data = d_words[d_word];
         assign d_wdata         = {LINE_WORDS{dcache_req.wdata}};
         assign d_wstrb         = line_strb_t'(dcache_req.wstrb)

@@ -4,14 +4,16 @@
  * A cycle out of reset and not halted retires an instruction or a bubble: retire.bubble
  * tells why (bubble_e, Mig3Pkg). Checks: an instruction has no bubble reason, a bubble has
  * one; a redirect bubble (branch, jump, return, trap, MRET) follows the instruction of that
- * class that retired right before it, at most 2 (a branch guessed taken: first pred_taken,
- * then cond_branch when guessed wrong; a return predicted by the return stack: first
- * pred_ret, then ret when predicted wrong); a btb_fix bubble (ID corrects the BTB) is an error
- * while the BTB tag covers the word address of imem (Mig3ConfigPkg: then no two pcs share
- * an entry), else it comes first after the instruction; a load-use bubble follows a load,
+ * class that retired right before it, at most 3 (a redirect from ID costs 2, from EX 3:
+ * the register stage between IF2 and ID; a branch guessed taken: first pred_taken, then
+ * cond_branch when guessed wrong; a return predicted by the return stack: first pred_ret,
+ * then ret when predicted wrong); a btb_fix bubble (ID corrects the BTB) is an error while
+ * the BTB tag covers the word address of imem (Mig3ConfigPkg: then no two pcs share an
+ * entry), else it comes first after the instruction (the first 2); a load-use bubble
+ * follows a load,
  * and the next instruction reads its rd; division bubbles come right before a division;
- * fill bubbles only before the first instruction after reset or resume; imem bubbles (ID
- * waits for imem) at any time; dmem bubbles come right before a load or store. The trace
+ * fill bubbles only before the first instruction after reset or resume; imem bubbles
+ * (IF2 waits for imem) at any time; dmem bubbles come right before a load or store. The trace
  * gets a
  * line per bubble; report() at the end of the run prints the count per reason and checks
  * that every counted cycle retired an instruction or a bubble. It also gives the pipeline
@@ -119,19 +121,19 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                 if (BTB_FULL_TAG)
                     $fatal(1, "Mig3: cycle %0d: btb_fix bubble after pc %h, but the BTB tag covers imem",
                            cycle, prev_pc);
-                else if (redirect_bubbles != 0)
+                else if (redirect_bubbles >= 2)
                     $fatal(1, "Mig3: cycle %0d: btb_fix bubble after pc %h, %0d bubbles before",
                            cycle, prev_pc, redirect_bubbles);
-            BUBBLE_PRED_RET:    // a return predicted by the return stack: first, right after it
-                if (!prev_ret || redirect_bubbles != 0)
+            BUBBLE_PRED_RET:    // a return predicted by the return stack: the first 2 after it
+                if (!prev_ret || redirect_bubbles >= 2)
                     $fatal(1, "Mig3: cycle %0d: pred_ret bubble after pc %h (%s, %0d bubbles before)",
                            cycle, prev_pc, bubble_name(redirect_class), redirect_bubbles);
-            BUBBLE_PRED_TAKEN:  // a branch guessed taken: first, right after it
-                if (redirect_class != BUBBLE_COND_BRANCH || redirect_bubbles != 0)
+            BUBBLE_PRED_TAKEN:  // a branch guessed taken: the first 2 after it
+                if (redirect_class != BUBBLE_COND_BRANCH || redirect_bubbles >= 2)
                     $fatal(1, "Mig3: cycle %0d: pred_taken bubble after pc %h (%s, %0d bubbles before)",
                            cycle, prev_pc, bubble_name(redirect_class), redirect_bubbles);
             default:        // redirect classes
-                if (b != redirect_class || redirect_bubbles >= 2)
+                if (b != redirect_class || redirect_bubbles >= 3)
                     $fatal(1, "Mig3: cycle %0d: %s bubble after pc %h (%s, %0d bubbles before)",
                            cycle, bubble_name(b), prev_pc, bubble_name(redirect_class),
                            redirect_bubbles);
