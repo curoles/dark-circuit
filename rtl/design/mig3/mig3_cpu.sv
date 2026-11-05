@@ -18,6 +18,8 @@ module Mig3Cpu import Mig3Pkg::*; #(
     input  wire         clk,
     input  wire         rst_n,          // synchronous reset, active low
     input  wire         uncached,       // the core bypasses its caches, see Mig3Caches
+    input  wire         meip,           // machine external interrupt: the testbench, a PLIC
+                                        // later
     output wire         halt,           // core halted at EBREAK, see Mig3Core
     output retire_t     retire,         // for trace in testbench
     output pipe_trace_t pipe_trace,     // pipeline view for testbench
@@ -33,7 +35,7 @@ module Mig3Cpu import Mig3Pkg::*; #(
     /* verilator lint_on UNUSEDSIGNAL */
 
     Mig3Core #(.CFG(CFG)) u_mig3_core(
-        .clk, .rst_n, .uncached, .mem_req, .mem_rsp, .halt, .retire, .pipe_trace, .dbg_req,
+        .clk, .rst_n, .uncached, .meip, .mem_req, .mem_rsp, .halt, .retire, .pipe_trace, .dbg_req,
         .dbg_rsp);
 
     // The memory, code and data; latency 1, always ready.

@@ -69,7 +69,7 @@ module Mig3MulDiv import Mig3Pkg::*; (
     assign stall = muldiv && dec.muldiv.div && !div_ready;
 
     // A division runs only while its instruction is in EX: nothing removes a stalled
-    // instruction from EX (no interrupts yet).
+    // instruction from EX (an interrupt is taken only before it acts, Mig3Control).
     `DC_ASSERT(a_busy_has_div, !busy || (muldiv && dec.muldiv.div))
     // The header's promise: the instruction and its registers do not change during the
     // division, so rs1_data is still the dividend at the end (REM by 0 returns it).

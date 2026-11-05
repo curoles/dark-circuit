@@ -101,6 +101,18 @@ the longest path 5.7 ns; so it stays 5.2). The test lrsc.S runs LR/SC in the cor
 the pipeline, and the retire check checks every SC against a reservation of its own.
 Why: `kb/rtl/design/mig3/lr_sc.yaml`.
 
+### Interrupts
+
+Mig3 takes the machine external interrupt: one input, meip, the level an interrupt
+controller holds until the interrupt is claimed (a PLIC in Mig3Cpu later; the testbench
+now). mie.MEIE enables it, mip.MEIP shows it, mstatus.MIE is the global enable. It is
+taken on the instruction in EX in the first cycle that instruction acts: it does nothing,
+traps with mcause 0x8000000b, and runs again after MRET. The testbench raises meip at
+random times (+irq_random) and drops it when the handler claims with a store to
+irq_claim. irq.S places interrupts on chosen instructions; irq_random.S checks that
+interrupts at random places do not change what a program computes. WFI is a no-op. Why:
+`kb/rtl/design/mig3/interrupts.yaml`.
+
 ## CoreMark
 
 CoreMark (EEMBC) runs as three benchmark tests: its sources unchanged (fetched at

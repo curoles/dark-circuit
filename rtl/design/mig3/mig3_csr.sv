@@ -20,7 +20,13 @@
  * - mstatus: MIE and MPIE; MPP reads 3 (machine mode only), other bits 0; mstatush 0.
  * - mtvec: direct mode only, bits 1:0 read 0; mepc: bits 1:0 read 0 (no C extension).
  * - mcause, mtval: written by traps, and by CSR instructions.
- * - mie, mip: read 0, writes ignored (no interrupts yet).
+ * - mie: MEIE (bit 11), read and write, other bits 0; mip: MEIP (bit 11) is meip, the
+ *   machine external interrupt, read-only (the interrupt controller clears it), other
+ *   bits 0.
+ *
+ * Interrupts. csr.irq = MEIP && MEIE && MIE: an interrupt is pending and enabled; from
+ * flops and meip only, so Mig3Control takes it on the instruction after a CSR write or
+ * MRET that enables it. An interrupt trap sets the interrupt bit of mcause.
  *
  * Traps and MRET. A trap (trap.valid) sets mepc to pc, mcause and mtval from trap, MPIE
  * to MIE and MIE to 0; MRET, when it completes, sets MIE to MPIE and MPIE to 1. A
@@ -44,6 +50,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t    rs1_data,
     input  iaddr_t   pc,         // address of the instruction in EX
+    input  wire      meip,       // machine external interrupt pending (mip.MEIP)
     input  trap_t    trap,       // the instruction in EX traps
     output word_t    rdata,      // old value of the CSR
     output wire      illegal,    // CSR does not exist, or write to a read-only CSR
@@ -61,6 +68,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     word_t  mscratch;
     logic   mstatus_mie;    // machine interrupt enable
     logic   mstatus_mpie;   // MIE before the trap
+    logic   mie_meie;       // machine external interrupt enable (mie.MEIE)
     iaddr_t mtvec;
     iaddr_t mepc;
     word_t  mcause;
@@ -101,7 +109,9 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             CSR_MEPC:                               old = {mepc, {IADDR_START{1'b0}}};
             CSR_MCAUSE:                             old = mcause;
             CSR_MTVAL:                              old = mtval;
-            CSR_MSTATUSH, CSR_MIE, CSR_MIP:         old = '0;
+            CSR_MSTATUSH:                           old = '0;
+            CSR_MIE:                                old = word_t'(mie_meie) << IRQ_MACHINE_EXTERNAL;
+            CSR_MIP:                                old = word_t'(meip) << IRQ_MACHINE_EXTERNAL;
             CSR_MISA:                               old = MISA;
             CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID,
             CSR_MHARTID:                            old = '0;
@@ -176,7 +186,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             mtval  <= '0;
         end else if (trap.valid) begin
             mepc   <= pc;
-            mcause <= {{(WIDTH-$bits(excp_code_t)){1'b0}}, trap.cause};
+            mcause <= {trap.irq, {(WIDTH-1-$bits(excp_code_t)){1'b0}}, trap.cause};
             mtval  <= trap.tval;
         end else if (we && addr == CSR_MEPC)
             mepc   <= new_iaddr;
@@ -185,6 +195,11 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
         else if (we && addr == CSR_MTVAL)
             mtval  <= new_value;
 
+    // mie: MEIE; the other interrupts do not exist. mip: MEIP is meip, read-only.
+    always_ff @(posedge clk)
+        if (!rst_n)                     mie_meie <= 1'b0;
+        else if (we && addr == CSR_MIE) mie_meie <= new_value[IRQ_MACHINE_EXTERNAL];
+
     // mtvec.
     always_ff @(posedge clk)
         if (!rst_n)                       mtvec <= '0;
@@ -192,5 +207,6 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
 
     assign csr.mtvec = mtvec;
     assign csr.mepc  = mepc;
+    assign csr.irq   = meip && mie_meie && mstatus_mie;
 
 endmodule

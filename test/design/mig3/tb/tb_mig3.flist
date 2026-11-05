@@ -2,4 +2,5 @@ tb_mig3_pkg.sv
 tb_mig3_pipe_view.sv
 tb_mig3_bubble_check.sv
 tb_mig3_debugger.sv
+tb_mig3_irq.sv
 tb_mig3_retire_check.sv

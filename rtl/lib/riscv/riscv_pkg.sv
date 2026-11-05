@@ -81,6 +81,10 @@ package RiscvPkg;
     localparam excp_code_t CAUSE_SUPERVISOR_ECALL    = 5'd9;
     localparam excp_code_t CAUSE_MACHINE_ECALL       = 5'd11;
 
+    // Interrupts: interrupt i is bit i of mip and mie and, with the interrupt bit (the
+    // top bit of mcause), exception code i. The machine external interrupt: MEIP, MEIE.
+    localparam excp_code_t IRQ_MACHINE_EXTERNAL      = 5'd11;
+
     // Integer registers by ABI name, those a design or a test needs: x1 (ra) and x5 (t0)
     // are the link registers of the return-address hints of JAL and JALR, a0 and a1 the
     // first arguments (semihosting).

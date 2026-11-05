@@ -251,17 +251,20 @@ package Mig3Pkg;
         logic   misaligned; // target byte address is not 4-byte aligned; with taken=1 a fault
     } branch_t;
 
-    // Control -> Csr: trap of the instruction in EX (machine mode).
+    // Control -> Csr: trap of the instruction in EX (machine mode): an exception, or an
+    // interrupt taken on it.
     typedef struct packed {
         logic                 valid;
+        logic                 irq;      // an interrupt (mcause interrupt bit)
         RiscvPkg::excp_code_t cause;    // exception code for mcause, RiscvPkg CAUSE_*
         word_t                tval;     // value for mtval: address or instruction, 0 when none
     } trap_t;
 
-    // Csr -> Control: where traps and MRET go.
+    // Csr -> Control: where traps and MRET go, and whether an interrupt is to be taken.
     typedef struct packed {
         iaddr_t mtvec;      // trap handler
         iaddr_t mepc;       // MRET target
+        logic   irq;        // an interrupt is pending and enabled: MEIP, MEIE and MIE
     } csr_t;
 
     // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none;

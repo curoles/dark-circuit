@@ -36,6 +36,10 @@
  * in MEM/WB, and an SC's result, which goes there (Mig3Atomic): the instruction in ID
  * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
  * bubble meanwhile.
+ * Interrupts: an interrupt that is pending and enabled (csr.irq) is taken on the
+ * instruction in EX in the first cycle it acts, before it sends a request or starts a
+ * division: ex_irq=1, the instruction does nothing and traps (mepc = its pc, it runs
+ * again after MRET).
  * Every bubble carries its reason (bubble_e, Mig3Pkg): the redirect class (JAL, branch
  * guessed taken, return, BTB corrected from ID; branch guessed wrong, JALR or return (not
  * predicted, predicted wrong), trap, MRET from EX), fill
@@ -102,6 +106,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
                                                     // insn in ID; carried to EX
     output wire                        ex_done,
     output trap_t                      ex_trap,
+    output wire                        ex_irq,      // an interrupt is taken on the insn in EX
     output iaddr_t                     ex_next_pc,  // next pc of the instruction in EX (retire)
     output wire                        halt,
     output iaddr_t                     halt_pc
@@ -142,17 +147,34 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     logic       flush_id;    // the instruction in ID must not go on
     bubble_e    redirect_why; // reason of the bubbles of a redirect
 
-    // Traps, MRET, a halting EBREAK and redirects of EX happen once, in a cycle the
-    // instruction acts (not while it waits behind a load in MEM/WB).
-    assign ex_stop = ex_act && ex_dec.sys.ebreak && ebreak_halt;
-    assign ex_mret = ex_act && ex_dec.sys.mret;
+    // Interrupts: taken on the instruction in EX in the first cycle it acts, before it
+    // sends a request or starts a division (it may stay in EX: a division, the D-cache
+    // does not take its request; a request once offered is not withdrawn). It then does
+    // nothing and traps; its own exception, if any, comes when it runs again after MRET.
+    // csr.irq comes from flops and meip: a CSR write or MRET that enables it counts for
+    // the next instruction, as the spec asks.
+    // @kb: rtl/design/mig3/interrupts
+    logic ex_acted;     // the instruction in EX acted in an earlier cycle (it stays)
+    always_ff @(posedge clk)
+        if (!rst_n || !ex_stall) ex_acted <= 1'b0;
+        else if (ex_act)         ex_acted <= 1'b1;
+    assign ex_irq = ex_act && !ex_acted && csr.irq;
 
-    // Fault of the instruction in EX; at most one source applies to an instruction.
+    // Traps, MRET, a halting EBREAK and redirects of EX happen once, in a cycle the
+    // instruction acts (not while it waits behind a load in MEM/WB); an interrupted
+    // EBREAK or MRET does nothing.
+    assign ex_stop = ex_act && ex_dec.sys.ebreak && ebreak_halt && !ex_irq;
+    assign ex_mret = ex_act && ex_dec.sys.mret && !ex_irq;
+
+    // Fault of the instruction in EX; at most one exception applies to an instruction,
+    // an interrupt comes first.
     always_comb begin
         ex_fault = ex_act;
         ex_cause = '0;
         ex_tval  = '0;
-        if (ex_dec.sys.illegal || ex_csr_illegal) begin
+        if (ex_irq)
+            ex_cause = IRQ_MACHINE_EXTERNAL;
+        else if (ex_dec.sys.illegal || ex_csr_illegal) begin
             ex_cause = CAUSE_ILLEGAL_INSTRUCTION;
             ex_tval  = ex_insn;
         end else if (ex_dec.sys.ecall)
@@ -172,9 +194,10 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
             ex_fault = 1'b0;
     end
 
-    assign ex_trap.valid = ex_fault;
-    assign ex_trap.cause = ex_cause;
-    assign ex_trap.tval  = ex_tval;
+    assign ex_trap.valid     = ex_fault;
+    assign ex_trap.irq       = ex_irq;
+    assign ex_trap.cause     = ex_cause;
+    assign ex_trap.tval      = ex_tval;
 
     // EBREAK decides in EX (ex_stop: fetch stops, ID is flushed); the core halts after
     // it retired in MEM/WB, so halt=1 comes the cycle after its retire.

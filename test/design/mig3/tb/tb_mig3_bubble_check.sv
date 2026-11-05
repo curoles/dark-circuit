@@ -62,6 +62,9 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
     logic    dmem_pending;          // after a dmem bubble: the next one loads or stores
     logic    prev_ret;              // the last retired instruction is a return (also one that
                                     // trapped: ID predicted it all the same)
+    logic    prev_jal;              // ... a JAL, prev_branch a conditional branch, also one
+    logic    prev_branch;           // that trapped (an interrupt taken on it in EX after ID
+                                    // redirected for it: those bubbles keep their reason)
 
     // JALR is a return (pops the return-address stack, RISC-V hints) when rs1 is x1 or
     // x5, unless rd = rs1.
@@ -130,11 +133,12 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                     $fatal(1, "Mig3: cycle %0d: pred_ret bubble after pc %h (%s, %0d bubbles before)",
                            cycle, prev_pc, bubble_name(redirect_class), redirect_bubbles);
             BUBBLE_PRED_TAKEN:  // a branch guessed taken: the first 2 after it
-                if (redirect_class != BUBBLE_COND_BRANCH || redirect_bubbles >= 2)
+                if (!prev_branch || redirect_bubbles >= 2)
                     $fatal(1, "Mig3: cycle %0d: pred_taken bubble after pc %h (%s, %0d bubbles before)",
                            cycle, prev_pc, bubble_name(redirect_class), redirect_bubbles);
-            default:        // redirect classes
-                if (b != redirect_class || redirect_bubbles >= 3)
+            default:        // redirect classes; dir_jump also after a JAL that trapped
+                if ((b != redirect_class && !(b == BUBBLE_DIR_JUMP && prev_jal)) ||
+                    redirect_bubbles >= 3)
                     $fatal(1, "Mig3: cycle %0d: %s bubble after pc %h (%s, %0d bubbles before)",
                            cycle, bubble_name(b), prev_pc, bubble_name(redirect_class),
                            redirect_bubbles);
@@ -210,6 +214,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             retired          <= retired + 1;
             redirect_class   <= redirect_class_of(retire.trap, retire.insn);
             prev_ret         <= is_ret(retire.insn);
+            prev_jal         <= retire.insn ==? JAL;
+            prev_branch      <= redirect_class_of(1'b0, retire.insn) == BUBBLE_COND_BRANCH;
             redirect_bubbles <= 0;
             load_rd          <= retire.mem_rmask != 0 || retire.insn ==? SC_W ?
                                 retire.rd_addr : '0;

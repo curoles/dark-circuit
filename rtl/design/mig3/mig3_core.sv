@@ -62,6 +62,7 @@ module Mig3Core import Mig3Pkg::*; #(
     output mem_req_t    mem_req,
     input  mem_rsp_t    mem_rsp,
     input  wire         uncached,          // every request bypasses the caches (Mig3Caches)
+    input  wire         meip,              // machine external interrupt (a PLIC, Mig3Cpu)
 
     // Retire trace, pipeline view and halt.
     output wire         halt,              // core halted at EBREAK, see dbg_req.ebreak_halt
@@ -130,6 +131,7 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
     trap_t        ex_trap;          // instruction in EX faults: retires as a trap
+    logic         ex_irq;           // an interrupt is taken on it: it does nothing
     logic         ex_rd_write;      // instruction in EX will write rd (not x0)
     reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
@@ -179,7 +181,7 @@ module Mig3Core import Mig3Pkg::*; #(
         .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
         .ras_ctrl,
-        .id_redirected, .ex_done, .ex_trap, .ex_next_pc, .halt, .halt_pc);
+        .id_redirected, .ex_done, .ex_trap, .ex_irq, .ex_next_pc, .halt, .halt_pc);
 
     Mig3Decode u_mig3_decode(.insn(id_insn), .dec(id_dec));
 
@@ -234,7 +236,8 @@ module Mig3Core import Mig3Pkg::*; #(
 
     // One data request in flight: EX sends its request only while no load in MEM/WB waits
     // (or its word comes now); a request the D-cache does not take stays offered, EX waits.
-    assign ex_lsu_valid = ex_fetch.valid && !mem_wait;
+    // An instruction an interrupt is taken on sends nothing.
+    assign ex_lsu_valid = ex_fetch.valid && !mem_wait && !ex_irq;
     assign ex_dmem_wait = dcache_req.valid && !dcache_rsp.ready;
 
     Mig3Lsu u_mig3_lsu(
@@ -249,6 +252,8 @@ module Mig3Core import Mig3Pkg::*; #(
         .rs1_data(ex_rs1_data), .trap(ex_trap), .cancel(ex_sc_cancel),
         .rd_data(ex_atomic_rd_data));
 
+    // An instruction an interrupt is taken on sends nothing to the D-cache.
+    `DC_ASSERT(a_irq_no_request, !ex_irq || !dcache_req.valid)
     // A failing SC sends nothing to the D-cache.
     `DC_ASSERT(a_sc_cancel_no_req, !ex_sc_cancel || !dcache_req.valid)
 
@@ -261,11 +266,11 @@ module Mig3Core import Mig3Pkg::*; #(
 
     Mig3Csr u_mig3_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
-        .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .trap(ex_trap), .rdata(ex_csr_rdata),
+        .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
         .illegal(ex_csr_illegal), .csr);
 
     Mig3MulDiv u_mig3_muldiv(
-        .clk, .rst_n, .valid(ex_fetch.valid), .hold(mem_wait), .dec(ex_dec),
+        .clk, .rst_n, .valid(ex_fetch.valid && !ex_irq), .hold(mem_wait), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall),
         .result(ex_muldiv_result));
 

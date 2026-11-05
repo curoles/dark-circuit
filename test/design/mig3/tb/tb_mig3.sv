@@ -39,6 +39,9 @@
  * +max_cycles=<n> (default 100000) only stops a run that does not end;
  * +mem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how the memory
  * of Mig3Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready.
+ * +irq_random=<seed>: TbMig3Irq raises meip, the machine external interrupt, at random
+ * times (+irq_max_gap=<n>) and drops it when the program claims: a store to its word
+ * irq_claim (address from +symbols); without it meip stays 0.
  * +uncached: every request of the core bypasses its caches (Mig3Caches), so the program sees
  * the memory's own timing: for tests that count cycles.
  * Bubbles, their checks, their trace lines and the count per reason at the end:
@@ -71,6 +74,11 @@ module TbMig3;
     integer      trace_fd;              // 0: no trace
     string       mem_latency;           // +mem_latency
     logic        uncached;              // +uncached
+    logic        irq_random;            // +irq_random given
+    int unsigned irq_seed;              // its seed
+    int unsigned irq_max_gap;           // +irq_max_gap
+    word_t       irq_claim;             // address of irq_claim
+    logic        meip;                  // the interrupt of TbMig3Irq
     int          lat [6];               // its six numbers
     logic        expect_trap;
     logic        first_ebreak_traps;
@@ -111,7 +119,8 @@ module TbMig3;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
-    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
+    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached, .meip, .halt, .retire, .pipe_trace, .dbg_req,
+                       .dbg_rsp);
 
     TbMig3PipeView u_pipe_view(.clk, .rst_n, .halt, .retire, .pipe_trace);
 
@@ -119,6 +128,10 @@ module TbMig3;
         .clk, .rst_n, .halt, .resume(dbg_req.resume), .retire, .cycle, .trace_fd);
 
     TbMig3Debugger u_debugger(.clk, .halt, .ebreak_halt, .cycle, .trace_fd, .dbg_rsp, .dbg_req);
+
+    TbMig3Irq u_irq(
+        .clk, .rst_n, .enable(irq_random), .seed(irq_seed), .max_gap(irq_max_gap),
+        .claim_addr(irq_claim), .retire, .cycle, .trace_fd, .meip);
 
     TbMig3RetireCheck u_retire_check(
         .clk, .rst_n, .halt, .halted, .allow_trap(expect_trap || riscv_test), .retire, .dbg_req,
@@ -239,6 +252,9 @@ module TbMig3;
         riscv_test           = $test$plusargs("riscv_test");
         no_debugger          = $test$plusargs("no_debugger");
         uncached             = $test$plusargs("uncached");
+        irq_random           = $value$plusargs("irq_random=%d", irq_seed);
+        if (!$value$plusargs("irq_max_gap=%d", irq_max_gap))     irq_max_gap    = 200;
+        irq_claim            = '0;
         check_halt_pc        = $value$plusargs("expect_halt_pc=%h", expect_halt_pc);
         check_exit           = $value$plusargs("expect_exit=%d", expect_exit);
         if (!$value$plusargs("resumes=%d", resumes))               resumes        = 0;
@@ -277,6 +293,14 @@ module TbMig3;
             find_symbol(symbols_file, "tohost", found, tohost);
             if (!found)
                 $fatal(1, "Mig3: no symbol tohost in %s", symbols_file);
+        end
+        if (irq_random) begin
+            logic found;
+            if (!$value$plusargs("symbols=%s", symbols_file))
+                $fatal(1, "Mig3: +irq_random needs +symbols=<file>");
+            find_symbol(symbols_file, "irq_claim", found, irq_claim);
+            if (!found)
+                $fatal(1, "Mig3: +irq_random: no symbol irq_claim in %s", symbols_file);
         end
 
         @(posedge rst_n);

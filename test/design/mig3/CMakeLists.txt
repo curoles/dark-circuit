@@ -158,6 +158,14 @@ if(DARK_CIRCUIT_RISCV)
     # (see lrsc.S); the retire check checks every SC against a reservation of its own.
     mig3_program_test(lrsc SOURCES lrsc.S ARCH rv32ia ARGS +expect_trap +expect_regs)
 
+    # Interrupts: the machine external interrupt (meip) of the testbench's source
+    # (TbMig3Irq, +irq_random), taken on chosen instructions (irq.S), and at random places
+    # without changing what a program computes (irq_random.S).
+    mig3_program_test(irq SOURCES irq.S ARCH rv32ima
+                      ARGS +expect_trap +expect_regs +irq_random=1)
+    mig3_program_test(irq_random SOURCES irq_random.S ARCH rv32ima
+                      ARGS +expect_trap +expect_regs +irq_random=7 +irq_max_gap=60)
+
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
 

@@ -1,0 +1,73 @@
+type: decision
+title: The machine external interrupt (meip), taken on the instruction in EX before it acts
+date: 2026-11-05
+question: >
+  Mig3 gets interrupts. Which source first, what does the core see, where in the pipeline
+  is an interrupt taken, and how is it tested?
+decision: >
+  One input, meip (the name of the mip bit, as Rocket's interrupts.meip): the machine
+  external interrupt, a level that an interrupt controller holds until the interrupt is
+  claimed (the spec: MEIP "is read-only in mip, and is set and cleared by a
+  platform-specific interrupt controller"). Mig3Cpu has the port; a PLIC goes into Mig3Cpu
+  later (a platform block, shared by harts, reached over the memory port), the core does not
+  change. No synchronizer: the source runs on the core's clock ("asynchronous" is to the
+  instruction stream, not to the clock). Mig3Csr: mie.MEIE read and write, mip.MEIP is meip
+  (read-only), csr.irq = MEIP && MEIE && MIE from flops and meip; an interrupt trap sets
+  the interrupt bit of mcause (0x8000000b), mtval 0. Mig3Control takes it on the
+  instruction in EX in the first cycle it acts (ex_irq; ex_acted marks an instruction that
+  stays in EX after acting: a division, the D-cache not taking its request): the
+  instruction does nothing (no request, no division started, no CSR write, no halt of an
+  EBREAK, no MRET) and traps; mepc is its pc, it runs again after MRET. An interrupt comes
+  before the instruction's own exception. WFI stays a no-op (the spec allows it). The
+  testbench's TbMig3Irq raises meip at random times (+irq_random=<seed>, +irq_max_gap) and
+  drops it when the program stores to its word irq_claim, as a handler claims at a PLIC.
+why: >
+  EX is where Mig3 decides every trap (MEM/WB never traps), so priority, the redirect to
+  mtvec and mepc are reused, and the interrupt is precise: every older instruction
+  completes, the interrupted one has done nothing. Before it acts, no request is offered,
+  so none is withdrawn (valid/ready rule 2 of AGENTS.md). csr.irq from flops makes a CSR
+  write or MRET that enables an interrupt count for the next instruction (the spec:
+  "evaluated immediately following the execution of an xRET instruction or an explicit
+  write to a CSR"). The wait is bounded: one division or one D-cache wait. A claim by a
+  store keeps meip a level, as with a real controller, without MMIO yet.
+rejected:
+  - choice: Take the interrupt in ID, as the instruction moves to EX
+    why_not: >
+      The instruction right behind a CSR write that enables interrupts would be judged with
+      the old value: one instruction late.
+  - choice: Take it in any cycle of the instruction in EX (abort a division, withdraw a request)
+    why_not: >
+      A division is restartable, but a request once offered may not be withdrawn; the first
+      cycle is enough, the wait is bounded.
+  - choice: A synchronizer (SignalClockSync) on meip
+    why_not: There is no second clock; it would only add two clocks of latency.
+  - choice: A timer interrupt (CLINT mtime, mtimecmp) first
+    why_not: It is memory-mapped; Mig3 has no MMIO yet.
+  - choice: The testbench drops meip when the interrupt is taken; markers that raise it
+    why_not: >
+      A claim by the handler is how hardware does it, and lets a handler that does not claim
+      see the interrupt again (a level); polling mip.MEIP with MIE = 0 places an interrupt
+      exactly without a marker.
+  - choice: A field in retire_t for interrupts
+    why_not: No check needs it; an interrupt retires as a trap without register write or access.
+relies_on:
+  - rtl/design/mig3/lr_sc
+evidence: >
+  2026-11-05, Verilator: Mig3's 114 tests pass, every trace of before identical (meip 0
+  without +irq_random). irq.S: 10 cases, 9 claims (one interrupt taken twice without a
+  claim), each mepc on its chosen instruction. irq_random.S: 119 interrupts at random
+  places, the same checksum as without them. First run: the bubble check rejected the
+  dir_jump bubble of a JAL that ID had redirected and that an interrupt was then taken on
+  (a flushed bubble keeps its reason); it now allows the ID-redirect bubbles after a JAL or
+  branch that trapped, as it did for returns. sky130: 5.2 -> 5.5 ns, 331 524 -> 332 715
+  um2. The longest path is the one-cycle multiplier (a tree of xor3) into EX's rd mux and
+  the forwarding to ID, not the interrupt logic: with csr.irq tied to 0 still 5.5 ns,
+  without the reads of mie and mip 5.2 ns (the netlist of before); the rd mux with the
+  product last (late_input_last_mux) 5.4 ns, and 5.3 ns on Mig3 without interrupts. Taking
+  the multiplier off that path is a step of its own.
+code:
+  - rtl/design/mig3/mig3_control.sv#ex_acted
+  - rtl/design/mig3/mig3_csr.sv#mie_meie
+  - test/design/mig3/tb/tb_mig3_irq.sv
+  - test/design/mig3/irq.S
+  - test/design/mig3/irq_random.S
