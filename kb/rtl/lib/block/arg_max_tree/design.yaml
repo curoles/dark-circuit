@@ -1,0 +1,49 @@
+type: decision
+title: ArgMaxTree, the largest of N valid values and its index, a tree of halves
+date: 2026-11-05
+question: >
+  The PLIC picks the highest-priority pending interrupt of a target; priority arbiters,
+  schedulers and a top-1 of scores need the same. A generic library block for it (user):
+  which ports and results, how are ties and "no valid input" defined, how is the struct
+  version built?
+decision: >
+  ArgMaxTree #(N, WIDTH): inputs values as one packed array [N-1:0][WIDTH-1:0] (as MuxN and
+  RegFile) and valid [N-1:0]; outputs max_valid (some input valid), max_value (the largest
+  valid value) and max_index ($clog2(N) bits, 1 for N = 1). Values are unsigned; a tie goes
+  to the lowest index (the PLIC's rule: the lowest ID wins); with no valid input all three
+  outputs are 0. Combinational, N 1 or more. The behave version scans from index 0 and
+  keeps an input only when it is larger. The struct version instantiates itself for the
+  lower inputs (NLO, the largest power of 2 below N) and the upper ones; a node takes the
+  upper winner when it is valid and the lower one is not valid or smaller (hi > lo is the
+  carry out of hi + ~lo, a KoggeStoneAdder), the index is {sel_hi, winner's index}; a leaf
+  masks its value with its valid.
+why: >
+  Defined results for every input (0 when nothing is valid) cost one And2 per leaf bit and
+  let a caller use the outputs without a guard. A tree of halves is log2(N) nodes deep; the
+  halves have different sizes and index widths when N is not a power of 2, which recursion
+  states directly, and every instance is a separate module, so there are no arrays of
+  levels (the false loop Verilator saw in the tree of PriorityEncoder). The comparator from
+  an adder's carry reuses the library (no magnitude comparator exists).
+rejected:
+  - choice: The nodes as one flat array of levels with offsets, as MuxN
+    why_not: >
+      The halves differ in size and index width; offsets and widths per level would be
+      functions where recursion has two lines, and arrays of levels gave Verilator's false
+      loop in PriorityEncoder's tree. Recursion builds and passes in Verilator, Icarus, sv2v
+      and Yosys.
+  - choice: Results undefined when no input is valid
+    why_not: Every caller would need a guard; the mask is one gate per bit.
+  - choice: A register stage inside (pipelined for large N)
+    why_not: >
+      Not needed yet; a caller registers around it (the PLIC's target registers its
+      outputs). A parameter later if a large N needs it.
+evidence: >
+  2026-11-05: behave and struct versions against one testbench (N=1..5 exhaustive for
+  inputs of up to 12 bits; N=8, 31, 33 directed and random; a two-pass model; coverage of no
+  valid input, a tie, every index), Verilator and Icarus (0.3 and 0.7 s); 5 of 5 mutants
+  caught. sv2v and Yosys, sky130 (ABC estimate), N=31 WIDTH=3: struct 4 410 um2, 5.0 ns;
+  behave 4 498 um2, 32.3 ns (a chain: the flow maps logic as written). N=32 WIDTH=8: struct
+  10 070 um2, 6.3 ns; behave 9 732 um2, 48.1 ns.
+code:
+  - rtl/lib/block/arg_max_tree/struct/arg_max_tree.sv#g_node
+  - rtl/lib/block/arg_max_tree/behave/arg_max_tree.sv#arg_max

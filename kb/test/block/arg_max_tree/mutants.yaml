@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the ArgMaxTree test (behave and struct versions)
+date: 2026-11-05
+tests: [block_arg_max_tree_behave, block_arg_max_tree_struct]
+mutants:
+  - name: behave, a tie goes to the higher index
+    edits:
+      - file: rtl/lib/block/arg_max_tree/behave/arg_max_tree.sv
+        old: "if (vld[k] && (!found || v[k] > best)) begin"
+        new: "if (vld[k] && (!found || v[k] >= best)) begin"
+    expect: model
+  - name: struct, a tie goes to the upper half (hi >= lo)
+    edits:
+      - file: rtl/lib/block/arg_max_tree/struct/arg_max_tree.sv
+        old: ".in1(hi_value), .in2(lo_value_n), .ci(1'b0), .co(hi_gt), .sum(diff));"
+        new: ".in1(hi_value), .in2(lo_value_n), .ci(1'b1), .co(hi_gt), .sum(diff));"
+    expect: model
+  - name: struct, a leaf does not mask its value with valid
+    edits:
+      - file: rtl/lib/block/arg_max_tree/struct/arg_max_tree.sv
+        old: ".in2({WIDTH{valid[0]}})"
+        new: ".in2({WIDTH{1'b1}})"
+    expect: model
+  - name: struct, the upper half wins only by value (lower valid ignored)
+    edits:
+      - file: rtl/lib/block/arg_max_tree/struct/arg_max_tree.sv
+        old: "Ind2 #(1) u_ind2(.in1(hi_gt), .in2(lo_valid), .out(hi_gt_or_lo_n));"
+        new: "Ind2 #(1) u_ind2(.in1(hi_gt), .in2(1'b1), .out(hi_gt_or_lo_n));"
+    expect: model
+  - name: struct, the top bit of the index is lost
+    edits:
+      - file: rtl/lib/block/arg_max_tree/struct/arg_max_tree.sv
+        old: "assign max_index[IW-1] = sel_hi;"
+        new: "assign max_index[IW-1] = 1'b0;"
+    expect: model

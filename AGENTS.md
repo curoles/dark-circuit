@@ -198,7 +198,8 @@ the chunk that establishes it:
   `KoggeStoneAdder`, a small storage read combinationally `RegFile`, a queue `Fifo`, one of
   N inputs by a binary select `MuxN`, a value N clocks later `DelayLine`, an arbiter
   `RoundRobinArbiter` (by position) or `MatrixLruArbiter` (least recently granted), a
-  channel's ready path cut without a clock more `FlowThroughBuffer`.
+  channel's ready path cut without a clock more `FlowThroughBuffer`, the largest of N
+  valid values and its index `ArgMaxTree`.
 - Logic only one parameter value needs: a generate branch `g_<variant>`, so the other
   variants do not have it (the round-robin flop in `block/cache/insn_data_cache_arbiter/struct`).
   A variant that is another block with some logic left out: a parameter of that block
