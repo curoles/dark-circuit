@@ -53,6 +53,7 @@
 -F plic/plic_gateway/behave/plic_gateway.flist
 -F plic/plic_target/behave/plic_target.flist
 -F plic/plic_claim/behave/plic_claim.flist
+-F plic/plic_decode/behave/plic_decode.flist
 -F noc/noc.flist
 -F noc/noc_virt_ch_in/behave/noc_virt_ch_in.flist
 -F noc/noc_virt_ch_out/behave/noc_virt_ch_out.flist

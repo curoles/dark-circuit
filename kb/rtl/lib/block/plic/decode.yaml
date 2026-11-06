@@ -1,0 +1,44 @@
+type: decision
+title: PlicDecode turns an address into one select per register, the address only
+date: 2026-11-05
+question: >
+  The PLIC's registers are reached through the register port by address (PlicPkg's map, the
+  spec's). What tells which register an access is for, and in what form do the registers
+  and the read mux get it?
+decision: >
+  PlicDecode #(N_SOURCES, N_CONTEXTS), combinational: the word's address (bits 25 to 2) in,
+  one select per register out (sel_priority[k] by source ID, sel_pending[w],
+  sel_enable[c][w], sel_threshold[c], sel_claim[c]); exactly one is 1 for a register of this
+  PLIC, none for a reserved address. It does not see whether the access reads or writes: a
+  write enable is a select And the write, a read takes the selected register; the PLIC top
+  does that. The behave version expands PlicPkg's decode(); the struct version compares the
+  high bits of the address with each block's number (4 KiB blocks: the priorities, the
+  pending words, a context's registers; 128 bytes: a context's enables) and the low bits
+  with each word number, shared by the blocks of one size, and Ands the two.
+why: >
+  One-hot selects are what the registers need (a StrbReg's we is its select and the write)
+  and what a read mux of And-Or takes without an encoder. Keeping read and write out leaves
+  the block one function, the map, and lets the top add the rules of a register kind (a
+  claim on a read, a complete on a write covering the ID's bytes). The struct version's
+  comparators per block cost a CmpEq per context, not a subtractor: the spec's map puts every
+  block at a multiple of its size.
+rejected:
+  - choice: A binary read index for a MuxN as well (the earlier plan)
+    why_not: >
+      The selects are already one-hot; an index needs an encoder of them, or a second
+      decode, for a mux no cheaper than And-Or.
+  - choice: Selects gated with the access's read and write inside
+    why_not: >
+      Two more outputs per register and the PLIC's access rules in the map's block.
+relies_on:
+  - rtl/lib/block/plic/register_map
+  - rtl/lib/block/plic/register_port
+evidence: >
+  2026-11-05: test/block/plic/plic_decode, behave and struct versions on Verilator and Icarus
+  (at most 0.09 s): PLICs of 31 sources and 2 contexts, 32 and 1, 100 and 5; every register
+  and the address after the last of each kind, then random addresses near the registers and
+  anywhere, every select compared with PlicPkg's decode() and every select seen; 5 of 5
+  mutants caught (kb test/block/plic/plic_decode/mutants).
+code:
+  - rtl/lib/block/plic/plic_decode/behave/plic_decode.sv#g_priority
+  - rtl/lib/block/plic/plic_decode/struct/plic_decode.sv#g_word
