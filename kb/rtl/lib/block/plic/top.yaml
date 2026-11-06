@@ -1,0 +1,53 @@
+type: decision
+title: Plic, the top of the PLIC, wiring of the parts and a hold of one clock after a claim
+date: 2026-11-05
+question: >
+  How do the PLIC's parts (gateways, targets, PlicClaim, PlicDecode) and the generic blocks
+  (RegPortTarget, StrbReg, MuxOneHot, DelayLine) make the PLIC, and what keeps two claims from
+  getting the same source?
+decision: >
+  Plic #(N_SOURCES, N_CONTEXTS, PRIO_WIDTH, EDGE_TRIGGERED[N_SOURCES:1], ADDR_WIDTH,
+  DATA_WIDTH = 32): src[N_SOURCES:1] in, eip[N_CONTEXTS-1:0] out, the register port. One
+  file for both libraries, wiring only: RegPortTarget takes the requests; PlicDecode gives a
+  select per register; a register is a StrbReg written by its select And acc_wr (priorities
+  of PRIO_WIDTH bits, enable words of 32 bits or the bits left, whose bit 0, ID 0, is written
+  0; thresholds); a claim is a read (acc_rd And the select), a complete a write whose ID's
+  bytes are all written (And3 with an AndReduce of the strobes); a read takes the selected
+  register through a MuxOneHot of every register's word. Requests wait the clock after a
+  claim: hold is the claim delayed by one DelayLine stage (a flop, so req_ready is from
+  flops). ADDR_WIDTH at most 26 and enough for the last context's claim register; the
+  address is zero-extended to the map's 26 bits.
+why: >
+  A claim in clock t clears the source's pending bit at the end of t; PlicTarget's claim_id,
+  a register of the pending bits, shows it at the end of t + 1. Only a claim in clock t + 1
+  can read the stale ID, so one clock of hold is enough (the earlier "two clocks" of kb
+  rtl/lib/block/plic/claim counted one edge too many). The rest of the top has no logic of
+  its own beyond And gates: every function is a tested block.
+rejected:
+  - choice: Hold two clocks after a claim (the first plan)
+    why_not: >
+      One clock is enough (above); the test shows it: with no hold, a claim right after a
+      claim gets the same source and the test fails, with one clock it passes.
+  - choice: Hold after writes too (a claim right after disabling a source sees it enabled)
+    why_not: >
+      Not an error of the spec's kind (a claim gets a source that was enabled a clock
+      earlier); a stall after every write for it is not worth it. Software that must not
+      get the source disables it, then claims later.
+  - choice: A register for enable bit 0 (ID 0)
+    why_not: >
+      Written 0, it reads 0 as the spec wants; the StrbReg keeps the byte strobes aligned,
+      and the flop is a constant that synthesis removes.
+relies_on:
+  - rtl/lib/block/plic/design
+  - rtl/lib/block/plic/claim
+  - rtl/lib/block/plic/decode
+  - rtl/lib/block/plic/register_port
+evidence: >
+  2026-11-05: test/block/plic (block_plic_behave, block_plic_struct), Verilator only (user:
+  too long on Icarus), 0.05 and 0.14 s: PLICs of 5 sources, 2 contexts, 3-bit priorities,
+  an edge source, and of 33 sources, 1 context, 2-bit priorities, ADDR_WIDTH 22; 600 random
+  register requests against a model, then the interrupt scenarios as software does them;
+  6 of 6 mutants caught (kb test/block/plic/mutants). With no hold the second of two claims
+  back to back read the first one's source; with the one clock it passes.
+code:
+  - rtl/lib/block/plic/plic.sv#g_context

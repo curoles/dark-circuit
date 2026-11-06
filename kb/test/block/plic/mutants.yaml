@@ -1,0 +1,41 @@
+type: mutants
+title: Mutants of the whole-PLIC test (Plic with the behave and the struct library)
+date: 2026-11-05
+tests: [block_plic_behave, block_plic_struct]
+mutants:
+  - name: no hold after a claim
+    edits:
+      - file: rtl/lib/block/plic/plic.sv
+        old: ".in(claimed), .out(hold)"
+        new: ".in(claimed & 1'b0), .out(hold)"
+    expect: model
+  - name: a complete counts without the ID's byte
+    edits:
+      - file: rtl/lib/block/plic/plic.sv
+        old: ".in(acc_wstrb[IDB-1:0]), .out(id_written)"
+        new: ".in(acc_wstrb[IDB-1:0] | IDB'(1)), .out(id_written)"
+    expect: model
+  - name: enable bit 0 (ID 0) is written
+    edits:
+      - file: rtl/lib/block/plic/plic.sv
+        old: "assign wdata = {acc_wdata[EW-1:1], 1'b0};"
+        new: "assign wdata = acc_wdata[EW-1:0];"
+    expect: model
+  - name: a priority reads the next source's
+    edits:
+      - file: rtl/lib/block/plic/plic.sv
+        old: "DATA_WIDTH'(prio[k]);"
+        new: "DATA_WIDTH'(prio[(k + 1) % (N_SOURCES + 1)]);"
+    expect: model
+  - name: the trigger types of the sources in reverse order
+    edits:
+      - file: rtl/lib/block/plic/plic.sv
+        old: ".EDGE_TRIGGERED(EDGE_TRIGGERED[k])"
+        new: ".EDGE_TRIGGERED(EDGE_TRIGGERED[N_SOURCES + 1 - k])"
+    expect: model
+  - name: a claim of context c takes the claim ID of another context
+    edits:
+      - file: rtl/lib/block/plic/plic.sv
+        old: ".in2(sel_claim[c]), .out(claim_en[c])"
+        new: ".in2(sel_claim[N_CONTEXTS - 1 - c]), .out(claim_en[c])"
+    expect: model

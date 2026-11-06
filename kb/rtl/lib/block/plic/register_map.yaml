@@ -14,11 +14,11 @@ decision: >
   the strobes). A source or context beyond the PLIC's, ID 0's priority and the gaps of the
   map are REG_NONE: reserved, read 0, writes ignored.
 why: >
-  One place for the map: PlicRegs (behave), its test and a later driver or software test
+  One place for the map: PlicDecode (behave), its test and a later driver or software test
   read the same constants. A function of the PLIC's sizes serves every configuration; the
-  struct version of PlicRegs decodes with gates from the same constants.
+  struct version of PlicDecode decodes with gates from the same constants.
 rejected:
-  - choice: The offsets inside PlicRegs
+  - choice: The offsets inside PlicDecode
     why_not: The tests and software need them as well; one copy.
 relies_on:
   - rtl/lib/block/plic/design

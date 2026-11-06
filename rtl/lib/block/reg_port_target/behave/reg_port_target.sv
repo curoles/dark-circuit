@@ -10,7 +10,7 @@
  * for that clock, with acc_addr, acc_wdata and acc_wstrb (the request's fields); for a read
  * the device gives the data of acc_addr on rd_data in that same clock, and does a read's
  * side effect then (a PLIC claim): once per read. hold = 1 makes requests wait (the PLIC:
- * the two clocks after a claim); it must come from the device's flops, so that req_ready
+ * the clock after a claim); it must come from the device's flops, so that req_ready
  * does, the library's rule for ready.
  *
  *   clock      1        2        3        4        5        6

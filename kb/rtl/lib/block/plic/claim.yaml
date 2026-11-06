@@ -13,8 +13,9 @@ decision: >
   compared with the claimed one (the spec does not check it). Ports per context (arrays), so
   several contexts may claim or complete in one cycle. Atomic claims are not done here:
   a claim clears the source's pending bit at the next edge and the registered claim ID shows
-  it one edge later, so whoever takes the claim reads (PlicRegs) holds the next claim read
-  for those two clocks.
+  it one edge later, so whoever takes the claim reads (the Plic top) holds the next
+  request for the clock in between (kb rtl/lib/block/plic/top; first written as two
+  clocks, one edge too many).
 why: >
   The spec's rules for completion ("silently ignored" when the source is not enabled for
   the target) and a claim of ID 0 (none) fall out of the decode and the mask; per-context
@@ -23,7 +24,7 @@ why: >
 rejected:
   - choice: One complete port (complete_id shared by the contexts)
     why_not: Assumes one write per cycle; per-context ports cost nothing when unused.
-  - choice: Hide the claim window here (remember the IDs claimed in the last two clocks)
+  - choice: Hide the claim window here (remember the IDs claimed in the clock before)
     why_not: >
       State and comparators per context for what one wait of the claim read avoids; the
       register side already decides when a read is taken. OpenTitan's rv_plic has the same

@@ -8,8 +8,10 @@ decision: >
   A library block in rtl/lib/block/plic, one function per module and file (user: the
   highest quality, super modular), each with behave and struct versions and a test of its
   own: PlicGateway (one source), PlicTarget (one context), PlicClaim (claim and complete to
-  the sources), PlicRegs (the registers), Plic (wiring only), a package for the register
-  map. The spec's standard register map (priorities at 0x0, pending at 0x1000, enables at
+  the sources), PlicDecode (the register map to selects), Plic (wiring only, with the
+  generic RegPortTarget, StrbReg, MuxOneHot; kb rtl/lib/block/plic/top), a package
+  for the register map. The spec's standard register map (priorities at 0x0, pending
+  at 0x1000, enables at
   0x2000 + 0x80 per context, threshold at 0x200000 and claim/complete at 0x200004, + 0x1000
   per context), so standard drivers work. Edge or level triggered per source is a
   parameter fixed by the platform; an edge while a source is active is ignored. A source of
