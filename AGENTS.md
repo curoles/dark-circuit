@@ -205,6 +205,10 @@ the chunk that establishes it:
   A variant that is another block with some logic left out: a parameter of that block
   (`READ_ONLY`) and a wrapper with the variant's ports, one file above `behave/` and
   `struct/` listed by both flists (`block/cache/direct_cache_rd_only`).
+- A device's registers: the register port, plain signals `req_valid`, `req_ready`,
+  `req_we`, `req_addr`, `req_wdata`, `req_wstrb`, `rsp_valid`, `rsp_rdata` with
+  parameters `ADDR_WIDTH` and `DATA_WIDTH`, as the caches' CPU side; no bus inside, a
+  bus through an adapter block (kb `rtl/lib/block/plic/register_port`).
 - Behave versions: combinational logic with bit or field selects as `assign` or an
   `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a
   `case` on a whole signal (`block/alu2/behave`). Parameter limits `` `DC_STATIC_ASSERT ``,

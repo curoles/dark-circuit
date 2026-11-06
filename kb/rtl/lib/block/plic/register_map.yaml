@@ -1,0 +1,30 @@
+type: decision
+title: PlicPkg holds the spec's register map and a decode function of the address
+date: 2026-11-05
+question: >
+  Where does the PLIC's register map live, and how is an address turned into a register for
+  a PLIC of any number of sources and contexts?
+decision: >
+  PlicPkg: the spec's offsets as constants (priority 0x0 + 4k, pending 0x1000 + 4w,
+  enables 0x2000 + 0x80c + 4w, threshold 0x200000 + 0x1000c, claim/complete 0x200004 +
+  0x1000c), the limits (1023 sources, 15872 contexts, a 64 MiB map), and decode(address,
+  n_sources, n_contexts): which register (REG_PRIORITY, REG_PENDING, REG_ENABLE,
+  REG_THRESHOLD, REG_CLAIM, or REG_NONE), of which context and with which index (source ID,
+  or word of 32 IDs). The two low address bits are ignored (32-bit registers; the bytes are
+  the strobes). A source or context beyond the PLIC's, ID 0's priority and the gaps of the
+  map are REG_NONE: reserved, read 0, writes ignored.
+why: >
+  One place for the map: PlicRegs (behave), its test and a later driver or software test
+  read the same constants. A function of the PLIC's sizes serves every configuration; the
+  struct version of PlicRegs decodes with gates from the same constants.
+rejected:
+  - choice: The offsets inside PlicRegs
+    why_not: The tests and software need them as well; one copy.
+relies_on:
+  - rtl/lib/block/plic/design
+evidence: >
+  2026-11-05: decode() against a table of 34 addresses written from the spec's map for 31
+  sources and 2 contexts, 32 and 1, and 1023 and 15872, Verilator and Icarus; 3 of 3
+  mutants caught (one word of bits too few, the enable stride, source 0 as a register).
+code:
+  - rtl/lib/block/plic/plic_pkg.sv#decode
