@@ -1,0 +1,36 @@
+type: mutants
+title: Mutants of the RegPortTarget test (behave and struct versions, the assertions)
+date: 2026-11-05
+tests: [block_reg_port_target_behave, block_reg_port_target_struct]
+mutants:
+  - name: behave, a write is taken during hold
+    edits:
+      - file: rtl/lib/block/reg_port_target/behave/reg_port_target.sv
+        old: "assign req_ready = !hold;"
+        new: "assign req_ready = !hold || req_we;"
+    expect: model
+  - name: behave, a write is answered too (a_answer_only_read)
+    edits:
+      - file: rtl/lib/block/reg_port_target/behave/reg_port_target.sv
+        old: "else        rsp_valid <= acc_rd;"
+        new: "else        rsp_valid <= acc_rd || acc_wr;"
+    expect: a_answer_only_read
+  - name: struct, the answer's data is loaded by writes (a_answer_next)
+    edits:
+      - file: rtl/lib/block/reg_port_target/struct/reg_port_target.sv
+        old: ".clk, .en(acc_rd), .in(rd_data), .out(rsp_rdata));"
+        new: ".clk, .en(acc_wr), .in(rd_data), .out(rsp_rdata));"
+    quiet: [model]
+    expect: a_answer_next
+  - name: struct, a read reaches the device during hold
+    edits:
+      - file: rtl/lib/block/reg_port_target/struct/reg_port_target.sv
+        old: "And2 #(1) u_and2_rd(.in1(taken), .in2(we_n), .out(acc_rd));"
+        new: "And2 #(1) u_and2_rd(.in1(req_valid), .in2(we_n), .out(acc_rd));"
+    expect: model
+  - name: the requester changes an offer that was not taken (a_req_held)
+    edits:
+      - file: test/block/reg_port_target/tb_reg_port_target.sv
+        old: "if (taken || !req_valid) begin"
+        new: "if (1'b1) begin"
+    expect: a_req_held

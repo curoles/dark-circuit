@@ -1,0 +1,41 @@
+type: decision
+title: RegPortTarget, the device side of the register port as one-clock accesses
+date: 2026-11-05
+question: >
+  Devices of the library (the PLIC first) offer registers on the register port (kb pattern
+  rtl/lib/block/plic/register_port). Who does the handshake and the answer, so that a device
+  only has registers and their logic (user: register interfaces should have no logic of
+  their own, they call other modules)?
+decision: >
+  A generic block RegPortTarget #(ADDR_WIDTH, DATA_WIDTH): req_ready = !hold (hold from the
+  device's flops, so ready is from flops); a request taken (valid and ready) is, for that
+  clock, acc_rd or acc_wr with acc_addr, acc_wdata, acc_wstrb (the request's fields); the
+  device gives rd_data for acc_addr in the clock of acc_rd and does a read's side effect
+  then; RegPortTarget answers a read one clock later from a register (rsp_valid, rsp_rdata),
+  a write gets no answer. Three flops' worth of logic: a DffSyncRst for rsp_valid, a DffEn
+  for rsp_rdata. Assertions: rule 2 on the request (an offer not taken stays the same), the
+  answer one clock after a read with that clock's data, no answer without a read.
+why: >
+  Every device needs the same handshake; written once and tested once, a device is its
+  registers, its decode and a read mux. One-clock accesses make a read's side effect happen
+  once per read, by construction. The registered answer cuts the device's read path from
+  whatever takes the answer.
+rejected:
+  - choice: The handshake inside each device (as the first PlicRegs plan)
+    why_not: The same logic in every device, and a register module with logic of its own.
+  - choice: A registered request too (the device sees the access a clock later)
+    why_not: Not needed for timing yet; a clock more for every access. A parameter later.
+relies_on:
+  - rtl/lib/block/plic/register_port
+evidence: >
+  2026-11-05: behave and struct versions against one testbench, DATA_WIDTH 32 and 64 (the
+  testbench is the requester, keeping offers by rule 2, and a device of 16 registers with a
+  counter that each read increments; a reference model gives every answer; random requests,
+  strobes and hold, 3000 cycles on Verilator, 400 on Icarus; every case counted: reads in a
+  row, a read right after a write of the same register, a request held, a partial write, a
+  read of the counter), Verilator and Icarus (at most 0.09 s); 5 of 5 mutants caught, each
+  assertion by a mutant of its own rule (a_req_held by a requester that changes a held
+  offer).
+code:
+  - rtl/lib/block/reg_port_target/behave/reg_port_target.sv#req_ready
+  - rtl/lib/block/reg_port_target/struct/reg_port_target.sv#u_dff_en_rsp_rdata
