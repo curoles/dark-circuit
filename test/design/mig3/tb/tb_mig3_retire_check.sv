@@ -175,7 +175,8 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             if (strb[STRB_WIDTH*i +: STRB_WIDTH] != '0)
                 k = i;
         w.pc   = '0;
-        w.addr = {TbMig3.u_mig3_cpu.mem_req.addr, {LINE_START{1'b0}}} + word_t'(STRB_WIDTH * k);
+        w.addr = {TbMig3.u_mig3_cpu.mem_req.addr[WIDTH-1:LINE_START], {LINE_START{1'b0}}} +
+                 word_t'(STRB_WIDTH * k);
         w.mask = strb[STRB_WIDTH*k +: STRB_WIDTH];
         w.data = data[WIDTH*k +: WIDTH];
         return TbMig3.u_mig3_cpu.mem_req.valid && TbMig3.u_mig3_cpu.mem_req.we &&

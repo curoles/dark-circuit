@@ -11,8 +11,10 @@
  * of a sum depend only on the low bits of the operands, so the trap does not wait for the
  * adder and result mux of Mig3Alu; addr, the same sum, gives the word address.
  * mem describes the access for the retire trace (RVFI): bytes read or written; the word
- * read is added in MEM/WB. cancel=1 (an SC that fails, Mig3Atomic) does not do the store:
- * no request, no write in mem; a misaligned SC still traps.
+ * read is added in MEM/WB. dmem_req also carries the byte and the size of the access, so
+ * an uncached one reaches memory or a device exactly. cancel=1 (an SC that fails,
+ * Mig3Atomic) does not do the store: no request, no write in mem; a misaligned SC still
+ * traps.
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig3Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -59,6 +61,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     strb_t strb;        // bytes of the access: size of funct3 at offset
     strb_t strb_b;      // strobes of a byte at offset 0
     strb_t strb_h;      // strobes of a halfword at offset 0
+    size_t size;        // bytes of the access: 1 << size
     assign strb_b = {{(STRB_WIDTH - 1){1'b0}}, 1'b1};
     assign strb_h = {{(STRB_WIDTH - 2){1'b0}}, 2'b11};
 
@@ -83,6 +86,13 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
             default:     strb = '1;
         endcase
 
+    always_comb
+        case (dec.funct3)
+            F3_B, F3_BU: size = SIZE_B;
+            F3_H, F3_HU: size = SIZE_H;
+            default:     size = SIZE_W;
+        endcase
+
     // Store: bytes of rs2 repeated over the word, strobes select the bytes at offset.
     always_comb
         case (dec.funct3)
@@ -93,7 +103,9 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
 
     assign dmem_req.valid = (load || write) && !misaligned;
     assign dmem_req.we    = write;
-    assign dmem_req.addr  = addr[WIDTH-1:DADDR_START];
+    assign dmem_req.addr   = addr[WIDTH-1:DADDR_START];
+    assign dmem_req.offset = offset;
+    assign dmem_req.size   = size;
     assign dmem_req.wdata = wr_data;
     assign dmem_req.wstrb = strb;
 

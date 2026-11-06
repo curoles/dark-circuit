@@ -19,7 +19,8 @@
  * flow-through buffer, so neither cache sees memory's ready or the other cache's valid
  * without a flop (kb pattern rtl/lib/block/flow_through_buffer/design). uncached=1 makes
  * every request bypass both caches: it passes to the arbiter as it comes (req_uncached of
- * the library caches; the line that holds its word), so the pipeline sees the memory's own
+ * the library caches: exactly its bytes, address and size), so the pipeline sees the memory's
+ * own
  * timing, but for a fetch and a load or store that want memory in the same clock (tests that
  * count cycles). A load or store of the I/O region (CFG.io_base, 1 << CFG.io_addr_width
  * bytes) always bypasses the D-cache; code is never fetched from it. invalidate is 0:
@@ -64,7 +65,8 @@ module Mig3Caches import Mig3Pkg::*; #(
     assign d_uncached = uncached ||
         dcache_req.addr[WIDTH-1:CFG.io_addr_width] == CFG.io_base[WIDTH-1:CFG.io_addr_width];
 
-    // The caches' memory sides, to the arbiter: byte addresses of lines (offset 0).
+    // The caches' memory sides, to the arbiter: byte addresses, a line's (offset 0) or an
+    // uncached request's own, with its size.
     logic             i_mem_valid;
     logic             i_mem_ready;
     logic [WIDTH-1:0] i_mem_addr;
@@ -85,18 +87,13 @@ module Mig3Caches import Mig3Pkg::*; #(
     line_t            d_line;           // the D-cache's answer
     line_t            d_wdata;          // a store's word in every word of the line
     line_strb_t       d_wstrb;          // its strobes in its own word
-    // The line address goes to the memory port: the offset of the byte address is 0.
-    /* verilator lint_off UNUSEDSIGNAL */
-    logic [WIDTH-1:0] mem_byte_addr;
-    logic [2:0]       mem_size;          // the request's size: not on the port yet
-    /* verilator lint_on UNUSEDSIGNAL */
 
     // @kb: rtl/design/mig2/caches_in_core
     SkewedCacheRdOnly #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.icache_sets_width),
                         .SETS_OFFSET(LINE_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
-        .req_uncached(uncached), .req_size(3'd2), .req_ready(icache_rsp.ready),
+        .req_uncached(uncached), .req_size(SIZE_W), .req_ready(icache_rsp.ready),
         .rsp_valid(icache_rsp.valid), .rsp_data(i_line),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
         .mem_req_addr(i_mem_addr), .mem_req_size(i_mem_size),
@@ -107,8 +104,8 @@ module Mig3Caches import Mig3Pkg::*; #(
                   .SETS_OFFSET(LINE_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(d_uncached),
-        .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
-        .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(3'd2),
+        .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
+        .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
         .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
@@ -160,11 +157,10 @@ module Mig3Caches import Mig3Pkg::*; #(
         .dcache_rsp_valid(d_mem_rsp_valid),
         .dcache_rsp_data(d_mem_rsp_data),
         .mem_req_valid(mem_req.valid), .mem_req_ready(mem_rsp.ready), .mem_req_we(mem_req.we),
-        .mem_req_addr(mem_byte_addr), .mem_req_wdata(mem_req.wdata),
-        .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_size),
+        .mem_req_addr(mem_req.addr), .mem_req_wdata(mem_req.wdata),
+        .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_req.size),
         .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 
-    assign mem_req.addr = mem_byte_addr[WIDTH-1:LINE_START];
 
 endmodule

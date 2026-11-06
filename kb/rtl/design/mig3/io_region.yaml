@@ -30,7 +30,9 @@ relies_on:
 evidence: >
   2026-11-06, Verilator: the whole Mig3 suite passes (114 tests, the config check among
   them), nothing in it touches the region yet. That the D-cache is bypassed there shows with
-  the PLIC (Mig3Cpu): two claim reads in a row get different IDs.
+  the PLIC (Mig3Cpu): two claim reads in a row get different IDs. Mig3 sends loads and
+  stores to the D-cache with their byte address and size, and its memory port carries
+  them (kb rtl/lib/block/cache/uncached): the suite passes again with them.
 code:
   - rtl/design/mig3/mig3_caches.sv#d_uncached
   - rtl/design/mig3/cfg/mig3_config.yaml

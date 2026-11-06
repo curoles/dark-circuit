@@ -29,7 +29,8 @@ module Mig3Cpu import Mig3Pkg::*; #(
     localparam MEM_ADDR_WIDTH = CFG.mem_addr_width;   // memory size: 1 << MEM_ADDR_WIDTH bytes
 
     mem_rsp_t mem_rsp;
-    // Not fully used: address bits above MEM_ADDR_WIDTH (the memory wraps around).
+    // Not fully used: address bits above MEM_ADDR_WIDTH (the memory wraps around), the
+    // offset in the line and the size (the RAM moves lines).
     /* verilator lint_off UNUSEDSIGNAL */
     mem_req_t mem_req;
     /* verilator lint_on UNUSEDSIGNAL */

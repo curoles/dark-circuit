@@ -6,7 +6,8 @@
  * Modules import this package in their header, `module X import Mig3Pkg::*; #(`, and
  * their ports use its types (word_t, insn_t, iaddr_t, reg_id_t, ...).
  * Instruction and data addresses on ports are word addresses (iaddr_t, daddr_t),
- * register values are byte addresses like software sees them.
+ * register values are byte addresses like software sees them. The memory port's is a
+ * byte address with a size, as AXI's: an uncached access goes out exactly.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -45,6 +46,11 @@ package Mig3Pkg;
     typedef logic [8*LINE_SIZE-1:0]     line_t;        // a cache line: what memory moves
     typedef logic [LINE_SIZE-1:0]       line_strb_t;   // byte enables of a line
     typedef logic [WIDTH-1:LINE_START]  laddr_t;       // line address
+    typedef logic [2:0]                 size_t;        // bytes of an access: 1 << size
+                                                       // (AXI AxSIZE)
+    localparam size_t SIZE_B = 3'd0;                   // a byte
+    localparam size_t SIZE_H = 3'd1;                   // a halfword
+    localparam size_t SIZE_W = 3'd2;                   // a word
 
     // Two words, hi and lo: a 64-bit value on RV32 (a product, a 64-bit counter).
     typedef struct packed {
@@ -99,7 +105,8 @@ package Mig3Pkg;
     // of the request channel, the answer). imem_req_t: Mig3Fetch to the I-cache, a word
     // (the answer: the line that holds it, kb rtl/design/mig3/fetch_line);
     // dmem_req_t: Mig3Lsu to the D-cache, a word; mem_req_t: the one memory port of Mig3Core
-    // behind both caches, a line (SimLatencyRAM in Mig3Cpu). Mig3Fetch waits for the
+    // behind both caches, a line, or an uncached access exactly (its byte address and size;
+    // SimLatencyRAM in Mig3Cpu). Mig3Fetch waits for the
     // I-cache, EX and MEM/WB for the D-cache (Mig3Control).
 
     // Instruction fetch: the word at addr.
@@ -115,13 +122,16 @@ package Mig3Pkg;
     } imem_rsp_t;
 
     // Data: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0 reads the
-    // word at addr.
+    // word at addr. offset and size are the access's own bytes (an uncached one goes out
+    // exactly).
     typedef struct packed {
-        logic   valid;
-        logic   we;
-        daddr_t addr;
-        word_t  wdata;
-        strb_t  wstrb;
+        logic         valid;
+        logic         we;
+        daddr_t       addr;
+        byte_offset_t offset;   // byte in the word: with addr, the byte address
+        size_t        size;     // 1 << size bytes: a byte, a halfword or a word
+        word_t        wdata;
+        strb_t        wstrb;
     } dmem_req_t;
 
     typedef struct packed {
@@ -135,7 +145,8 @@ package Mig3Pkg;
     typedef struct packed {
         logic       valid;
         logic       we;
-        laddr_t     addr;
+        word_t      addr;   // byte address: a line's (offset 0), or an uncached access's
+        size_t      size;   // 1 << size bytes: the line, or the uncached access's
         line_t      wdata;
         line_strb_t wstrb;
     } mem_req_t;
