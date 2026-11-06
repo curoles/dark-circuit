@@ -1,0 +1,46 @@
+type: decision
+title: AddrDecode, address regions of a fixed map to one select per region
+date: 2026-11-06
+question: >
+  A request reaches one of several targets by its address (Mig3: the PLIC or the memory,
+  later more devices). What turns an address into the target, and how general is it?
+decision: >
+  AddrDecode #(ADDR_WIDTH, N_RULES, BASES, WIDTHS): rule r is a region of 1 << WIDTHS[r]
+  bytes at BASES[r], aligned to its size; sel[r] = the address bits above WIDTHS[r] equal
+  the base's; miss = no select (the caller's default target). The map is parameters, one
+  flat vector each (Icarus takes no packed array parameters); elaboration checks that each
+  base is aligned, each region smaller than the space, and no two regions overlap, so sel is
+  one-hot or 0. Combinational; behave a compare per rule, struct a CmpEq per rule and a
+  NorReduce for miss. Routing by the selects is another block (ReqDemux).
+why: >
+  A device's register block and a memory are aligned power-of-two regions, so one equality
+  compare per rule does it (OpenTitan's crossbar decodes base and mask the same way; PULP's
+  addr_decode takes arbitrary ranges, two magnitude compares per rule). A fixed map is the
+  platform's, and parameters let elaboration catch a wrong one. The decode apart from the
+  routing (user, as PULP's addr_decode and axi_demux, OpenTitan's decode and
+  tlul_socket_1n): either is useful alone.
+rejected:
+  - choice: Arbitrary ranges [start, end)
+    why_not: >
+      Two comparators per rule for what aligned regions do with one; a block of its own
+      later if memory of odd sizes needs it.
+  - choice: The map as input ports (changeable at run time)
+    why_not: Nothing to remap today, and no elaboration check of the map.
+  - choice: Overlapping rules, the first match wins
+    why_not: >
+      A priority chain to nest a region inside another; today's map needs none (the memory
+      is miss).
+  - choice: One block that decodes and routes (AddrReqDemux)
+    why_not: User chose the split; the selects also serve a mux of answers, an arbiter.
+relies_on:
+  - rtl/design/mig3/io_region
+evidence: >
+  2026-11-06: test/block/addr_decode, behave and struct versions on Verilator and Icarus (at
+  most 0.11 s): maps of 1 rule (12-bit addresses), 3 rules of different sizes, one at 0
+  (16-bit), 2 rules as Mig3's I/O region (32-bit); every rule's first and last byte, the
+  bytes before and after it, inside it and anywhere, against a model by subtraction; 4 of 4
+  mutants caught (kb test/block/addr_decode/mutants). Icarus first refused the packed array
+  parameters (AGENTS.md, simulator traps).
+code:
+  - rtl/lib/block/addr_decode/behave/addr_decode.sv#g_rule
+  - rtl/lib/block/addr_decode/struct/addr_decode.sv#g_rule

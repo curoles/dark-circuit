@@ -200,7 +200,8 @@ the chunk that establishes it:
   N inputs by a binary select `MuxN` or by a one-hot select `MuxOneHot`, a value N clocks
   later `DelayLine`, an arbiter `RoundRobinArbiter` (by position) or `MatrixLruArbiter`
   (least recently granted), a channel's ready path cut without a clock more
-  `FlowThroughBuffer`, the largest of N valid values and its index `ArgMaxTree`.
+  `FlowThroughBuffer`, the largest of N valid values and its index `ArgMaxTree`, which of
+  N address regions holds an address `AddrDecode`.
 - Logic only one parameter value needs: a generate branch `g_<variant>`, so the other
   variants do not have it (the round-robin flop in `block/cache/insn_data_cache_arbiter/struct`).
   A variant that is another block with some logic left out: a parameter of that block
@@ -248,6 +249,9 @@ Icarus means Icarus 13, the version the project uses.
 - Icarus does not take a packed array of two dimensions selected by two variables,
   `a[i][j]` ("Array index expressions must be constant here"); copy the row,
   `row = a[i]`, and select `row[j]` (`block/plic/plic_claim/behave`).
+- Icarus has no packed array parameters ("sorry: packed array parameters are not supported
+  yet"): one flat vector, `parameter [N*W-1:0] P`, element r `P[r*W +: W]`, written
+  `{p_N-1, ..., p_0}` by the caller as for a packed array (`block/addr_decode`).
 - Icarus has no queues of packed structs ("Queue of type netstruct_t is not yet
   supported"); queue plain vectors of `$bits(T)` and assign to and from T.
 - Icarus and fields of array elements: a field of an element of an unpacked array of

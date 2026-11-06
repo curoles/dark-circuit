@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the AddrDecode test (behave and struct versions)
+date: 2026-11-06
+tests: [block_addr_decode_behave, block_addr_decode_struct]
+mutants:
+  - name: behave, one bit fewer compared (a region twice its size)
+    edits:
+      - file: rtl/lib/block/addr_decode/behave/addr_decode.sv
+        old: "assign sel[r] = addr[ADDR_WIDTH-1:W] == BASE[ADDR_WIDTH-1:W];"
+        new: "assign sel[r] = addr[ADDR_WIDTH-1:W+1] == BASE[ADDR_WIDTH-1:W+1];"
+    expect: model
+  - name: behave, miss only when not every rule selects
+    edits:
+      - file: rtl/lib/block/addr_decode/behave/addr_decode.sv
+        old: "assign miss = sel == '0;"
+        new: "assign miss = sel != '1;"
+    expect: model
+  - name: struct, one bit more compared (a region half its size)
+    edits:
+      - file: rtl/lib/block/addr_decode/struct/addr_decode.sv
+        old: "W    = width_of(r);"
+        new: "W    = width_of(r) - 1;"
+    expect: model
+  - name: struct, miss is any select
+    edits:
+      - file: rtl/lib/block/addr_decode/struct/addr_decode.sv
+        old: "NorReduce #(N_RULES) u_nor_reduce_miss"
+        new: "OrReduce #(N_RULES) u_nor_reduce_miss"
+    expect: model
