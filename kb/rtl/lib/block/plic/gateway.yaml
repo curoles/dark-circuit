@@ -1,0 +1,38 @@
+type: decision
+title: PlicGateway, two flops (pending, active); a request in the cycle of complete is taken
+date: 2026-11-05
+question: >
+  The gateway of one PLIC source: what state, which requests are forwarded or ignored, and
+  what happens in the cycle the handler completes?
+decision: >
+  Two flops, as OpenTitan's rv_plic_gateway: pending (ip) and active (pending or in
+  service). A request is src at 1 (EDGE_TRIGGERED = 0) or a rising edge of src (1). With
+  done = active & complete & ~pending: take = set & (~active | done); pending gets
+  (pending & ~claim) | take; active gets take | (active & ~done). So a request in the cycle
+  of complete is taken (OpenTitan drops it), a complete while pending and a claim while not
+  pending are ignored, an edge while active is ignored, and a level that falls before the
+  claim stays pending. The struct version uses EdgeDetector for the edge, two DffSyncRst,
+  and Ao21 for both next states.
+why: >
+  The spec's gateway: one request at a time, a new one only after the completion. Taking
+  the request of the completion cycle loses no edge there and lets a level still at 1
+  request one clock earlier, for one gate. Ignoring stray claims and completes keeps
+  software mistakes from corrupting the state.
+rejected:
+  - choice: Ignore a request in the cycle of complete (OpenTitan)
+    why_not: An edge exactly then is lost for no gain.
+  - choice: Three explicit states (RoaLogic's ip_state)
+    why_not: Two flops say the same; the test's model is the state machine, a check from
+      another angle.
+relies_on:
+  - rtl/lib/block/plic/design
+evidence: >
+  2026-11-05: behave and struct versions against one testbench, level and edge triggered (a
+  state-machine model; directed sequences of every case, then random src in bursts with
+  claims and completes, 4000 cycles on Verilator, 600 on Icarus; every case counted),
+  Verilator and Icarus (at most 0.13 s); 5 of 5 mutants caught, two of them first by the
+  RTL's invariant a_pending_active (a complete while pending ends the activity; active
+  falling while pending).
+code:
+  - rtl/lib/block/plic/plic_gateway/behave/plic_gateway.sv#take
+  - rtl/lib/block/plic/plic_gateway/struct/plic_gateway.sv#u_ao21_active

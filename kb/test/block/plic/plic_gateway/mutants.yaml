@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the PlicGateway test (behave and struct versions)
+date: 2026-11-05
+tests: [block_plic_gateway_behave, block_plic_gateway_struct]
+mutants:
+  - name: behave, a request in the cycle of complete is dropped
+    edits:
+      - file: rtl/lib/block/plic/plic_gateway/behave/plic_gateway.sv
+        old: "assign take = set && (!active || done);"
+        new: "assign take = set && !active;"
+    expect: model
+  - name: behave, a complete while pending ends the activity (the invariant sees it first)
+    edits:
+      - file: rtl/lib/block/plic/plic_gateway/behave/plic_gateway.sv
+        old: "assign done = active && complete && !pending;"
+        new: "assign done = active && complete;"
+    expect: a_pending_active
+  - name: struct, any edge is a request (also a falling one)
+    edits:
+      - file: rtl/lib/block/plic/plic_gateway/struct/plic_gateway.sv
+        old: "EdgeDetector #(.EDGE(1), .RST_VAL(1'b0)) u_edge_detector("
+        new: "EdgeDetector #(.EDGE(2), .RST_VAL(1'b0)) u_edge_detector("
+    expect: model
+  - name: struct, a claim does not clear pending (claim not inverted)
+    edits:
+      - file: rtl/lib/block/plic/plic_gateway/struct/plic_gateway.sv
+        old: "Inv  #(1) u_inv_claim(.in(claim), .out(claim_n));"
+        new: "Buf  #(1) u_inv_claim(.in(claim), .out(claim_n));"
+    expect: model
+  - name: struct, c not inverted for active (active falls while pending; the invariant)
+    edits:
+      - file: rtl/lib/block/plic/plic_gateway/struct/plic_gateway.sv
+        old: "Inv  #(1) u_inv_c(.in(c), .out(c_n));"
+        new: "Buf  #(1) u_inv_c(.in(c), .out(c_n));"
+    expect: a_pending_active

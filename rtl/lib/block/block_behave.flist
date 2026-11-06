@@ -47,6 +47,7 @@
 -F compute_core_bitmanip/behave/compute_core_bitmanip.flist
 -F pop_count/behave/pop_count.flist
 -F arg_max_tree/behave/arg_max_tree.flist
+-F plic/plic_gateway/behave/plic_gateway.flist
 -F noc/noc.flist
 -F noc/noc_virt_ch_in/behave/noc_virt_ch_in.flist
 -F noc/noc_virt_ch_out/behave/noc_virt_ch_out.flist

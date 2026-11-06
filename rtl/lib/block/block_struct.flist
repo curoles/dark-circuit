@@ -46,6 +46,7 @@
 -F alu2/struct/alu2.flist
 -F pop_count/struct/pop_count.flist
 -F arg_max_tree/struct/arg_max_tree.flist
+-F plic/plic_gateway/struct/plic_gateway.flist
 -F compute_core_bitmanip/struct/compute_core_bitmanip.flist
 -F noc/noc.flist
 -F noc/noc_virt_ch_out/struct/noc_virt_ch_out.flist

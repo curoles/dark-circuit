@@ -1,0 +1,51 @@
+type: decision
+title: A RISC-V PLIC as a library block of small modules, with no bus of its own
+date: 2026-11-05
+question: >
+  Mig3 has a machine external interrupt input (meip) that a PLIC drives later. How is the
+  PLIC built, what does it implement, and what is borrowed from the open PLICs?
+decision: >
+  A library block in rtl/lib/block/plic, one function per module and file (user: the
+  highest quality, super modular), each with behave and struct versions and a test of its
+  own: PlicGateway (one source), PlicTarget (one context), PlicClaim (claim and complete to
+  the sources), PlicRegs (the registers), Plic (wiring only), a package for the register
+  map. The spec's standard register map (priorities at 0x0, pending at 0x1000, enables at
+  0x2000 + 0x80 per context, threshold at 0x200000 and claim/complete at 0x200004, + 0x1000
+  per context), so standard drivers work. Edge or level triggered per source is a
+  parameter fixed by the platform; an edge while a source is active is ignored. A source of
+  priority 0 is never eligible, also not for a claim; a claim is not gated by the threshold;
+  a complete for a source not enabled for the context is ignored (the spec). The outputs to
+  the harts (EIP) and the claim ID are registered. No synchronizer inside: a source on
+  another clock is synchronized by the platform. The registers sit behind a generic
+  request/answer port of the library, no concrete bus (user: the library must not assume
+  one); a bus adapter is a block of its own. Generic parts are library blocks: ArgMaxTree
+  (the largest priority and its ID), EdgeDetector, Decoder. Not in Mig3 yet: hooking it to
+  Mig3 (MMIO) is a step of its own.
+why: >
+  Small modules are easy to read and to test alone; generic parts serve other blocks
+  (arbiters, schedulers). The standard map is what Linux and OpenSBI expect. Platform
+  parameters for the trigger type and no synchronizers keep every gateway two flops.
+rejected:
+  - choice: RoaLogic's computed, packed register map
+    why_not: Not the spec's map; standard drivers would not work.
+  - choice: A register per source for edge or level (OpenTitan's le)
+    why_not: The spec has none; the device's wiring does not change at run time.
+  - choice: Counting edges while a source is active (RoaLogic's pending counter)
+    why_not: >
+      A counter and a width per source for handler runs that find nothing to do; the
+      spec allows ignoring them. A parameter later if a device needs it.
+  - choice: Synchronizers in the gateway (nktkt)
+    why_not: The sources are on the PLIC's clock; a crossing is synchronized where it is.
+  - choice: A concrete bus (TileLink, AHB-Lite, AXI-Lite as the three references)
+    why_not: A library block works with any bus through an adapter.
+relies_on:
+  - rtl/design/mig3/interrupts
+  - rtl/lib/block/arg_max_tree/design
+evidence: >
+  The references read 2026-11-05: OpenTitan rv_plic (gateway 112 lines, target 74,
+  prim_max_tree; registers generated, 24 042 lines), RoaLogic plic (core about 800 lines,
+  a computed register map of 715), nktkt riscv-soc (gateway, priority resolver, a 677-line
+  top mixing AXI-Lite and registers); the PLIC spec (riscv-plic-spec, claim, completion,
+  gateways, memory map). Ideas only, our own code.
+code:
+  - rtl/lib/block/plic
