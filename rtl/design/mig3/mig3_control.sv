@@ -111,8 +111,10 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     output wire                        halt,
     output iaddr_t                     halt_pc
 );
+    logic       rst;         // reset active
     logic       ex_stall;    // the instruction in EX stays for another cycle
     logic       ex_act;      // the instruction in EX acts now: it does not wait behind MEM/WB
+    assign rst      = !rst_n;
     // @kb: rtl/design/mig2/data_waits
     assign ex_stall = ex_muldiv_stall || ex_dmem_wait || mem_wait;
     assign ex_act   = ex_fetch.valid && !mem_wait;
@@ -156,7 +158,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     // @kb: rtl/design/mig3/interrupts
     logic ex_acted;     // the instruction in EX acted in an earlier cycle (it stays)
     always_ff @(posedge clk)
-        if (!rst_n || !ex_stall) ex_acted <= 1'b0;
+        if (rst || !ex_stall)    ex_acted <= 1'b0;
         else if (ex_act)         ex_acted <= 1'b1;
     assign ex_irq = ex_act && !ex_acted && csr.irq;
 
@@ -202,11 +204,11 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     // EBREAK decides in EX (ex_stop: fetch stops, ID is flushed); the core halts after
     // it retired in MEM/WB, so halt=1 comes the cycle after its retire.
     always_ff @(posedge clk)
-        if (!rst_n) mem_halting <= 1'b0;
-        else        mem_halting <= ex_stop;
+        if (rst) mem_halting <= 1'b0;
+        else     mem_halting <= ex_stop;
 
     always_ff @(posedge clk)
-        if (!rst_n)              running <= 1'b1;
+        if (rst)                 running <= 1'b1;
         else if (mem_halting)    running <= 1'b0;
         else if (halt && resume) running <= 1'b1;
 

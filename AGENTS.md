@@ -40,8 +40,9 @@ This file has the rules that are not in README.md.
 - Reset: ports are `rst_n`, synchronous and active low, and code writes `!rst_n`. Only a
   module that uses the reset in two or more places may declare
   `logic rst;  // reset active` with `assign rst = !rst_n;`, because `rst || x` reads
-  better than `!rst_n || x`; it then writes `rst` everywhere in that module, also
-  `if (rst)` in its always_ff blocks: one spelling per module.
+  better than `!rst_n || x`; it then writes `rst` wherever the reset is active, also
+  `if (rst)` in its always_ff blocks, and `rst_n` where "not in reset" is meant
+  (`run = rst_n && running`), never `!rst_n` or `!rst`.
 - Raw and qualified: when a signal is first computed without the condition that makes
   it count (valid, a fault, a flush) and then qualified, the first one is
   `<name>_raw` and the qualified one gets the plain name; then every use shows whether
