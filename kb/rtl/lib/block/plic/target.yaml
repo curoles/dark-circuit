@@ -1,0 +1,45 @@
+type: decision
+title: PlicTarget, vectors indexed by source ID, ArgMaxTree, registered EIP and claim ID
+date: 2026-11-05
+question: >
+  One PLIC context: which sources take part, how is the winner found, what do the
+  notification (EIP) and a claim see, and how are the sources numbered on the ports?
+decision: >
+  The vectors (ip, ie, prio) are indexed by the spec's source ID, [N_SOURCES:0], bit 0
+  unused (no source has ID 0). eligible[k] = ip[k] & ie[k] & (prio[k] != 0), eligible[0] = 0;
+  an ArgMaxTree over IDs 0 to N_SOURCES gives the winner's priority and its ID (0 if none),
+  so its index is the claim ID with no adder. eip = the winner's priority above the threshold
+  (with no eligible source it is 0, never above: no valid needed), claim_id = the winner's
+  ID; both registered (DffSyncRst in the struct version),
+  one clock after the inputs. The struct version: OrReduce and And3 per source, the
+  comparison with the threshold as the carry out of best_prio + ~threshold (KoggeStoneAdder,
+  as in ArgMaxTree's nodes). Assertion: eip implies a claim ID.
+why: >
+  Indexing by ID matches the spec's numbering everywhere (registers, claim, complete), and
+  ArgMaxTree's index 0 meaning "none" is the spec's ID 0. Priority 0 must not be claimable,
+  since a claim is not gated by the threshold (the spec), and "never interrupt" must hold for
+  claims too (OpenTitan's target seems to let such a source win a claim; nktkt excludes it).
+  Registered outputs cut the tree (about 5 ns for 31 sources in sky130) from what follows.
+rejected:
+  - choice: Vectors of N_SOURCES bits, source k at index k - 1
+    why_not: An adder for every claim ID and a minus one for every complete; two numberings.
+  - choice: The claim ID gated by the threshold
+    why_not: The spec says the claim is not affected by the threshold (a hart may poll).
+  - choice: A magnitude comparator part (CmpGt) for the two comparisons of the PLIC
+    why_not: >
+      Not yet: the carry of an adder is the library's way so far (ArgMaxTree); a part when a
+      third block needs it.
+relies_on:
+  - rtl/lib/block/plic/design
+  - rtl/lib/block/arg_max_tree/design
+evidence: >
+  2026-11-05: behave and struct versions against one testbench (N_SOURCES/PRIO_WIDTH 1/1,
+  3/2, 7/3, 31/3, 32/4; a model that searches from the highest priority down; directed
+  cases, then random inputs, 3000 cycles on Verilator, 300 on Icarus; every case counted:
+  none eligible, priority 0 passed over, a tie, a winner not above the threshold, eip),
+  Verilator and Icarus (at most 0.71 s); 5 of 5 mutants caught. The first mutants found
+  "eip = valid && above" redundant (an equivalent mutant survived): the winner's priority is
+  0 with no eligible source, so eip is the comparison alone.
+code:
+  - rtl/lib/block/plic/plic_target/behave/plic_target.sv#eligible_of
+  - rtl/lib/block/plic/plic_target/struct/plic_target.sv#g_eligible
