@@ -51,6 +51,7 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     input  wire                  icache_req_valid,
     output wire                  icache_req_ready,
     input  wire [ADDR_WIDTH-1:0] icache_req_addr,
+    input  wire [2:0]            icache_req_size,   // 1 << size bytes (AXI AxSIZE)
     output wire                  icache_rsp_valid,
     output wire [DATA_WIDTH-1:0] icache_rsp_data,
 
@@ -59,6 +60,7 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     output wire                  dcache_req_ready,
     input  wire                  dcache_req_we,
     input  wire [ADDR_WIDTH-1:0] dcache_req_addr,
+    input  wire [2:0]            dcache_req_size,   // 1 << size bytes (AXI AxSIZE)
     input  wire [DATA_WIDTH-1:0] dcache_req_wdata,
     input  wire [STRB_WIDTH-1:0] dcache_req_wstrb,
     output wire                  dcache_rsp_valid,
@@ -69,6 +71,7 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     input  wire                  mem_req_ready,
     output wire                  mem_req_we,
     output wire [ADDR_WIDTH-1:0] mem_req_addr,
+    output wire [2:0]            mem_req_size,      // 1 << size bytes (AXI AxSIZE)
     output wire [DATA_WIDTH-1:0] mem_req_wdata,     // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb,     // write: the bytes to write
     input  wire                  mem_rsp_valid,
@@ -100,30 +103,37 @@ module InsnDataCacheArbiter import CachePkg::*; #(
 
     // Each side's request goes through a flow-through buffer: the cache's ready comes from a
     // flop (its buffer is empty), never from memory's ready or the other cache's valid.
-    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + DATA_WIDTH + STRB_WIDTH; // {we, addr, wdata, wstrb}
-    typedef logic [ADDR_WIDTH-1:0]  i_req_t;
+    localparam I_REQ_WIDTH = ADDR_WIDTH + 3;    // {addr, size}
+    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + 3 + DATA_WIDTH + STRB_WIDTH;
+                                                // {we, addr, size, wdata, wstrb}
+    typedef logic [I_REQ_WIDTH-1:0] i_req_t;
     typedef logic [D_REQ_WIDTH-1:0] d_req_t;
 
     wire                  i_valid;      // the instruction cache's request, behind its buffer
     wire                  i_ready;
     wire [ADDR_WIDTH-1:0] i_addr;
+    wire [2:0]            i_size;
     wire                  d_valid;      // the data cache's request, behind its buffer
     wire                  d_ready;
     wire                  d_we;
     wire [ADDR_WIDTH-1:0] d_addr;
+    wire [2:0]            d_size;
     wire [DATA_WIDTH-1:0] d_wdata;
     wire [STRB_WIDTH-1:0] d_wstrb;
 
     // @kb: rtl/lib/block/flow_through_buffer/design
     FlowThroughBufferT #(.T(i_req_t)) u_icache_flow(
         .clk, .rst_n,
-        .in_valid(icache_req_valid), .in_ready(icache_req_ready), .in_data(icache_req_addr),
-        .out_valid(i_valid), .out_ready(i_ready), .out_data(i_addr));
+        .in_valid(icache_req_valid), .in_ready(icache_req_ready),
+        .in_data({icache_req_addr, icache_req_size}),
+        .out_valid(i_valid), .out_ready(i_ready), .out_data({i_addr, i_size}));
     FlowThroughBufferT #(.T(d_req_t)) u_dcache_flow(
         .clk, .rst_n,
         .in_valid(dcache_req_valid), .in_ready(dcache_req_ready),
-        .in_data({dcache_req_we, dcache_req_addr, dcache_req_wdata, dcache_req_wstrb}),
-        .out_valid(d_valid), .out_ready(d_ready), .out_data({d_we, d_addr, d_wdata, d_wstrb}));
+        .in_data({dcache_req_we, dcache_req_addr, dcache_req_size, dcache_req_wdata,
+                  dcache_req_wstrb}),
+        .out_valid(d_valid), .out_ready(d_ready),
+        .out_data({d_we, d_addr, d_size, d_wdata, d_wstrb}));
 
     // @kb: rtl/lib/block/cache/insn_data_cache_arbiter/design
     // The side that gets memory when both want it: prio, else POLICY. The only place that
@@ -153,6 +163,7 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     assign mem_req_valid = (side == SIDE_D) ? d_ok : i_ok;
     assign mem_req_we    = (side == SIDE_D) && d_we;
     assign mem_req_addr  = (side == SIDE_D) ? d_addr : i_addr;
+    assign mem_req_size  = (side == SIDE_D) ? d_size : i_size;
     assign mem_req_wdata = d_wdata;             // a write is always the data cache's
     assign mem_req_wstrb = d_wstrb;
 

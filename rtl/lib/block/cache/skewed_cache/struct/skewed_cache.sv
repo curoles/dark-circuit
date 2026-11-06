@@ -40,6 +40,7 @@ module SkewedCache #(
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
     input  wire                  req_uncached,  // the request bypasses the lines
+    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
     // The offset in the line is not used: the cache works on whole lines. The fields of a
     // store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -55,7 +56,8 @@ module SkewedCache #(
     output wire                  mem_req_valid,
     input  wire                  mem_req_ready,
     output wire                  mem_req_we,
-    output wire [ADDR_WIDTH-1:0] mem_req_addr,  // address of the line (offset 0)
+    output wire [ADDR_WIDTH-1:0] mem_req_addr,  // the line's (offset 0), or an uncached request's
+    output wire [2:0]            mem_req_size,  // 1 << mem_req_size bytes: the line, or uncached
     output wire [DATA_WIDTH-1:0] mem_req_wdata, // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
     input  wire                  mem_rsp_valid,
@@ -106,9 +108,9 @@ module SkewedCache #(
         u_control(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_uncached, .req_we, .req_addr, .req_wdata, .req_wstrb,
-            .rsp_valid, .rsp_data,
+            .req_size, .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-            .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data,
+            .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data,
             .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
             .replay, .ram_wr_line, .merged, .hit, .hit_line, .fill_conflict);
 

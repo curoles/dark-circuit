@@ -21,8 +21,9 @@
  *   idle      = Nor3(look, waiting, unc_busy)      unc_busy = unc_waiting AND ~mem_rsp_valid
  *   req_ready = Mux2(NorReduce(waiting_kept, replay, load_miss, held, unc_busy),
  *                    idle AND mem_req_ready, req_uncached)
- *   unc_pass  = req_valid AND req_uncached AND idle; the memory line a Mux2 of look_line and
- *               the request's on unc_pass, the fields of a write (g_store) one of the store kept
+ *   unc_pass  = req_valid AND req_uncached AND idle; the memory address a Mux2 of the line's
+ *               and the request's own on unc_pass, the size one of SETS_OFFSET and req_size,
+ *               the fields of a write (g_store) one of the store kept
  *               and the request's; unc_waiting a DffSyncRst like waiting
  *
  * @author    Igor Lesik
@@ -45,8 +46,8 @@ module CacheControl #(
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
     input  wire                  req_uncached,  // the request bypasses the lines
-    // The offset in the line is not used: the cache works on whole lines. The fields of a
-    // store are not used when READ_ONLY=1.
+    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
+    // The fields of a store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
     input  wire [ADDR_WIDTH-1:0] req_addr,
@@ -60,7 +61,8 @@ module CacheControl #(
     output wire                  mem_req_valid,
     input  wire                  mem_req_ready,
     output wire                  mem_req_we,
-    output wire [ADDR_WIDTH-1:0] mem_req_addr,  // address of the line (offset 0)
+    output wire [ADDR_WIDTH-1:0] mem_req_addr,  // the line's (offset 0), or an uncached request's
+    output wire [2:0]            mem_req_size,  // 1 << mem_req_size bytes: the line, or uncached
     output wire [DATA_WIDTH-1:0] mem_req_wdata, // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
     input  wire                  mem_rsp_valid,
@@ -84,6 +86,8 @@ module CacheControl #(
     localparam LINE_WIDTH  = ADDR_WIDTH - SETS_OFFSET;      // address bits above the offset
     localparam STORE_WIDTH = 1 + DATA_WIDTH + STRB_WIDTH;   // the fields of a store kept
 
+    `DC_STATIC_ASSERT(a_size_fits, SETS_OFFSET <= 7)
+
     wire                  accept;       // a cached request is taken
     wire                  look_ok;      // the lookup is no replay: its RAM outputs are its own
     wire                  replay_n;
@@ -98,7 +102,6 @@ module CacheControl #(
     wire                  load_miss;
     wire                  mem_ready_n;
     wire                  look_req;     // the lookup asks memory: a store or a load miss
-    wire [LINE_WIDTH-1:0] mem_line;     // the line memory is asked for
     wire                  held;         // its memory request is not taken: the lookup stays
     wire                  waiting;      // a load miss is served: memory has not answered yet
     wire                  waiting_next;
@@ -157,9 +160,16 @@ module CacheControl #(
     Or2  #(1) u_or2_mem_valid(.in1(unc_pass), .in2(look_req), .out(mem_req_valid));
     Inv  #(1) u_inv_mem_ready(.in(mem_req_ready), .out(mem_ready_n));
     And2 #(1) u_and2_held    (.in1(look_req), .in2(mem_ready_n), .out(held));
-    Mux2 #(LINE_WIDTH) u_mux2_mem_line(.in0(look_line), .in1(req_line), .sel(unc_pass),
-                                       .out(mem_line));
-    assign mem_req_addr = {mem_line, {SETS_OFFSET{1'b0}}};
+    // An uncached request as the CPU asked it (address and size), a cached one a line.
+    // @kb: rtl/lib/block/cache/uncached
+    Mux2 #(ADDR_WIDTH) u_mux2_mem_addr(.in0({look_line, {SETS_OFFSET{1'b0}}}), .in1(req_addr),
+                                       .sel(unc_pass), .out(mem_req_addr));
+    Mux2 #(3) u_mux2_mem_size(.in0(3'(SETS_OFFSET)), .in1(req_size), .sel(unc_pass),
+                              .out(mem_req_size));
+
+    // An uncached request is aligned to its size and fits its line.
+    `DC_ASSERT(a_unc_exact, !unc_pass || (int'(req_size) <= SETS_OFFSET &&
+        (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
 
     // The logic only stores need; a read-only cache has none of it. Both branches drive
     // look_we, store_write, merged, ram_wr_line and the fields of a memory write (mem_req_we,

@@ -12,7 +12,8 @@
  * hits also merges its bytes into the line that hits (merged), written when memory takes the
  * store (store_write); a store that misses leaves the cache as it is.
  * Memory side: requests on one valid/ready channel, in program order (mem_req_we, the
- * address of the line, for a write the line and its strobes), so a read sees every store
+ * address of the line and its size, mem_req_size = SETS_OFFSET, for a write the line and
+ * its strobes), so a read sees every store
  * before it. A write gets no answer; a read is answered by mem_rsp_valid with the line one
  * or more clocks after memory took it (no ready: the cache always takes the answer). While
  * memory does not take a request, the lookup holds it (held: the cache's RAM outputs hold)
@@ -25,7 +26,10 @@
  * lookup's place) and is looked up in the clock after. req_ready does not depend on the
  * request's address.
  * Uncached: a request with req_uncached=1 does not use the lines (no lookup, fill or update)
- * and passes straight to the memory side: it is taken when nothing is looked up or served, in
+ * and passes straight to the memory side with its own address and size (req_size, 1 <<
+ * req_size bytes as AXI's AxSIZE, the address aligned to it, within a line): exactly the
+ * bytes asked for, so a device sees no access the program did not make (kb
+ * rtl/lib/block/cache/uncached). It is taken when nothing is looked up or served, in
  * the clock memory takes it, so req_ready then follows mem_req_ready without a flop; a load is
  * answered in the clock memory answers, with memory's line. An address is used either cached
  * or uncached, never both: the cache does not check.
@@ -61,8 +65,8 @@ module CacheControl #(
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
     input  wire                  req_uncached,  // the request bypasses the lines
-    // The offset in the line is not used: the cache works on whole lines. The fields of a
-    // store are not used when READ_ONLY=1.
+    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
+    // The fields of a store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
     input  wire [ADDR_WIDTH-1:0] req_addr,
@@ -76,7 +80,8 @@ module CacheControl #(
     output wire                  mem_req_valid,
     input  wire                  mem_req_ready,
     output wire                  mem_req_we,
-    output wire [ADDR_WIDTH-1:0] mem_req_addr,  // address of the line (offset 0)
+    output wire [ADDR_WIDTH-1:0] mem_req_addr,  // the line's (offset 0), or an uncached request's
+    output wire [2:0]            mem_req_size,  // 1 << mem_req_size bytes: the line, or uncached
     output wire [DATA_WIDTH-1:0] mem_req_wdata, // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
     input  wire                  mem_rsp_valid,
@@ -97,6 +102,8 @@ module CacheControl #(
     input  wire                  fill_conflict, // the request is at the place the refill writes
     input  wire [DATA_WIDTH-1:0] hit_line       // the line of the way that hits
 );
+    `DC_STATIC_ASSERT(a_size_fits, SETS_OFFSET <= 7)
+
     logic                  accept;      // a cached request is taken
     logic                  look_ok;     // the lookup is no replay: its RAM outputs are its own
     logic                  wait_busy;   // a load miss is served, memory does not answer now
@@ -158,8 +165,15 @@ module CacheControl #(
     assign look_req      = store || load_miss;
     assign mem_req_valid = unc_pass || look_req;
     assign held          = look_req && !mem_req_ready;
-    assign mem_req_addr  = unc_pass ? {req_addr[ADDR_WIDTH-1:SETS_OFFSET], {SETS_OFFSET{1'b0}}}
-                                    : {look_line, {SETS_OFFSET{1'b0}}};
+    // An uncached request goes as the CPU asked it, exactly its bytes; a cached one moves a
+    // whole line.
+    // @kb: rtl/lib/block/cache/uncached
+    assign mem_req_addr  = unc_pass ? req_addr : {look_line, {SETS_OFFSET{1'b0}}};
+    assign mem_req_size  = unc_pass ? req_size : 3'(SETS_OFFSET);
+
+    // An uncached request is aligned to its size and fits its line.
+    `DC_ASSERT(a_unc_exact, !unc_pass || (int'(req_size) <= SETS_OFFSET &&
+        (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
 
     // The merged line goes into the cache once: in the clock memory takes the store.
     function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,

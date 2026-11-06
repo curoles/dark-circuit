@@ -49,12 +49,14 @@ module Mig2Caches import Mig2Pkg::*; #(
     logic             i_mem_valid;
     logic             i_mem_ready;
     logic [WIDTH-1:0] i_mem_addr;
+    logic [2:0]       i_mem_size;
     logic             i_mem_rsp_valid;
     insn_t            i_mem_rsp_data;
     logic             d_mem_valid;
     logic             d_mem_ready;
     logic             d_mem_we;
     logic [WIDTH-1:0] d_mem_addr;
+    logic [2:0]       d_mem_size;
     word_t            d_mem_wdata;
     strb_t            d_mem_wstrb;
     logic             d_mem_rsp_valid;
@@ -62,6 +64,7 @@ module Mig2Caches import Mig2Pkg::*; #(
     // The word address goes to the memory port: the offset of the byte address is 0.
     /* verilator lint_off UNUSEDSIGNAL */
     logic [WIDTH-1:0] mem_byte_addr;
+    logic [2:0]       mem_size;          // the request's size: not on the port yet
     /* verilator lint_on UNUSEDSIGNAL */
 
     // @kb: rtl/design/mig2/caches_in_core
@@ -69,10 +72,11 @@ module Mig2Caches import Mig2Pkg::*; #(
                         .SETS_OFFSET(IADDR_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
-        .req_uncached(uncached), .req_ready(icache_rsp.ready),
+        .req_uncached(uncached), .req_size(3'd2), .req_ready(icache_rsp.ready),
         .rsp_valid(icache_rsp.valid), .rsp_data(icache_rsp.data),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
-        .mem_req_addr(i_mem_addr), .mem_rsp_valid(i_mem_rsp_valid),
+        .mem_req_addr(i_mem_addr), .mem_req_size(i_mem_size),
+        .mem_rsp_valid(i_mem_rsp_valid),
         .mem_rsp_data(i_mem_rsp_data));
 
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
@@ -80,11 +84,11 @@ module Mig2Caches import Mig2Pkg::*; #(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
-        .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb),
+        .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb), .req_size(3'd2),
         .rsp_valid(dcache_rsp.valid), .rsp_data(dcache_rsp.data),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
-        .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb),
+        .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb), .mem_req_size(d_mem_size),
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
     // @kb: rtl/design/mig2/single_memory
@@ -94,15 +98,18 @@ module Mig2Caches import Mig2Pkg::*; #(
                            .POLICY(CachePkg::ARB_DATA_FIRST)) u_arbiter(
         .clk, .rst_n, .prio,
         .icache_req_valid(i_mem_valid), .icache_req_ready(i_mem_ready),
-        .icache_req_addr(i_mem_addr), .icache_rsp_valid(i_mem_rsp_valid),
+        .icache_req_addr(i_mem_addr), .icache_req_size(i_mem_size),
+        .icache_rsp_valid(i_mem_rsp_valid),
         .icache_rsp_data(i_mem_rsp_data),
         .dcache_req_valid(d_mem_valid), .dcache_req_ready(d_mem_ready), .dcache_req_we(d_mem_we),
         .dcache_req_addr(d_mem_addr), .dcache_req_wdata(d_mem_wdata),
-        .dcache_req_wstrb(d_mem_wstrb), .dcache_rsp_valid(d_mem_rsp_valid),
+        .dcache_req_wstrb(d_mem_wstrb), .dcache_req_size(d_mem_size),
+        .dcache_rsp_valid(d_mem_rsp_valid),
         .dcache_rsp_data(d_mem_rsp_data),
         .mem_req_valid(mem_req.valid), .mem_req_ready(mem_rsp.ready), .mem_req_we(mem_req.we),
         .mem_req_addr(mem_byte_addr), .mem_req_wdata(mem_req.wdata),
-        .mem_req_wstrb(mem_req.wstrb), .mem_rsp_valid(mem_rsp.valid),
+        .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_size),
+        .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 
     assign mem_req.addr = mem_byte_addr[WIDTH-1:DADDR_START];

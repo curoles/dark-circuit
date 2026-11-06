@@ -71,6 +71,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     wire   mem_req_valid;
     logic  mem_req_ready;
     addr_t mem_req_addr;
+    logic  [2:0] mem_req_size;
     logic  mem_rsp_valid;
     data_t mem_rsp_data;
     // The random policy's Lfsr, a copy of the cache's: the model knows every random victim.
@@ -131,9 +132,9 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
                           .SETS_OFFSET(SETS_OFFSET), .WAYS(WAYS), .REPLACEMENT(REPLACEMENT))
         u_set_assoc_cache_rd_only(
             .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_uncached(1'b0), .req_ready,
-            .rsp_valid,
-            .rsp_data, .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_rsp_valid,
-            .mem_rsp_data);
+            .req_size(3'd2), .rsp_valid,
+            .rsp_data, .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_req_size,
+            .mem_rsp_valid, .mem_rsp_data);
 
     Lfsr #(.WIDTH(8)) u_lfsr(.clk, .rst_n, .q(lfsr_q));
 
@@ -188,7 +189,8 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         exp_rsp     = (look && look_hit) || (waiting && mem_rsp_valid);
         exp_data    = waiting ? mem_rsp_data : look_data;
         if (req_ready !== model_ready() || mem_req_valid !== exp_mem_req ||
-            (exp_mem_req && mem_req_addr !== line_of(look_addr)) || rsp_valid !== exp_rsp ||
+            (exp_mem_req && (mem_req_addr !== line_of(look_addr) ||
+                             mem_req_size !== 3'(SETS_OFFSET))) || rsp_valid !== exp_rsp ||
             (exp_rsp && rsp_data !== exp_data))
             $fatal(1, "Cache %0d ways %0d: ready %b mem_req %b %h rsp %b %h, expected %b %b %h %b %h",
                    WAYS, REPLACEMENT, req_ready, mem_req_valid, mem_req_addr, rsp_valid,

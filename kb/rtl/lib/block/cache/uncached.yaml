@@ -21,7 +21,11 @@ decision: >
   or the two paths close a loop. Channel rule 3 holds: mem_req_valid depends on req_valid and
   idle, never on mem_req_ready (ready on ready is allowed). The same logic in all three
   read-write caches, so their read-only wrappers have the input too: SkewedCache first, then
-  DirectCache and SetAssocCache.
+  DirectCache and SetAssocCache. Exact (2026-11-06): an uncached request carries its own
+  byte address and its size (req_size, mem_req_size: 1 << size bytes, AXI's AxSIZE; the
+  address aligned to it, within a line), a cached one its line's address and the line's
+  size (SETS_OFFSET); writes keep their strobes. The arbiter carries the size with its
+  request.
 why: >
   With latency-1 memory an uncached request has the memory's own timing: a load taken in clock
   t is answered in t+1, as without a cache, so programs that count cycles run unchanged (user:
@@ -30,7 +34,12 @@ why: >
   answers come in order without a queue. A requester that withdraws a request not taken
   (Mig2's fetch: kb rtl/design/mig2/fetch_waits) makes the memory side withdraw in uncached
   mode, against the cache's rule that its own request is held until taken; memory must accept
-  that (SimLatencyRAM does its work only at the take).
+  that (SimLatencyRAM does its work only at the take). Exact uncached requests: a device
+  must see no access the program did not make; a read of the whole line would also read a
+  neighbour register with a side effect (a PLIC claim beside its threshold). TileLink
+  (Get/Put with lgSize and a mask), AXI (single beats of AxSIZE; device memory is never
+  widened, merged or split) and RISC-V PMAs (I/O regions are non-idempotent) send
+  uncached accesses exactly; a size, not a read mask, as AXI (user: AXI is the bus).
 rejected:
   - choice: Uncached as a mode of the whole cache (one input for every request)
     why_not: >
@@ -42,6 +51,14 @@ rejected:
       would not keep their cycle counts.
   - choice: Warm the cache in the programs of the timing tests
     why_not: User, 2026-10-30, do not change programs for the cache.
+  - choice: The word's address only, no size
+    why_not: >
+      Enough for the PLIC's word registers; a byte register (a UART) read as a word
+      would read its neighbours.
+  - choice: A size of 1 << (size + 1) bytes, for bigger lines
+    why_not: >
+      No 1-byte access. A line bigger than the memory port goes as a burst (AXI's
+      AxLEN) when the port gets narrower; the size describes one beat.
 relies_on:
   - rtl/design/mig2/fetch_waits
 evidence: >
@@ -53,10 +70,17 @@ evidence: >
   memory address and write fields, accept). DirectCache and SetAssocCache, 2026-10-30: the
   same uncached requests in their tests pass on both versions, Icarus and Verilator (all ways
   and policies the tests run), the read-only tests unchanged; 20 of 20 mutants of the same
-  kinds caught (5 per version per cache).
+  kinds caught (5 per version per cache). Exact uncached requests, 2026-11-06: the
+  read-write caches' tests send uncached requests of 1, 2 and 4 bytes, aligned, a store's
+  strobes on its bytes, and check address and size at memory, a cached request's line
+  address and size; the read-only tests the line's size; the arbiter's test a size that
+  comes with its request; all pass on both versions, Verilator and Icarus; Mig2 and Mig3
+  (word size) 225 tests pass; 5 of 5 mutants caught (kb
+  test/block/cache/skewed_cache/mutants).
 code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#unc_pass
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_unc_alone
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_unc_exact
   - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_mux2_ready
   - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached
   - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_unc_idle_wait

@@ -19,7 +19,10 @@
  * the same line (forwarding), of the other way and of the same way at another index,
  * evictions by the recent bits and by the tie rule, a store and a read held by memory, a miss
  * on a line an invalidate cleared, both memory latencies.
- * Uncached requests (one in 8) use a tag of their own, not in the pool, and a memory model of
+ * Uncached requests (one in 8) have the size of a byte, a half or a word (up to the line),
+ * an address aligned to it and a store's strobes on exactly its bytes; memory must get them
+ * as they are (address and size), a cached request with its line's address and size. They
+ * use a tag of their own, not in the pool, and a memory model of
  * their own: the model passes them straight to memory while nothing is looked up or served
  * (req_ready is then mem_req_ready), answers a load with memory's line in the clock memory
  * answers, writes a store only to memory and leaves the lines as they are; cases also:
@@ -72,6 +75,7 @@ module TbSkewedCacheCheck #(
     logic  req_valid;
     wire   req_ready;
     logic  req_uncached;
+    logic  [2:0] req_size;      // 1 << req_size bytes
     logic  req_we;
     addr_t req_addr;
     data_t req_wdata;
@@ -82,6 +86,7 @@ module TbSkewedCacheCheck #(
     logic  mem_req_ready;
     wire   mem_req_we;
     addr_t mem_req_addr;
+    logic  [2:0] mem_req_size;
     data_t mem_req_wdata;
     strb_t mem_req_wstrb;
     logic  mem_rsp_valid;
@@ -156,9 +161,9 @@ module TbSkewedCacheCheck #(
         u_skewed_cache(
             .clk, .rst_n, .invalidate,
             .req_valid, .req_ready, .req_uncached, .req_we, .req_addr, .req_wdata, .req_wstrb,
-            .rsp_valid, .rsp_data,
+            .req_size, .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-            .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data);
+            .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data);
 
     // The address of the line of a: offset 0.
     function automatic addr_t line_of(input addr_t a);
@@ -280,13 +285,14 @@ module TbSkewedCacheCheck #(
                    SETS, req_ready, mem_req_valid, rsp_valid, rsp_data, exp_ready(),
                    exp_mem_valid(), exp_rsp, exp_data);
         if (exp_unc_pass() &&
-            (mem_req_we !== req_we || mem_req_addr !== line_of(req_addr) ||
+            (mem_req_we !== req_we || mem_req_addr !== req_addr || mem_req_size !== req_size ||
              (req_we && (mem_req_wdata !== req_wdata || mem_req_wstrb !== req_wstrb))))
             $fatal(1, "SkewedCache %0d: uncached mem_req we %b %h %h %b, expected %b %h %h %b",
                    SETS, mem_req_we, mem_req_addr, mem_req_wdata, mem_req_wstrb,
-                   req_we, line_of(req_addr), req_wdata, req_wstrb);
+                   req_we, req_addr, req_wdata, req_wstrb);
         if (exp_look_req() &&
             (mem_req_we !== look_we || mem_req_addr !== line_of(look_addr) ||
+             mem_req_size !== 3'(SETS_OFFSET) ||
              (look_we && (mem_req_wdata !== look_wdata || mem_req_wstrb !== look_wstrb))))
             $fatal(1, "SkewedCache %0d: mem_req we %b %h %h %b, expected %b %h %h %b",
                    SETS, mem_req_we, mem_req_addr, mem_req_wdata, mem_req_wstrb,
@@ -451,6 +457,16 @@ module TbSkewedCacheCheck #(
         req_wstrb = STRB_WIDTH'($random(seed));
         if (r[10:9] == 2'b00 || req_wstrb == '0)
             req_wstrb = '1;
+        // Uncached: a size up to a word that fits the line, the address aligned to it, a
+        // store's strobes on exactly its bytes, as a CPU makes them.
+        req_size = 3'(SETS_OFFSET);
+        if (req_uncached) begin
+            req_size        = 3'($unsigned($random(seed)) % 3);
+            if (int'(req_size) > SETS_OFFSET)
+                req_size = 3'(SETS_OFFSET);
+            req_addr.offset = req_addr.offset & ~(SETS_OFFSET'((1 << req_size) - 1));
+            req_wstrb       = STRB_WIDTH'(((1 << (1 << req_size)) - 1) << req_addr.offset);
+        end
         req_valid = 1'b1;
     endtask
 

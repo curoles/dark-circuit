@@ -69,6 +69,7 @@ module TbSkewedCacheCheck #(
     wire   mem_req_valid;
     logic  mem_req_ready;
     addr_t mem_req_addr;
+    logic  [2:0] mem_req_size;
     logic  mem_rsp_valid;
     data_t mem_rsp_data;
 
@@ -119,9 +120,9 @@ module TbSkewedCacheCheck #(
                         .SETS_OFFSET(SETS_OFFSET))
         u_skewed_cache_rd_only(
             .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_uncached(1'b0), .req_ready,
-            .rsp_valid,
-            .rsp_data, .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_rsp_valid,
-            .mem_rsp_data);
+            .req_size(3'd2), .rsp_valid,
+            .rsp_data, .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_req_size,
+            .mem_rsp_valid, .mem_rsp_data);
 
     // The address of the line of a: offset 0.
     function automatic addr_t line_of(input addr_t a);
@@ -189,7 +190,8 @@ module TbSkewedCacheCheck #(
         exp_rsp     = (look && look_hit) || (waiting && mem_rsp_valid);
         exp_data    = waiting ? mem_rsp_data : look_data;
         if (req_ready !== model_ready() || mem_req_valid !== exp_mem_req ||
-            (exp_mem_req && mem_req_addr !== line_of(look_addr)) || rsp_valid !== exp_rsp ||
+            (exp_mem_req && (mem_req_addr !== line_of(look_addr) ||
+                             mem_req_size !== 3'(SETS_OFFSET))) || rsp_valid !== exp_rsp ||
             (exp_rsp && rsp_data !== exp_data))
             $fatal(1, "Skewed cache %0d: ready %b mem_req %b %h rsp %b %h, expected %b %b %h %b %h",
                    SETS, req_ready, mem_req_valid, mem_req_addr, rsp_valid, rsp_data,
