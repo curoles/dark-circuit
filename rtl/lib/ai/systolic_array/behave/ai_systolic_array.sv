@@ -1,45 +1,64 @@
+/* Systolic array of ROWS x COLS processing elements (AiMacPe), a sketch.
+ *
+ * Every PE takes an operand from its west and one from its north neighbor, passes them on
+ * to east and south, and keeps an accumulator (accum_out): output stationary, the result of
+ * PE (r, c) stays in it. Row r's operands enter at the west edge (left_inputs[r]), column
+ * c's at the north edge (top_inputs[c]); the operands that leave the east and south edges
+ * are not used.
+ *
+ *   top_inputs[0]   top_inputs[1]
+ *        |               |
+ *        v               v
+ *      +----+  east    +----+
+ *   -->| PE |--------->| PE |--> (not used)      left_inputs[0] enters row 0
+ *      +----+          +----+
+ *        | south         |
+ *        v               v
+ *      +----+          +----+
+ *   -->| PE |--------->| PE |--> (not used)      left_inputs[1] enters row 1
+ *      +----+          +----+
+ *        |               |
+ *        v               v
+ *    (not used)      (not used)
+ *
+ * The PE, AiMacPe, is not written yet.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
 module AiSystolicArray #(
-    parameter int ROWS = 16,
-    parameter int COLS = 16,
-    parameter int DATA_W = 8,
-    parameter int ACCUM_W = 32
+    parameter ROWS       = 16,
+    parameter COLS       = 16,
+    parameter DATA_WIDTH = 8,                               // bits of an operand
+    parameter ACC_WIDTH  = 32                               // bits of an accumulator
 )(
-    input  logic clk,
-    input  logic rst_n,
-    input  logic [ROWS-1:0][DATA_W-1:0] left_inputs,
-    input  logic [COLS-1:0][DATA_W-1:0] top_inputs,
-    output logic [ROWS-1:0][COLS-1:0][ACCUM_W-1:0] array_outputs
+    input  wire                                     clk,
+    input  wire                                     rst_n,  // synchronous reset, active low
+    input  wire  [ROWS-1:0][DATA_WIDTH-1:0]         left_inputs,    // into row r, west
+    input  wire  [COLS-1:0][DATA_WIDTH-1:0]         top_inputs,     // into column c, north
+    output wire  [ROWS-1:0][COLS-1:0][ACC_WIDTH-1:0] array_outputs  // accumulator of PE (r, c)
 );
+    // The operands between neighbors: horiz_wires[r][c] into PE (r, c) from the west,
+    // vert_wires[r][c] from the north; the last column and row leave the array, not used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [ROWS-1:0][COLS:0][DATA_WIDTH-1:0] horiz_wires;
+    wire [ROWS:0][COLS-1:0][DATA_WIDTH-1:0] vert_wires;
+    /* verilator lint_on UNUSEDSIGNAL */
 
-    // 2D wire arrays to connect neighbor PEs together
-    logic [ROWS-1:0][COLS:0][DATA_W-1:0] horiz_wires;
-    logic [ROWS:0][COLS-1:0][DATA_W-1:0] vert_wires;
+    assign vert_wires[0] = top_inputs;
 
-    // Hook up external inputs to the boundary wires
-    assign horiz_wires[ROWS-1:0][0] = left_inputs;
-    assign vert_wires[0][COLS-1:0]  = top_inputs;
-
-    // Generate block physically stitches the PEs together
-    genvar r, c;
-    generate
-        for (r = 0; r < ROWS; r++) begin : row_gen
-            for (c = 0; c < COLS; c++) begin : col_gen
-                // The PE is hardcoded to be an AI MAC, but perfectly parameterized
-                AiMacPe #(
-                    .DATA_W(DATA_W),
-                    .ACCUM_W(ACCUM_W)
-                ) u_pe (
-                    .clk(clk),
-                    .rst_n(rst_n),
-                    .in_west(horiz_wires[r][c]),      // Data from left neighbor
-                    .in_north(vert_wires[r][c]),     // Data from top neighbor
-                    .out_east(horiz_wires[r][c+1]),   // Pass to right neighbor
-                    .out_south(vert_wires[r+1][c]),  // Pass to bottom neighbor
-                    .accum_out(array_outputs[r][c])
-                );
-            end
+    for (genvar r = 0; r < ROWS; r++) begin: g_row
+        assign horiz_wires[r][0] = left_inputs[r];
+        for (genvar c = 0; c < COLS; c++) begin: g_col
+            AiMacPe #(.DATA_WIDTH(DATA_WIDTH), .ACC_WIDTH(ACC_WIDTH)) u_pe(
+                .clk, .rst_n,
+                .in_west(horiz_wires[r][c]),
+                .in_north(vert_wires[r][c]),
+                .out_east(horiz_wires[r][c + 1]),
+                .out_south(vert_wires[r + 1][c]),
+                .accum_out(array_outputs[r][c]));
         end
-    endgenerate
+    end
 
 endmodule
-
