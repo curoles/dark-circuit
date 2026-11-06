@@ -1,0 +1,42 @@
+type: decision
+title: PlicClaim decodes claims and completes per context; atomic claims are the reader's job
+date: 2026-11-05
+question: >
+  The contexts read (claim) and write (complete) their claim/complete registers; the
+  gateways want one claim and one complete pulse per source. How are they made, which
+  completes count, and what keeps two claims from getting the same ID?
+decision: >
+  PlicClaim, combinational: per context a Decoder for the claimed ID (claim_en with the
+  target's registered claim_id) and one for the completed ID (complete_en with the written
+  complete_id), the complete masked with the context's enables, an OrReduce per source over
+  the contexts. Bit 0 (ID 0) and IDs above N_SOURCES give nothing; the complete ID is not
+  compared with the claimed one (the spec does not check it). Ports per context (arrays), so
+  several contexts may claim or complete in one cycle. Atomic claims are not done here:
+  a claim clears the source's pending bit at the next edge and the registered claim ID shows
+  it one edge later, so whoever takes the claim reads (PlicRegs) holds the next claim read
+  for those two clocks.
+why: >
+  The spec's rules for completion ("silently ignored" when the source is not enabled for
+  the target) and a claim of ID 0 (none) fall out of the decode and the mask; per-context
+  ports keep the block independent of how many reads a bus does per cycle. The window after
+  a claim is a matter of when reads are taken, which the register side controls.
+rejected:
+  - choice: One complete port (complete_id shared by the contexts)
+    why_not: Assumes one write per cycle; per-context ports cost nothing when unused.
+  - choice: Hide the claim window here (remember the IDs claimed in the last two clocks)
+    why_not: >
+      State and comparators per context for what one wait of the claim read avoids; the
+      register side already decides when a read is taken. OpenTitan's rv_plic has the same
+      registered claim ID and seems to rely on its bus being slower than the window.
+relies_on:
+  - rtl/lib/block/plic/target
+evidence: >
+  2026-11-05: behave and struct versions against one testbench (N_SOURCES/N_CONTEXTS 1/1,
+  3/2, 5/3, 31/2, 32/4; a model from the contexts' side; directed cases, then random IDs of
+  every value, 3000 on Verilator, 300 on Icarus; every case counted: claim, complete, a
+  complete dropped for its enable, ID 0, an ID above N_SOURCES, two contexts on one source),
+  Verilator and Icarus (at most 0.46 s); 5 of 5 mutants caught. Icarus first rejected
+  en[c][k] with both indices variable (AGENTS.md, simulator traps).
+code:
+  - rtl/lib/block/plic/plic_claim/behave/plic_claim.sv#pulses
+  - rtl/lib/block/plic/plic_claim/struct/plic_claim.sv#g_source

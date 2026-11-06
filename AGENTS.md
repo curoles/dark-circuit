@@ -238,6 +238,9 @@ Icarus means Icarus 13, the version the project uses.
 - Icarus does not support `inside`; use `case` or `==`.
 - Icarus crashes (assert in elab_expr.cc) on an indexed part-select of a struct field,
   `s.f[i -: w]`; copy the field to a plain vector and select on that.
+- Icarus does not take a packed array of two dimensions selected by two variables,
+  `a[i][j]` ("Array index expressions must be constant here"); copy the row,
+  `row = a[i]`, and select `row[j]` (`block/plic/plic_claim/behave`).
 - Icarus has no queues of packed structs ("Queue of type netstruct_t is not yet
   supported"); queue plain vectors of `$bits(T)` and assign to and from T.
 - Icarus and fields of array elements: a field of an element of an unpacked array of
