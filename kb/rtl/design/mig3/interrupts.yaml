@@ -64,7 +64,8 @@ evidence: >
   the forwarding to ID, not the interrupt logic: with csr.irq tied to 0 still 5.5 ns,
   without the reads of mie and mip 5.2 ns (the netlist of before); the rd mux with the
   product last (late_input_last_mux) 5.4 ns, and 5.3 ns on Mig3 without interrupts. Taking
-  the multiplier off that path is a step of its own.
+  the multiplier off that path was measured and not done (kb rtl/design/mig3/mul_timing:
+  without a multiplier 5.4 ns).
 code:
   - rtl/design/mig3/mig3_control.sv#ex_acted
   - rtl/design/mig3/mig3_csr.sv#mie_meie

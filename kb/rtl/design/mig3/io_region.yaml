@@ -1,0 +1,36 @@
+type: decision
+title: One uncached I/O region from the configuration, its devices at offsets in it
+date: 2026-11-06
+question: >
+  The PLIC comes beside Mig3, and other devices with registers after it. A device's
+  registers must not be cached (a PLIC claim is a read with a side effect). How does the
+  core know which addresses are a device's, and how do programs know where the devices are?
+decision: >
+  The configuration (cfg/mig3_config.yaml) has one I/O region, io_base and io_addr_width
+  (0x0C000000, 64 MiB: where QEMU virt and SiFive put the PLIC), and a section per device
+  with its offset in the region and its size, the PLIC's with its sources and priority bits
+  (offset 0, 4 MiB, 8 sources, 3 bits). Mig3Caches sends every load and store of the region
+  past the D-cache (req_uncached of the library cache, by an address compare); the core knows
+  nothing else of the devices, Mig3Cpu decodes the region. Mig3ConfigPkg has a struct per
+  device (CFG.plic.sources); mig3_config.h gives programs the region, the PLIC's base and
+  its register addresses.
+why: >
+  One region and one compare cover any number of devices: a new device is a section in the
+  YAML and a decode in Mig3Cpu, nothing in the core. The generated header keeps programs and
+  hardware on one set of numbers.
+rejected:
+  - choice: A table of regions with attributes (a PMA table)
+    why_not: More than one region of one kind needs; later when memory-mapped memory comes.
+  - choice: The PLIC's knobs at the top of the YAML (plic_sources, ...)
+    why_not: >
+      A section per device keeps a device's offset, size and parameters together (user),
+      as more devices come.
+relies_on:
+  - rtl/lib/block/plic/top
+evidence: >
+  2026-11-06, Verilator: the whole Mig3 suite passes (114 tests, the config check among
+  them), nothing in it touches the region yet. That the D-cache is bypassed there shows with
+  the PLIC (Mig3Cpu): two claim reads in a row get different IDs.
+code:
+  - rtl/design/mig3/mig3_caches.sv#d_uncached
+  - rtl/design/mig3/cfg/mig3_config.yaml

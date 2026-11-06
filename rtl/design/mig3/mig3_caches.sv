@@ -21,7 +21,9 @@
  * every request bypass both caches: it passes to the arbiter as it comes (req_uncached of
  * the library caches; the line that holds its word), so the pipeline sees the memory's own
  * timing, but for a fetch and a load or store that want memory in the same clock (tests that
- * count cycles). invalidate is 0: Mig3 has no FENCE.I; a store to an address the I-cache
+ * count cycles). A load or store of the I/O region (CFG.io_base, 1 << CFG.io_addr_width
+ * bytes) always bypasses the D-cache; code is never fetched from it. invalidate is 0:
+ * Mig3 has no FENCE.I; a store to an address the I-cache
  * holds is not seen by a later fetch that hits (self-modifying code is not supported).
  *
  *   icache_req (fetch) --> word in line --> SkewedCacheRdOnly u_icache --+
@@ -53,6 +55,14 @@ module Mig3Caches import Mig3Pkg::*; #(
     input  mem_rsp_t  mem_rsp
 );
     `DC_STATIC_ASSERT(a_line_words, LINE_WORDS == 1 || LINE_WORDS == 2)
+    `DC_STATIC_ASSERT(a_io_aligned, CFG.io_base % (1 << CFG.io_addr_width) == 0)
+
+    // A load or store of the I/O region bypasses the D-cache: a device's register is read
+    // and written where it is, every time (a PLIC claim is a read).
+    // @kb: rtl/design/mig3/io_region
+    logic d_uncached;   // the data request bypasses the D-cache
+    assign d_uncached = uncached ||
+        dcache_req.addr[WIDTH-1:CFG.io_addr_width] == CFG.io_base[WIDTH-1:CFG.io_addr_width];
 
     // The caches' memory sides, to the arbiter: byte addresses of lines (offset 0).
     logic             i_mem_valid;
@@ -92,7 +102,7 @@ module Mig3Caches import Mig3Pkg::*; #(
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
                   .SETS_OFFSET(LINE_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
-        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
+        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(d_uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb),
         .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),

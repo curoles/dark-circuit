@@ -1,6 +1,13 @@
 # Mig3 configuration. After a change run: make config
 rst_addr:        0x00000000   # PC after reset, byte address
 mem_addr_width:  16           # the memory, code and data: 1 << 16 = 64 KiB
+io_base:         0x0C000000   # I/O region, uncached: byte address, a multiple of its size
+io_addr_width:   26           # I/O region: 1 << 26 = 64 MiB, its devices below
+plic:                         # PLIC (rtl/lib/block/plic), one context: the hart's M-mode
+  offset:        0x0000000    # from io_base, a multiple of its size
+  addr_width:    22           # 1 << 22 = 4 MiB: the spec's map up to context 0's claim register
+  sources:       8            # interrupt sources, IDs 1 to 8
+  prio_width:    3            # priorities 1 to 7 (0: never)
 btb_index_width: 6            # BTB in IF: 1 << 6 = 64 entries (kb rtl/design/mig3/btb_size)
 btb_tag_width:   8            # BTB tag: index + tag = 14 bits, the word address of 64 KiB
 ras_addr_width:  3            # return-address stack in ID: 1 << 3 = 8 entries

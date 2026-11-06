@@ -6,9 +6,21 @@
 // A new knob: a line in the YAML and a field here.
 package Mig3ConfigPkg;
 
+    // The PLIC in the I/O region (Mig3Cpu).
+    typedef struct packed {
+        logic [31:0] offset;           // from io_base, a multiple of its size
+        int unsigned addr_width;       // its region: 1 << addr_width bytes
+        int unsigned sources;          // interrupt sources, IDs 1 to sources
+        int unsigned prio_width;       // bits of a priority
+    } mig3_plic_cfg_t;
+
     typedef struct packed {
         logic [31:0] rst_addr;         // PC after reset, byte address
         int unsigned mem_addr_width;   // Mig3Cpu memories: 1 << mem_addr_width bytes each
+        logic [31:0] io_base;          // I/O region, uncached: byte address, a multiple of
+                                       // its size
+        int unsigned io_addr_width;    // I/O region: 1 << io_addr_width bytes
+        mig3_plic_cfg_t plic;          // the PLIC in the I/O region (Mig3Cpu)
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
         int unsigned btb_tag_width;    // BTB tag; with the index it should cover the word
                                        // address of imem: then no two pcs share an entry
@@ -21,6 +33,10 @@ package Mig3ConfigPkg;
     localparam mig3_cfg_t MIG3_CFG = '{
         rst_addr:        32'h0000_0000,
         mem_addr_width:  16,   // 65536 bytes each
+        io_base:         32'h0c00_0000,
+        io_addr_width:   26,   // 67108864 bytes
+        plic: '{offset: 32'h0000_0000, addr_width: 22,
+                sources: 8, prio_width: 3},
         btb_index_width: 6,    // 64 entries
         btb_tag_width:   8,
         ras_addr_width:  3,    // 8 entries

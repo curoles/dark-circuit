@@ -1,0 +1,46 @@
+type: decision
+title: MUL stays single-cycle in EX until the FP design; it is not what limits Mig3's clock
+date: 2026-11-05
+question: >
+  After interrupts sky130 gave 5.5 ns and the longest path reported was the one-cycle
+  multiplier into EX's rd mux and the forwarding to ID. Should the multiplier come off that
+  path now (kb rtl/design/mig3/interrupts: "a step of its own")?
+decision: >
+  No change: MUL, MULH, MULHSU, MULHU stay one cycle in EX (Int32Mul) with the product
+  forwarded from EX. The multiplier's shape (width, a split at the carry-save boundary,
+  shared with the FP mantissa multiply or not, its latency and the interlock or scoreboard
+  for it) is decided with floating point, which needs a mechanism for results several
+  clocks out anyway.
+why: >
+  Without any multiplier Mig3 is 5.4 ns: other paths from the ID/EX register (rs1_data) are
+  nearly as long, so the multiplier costs Mig3's clock at most 0.1 ns, within ABC's
+  noise. Moving the product alone made Mig3 slower in time and in cycles. FP decides how a
+  multiplier is built and pipelined: an FMA wants the tree in carry-save, the addend added
+  before the one adder; a single-precision mantissa (24 x 24) fits the 32 x 32 array; a
+  later double one (53 x 53) does not. Building it now would mean building it twice.
+rejected:
+  - choice: The product off EX's forwarding, to MEM/WB only, as an SC's result (RD_MULDIV
+            split into RD_MUL and RD_DIV, the load-use interlock for MUL)
+    why_not: >
+      5.6 ns: the product still goes through as many muxes, now into the EX/MEM register
+      (Mig3MulDiv's result mux, the rd value of the retire entry, its rd_write gate); and a
+      bubble whenever the next instruction reads a product: CoreMark -O2 +2.6 % pipeline
+      cycles, coremark_O0 +0.4 %, coremark_tuned +0.03 %, Dhrystone, qsort, towers 0.
+  - choice: A two-stage multiplier now (the tree in EX, the final adder in MEM/WB)
+    why_not: >
+      At most 0.1 ns for Mig3 (above), and its width, Booth or not and latency are
+      FP's choices.
+relies_on:
+  - rtl/design/mig3/interrupts
+  - rtl/design/mig3/lr_sc
+evidence: >
+  2026-11-05, sky130 (Yosys, ABC estimate): Mig3 as it is 5.5 ns, 332 715 um2; the product
+  to MEM/WB only 5.6 ns, 333 266 um2 (the path from rs1_data in the ID/EX register); the
+  product tied to 0, no multiplier, 5.4 ns, 285 254 um2 (the multiplier is 47 461 um2, 14 %
+  of Mig3), the path from rs1_data bit 0. Benchmarks (Verilator, uncached, pipeline
+  cycles) before and with the product to MEM/WB: dhrystone 1 936 203 both, qsort 165 502
+  both, towers 235 228 both, coremark 1 801 836 -> 1 848 830, coremark_tuned 1 392 724 ->
+  1 393 085, coremark_O0 1 521 645 -> 1 527 811; the whole Mig3 suite passed with it (114
+  tests). Not in the repo: the change was tried in a scratch tree only.
+code:
+  - rtl/design/mig3/mig3_muldiv.sv
