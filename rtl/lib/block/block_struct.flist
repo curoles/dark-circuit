@@ -47,6 +47,7 @@
 -F pop_count/struct/pop_count.flist
 -F arg_max_tree/struct/arg_max_tree.flist
 -F reg_port_target/struct/reg_port_target.flist
+-F strb_reg/struct/strb_reg.flist
 -F plic/plic.flist
 -F plic/plic_gateway/struct/plic_gateway.flist
 -F plic/plic_target/struct/plic_target.flist

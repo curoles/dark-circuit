@@ -20,6 +20,13 @@ why: >
   registers, its decode and a read mux. One-clock accesses make a read's side effect happen
   once per read, by construction. The registered answer cuts the device's read path from
   whatever takes the answer.
+  This is the usual two-layer split of register access, a protocol adapter in front of a
+  plain register interface (checked in their sources 2026-11-05): OpenTitan's
+  tlul_adapter_reg (TileLink in; re_o, we_o, addr_o, wdata_o, be_o, rdata_i, error_i, and
+  busy_i, our hold, out), PULP's register_interface (REG_BUS: addr, write, wdata, wstrb,
+  valid / rdata, error, ready, with adapters apb_to_reg, axi_lite_to_reg, reg_to_apb,
+  reg_to_axi, reg_to_tlul, reg_to_mem), PeakRDL-regblock's selectable CPU interface (apb3,
+  apb4, axi4lite, avalon, obi, wishbone, passthrough).
 rejected:
   - choice: The handshake inside each device (as the first PlicRegs plan)
     why_not: The same logic in every device, and a register module with logic of its own.

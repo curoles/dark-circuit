@@ -19,8 +19,12 @@ solution: >
 why: >
   The caches and Mig3's data channel already use these signals: one convention for every
   request/answer channel of the library, and a core's data port reaches a device with no
-  conversion. Parameters, not a package with fixed widths, keep it free of a bus.
-known_as: [register interface, CSR bus, register slave port, APB-like port]
+  conversion. Parameters, not a package with fixed widths, keep it free of a bus. PULP's
+  register_interface is the closest relative (the same request fields and a response with
+  ready); it adds an error response, which our pattern leaves to an adapter.
+known_as: [register interface, CSR bus, register slave port, APB-like port,
+           register bus (PULP REG_BUS), register interface adapter (OpenTitan
+           tlul_adapter_reg), CPU interface / cpuif (PeakRDL-regblock)]
 rejected:
   - choice: A package of structs with fixed widths (32-bit address and data)
     why_not: Fixed widths are a bus's choice; the library must not make it.

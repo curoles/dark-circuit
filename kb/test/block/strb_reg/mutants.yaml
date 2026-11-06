@@ -1,0 +1,30 @@
+type: mutants
+title: Mutants of the StrbReg test (behave and struct versions, the assertion)
+date: 2026-11-05
+tests: [block_strb_reg_behave, block_strb_reg_struct]
+mutants:
+  - name: behave, the strobes are ignored (every byte written)
+    edits:
+      - file: rtl/lib/block/strb_reg/behave/strb_reg.sv
+        old: "if (wstrb[i / 8])"
+        new: "if (wstrb[i / 8] || we)"
+    expect: model
+  - name: behave, the reset value is 0
+    edits:
+      - file: rtl/lib/block/strb_reg/behave/strb_reg.sv
+        old: "q <= RST_VAL;"
+        new: "q <= RST_VAL & '0;"
+    expect: model
+  - name: struct, a byte is written without we (a_kept)
+    edits:
+      - file: rtl/lib/block/strb_reg/struct/strb_reg.sv
+        old: "And2 #(1) u_and2(.in1(we), .in2(wstrb[b]), .out(en));"
+        new: "And2 #(1) u_and2(.in1(we | wstrb[b]), .in2(wstrb[b]), .out(en));"
+    quiet: [model]
+    expect: a_kept
+  - name: struct, the last partial byte takes the next byte's strobe
+    edits:
+      - file: rtl/lib/block/strb_reg/struct/strb_reg.sv
+        old: ".in2(wstrb[b])"
+        new: ".in2(wstrb[(b + 1 < NBYTES) ? b + 1 : b])"
+    expect: model

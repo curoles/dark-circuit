@@ -1,0 +1,30 @@
+type: decision
+title: StrbReg, a register of any width written byte by byte
+date: 2026-11-05
+question: >
+  The registers of a device are written through the register port with byte strobes, and
+  many hold fewer bits than the port (a PLIC priority of 3 bits, a threshold, a word of
+  enable bits). One generic block for them?
+decision: >
+  StrbReg #(WIDTH, RST_VAL): WIDTH bits of any number, bytes 0 to NBYTES - 1 = (WIDTH + 7)
+  / 8, the last one partial; with we, every byte whose strobe is 1 takes wdata's bits of that
+  byte, the others keep their value; reset sets RST_VAL. wdata and wstrb are the low WIDTH
+  bits and NBYTES strobes of the access (RegPortTarget's acc_wdata, acc_wstrb); we is the
+  device's decode of "this register is written". The struct version: a DffSyncRstEn per
+  byte with its part of RST_VAL, enabled by we & wstrb[b] (And2). Assertion: without we the
+  register keeps its value.
+why: >
+  Every device register is one; the bits a register does not have are simply not there
+  (they read 0 in the device's read mux), so a narrow register costs only its flops.
+rejected:
+  - choice: A register of the port's whole width, the unused bits tied off by the caller
+    why_not: Flops for bits that do not exist; the WIDTH parameter says it directly.
+relies_on:
+  - rtl/lib/block/plic/register_port
+evidence: >
+  test/block/strb_reg (block_strb_reg_behave, block_strb_reg_struct on Verilator and Icarus):
+  WIDTH 1, 3, 8, 12, 32, 33 with reset values not 0, random we, strobes and data against a
+  byte model, every case covered; 4 mutants caught (kb test/block/strb_reg/mutants), one of
+  them only by the assertion a_kept.
+code:
+  - rtl/lib/block/strb_reg/struct/strb_reg.sv#g_byte
