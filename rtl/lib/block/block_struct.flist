@@ -1,6 +1,7 @@
 -F counter/struct/counter.flist
 -F decoder/struct/decoder.flist
 -F mux_n/struct/mux_n.flist
+-F mux_one_hot/struct/mux_one_hot.flist
 -F priority_encoder/struct/priority_encoder.flist
 -F shift_reg/struct/shift_reg.flist
 -F delay_line/struct/delay_line.flist

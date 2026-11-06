@@ -1,0 +1,36 @@
+type: decision
+title: MuxOneHot, a multiplexer of N inputs by a one-hot select, the OR of the selected
+date: 2026-11-05
+question: >
+  The PLIC's read mux gets one-hot selects from PlicDecode; RegFile's read ports, Sram1r1w's
+  read and the BTB's valid lookup each write the same And-Or by hand. Mux1hot2 and Mux1hot3
+  are gates of 2 and 3 inputs, MuxN takes a binary select. One block of N inputs?
+decision: >
+  MuxOneHot #(N, WIDTH): inputs in[N-1:0][WIDTH-1:0] as MuxN's, sel[N-1:0] one bit per
+  input; out is the OR of the inputs whose select is 1: input k when sel[k] is the only 1, 0
+  when none is, the OR when several are. The struct version per bit of out: the column of
+  the inputs' bits And2 sel, OrReduce (RegFile's read port). Named in whole words like the
+  newer blocks (MuxN's N is implied: a one-hot select has a bit per input).
+why: >
+  A decoder or the ways of a cache give one bit per input; encoding them to feed MuxN costs
+  an encoder and a tree no smaller than the And-Or. Defining out for every sel (none: 0,
+  several: the OR) leaves no undefined case to assert against, and a reserved address of a
+  device reads 0 by itself.
+rejected:
+  - choice: Mux1hotN, after the gates Mux1hot2 and Mux1hot3
+    why_not: >
+      Their names come from the 2014 gates; the user prefers whole words, as the blocks of
+      2026 are named.
+  - choice: out undefined when several selects are 1, with an assertion
+    why_not: >
+      The block has no clock for DC_ASSERT, and the OR is what the gates give anyway.
+relies_on: []
+evidence: >
+  2026-11-05: test/block/mux_one_hot, behave and struct versions on Verilator and Icarus (at
+  most 0.12 s): N 1, 2, 3, 5, 17, random inputs with no select, one select and random
+  selects against a bit-by-bit model, every input selected alone; 4 of 4 mutants caught (kb
+  test/block/mux_one_hot/mutants). The library had no such block (searched 2026-11-05): only
+  the gates Mux1hot2, Mux1hot3 and the And-Or written inline in RegFile, Sram1r1w and the
+  BTB.
+code:
+  - rtl/lib/block/mux_one_hot/struct/mux_one_hot.sv#g_bit

@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the MuxOneHot test (behave and struct versions)
+date: 2026-11-05
+tests: [block_mux_one_hot_behave, block_mux_one_hot_struct]
+mutants:
+  - name: behave, the last selected input wins instead of the OR
+    edits:
+      - file: rtl/lib/block/mux_one_hot/behave/mux_one_hot.sv
+        old: "o = o | i[k];"
+        new: "o = i[k];"
+    expect: model
+  - name: behave, input 0 is always selected
+    edits:
+      - file: rtl/lib/block/mux_one_hot/behave/mux_one_hot.sv
+        old: "if (s[k])"
+        new: "if (s[k] || k == 0)"
+    expect: model
+  - name: struct, an AND of the selected instead of the OR
+    edits:
+      - file: rtl/lib/block/mux_one_hot/struct/mux_one_hot.sv
+        old: "OrReduce #(N) u_or_reduce"
+        new: "AndReduce #(N) u_or_reduce"
+    expect: model
+  - name: struct, the columns are taken in reverse bit order
+    edits:
+      - file: rtl/lib/block/mux_one_hot/struct/mux_one_hot.sv
+        old: "assign column[k] = in[k][b];"
+        new: "assign column[k] = in[k][WIDTH - 1 - b];"
+    expect: model
