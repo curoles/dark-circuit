@@ -123,7 +123,9 @@ package Mig3Pkg;
 
     // Data: we=1 writes the bytes of wdata with wstrb=1 and gets no answer, we=0 reads the
     // word at addr. offset and size are the access's own bytes (an uncached one goes out
-    // exactly).
+    // exactly). An AMO is a read with an atop (AtomicPkg): wdata and wstrb are its
+    // operand, the answer is the old word; it is done in front of the memory (Mig3Cpu,
+    // kb rtl/lib/block/atomic/design).
     typedef struct packed {
         logic         valid;
         logic         we;
@@ -132,6 +134,7 @@ package Mig3Pkg;
         size_t        size;     // 1 << size bytes: a byte, a halfword or a word
         word_t        wdata;
         strb_t        wstrb;
+        AtomicPkg::atop_t atop; // ATOP_NONE, or the AMO's operation
     } dmem_req_t;
 
     typedef struct packed {
@@ -141,7 +144,8 @@ package Mig3Pkg;
     } dmem_rsp_t;
 
     // Memory, behind the caches: the same for a line; a write writes the bytes of wdata
-    // with wstrb=1 (a store's word, or an uncached store's).
+    // with wstrb=1 (a store's word, or an uncached store's); an AMO comes as asked, its
+    // operand in every word of wdata.
     typedef struct packed {
         logic       valid;
         logic       we;
@@ -149,6 +153,7 @@ package Mig3Pkg;
         size_t      size;   // 1 << size bytes: the line, or the uncached access's
         line_t      wdata;
         line_strb_t wstrb;
+        AtomicPkg::atop_t atop; // ATOP_NONE, or an AMO's operation
     } mem_req_t;
 
     typedef struct packed {

@@ -108,6 +108,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     assign dmem_req.size   = size;
     assign dmem_req.wdata = wr_data;
     assign dmem_req.wstrb = strb;
+    assign dmem_req.atop  = AtomicPkg::ATOP_NONE;     // no AMOs yet
 
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;

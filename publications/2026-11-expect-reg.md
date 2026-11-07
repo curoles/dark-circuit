@@ -24,8 +24,8 @@ A self-checking test in the style of riscv-tests looks like this (simplified):
     li    x1, 5
     li    x2, -3
     add   x3, x1, x2
-    li    x7, 2             # the expected value
-    bne   x3, x7, fail      # the CPU compares and branches
+    li    x7, 2         # the expected value
+    bne   x3, x7, fail  # the CPU compares and branches
 ```
 
 It is a fine approach for a CPU that mostly works. On one that does not, it fails in
@@ -60,11 +60,11 @@ _start:
     addi  x2, x0, -3
     add   x3, x1, x2
     sub   x4, x1, x2
-    slt   x6, x2, x1          # -3 < 5 signed
-    sltu  x7, x2, x1          # 0xfffffffd < 5 unsigned
+    slt   x6, x2, x1     # -3 < 5 signed
+    sltu  x7, x2, x1     # 0xfffffffd < 5 unsigned
 here:
     auipc x24, 0
-    ebreak                    # the core halts here
+    ebreak               # the core halts here
 
     .word (expect_end - expect) / 8
 expect:
@@ -72,7 +72,7 @@ expect:
     EXPECT_REG 4,  8
     EXPECT_REG 6,  1
     EXPECT_REG 7,  0
-    EXPECT_REG 24, here       # a label: the assembler fills in its address
+    EXPECT_REG 24, here  # a label: the assembler fills in its address
 expect_end:
 ```
 
@@ -134,9 +134,9 @@ any difference it sees in `mcause`, `mtval`, `mstatus`), `s7` counts interrupts,
 the last `mepc`. The table is short and says a lot:
 
 ```asm
-    EXPECT_REG 22, 0                # s6: no error seen by the handler
-    EXPECT_REG 23, 10               # s7: 10 interrupts
-    EXPECT_REG 24, c10              # s8: the last one was taken on instruction c10
+    EXPECT_REG 22, 0     # s6: no error seen by the handler
+    EXPECT_REG 23, 10    # s7: 10 interrupts
+    EXPECT_REG 24, c10   # s8: the last one was taken on instruction c10
 ```
 
 A device test (Mig3's `plic.S`) checks an interrupt controller's registers through the
@@ -146,8 +146,10 @@ come from the same header:
 ```asm
 #include "mig3_config.h"
     ...
-    EXPECT_REG 9,  MIG3_PLIC_PRIO_MAX                   # a priority register's width
-    EXPECT_REG 19, (1 << (MIG3_PLIC_SOURCES + 1)) - 2   # the enable bits of the sources
+    # a priority register's width
+    EXPECT_REG 9,  MIG3_PLIC_PRIO_MAX
+    # the enable bits of the sources
+    EXPECT_REG 19, (1 << (MIG3_PLIC_SOURCES + 1)) - 2
 ```
 
 Change the number of interrupt sources in the configuration, and the test's expectation
