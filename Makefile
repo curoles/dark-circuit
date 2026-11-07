@@ -11,7 +11,8 @@
 #   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
 #   make config  - generate files from design configurations
-#   make kb      - check the knowledge base kb/: records, links to the code
+#   make kb      - check the knowledge base kb/: records, links to the code; CATALOG.md
+#   make catalog - generate CATALOG.md, the catalog of rtl/lib
 #   make mutants [M=<filter>] [SIM=icarus] - run the mutants of the tests (kb records)
 #   make <design>_synth [TECH=sky130] - synthesis of one design with Yosys, like make mig2_synth
 #   make doc     - documentation of the RTL with Doxygen
@@ -58,7 +59,7 @@ CONFIGS := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_config.yaml)
 # Plain `make` without a target shows help.
 .DEFAULT_GOAL := help
 
-.PHONY: cmake build test test_gates test_parts test_blocks run list config kb mutants doc
+.PHONY: cmake build test test_gates test_parts test_blocks run list config kb catalog mutants doc
 .PHONY: help
 
 cmake:
@@ -121,6 +122,12 @@ config:
 # after a change that adds records, or moves, renames or deletes code with an @kb: tag.
 kb:
 	@python3 $(SOURCE_DIR)/tools/kb_check.py --root $(SOURCE_DIR)
+	@python3 $(SOURCE_DIR)/tools/catalog.py --root $(SOURCE_DIR) --check
+
+# The catalog of the library, CATALOG.md (kb/tools/catalog.yaml): every module of rtl/lib with
+# the first sentence of its header comment; run after adding, renaming or describing a module.
+catalog:
+	@python3 $(SOURCE_DIR)/tools/catalog.py --root $(SOURCE_DIR)
 
 # Run the mutants of the tests (kb records of type mutants, kb/README.md) in a scratch copy,
 # never in the repository: each must be caught. M=<filter> selects records by id, SIM=icarus.
@@ -144,7 +151,9 @@ Targets:
   make list         configure if needed and list tests: name and labels of every test
   make config       generate files from design configurations: rtl/design/*/cfg/*_config.yaml
   make kb           check the knowledge base kb/ (why the code is as it is): records, links
-                    to the code (kb/README.md)
+                    to the code (kb/README.md); and that CATALOG.md is up to date
+  make catalog      generate CATALOG.md: every module of rtl/lib, what it is, its versions,
+                    test and kb records
   make mutants      run the mutants of the tests (kb records of type mutants) in a scratch
                     copy (/tmp/dc_mutate): each must be caught; M=<filter>, SIM=icarus
   make <design>_synth  synthesis of one design with Yosys (sv2v, then Yosys), like

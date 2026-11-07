@@ -1,0 +1,29 @@
+type: decision
+title: A generated catalog of the library, CATALOG.md, checked by make kb
+date: 2026-11-07
+question: >
+  Agents (and readers) look for an existing block before writing one. Is a catalog of the
+  library worth having, or does scanning the files and directories do as well?
+decision: >
+  CATALOG.md at the top of the repository: every module, package and macro file of rtl/lib
+  in one YAML tree of its directories, each with what it is (the first sentence of its
+  header comment), its versions (behave/struct, comb/pipe, the gate and cell flavors), its
+  path, its test directory and the kb records that point into it. tools/catalog.py writes it
+  (make catalog); make kb fails when it is not up to date, so it never drifts. AGENTS.md
+  says to read it before writing a module.
+why: >
+  Scanning finds a block only when its name is guessed: twice an agent wrote what the
+  library had (ANDN/ORN/XNOR without reading Alu1; a one-hot mux beside the gates
+  Mux1hot2/3), and a catalog searched by what blocks do finds them. Generated from the
+  header comments, it costs nothing to keep and cannot go stale; a hand-written list would.
+  A whole read is about 1 200 lines, and it greps by name or by words of its sentences.
+rejected:
+  - choice: No catalog, scanning only
+    why_not: Misses blocks under other names (above); many tool calls for every search.
+  - choice: A hand-written catalog
+    why_not: It drifts from the code; the header comments already say what each module is.
+evidence: >
+  2026-11-07: 251 entries, all with a description from their header comments.
+code:
+  - tools/catalog.py#summary
+  - Makefile#catalog

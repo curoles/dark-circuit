@@ -173,7 +173,9 @@ This file has the rules that are not in README.md.
 
 ## Library idioms
 
-Before writing a module, read the closest existing module of the same kind (a part, a
+Before writing a module, look in `CATALOG.md` (every module of `rtl/lib` with what it is,
+generated: `make catalog`) for one that does the job under another name. Then read the
+closest existing module of the same kind (a part, a
 block's behave or struct version, a testbench) and follow its idioms; when the library has an
 element for a job, use it instead of writing the logic again. The idioms, each with a file
 that shows it (paths under `rtl/lib/` unless written in full); a new idiom gets a line here in
@@ -428,7 +430,8 @@ document intent and stop the simulation in the cycle a rule breaks.
 
 - Block: `rtl/lib/block/<b>/{behave,struct}/` with `<b>.flist` each, a `-F` line in
   `block_behave.flist` and `block_struct.flist`, a test in `test/block/<b>/`,
-  the block name in the README layout.
+  the block name in the README layout, `make catalog` (`make kb` fails while
+  `CATALOG.md` is stale; its first header sentence is the catalog's description).
 - Order for a block: the behave version first, with its test (the test is the spec both
   versions must meet), then the struct version against the same test. Writing the struct
   version is a review of the design: look for simplifications (a cheaper state, a shared

@@ -170,6 +170,8 @@ on the main simulator, so both versions must behave the same.
   see [Design configuration](#design-configuration)
 - `make kb`: check the knowledge base `kb/`: why the code is as it is, decisions and
   attempts that were dropped, linked to the code (see `kb/README.md`)
+- `make catalog`: generate `CATALOG.md`, every module of `rtl/lib` with what it is, its
+  versions, test and kb records
 
 Configure is needed the first time and when `CMAKE_ARGS` are given;
 after that cmake re-runs itself when `CMakeLists.txt` or flists change.
