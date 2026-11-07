@@ -16,6 +16,140 @@ ai:
       what: "Systolic array of ROWS x COLS processing elements (AiMacPe), a sketch"
       versions: [behave]
       path: rtl/lib/ai/systolic_array/behave/ai_systolic_array.sv
+bus:
+  axi:
+    AxiPkg:
+      kind: package
+      what: "AXI (AMBA AXI4 and AXI5) encodings, for the adapters between AXI and the library's channels"
+      path: rtl/lib/bus/axi/axi_pkg.sv
+      kb: [rtl/lib/block/atomic/design]
+macro:
+  clog2.svh:
+    kind: macros
+    what: "CLOG2: compile-time log2 as a macro, kept only for old code"
+    path: rtl/lib/macro/clog2.svh
+  dark_circuit_assert.svh:
+    kind: macros
+    what: "Assertion macros: invariants written next to the logic they guard"
+    path: rtl/lib/macro/dark_circuit_assert.svh
+  dark_circuit_test.svh:
+    kind: macros
+    what: "Test macros: named checks, and the hooks of mutant runs (tools/mutate.py, kb records of type mutants, kb/README.md)"
+    path: rtl/lib/macro/dark_circuit_test.svh
+    kb: [tools/mutate]
+  repeat_macro.svh:
+    kind: macros
+    what: "REPEAT: macro that repeats its argument n times, n from 0 to 9"
+    path: rtl/lib/macro/repeat_macro.svh
+numeric:
+  fp32:
+    Fp32Pkg:
+      kind: package
+      what: "Fp32 package: the IEEE-754 single precision format"
+      path: rtl/lib/numeric/fp32/fp32_pkg.sv
+    mul:
+      Fp32CombMultiplier:
+        what: "Fp32 combinational multiplier: IEEE-754 single precision a * b"
+        versions: [behave]
+        path: rtl/lib/numeric/fp32/mul/comb/behave/fp32_comb_multiplier.sv
+        test: test/numeric/fp32/mul
+      Fp32PipelinedMultiplier:
+        what: "Fp32 pipelined multiplier: IEEE-754 single precision a * b in three stages"
+        versions: [behave]
+        path: rtl/lib/numeric/fp32/mul/pipe/behave/fp32_pipelined_multiplier.sv
+        test: test/numeric/fp32/mul
+  int32:
+    div:
+      iter:
+        Int32Div:
+          what: "32-bit integer divider: quotient and remainder, signed or unsigned, iterative (Divider, 32 clocks)"
+          versions: [behave, struct]
+          path: rtl/lib/numeric/int32/div/iter/behave/int32_div.sv
+          kb: [rtl/lib/block/divider/early_start]
+    mul:
+      Int32Mul:
+        what: "32-bit integer multiplier: product = a * b, each operand signed or unsigned, combinational"
+        versions: [behave, struct]
+        path: rtl/lib/numeric/int32/mul/comb/behave/int32_mul.sv
+        test: test/numeric/int32/mul
+part:
+  BrentKungAdder:
+    what: "Brent-Kung adder: {co, sum} = in1 + in2 + ci, parallel prefix"
+    path: rtl/lib/part/brent_kung_adder.sv
+    test: test/part/brent_kung_adder
+  CarrySaveAdder:
+    what: "Carry Save Adder: adds 3 numbers into partial sum and shifted carry, in1 + in2 + in3 = ps + (sc << 1)"
+    path: rtl/lib/part/carry_save_adder.sv
+    test: test/part/carry_save_adder
+  Crc8CcittLfsr:
+    what: "CRC-8 with the CCITT polynomial x^8 + x^2 + x + 1 (0x07), bit-serial"
+    path: rtl/lib/part/crc8_ccitt_lfsr.sv
+    test: test/part/crc8_ccitt_lfsr
+  EdgeDetector:
+    what: "Edge detector: edge_detected is 1 while in differs from its value at the last rising edge of clk in the way EDGE asks: 0 a falling edge (in went 1 -> 0), 1 a rising edge (0 -> 1), 2 any edge"
+    path: rtl/lib/part/edge_detector.sv
+    test: test/part/edge_detector
+  GatedClk:
+    what: "Gated clock"
+    path: rtl/lib/part/gated_clk.sv
+    test: test/part/gated_clk
+  KoggeStoneAdder:
+    what: "Kogge-Stone adder: {co, sum} = in1 + in2 + ci, parallel prefix"
+    path: rtl/lib/part/kogge_stone_adder.sv
+    test: test/part/kogge_stone_adder
+  LimDff:
+    what: "Logic-in-Memory DFF"
+    path: rtl/lib/part/lim_dff.sv
+    test: test/part/lim_dff
+  RippleCarryAdder:
+    what: "Ripple Carry Adder: {co, sum} = in1 + in2 + ci"
+    path: rtl/lib/part/ripple_carry_adder.sv
+    test: test/part/ripple_carry_adder
+  SignalClockSync:
+    what: "Signal clock synchronizer: brings in, a signal of clk1's clock domain, into clk2's domain, through a chain of STAGES flip-flops on clk2"
+    path: rtl/lib/part/signal_clock_sync.sv
+    test: test/part/signal_clock_sync
+riscv:
+  RiscvCsrPkg:
+    kind: package
+    what: "verilator lint_off UNUSEDPARAM"
+    path: rtl/lib/riscv/riscv_csr_pkg.sv
+  RiscvInstrPkg:
+    kind: package
+    what: "verilator lint_off UNUSEDPARAM"
+    path: rtl/lib/riscv/riscv_instr_pkg.sv
+  RiscvPkg:
+    kind: package
+    what: "RISC-V instruction formats: fields of a 32-bit instruction, as in the format tables of the RISC-V spec"
+    path: rtl/lib/riscv/riscv_pkg.sv
+sim:
+  DcTestPkg:
+    kind: package
+    what: "Helpers of the tests: the named checks of DC_TEST_FAIL (dark_circuit_test.svh)"
+    path: rtl/lib/sim/dc_test_pkg.sv
+    kb: [tools/mutate]
+  SimClkGen:
+    what: "Simple clock generator to use in RTL simulations"
+    path: rtl/lib/sim/sim_clk_gen.sv
+  SimLatencyRAM:
+    what: "Simulation RAM with variable latency: SimRAM behind a request channel"
+    path: rtl/lib/sim/sim_latency_ram.sv
+    kb: [rtl/lib/sim/sim_latency_ram]
+  SimRAM:
+    what: "Verilog simulation RAM model"
+    path: rtl/lib/sim/sim_ram.sv
+  SimROM:
+    what: "Verilog simulation ROM model"
+    path: rtl/lib/sim/sim_rom.sv
+  SimRstGen:
+    what: "Simple reset signal generator to use in RTL simulations"
+    path: rtl/lib/sim/sim_rst_gen.sv
+  SimVldRdySink:
+    what: "Valid/ready sink for testbenches: raises ready at random (ready_pct is the percent of cycles with ready=1), keeps the items it takes (received), and checks the valid/ready rules on its side with $fatal: valid=0 during reset; while valid=1 and ready=0, valid and data must stay until the transfer. ready is a flip-flop, so the sink makes no combinational loop"
+    path: rtl/lib/sim/sim_vld_rdy.sv
+  SimVldRdySource:
+    what: "Valid/ready source for testbenches: sends the items of its queue (push()) through channel out, raising valid at random: gap_pct is the percent of cycles without an offer while items wait"
+    path: rtl/lib/sim/sim_vld_rdy.sv
 block:
   AddCmp:
     what: "Adder-comparator: eq = (a + b == c), mod 2^WIDTH"
@@ -549,13 +683,252 @@ block:
     SkidBufferT:
       what: "Skid buffer of type T: SkidBuffer with DATA_WIDTH = $bits(T); items are values of T"
       path: rtl/lib/block/skid_buffer/skid_buffer_t.sv
-bus:
-  axi:
-    AxiPkg:
-      kind: package
-      what: "AXI (AMBA AXI4 and AXI5) encodings, for the adapters between AXI and the library's channels"
-      path: rtl/lib/bus/axi/axi_pkg.sv
-      kb: [rtl/lib/block/atomic/design]
+gate:
+  And2:
+    what: "2-input AND"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/and2.sv
+    test: test/gate
+  And3:
+    what: "3-input AND"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/and3.sv
+    test: test/gate
+  AndReduce:
+    what: "AND reduction, returns 1 if all bits of input are 1"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/and_reduce.sv
+    test: test/gate
+  Ao21:
+    what: "AND-OR, out = (in1 & in2) | in3"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/ao21.sv
+    test: test/gate
+  Aoi21:
+    what: "AND-OR-Invert, out = ~((in1 & in2) | in3)"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/aoi21.sv
+    test: test/gate
+  Aoi22:
+    what: "Complex gate And-Or-Invertor"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/aoi22.sv
+    test: test/gate
+  Aoi31:
+    what: "AND-OR-Invert, 3-Input AND Feeding NOR with 1 input"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/aoi31.sv
+    test: test/gate
+  Benc:
+    what: "Booth Encoding"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/benc.sv
+    test: test/gate
+  Bml:
+    what: "Booth Multiplexer"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/bml.sv
+    test: test/gate
+  Buf:
+    what: "Buffer"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/buf.sv
+    test: test/gate
+  CmpEq:
+    what: "Comparator, returns 1 if in1 equals in2"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/cmp_eq.sv
+    test: test/gate
+  CmpNe:
+    what: "Comparator, returns 1 if in1 mismatches in2"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/cmp_ne.sv
+    test: test/gate
+  Dff:
+    what: "Rising edge triggered D Flip Flop"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/dff.sv
+    test: test/gate
+  DffAsyncRst:
+    what: "D type Flip Flop with asynchronous reset"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/dff_async_rst.sv
+    test: test/gate
+  DffAsyncRstEn:
+    what: "D type Flip Flop with asynchronous reset and Enable"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/dff_async_rst.sv
+    test: test/gate
+  DffEn:
+    what: "Rising edge triggered D Flip Flop with Enable: en=1 takes in, en=0 holds"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/dff.sv
+    test: test/gate
+  DffSyncRst:
+    what: "D type Flip Flop with Synchronous Reset to RST_VAL"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/dff_sync_rst.sv
+    test: test/gate
+  DffSyncRstEn:
+    what: "D type Flip Flop with Synchronous Reset to RST_VAL and Enable"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/dff_sync_rst.sv
+    test: test/gate
+  FullAdder:
+    what: "Full Adder, independent for every bit (no carry chain between bits)"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/full_adder.sv
+    test: test/gate
+  FullAdderAoi:
+    what: "Full Adder using And-Or-Invert (AOI) logic, independent for every bit"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/full_adder_aoi.sv
+    test: test/gate
+  FullAdderMaj3:
+    what: "Full Adder made of MAJ3 gates and inverters only, independent for every bit"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/full_adder_maj3.sv
+    test: test/gate
+  HalfAdder:
+    what: "Half Adder, independent for every bit"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/half_adder.sv
+    test: test/gate
+  Iind3:
+    what: "3-input NAND with 2 inverted input"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/iind3.sv
+    test: test/gate
+  Ind2:
+    what: "2-input NAND with 1 inverted input"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/ind2.sv
+    test: test/gate
+  Ind3:
+    what: "3-input NAND with 1 inverted input"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/ind3.sv
+    test: test/gate
+  Inv:
+    what: "Inverter"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/inv.sv
+    test: test/gate
+  Latch:
+    what: "Latch"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/latch.sv
+    test: test/gate
+  Maj3:
+    what: "3-input Majority, out bit is 1 when at least 2 of 3 input bits are 1"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/maj3.sv
+    test: test/gate
+  Mux1hot2:
+    what: "One-hot Multiplexer, sel[k] selects input in<k>"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux1hot2.sv
+    test: test/gate
+  Mux1hot3:
+    what: "One-hot Multiplexer, sel[k] selects input in<k>"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux1hot3.sv
+    test: test/gate
+  Mux2:
+    what: "2:1 Multiplexer"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux2.sv
+    test: test/gate
+  Mux2i:
+    what: "Inverting 2:1 Multiplexer made with OAI22, out = ~(sel ? in1 : in0)"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux2i.sv
+    test: test/gate
+  Mux3:
+    what: "Multiplexer, sel 0 selects in0, 1 selects in1, 2 and 3 select in2"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux3.sv
+    test: test/gate
+  Mux4:
+    what: "4:1 Multiplexer, sel k selects input in<k>"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux4.sv
+    test: test/gate
+  Mux8:
+    what: "8 inputs Multiplexer, sel k selects input in<k>"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/mux8.sv
+    test: test/gate
+  Nand2:
+    what: "2-input NAND"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/nand2.sv
+    test: test/gate
+  Nand3:
+    what: "3-input NAND"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/nand3.sv
+    test: test/gate
+  Nor2:
+    what: "2-input NOR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/nor2.sv
+    test: test/gate
+  Nor3:
+    what: "3-input NOR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/nor3.sv
+    test: test/gate
+  NorReduce:
+    what: "NOR reduction, returns 1 if all bits of input are 0"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/nor_reduce.sv
+    test: test/gate
+  Oai21:
+    what: "OR-AND-Invert, out = ~((in1 | in2) & in3)"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/oai21.sv
+    test: test/gate
+  Oai22:
+    what: "Complex gate OR-AND-Invertor"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/oai22.sv
+    test: test/gate
+  Or2:
+    what: "2-input OR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/or2.sv
+    test: test/gate
+  Or3:
+    what: "3-input OR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/or3.sv
+    test: test/gate
+  OrReduce:
+    what: "OR reduction, returns 1 if any bit of input is 1"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/or_reduce.sv
+    test: test/gate
+  Parity:
+    what: "Return 1 if input vector has odd number of 1's"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/parity.sv
+    test: test/gate
+  Xnor2:
+    what: "2-input XNOR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/xnor2.sv
+    test: test/gate
+  Xor2:
+    what: "2-input XOR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/xor2.sv
+    test: test/gate
+  Xor3:
+    what: "3-input XOR"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/xor3.sv
+    test: test/gate
 cell:
   AN2:
     what: "2-input AND, TSMC-style cell AN2"
@@ -821,377 +1194,4 @@ cell:
     what: "3-input XOR, cell XOR3 mapped to TSMC library cell XOR3D1"
     versions: [tsmc]
     path: rtl/lib/cell/tsmc/xor3.sv
-gate:
-  And2:
-    what: "2-input AND"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/and2.sv
-    test: test/gate
-  And3:
-    what: "3-input AND"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/and3.sv
-    test: test/gate
-  AndReduce:
-    what: "AND reduction, returns 1 if all bits of input are 1"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/and_reduce.sv
-    test: test/gate
-  Ao21:
-    what: "AND-OR, out = (in1 & in2) | in3"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/ao21.sv
-    test: test/gate
-  Aoi21:
-    what: "AND-OR-Invert, out = ~((in1 & in2) | in3)"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/aoi21.sv
-    test: test/gate
-  Aoi22:
-    what: "Complex gate And-Or-Invertor"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/aoi22.sv
-    test: test/gate
-  Aoi31:
-    what: "AND-OR-Invert, 3-Input AND Feeding NOR with 1 input"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/aoi31.sv
-    test: test/gate
-  Benc:
-    what: "Booth Encoding"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/benc.sv
-    test: test/gate
-  Bml:
-    what: "Booth Multiplexer"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/bml.sv
-    test: test/gate
-  Buf:
-    what: "Buffer"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/buf.sv
-    test: test/gate
-  CmpEq:
-    what: "Comparator, returns 1 if in1 equals in2"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/cmp_eq.sv
-    test: test/gate
-  CmpNe:
-    what: "Comparator, returns 1 if in1 mismatches in2"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/cmp_ne.sv
-    test: test/gate
-  Dff:
-    what: "Rising edge triggered D Flip Flop"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/dff.sv
-    test: test/gate
-  DffAsyncRst:
-    what: "D type Flip Flop with asynchronous reset"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/dff_async_rst.sv
-    test: test/gate
-  DffAsyncRstEn:
-    what: "D type Flip Flop with asynchronous reset and Enable"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/dff_async_rst.sv
-    test: test/gate
-  DffEn:
-    what: "Rising edge triggered D Flip Flop with Enable: en=1 takes in, en=0 holds"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/dff.sv
-    test: test/gate
-  DffSyncRst:
-    what: "D type Flip Flop with Synchronous Reset to RST_VAL"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/dff_sync_rst.sv
-    test: test/gate
-  DffSyncRstEn:
-    what: "D type Flip Flop with Synchronous Reset to RST_VAL and Enable"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/dff_sync_rst.sv
-    test: test/gate
-  FullAdder:
-    what: "Full Adder, independent for every bit (no carry chain between bits)"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/full_adder.sv
-    test: test/gate
-  FullAdderAoi:
-    what: "Full Adder using And-Or-Invert (AOI) logic, independent for every bit"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/full_adder_aoi.sv
-    test: test/gate
-  FullAdderMaj3:
-    what: "Full Adder made of MAJ3 gates and inverters only, independent for every bit"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/full_adder_maj3.sv
-    test: test/gate
-  HalfAdder:
-    what: "Half Adder, independent for every bit"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/half_adder.sv
-    test: test/gate
-  Iind3:
-    what: "3-input NAND with 2 inverted input"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/iind3.sv
-    test: test/gate
-  Ind2:
-    what: "2-input NAND with 1 inverted input"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/ind2.sv
-    test: test/gate
-  Ind3:
-    what: "3-input NAND with 1 inverted input"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/ind3.sv
-    test: test/gate
-  Inv:
-    what: "Inverter"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/inv.sv
-    test: test/gate
-  Latch:
-    what: "Latch"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/latch.sv
-    test: test/gate
-  Maj3:
-    what: "3-input Majority, out bit is 1 when at least 2 of 3 input bits are 1"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/maj3.sv
-    test: test/gate
-  Mux1hot2:
-    what: "One-hot Multiplexer, sel[k] selects input in<k>"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux1hot2.sv
-    test: test/gate
-  Mux1hot3:
-    what: "One-hot Multiplexer, sel[k] selects input in<k>"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux1hot3.sv
-    test: test/gate
-  Mux2:
-    what: "2:1 Multiplexer"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux2.sv
-    test: test/gate
-  Mux2i:
-    what: "Inverting 2:1 Multiplexer made with OAI22, out = ~(sel ? in1 : in0)"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux2i.sv
-    test: test/gate
-  Mux3:
-    what: "Multiplexer, sel 0 selects in0, 1 selects in1, 2 and 3 select in2"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux3.sv
-    test: test/gate
-  Mux4:
-    what: "4:1 Multiplexer, sel k selects input in<k>"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux4.sv
-    test: test/gate
-  Mux8:
-    what: "8 inputs Multiplexer, sel k selects input in<k>"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/mux8.sv
-    test: test/gate
-  Nand2:
-    what: "2-input NAND"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/nand2.sv
-    test: test/gate
-  Nand3:
-    what: "3-input NAND"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/nand3.sv
-    test: test/gate
-  Nor2:
-    what: "2-input NOR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/nor2.sv
-    test: test/gate
-  Nor3:
-    what: "3-input NOR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/nor3.sv
-    test: test/gate
-  NorReduce:
-    what: "NOR reduction, returns 1 if all bits of input are 0"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/nor_reduce.sv
-    test: test/gate
-  Oai21:
-    what: "OR-AND-Invert, out = ~((in1 | in2) & in3)"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/oai21.sv
-    test: test/gate
-  Oai22:
-    what: "Complex gate OR-AND-Invertor"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/oai22.sv
-    test: test/gate
-  Or2:
-    what: "2-input OR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/or2.sv
-    test: test/gate
-  Or3:
-    what: "3-input OR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/or3.sv
-    test: test/gate
-  OrReduce:
-    what: "OR reduction, returns 1 if any bit of input is 1"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/or_reduce.sv
-    test: test/gate
-  Parity:
-    what: "Return 1 if input vector has odd number of 1's"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/parity.sv
-    test: test/gate
-  Xnor2:
-    what: "2-input XNOR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/xnor2.sv
-    test: test/gate
-  Xor2:
-    what: "2-input XOR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/xor2.sv
-    test: test/gate
-  Xor3:
-    what: "3-input XOR"
-    versions: [cell, generic]
-    path: rtl/lib/gate/generic/xor3.sv
-    test: test/gate
-macro:
-  clog2.svh:
-    kind: macros
-    what: "CLOG2: compile-time log2 as a macro, kept only for old code"
-    path: rtl/lib/macro/clog2.svh
-  dark_circuit_assert.svh:
-    kind: macros
-    what: "Assertion macros: invariants written next to the logic they guard"
-    path: rtl/lib/macro/dark_circuit_assert.svh
-  dark_circuit_test.svh:
-    kind: macros
-    what: "Test macros: named checks, and the hooks of mutant runs (tools/mutate.py, kb records of type mutants, kb/README.md)"
-    path: rtl/lib/macro/dark_circuit_test.svh
-    kb: [tools/mutate]
-  repeat_macro.svh:
-    kind: macros
-    what: "REPEAT: macro that repeats its argument n times, n from 0 to 9"
-    path: rtl/lib/macro/repeat_macro.svh
-numeric:
-  fp32:
-    Fp32Pkg:
-      kind: package
-      what: "Fp32 package: the IEEE-754 single precision format"
-      path: rtl/lib/numeric/fp32/fp32_pkg.sv
-    mul:
-      Fp32CombMultiplier:
-        what: "Fp32 combinational multiplier: IEEE-754 single precision a * b"
-        versions: [behave]
-        path: rtl/lib/numeric/fp32/mul/comb/behave/fp32_comb_multiplier.sv
-        test: test/numeric/fp32/mul
-      Fp32PipelinedMultiplier:
-        what: "Fp32 pipelined multiplier: IEEE-754 single precision a * b in three stages"
-        versions: [behave]
-        path: rtl/lib/numeric/fp32/mul/pipe/behave/fp32_pipelined_multiplier.sv
-        test: test/numeric/fp32/mul
-  int32:
-    div:
-      iter:
-        Int32Div:
-          what: "32-bit integer divider: quotient and remainder, signed or unsigned, iterative (Divider, 32 clocks)"
-          versions: [behave, struct]
-          path: rtl/lib/numeric/int32/div/iter/behave/int32_div.sv
-          kb: [rtl/lib/block/divider/early_start]
-    mul:
-      Int32Mul:
-        what: "32-bit integer multiplier: product = a * b, each operand signed or unsigned, combinational"
-        versions: [behave, struct]
-        path: rtl/lib/numeric/int32/mul/comb/behave/int32_mul.sv
-        test: test/numeric/int32/mul
-part:
-  BrentKungAdder:
-    what: "Brent-Kung adder: {co, sum} = in1 + in2 + ci, parallel prefix"
-    path: rtl/lib/part/brent_kung_adder.sv
-    test: test/part/brent_kung_adder
-  CarrySaveAdder:
-    what: "Carry Save Adder: adds 3 numbers into partial sum and shifted carry, in1 + in2 + in3 = ps + (sc << 1)"
-    path: rtl/lib/part/carry_save_adder.sv
-    test: test/part/carry_save_adder
-  Crc8CcittLfsr:
-    what: "CRC-8 with the CCITT polynomial x^8 + x^2 + x + 1 (0x07), bit-serial"
-    path: rtl/lib/part/crc8_ccitt_lfsr.sv
-    test: test/part/crc8_ccitt_lfsr
-  EdgeDetector:
-    what: "Edge detector: edge_detected is 1 while in differs from its value at the last rising edge of clk in the way EDGE asks: 0 a falling edge (in went 1 -> 0), 1 a rising edge (0 -> 1), 2 any edge"
-    path: rtl/lib/part/edge_detector.sv
-    test: test/part/edge_detector
-  GatedClk:
-    what: "Gated clock"
-    path: rtl/lib/part/gated_clk.sv
-    test: test/part/gated_clk
-  KoggeStoneAdder:
-    what: "Kogge-Stone adder: {co, sum} = in1 + in2 + ci, parallel prefix"
-    path: rtl/lib/part/kogge_stone_adder.sv
-    test: test/part/kogge_stone_adder
-  LimDff:
-    what: "Logic-in-Memory DFF"
-    path: rtl/lib/part/lim_dff.sv
-    test: test/part/lim_dff
-  RippleCarryAdder:
-    what: "Ripple Carry Adder: {co, sum} = in1 + in2 + ci"
-    path: rtl/lib/part/ripple_carry_adder.sv
-    test: test/part/ripple_carry_adder
-  SignalClockSync:
-    what: "Signal clock synchronizer: brings in, a signal of clk1's clock domain, into clk2's domain, through a chain of STAGES flip-flops on clk2"
-    path: rtl/lib/part/signal_clock_sync.sv
-    test: test/part/signal_clock_sync
-riscv:
-  RiscvCsrPkg:
-    kind: package
-    what: "verilator lint_off UNUSEDPARAM"
-    path: rtl/lib/riscv/riscv_csr_pkg.sv
-  RiscvInstrPkg:
-    kind: package
-    what: "verilator lint_off UNUSEDPARAM"
-    path: rtl/lib/riscv/riscv_instr_pkg.sv
-  RiscvPkg:
-    kind: package
-    what: "RISC-V instruction formats: fields of a 32-bit instruction, as in the format tables of the RISC-V spec"
-    path: rtl/lib/riscv/riscv_pkg.sv
-sim:
-  DcTestPkg:
-    kind: package
-    what: "Helpers of the tests: the named checks of DC_TEST_FAIL (dark_circuit_test.svh)"
-    path: rtl/lib/sim/dc_test_pkg.sv
-    kb: [tools/mutate]
-  SimClkGen:
-    what: "Simple clock generator to use in RTL simulations"
-    path: rtl/lib/sim/sim_clk_gen.sv
-  SimLatencyRAM:
-    what: "Simulation RAM with variable latency: SimRAM behind a request channel"
-    path: rtl/lib/sim/sim_latency_ram.sv
-    kb: [rtl/lib/sim/sim_latency_ram]
-  SimRAM:
-    what: "Verilog simulation RAM model"
-    path: rtl/lib/sim/sim_ram.sv
-  SimROM:
-    what: "Verilog simulation ROM model"
-    path: rtl/lib/sim/sim_rom.sv
-  SimRstGen:
-    what: "Simple reset signal generator to use in RTL simulations"
-    path: rtl/lib/sim/sim_rst_gen.sv
-  SimVldRdySink:
-    what: "Valid/ready sink for testbenches: raises ready at random (ready_pct is the percent of cycles with ready=1), keeps the items it takes (received), and checks the valid/ready rules on its side with $fatal: valid=0 during reset; while valid=1 and ready=0, valid and data must stay until the transfer. ready is a flip-flop, so the sink makes no combinational loop"
-    path: rtl/lib/sim/sim_vld_rdy.sv
-  SimVldRdySource:
-    what: "Valid/ready source for testbenches: sends the items of its queue (push()) through channel out, raising valid at random: gap_pct is the percent of cycles without an offer while items wait"
-    path: rtl/lib/sim/sim_vld_rdy.sv
 ```

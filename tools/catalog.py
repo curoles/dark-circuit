@@ -22,6 +22,8 @@ LIB = "rtl/lib"
 VERSION_DIRS = {"behave", "struct", "comb", "pipe"}
 # Directories right under these that are versions of the same modules (the same names).
 GROUP_VERSION_DIRS = {"gate": {"generic", "cell"}, "cell": {"builtin", "cmos", "generic", "tsmc"}}
+# Top-level directories that come last, in this order; the others alphabetically before them.
+LAST = ["block", "gate", "cell"]
 # The version whose description and path an entry shows, first found in this order.
 PREFERRED = ["behave", "generic", "comb"]
 DECL = re.compile(r"^\s*(module|package|interface)\s+(\w+)", re.M)
@@ -197,7 +199,11 @@ def render(entries):
                 out.append(f"{ind}  test: {e['test']}")
             if e["kb"]:
                 out.append(f"{ind}  kb: [{', '.join(e['kb'])}]")
-        for k in sorted(x for x in node if x):
+        keys = sorted(x for x in node if x)
+        if depth == 0:
+            # Most readers look for blocks; gates and cells come last.
+            keys = [k for k in keys if k not in LAST] + [k for k in LAST if k in keys]
+        for k in keys:
             out.append(f"{ind}{k}:")
             walk(node[k], depth + 1)
 
