@@ -208,6 +208,13 @@ the chunk that establishes it:
   A variant that is another block with some logic left out: a parameter of that block
   (`READ_ONLY`) and a wrapper with the variant's ports, one file above `behave/` and
   `struct/` listed by both flists (`block/cache/direct_cache_rd_only`).
+- Library layout: generic blocks in `rtl/lib/block/`; a concrete on-chip bus (AXI) only in
+  `rtl/lib/bus/`, as adapters to the library's channels; device controllers with pins
+  (UART, I2C, SPI, later PCIe, USB) in `rtl/lib/io/`, their registers behind the register
+  port (kb `rtl/lib/block/atomic/design`).
+- Atomics at the point of coherence: a request's `atop` (AtomicPkg, AXI5 AWATOP's values),
+  done by AtomicUnit in front of the shared memory level, not in the core (kb
+  `rtl/lib/block/atomic/design`).
 - A device's registers: the register port, plain signals `req_valid`, `req_ready`,
   `req_we`, `req_addr`, `req_wdata`, `req_wstrb`, `rsp_valid`, `rsp_rdata` with
   parameters `ADDR_WIDTH` and `DATA_WIDTH`, as the caches' CPU side; no bus inside, a

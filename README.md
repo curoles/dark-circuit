@@ -22,6 +22,8 @@ rtl/lib/
                      not in aggregate flists, not tested yet
   numeric/       number formats, built on blocks: int32/mul Int32Mul, int32/div Int32Div;
                  <format>/<op>/<kind>/{behave,struct}, aggregate flists like block/
+  bus/           standard on-chip buses, the only place for one: axi/ AxiPkg and adapters
+                 between AXI and the library's channels (blocks take no concrete bus)
   riscv/         RISC-V instruction encodings and CSR addresses, generated from riscv-opcodes
                  by tools/riscv_opcodes.sh
   macro/         include files kept for old code; use $clog2, not `CLOG2

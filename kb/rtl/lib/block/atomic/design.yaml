@@ -1,0 +1,80 @@
+type: decision
+title: Atomic memory operations at the point of coherence, with AXI5's encoding (far atomics)
+date: 2026-11-06
+question: >
+  Mig3 has LR/SC (Zalrsc); the AMOs of the A extension (Zaamo) are missing. Where does the
+  read-modify-write of an AMO happen, so that the design carries into Mig4 (RV64, L2, MMU),
+  Mig5 (out of order) and Mig6 (the AI chip, several agents: cores, DMA), and where in the
+  library do atomics and bus code live?
+decision: >
+  Atomics are done where every agent's accesses meet, the point of coherence: in front of
+  the memory in Mig3, at the L2 in Mig4, at the L2/L3 slices or the memory controllers in
+  Mig6, never in the core. Four parts. (1) The library's request channels get a field atop,
+  the operation, with AXI5 AWATOP's values (AtomicPkg: not atomic, AtomicLoad ADD, CLR, EOR,
+  SET, SMAX, SMIN, UMAX, UMIN, AtomicSwap; AtomicStore and AtomicCompare later); the data of
+  the request is the operand. (2) AtomicUnit, a library block in front of a memory level:
+  ordinary requests pass, an atomic one is read, op(old, data) written, old answered; it
+  reuses Alu2 (ADD, ANDN = CLR, XOR, OR = SET, the min/max of Zbb; a swap needs no ALU). (3)
+  Caches above that level pass an atomic through as a no-cache request (exact address and
+  size, kb rtl/lib/block/cache/uncached) and drop their own copy of the line; with write-back
+  coherent caches (Mig4) the coherence protocol does that part (the home node invalidates
+  sharers first, as Arm CHI's far atomics). (4) The core sends an AMO as a load with an atop
+  (AMOAND sends ~rs2 for CLR); its answer, the old value, comes back as a load's and goes to
+  rd: no state machine in EX, no second ALU, nothing new in the pipeline; an out-of-order core
+  orders it as a load with a fence. LR/SC stays in the core (Mig3Atomic) for now; with several
+  agents its reservation moves next to AtomicUnit as an exclusive monitor (AXI exclusive
+  accesses), so that the writes of the others break it. Library layout: generic blocks in
+  rtl/lib/block/ (rtl/lib/block/atomic: AtomicPkg, AtomicUnit, later the exclusive monitor);
+  a concrete on-chip bus only in rtl/lib/bus/ (rtl/lib/bus/axi: AxiPkg, the adapters between
+  AXI and the library's channels); device controllers with pins (UART, I2C, SPI, GPIO, later
+  PCIe and USB) in rtl/lib/io/, their registers behind the register port; platform devices
+  without pins (the PLIC, timers) stay in rtl/lib/block/.
+why: >
+  An AMO done in the core is atomic only while nothing else writes the memory; the AI chip
+  (Mig6) has DMA and several cores, and the DMA experiment may come to Mig3 already. At the
+  level where all accesses meet, one block makes atomics right for every agent, and the
+  same block moves from the memory (Mig3) to the L2 (Mig4) to the slices (Mig6). This is
+  what AXI5 (AWATOP), TileLink (arithmetic and logical operations) and Arm CHI (AtomicLoad,
+  AtomicStore at the Home Node) do. AXI's values for atop make the AXI adapter wiring (user:
+  AXI is the bus the platforms will use), while AtomicPkg itself stays free of AXI. The core
+  gets simpler, not more complex: an AMO is a load. The user: the library is not a
+  commercial CPU; choose what works for Mig4/5/6, not a shortcut for Mig3.
+rejected:
+  - choice: The read-modify-write in the core, EX stalling over several clocks
+    why_not: >
+      Not atomic once another agent writes the memory (DMA, a second core); the D-cache's
+      answer would have to come back to EX (today only MEM/WB takes answers); a stall of
+      three or more clocks per AMO.
+  - choice: Decode splits an AMO into two micro-ops (a load, then the operation and a store)
+    why_not: >
+      Not atomic with other agents either; a hidden temporary register, a sequencer in ID,
+      two retires merged into one entry of the trace.
+  - choice: The operation in the L1 D-cache (an AMO ALU in the cache, as Rocket)
+    why_not: >
+      Right for caches that own their lines (coherence: Mig4 and later); Mig3's
+      write-through D-cache owns nothing, and the block at the point of coherence serves
+      every level.
+  - choice: A separate write-back (WB) stage in the core for the AMO's store
+    why_not: >
+      The store still needs the D-cache port that EX uses every clock; WB would add a
+      forwarding source on Mig3's longest path (5.5 ns into id_rs1_data). Stages are
+      reconsidered with floating point's latencies.
+  - choice: Our own encoding of the operations
+    why_not: An AXI adapter would translate; AXI's values cost nothing.
+  - choice: AXI code in rtl/lib/block/axi (next to the NoC) or in rtl/lib/io/axi
+    why_not: >
+      A concrete bus among the generic blocks hides the rule that blocks take no bus; AXI
+      never leaves the chip, it is no I/O (user).
+relies_on:
+  - rtl/lib/block/cache/uncached
+  - rtl/design/mig3/lr_sc
+  - rtl/lib/block/plic/register_port
+evidence: >
+  2026-11-06: options discussed with the user (in-core, micro-ops, cache-side, at the point
+  of coherence; a WB stage); the encoding table is AXI5's as the authors know it, to check
+  against the AMBA AXI specification (IHI 0022) when the AXI adapter is written. Not built
+  yet: AtomicUnit, the atop field on the channels, the caches' pass-through and Mig3's AMOs
+  are the next steps.
+code:
+  - rtl/lib/block/atomic/atomic_pkg.sv
+  - rtl/lib/bus/axi/axi_pkg.sv

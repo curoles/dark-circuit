@@ -53,6 +53,7 @@
 -F reg_port_target/behave/reg_port_target.flist
 -F strb_reg/behave/strb_reg.flist
 -F plic/plic.flist
+-F atomic/atomic.flist
 -F plic/plic_gateway/behave/plic_gateway.flist
 -F plic/plic_target/behave/plic_target.flist
 -F plic/plic_claim/behave/plic_claim.flist
