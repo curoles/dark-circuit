@@ -127,13 +127,14 @@ if(DARK_CIRCUIT_RISCV)
 
     # Faults trap: a handler checks mcause, mepc and mtval; rd and memory are not
     # written. One build of the program per case (-DCASE_<case>):
-    # misaligned jump target, load and store address; ECALL, illegal words, CSR
+    # misaligned jump target, load, store and AMO address (rv32ia: the AMO); ECALL,
+    # illegal words, CSR
     # instructions on a missing CSR or writing a read-only one.
     set(FAULT_ARGS +expect_trap +expect_regs +expect_mem_unchanged)
-    foreach(case IN ITEMS jalr lw sh)
+    foreach(case IN ITEMS jalr lw sh amo)
         string(TOUPPER ${case} case_macro)
-        mig3_program_test(misaligned_${case} SOURCES misaligned.S FLAGS -DCASE_${case_macro}
-                          ARGS ${FAULT_ARGS})
+        mig3_program_test(misaligned_${case} SOURCES misaligned.S ARCH rv32ia
+                          FLAGS -DCASE_${case_macro} ARGS ${FAULT_ARGS})
     endforeach()
     foreach(case IN ITEMS ecall zero ones csr_unknown csr_readonly)
         string(TOUPPER ${case} case_macro)

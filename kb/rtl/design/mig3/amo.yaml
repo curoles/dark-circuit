@@ -47,8 +47,9 @@ evidence: >
   every AMO's new word and checking the RAM's write of it; the decode test has a case per
   AMO (atop by its encoding) and amoadd.d stays illegal; csr.S reads misa with A; the whole
   Mig3 suite passes (125 tests). Timing, sky130: 5.5 ns as before, 334 746 um2 (+0.4 %:
-  the D-cache's atop and the decode of the AMOs). The cause of a misaligned AMO is set but
-  not exercised by a test.
+  the D-cache's atop and the decode of the AMOs). misaligned.S (CASE_AMO): a misaligned
+  AMOADD.W traps with cause 6 and writes nothing; with the old cause (load misaligned)
+  the test fails.
 code:
   - rtl/design/mig3/mig3_decode.sv#atop_of
   - rtl/design/mig3/mig3_lsu.sv#clear

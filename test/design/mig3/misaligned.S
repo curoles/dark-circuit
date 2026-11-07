@@ -3,12 +3,14 @@
  * One case per build, selected with -D:
  * - CASE_JALR: JALR to an address with bit 1 set (instructions are 4-byte aligned),
  * - CASE_LW:   LW from an address with bit 1 set,
- * - CASE_SH:   SH to an odd address.
+ * - CASE_SH:   SH to an odd address,
+ * - CASE_AMO:  AMOADD.W to an address with bit 1 set: store/AMO misaligned, though
+ *   the core treats an AMO as a load.
  * The instruction at `fault` traps: it writes nothing (x1 keeps 7, memory unchanged
  * with +expect_mem_unchanged). The handler copies mcause to x10, mepc to x11, and
  * mtval minus the expected mtval (x13, the bad address) to x12, then halts.
  * Expected: x10 = CAUSE, x11 = fault, x12 = 0. If the core ignored the low address
- * bits, the JALR would reach the EBREAK at `target` and the LW and SH would complete:
+ * bits, the JALR would reach the EBREAK at `target` and the LW, SH and AMO would complete:
  * the run ends without a trap.
  */
     .macro EXPECT_REG r, value
@@ -39,8 +41,14 @@ fault:
     mv    x13, x2
 fault:
     sh    x1, 0(x2)
+#elif defined(CASE_AMO)
+    .equ  CAUSE, 6                  # misaligned store/AMO
+    la    x2, target + 2
+    mv    x13, x2
+fault:
+    amoadd.w x1, x0, (x2)
 #else
-#error "define CASE_JALR, CASE_LW or CASE_SH"
+#error "define CASE_JALR, CASE_LW, CASE_SH or CASE_AMO"
 #endif
     ebreak                          # not reached: the instruction before traps
 
