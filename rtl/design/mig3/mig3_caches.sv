@@ -84,12 +84,13 @@ module Mig3Caches import Mig3Pkg::*; #(
     logic [2:0]       d_mem_size;
     line_t            d_mem_wdata;
     line_strb_t       d_mem_wstrb;
-    // No atomics yet (kb rtl/lib/block/atomic/design).
-    /* verilator lint_off UNUSEDSIGNAL */
     AtomicPkg::atop_t d_mem_atop;
-    /* verilator lint_on UNUSEDSIGNAL */
     logic             d_mem_rsp_valid;
     line_t            d_mem_rsp_data;
+    // No atomics yet (kb rtl/lib/block/atomic/design): not on the memory port.
+    /* verilator lint_off UNUSEDSIGNAL */
+    AtomicPkg::atop_t mem_atop;
+    /* verilator lint_on UNUSEDSIGNAL */
     // The caches' CPU sides, lines.
     line_t            i_line;           // the I-cache's answer
     line_t            d_line;           // the D-cache's answer
@@ -166,11 +167,13 @@ module Mig3Caches import Mig3Pkg::*; #(
         .dcache_req_valid(d_mem_valid), .dcache_req_ready(d_mem_ready), .dcache_req_we(d_mem_we),
         .dcache_req_addr(d_mem_addr), .dcache_req_wdata(d_mem_wdata),
         .dcache_req_wstrb(d_mem_wstrb), .dcache_req_size(d_mem_size),
+        .dcache_req_atop(d_mem_atop),
         .dcache_rsp_valid(d_mem_rsp_valid),
         .dcache_rsp_data(d_mem_rsp_data),
         .mem_req_valid(mem_req.valid), .mem_req_ready(mem_rsp.ready), .mem_req_we(mem_req.we),
         .mem_req_addr(mem_req.addr), .mem_req_wdata(mem_req.wdata),
         .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_req.size),
+        .mem_req_atop(mem_atop),
         .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 

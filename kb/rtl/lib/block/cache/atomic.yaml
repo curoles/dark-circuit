@@ -18,6 +18,8 @@ decision: >
   next access misses and reads the new value, which the unit below orders after the atomic's
   write (AtomicUnit takes no request until it). Uncached (bypass) requests pass req_atop as
   they come. Read-only caches have no atomics: their wrappers tie req_atop to ATOP_NONE.
+  InsnDataCacheArbiter carries the data cache's atop with its request (in its
+  flow-through buffer) and sends ATOP_NONE for the instruction cache's.
 why: >
   A write-through cache owns no line, so it cannot do the operation (kb
   rtl/lib/block/atomic/design: not in L1 for Mig3), and it does not see the new value; the
@@ -53,7 +55,10 @@ evidence: >
   line would answer stale); atomics that drop a line and that miss must happen. Both
   versions pass on Verilator and Icarus; mutants caught (kb
   test/block/cache/skewed_cache/mutants). DirectCache and SetAssocCache have the same logic;
-  their tests pass with ATOP_NONE (their drop is not exercised).
+  their tests pass with ATOP_NONE (their drop is not exercised). The arbiter, 2026-11-07:
+  its test gives each data read an atop (bits of its address) and checks it at memory,
+  ATOP_NONE for writes and instruction reads; both versions, Verilator and Icarus;
+  2 of 2 mutants caught.
 code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#drop
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#look_atomic
@@ -62,3 +67,5 @@ code:
   - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_and2_drop_wr
   - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#u_or2_valid_wr
   - rtl/lib/block/cache/set_assoc_cache/struct/set_assoc_cache.sv#u_and2_drop_wr
+  - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#d_atop
+  - rtl/lib/block/cache/insn_data_cache_arbiter/struct/insn_data_cache_arbiter.sv#u_mux2_atop

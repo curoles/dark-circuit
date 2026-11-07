@@ -13,7 +13,7 @@
  */
 `include "dark_circuit_assert.svh"
 
-module InsnDataCacheArbiter import CachePkg::*; #(
+module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     parameter  ADDR_WIDTH    = 32,                  // byte address
     parameter  DATA_WIDTH    = 32,                  // a line
     parameter  POLICY        = ARB_ROUND_ROBIN,     // when both want memory and prio is none
@@ -38,6 +38,7 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     input  wire                  dcache_req_we,
     input  wire [ADDR_WIDTH-1:0] dcache_req_addr,
     input  wire [2:0]            dcache_req_size,   // 1 << size bytes (AXI AxSIZE)
+    input  atop_t                dcache_req_atop,   // ATOP_NONE, or an atomic (a read)
     input  wire [DATA_WIDTH-1:0] dcache_req_wdata,
     input  wire [STRB_WIDTH-1:0] dcache_req_wstrb,
     output wire                  dcache_rsp_valid,
@@ -49,6 +50,8 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     output wire                  mem_req_we,
     output wire [ADDR_WIDTH-1:0] mem_req_addr,
     output wire [2:0]            mem_req_size,      // 1 << size bytes (AXI AxSIZE)
+    output atop_t                mem_req_atop,      // the data cache's; ATOP_NONE for the
+                                                    // instruction cache
     output wire [DATA_WIDTH-1:0] mem_req_wdata,     // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb,     // write: the bytes to write
     input  wire                  mem_rsp_valid,
@@ -94,8 +97,8 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     // Each side's request goes through a flow-through buffer: the cache's ready comes from a
     // flop (its buffer is empty), never from memory's ready or the other cache's valid.
     localparam I_REQ_WIDTH = ADDR_WIDTH + 3;    // {addr, size}
-    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + 3 + DATA_WIDTH + STRB_WIDTH;
-                                                // {we, addr, size, wdata, wstrb}
+    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + 3 + $bits(atop_t) + DATA_WIDTH + STRB_WIDTH;
+                                                // {we, addr, size, atop, wdata, wstrb}
     typedef logic [I_REQ_WIDTH-1:0] i_req_t;
     typedef logic [D_REQ_WIDTH-1:0] d_req_t;
 
@@ -108,6 +111,7 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     wire                  d_we;
     wire [ADDR_WIDTH-1:0] d_addr;
     wire [2:0]            d_size;
+    atop_t                d_atop;
     wire [DATA_WIDTH-1:0] d_wdata;
     wire [STRB_WIDTH-1:0] d_wstrb;
 
@@ -120,10 +124,10 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     FlowThroughBufferT #(.T(d_req_t)) u_dcache_flow(
         .clk, .rst_n,
         .in_valid(dcache_req_valid), .in_ready(dcache_req_ready),
-        .in_data({dcache_req_we, dcache_req_addr, dcache_req_size, dcache_req_wdata,
-                  dcache_req_wstrb}),
+        .in_data({dcache_req_we, dcache_req_addr, dcache_req_size, dcache_req_atop,
+                  dcache_req_wdata, dcache_req_wstrb}),
         .out_valid(d_valid), .out_ready(d_ready),
-        .out_data({d_we, d_addr, d_size, d_wdata, d_wstrb}));
+        .out_data({d_we, d_addr, d_size, d_atop, d_wdata, d_wstrb}));
 
     // @kb: rtl/lib/block/cache/insn_data_cache_arbiter/design
     // The tie: prio first (PRIO_DATA and PRIO_INSN never hold together), else POLICY. The
@@ -165,7 +169,10 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     Mux2 #(ADDR_WIDTH) u_mux2_addr(.in0(i_addr), .in1(d_addr), .sel(side),
                                    .out(mem_req_addr));
     Mux2 #(3) u_mux2_size(.in0(i_size), .in1(d_size), .sel(side), .out(mem_req_size));
-    assign mem_req_wdata = d_wdata;             // a write is always the data cache's
+    // @kb: rtl/lib/block/cache/atomic
+    Mux2 #($bits(atop_t)) u_mux2_atop(.in0(AtomicPkg::ATOP_NONE), .in1(d_atop), .sel(side),
+                                      .out(mem_req_atop));
+    assign mem_req_wdata = d_wdata;             // a write, an atomic: the data cache's
     assign mem_req_wstrb = d_wstrb;
 
     And2 #(1) u_and2_taken (.in1(mem_req_valid), .in2(mem_req_ready), .out(taken));
@@ -196,10 +203,13 @@ module InsnDataCacheArbiter import CachePkg::*; #(
     assign dcache_rsp_data = mem_rsp_data;
 
     // A request presented to memory and not taken stays, its fields unchanged (the caches
-    // keep theirs, rule 2; a read's wdata and wstrb mean nothing).
+    // keep theirs, rule 2; a plain read's wdata and wstrb mean nothing, an atomic's are
+    // its operand).
     `DC_ASSERT_NEXT(a_mem_req_held, mem_req_valid && !mem_req_ready,
                     mem_req_valid && $stable(mem_req_we) && $stable(mem_req_addr) &&
-                    (!mem_req_we || ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
+                    $stable(mem_req_atop) &&
+                    ((!mem_req_we && !is_atomic(mem_req_atop)) ||
+                     ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
 
     `DC_ASSERT(a_answer_expected, !mem_rsp_valid || !empty)
     `DC_ASSERT(a_prio_known, prio != 2'd3)
