@@ -166,6 +166,9 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_trap +expect_regs +irq_random=1)
     mig3_program_test(irq_random SOURCES irq_random.S ARCH rv32ima FLAGS -I${SW}
                       ARGS +expect_trap +expect_regs +irq_random=7 +irq_max_gap=60)
+    # The PLIC from software: registers, threshold, a claim acts once.
+    mig3_program_test(plic SOURCES plic.S FLAGS -I${SW}
+                      ARGS +expect_regs +irq_random=3 +irq_max_gap=1000)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)

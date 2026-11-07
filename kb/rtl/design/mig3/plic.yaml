@@ -43,7 +43,9 @@ evidence: >
   interrupts during work) run with the PLIC between the testbench's device and meip: the
   handlers' claim reads go through the D-cache as no-cache requests and reach the PLIC
   exactly, the completes as stores; every other program's memory traffic goes through
-  AddrDecode and ReqDemux to the memory.
+  AddrDecode and ReqDemux to the memory. plic.S: the registers' widths and reserved words
+  as software sees them, the threshold gating meip but not the claim, two claims in a
+  row getting 1 then 0 (a no-cache read reaches the PLIC every time).
 code:
   - rtl/design/mig3/mig3_cpu.sv#u_plic
   - test/design/mig3/irq.S
