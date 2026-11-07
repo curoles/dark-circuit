@@ -36,7 +36,7 @@ module TbMig3Mem;
 
     assign dbg_req = '0;
 
-    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached(1'b0), .meip(1'b0), .halt, .retire, .pipe_trace,
+    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached(1'b0), .irq_src('0), .halt, .retire, .pipe_trace,
                        .dbg_req,
                        .dbg_rsp);
 

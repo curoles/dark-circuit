@@ -39,9 +39,9 @@
  * +max_cycles=<n> (default 100000) only stops a run that does not end;
  * +mem_latency=<ready %>,<fast %>,<fast min>,<fast max>,<slow min>,<slow max>: how the memory
  * of Mig3Cpu answers (SimLatencyRAM configure()), without it latency 1 and always ready.
- * +irq_random=<seed>: TbMig3Irq raises meip, the machine external interrupt, at random
- * times (+irq_max_gap=<n>) and drops it when the program claims: a store to its word
- * irq_claim (address from +symbols); without it meip stays 0.
+ * +irq_random=<seed>: TbMig3Irq, a device, raises its interrupt, source 1 of the PLIC of
+ * Mig3Cpu, at random times (+irq_max_gap=<n>) and drops it when the program acknowledges
+ * it: a store to its word irq_claim (address from +symbols); without it the line stays 0.
  * +uncached: every request of the core bypasses its caches (Mig3Caches), so the program sees
  * the memory's own timing: for tests that count cycles.
  * Bubbles, their checks, their trace lines and the count per reason at the end:
@@ -79,6 +79,7 @@ module TbMig3;
     int unsigned irq_max_gap;           // +irq_max_gap
     word_t       irq_claim;             // address of irq_claim
     logic        meip;                  // the interrupt of TbMig3Irq
+    wire  [MIG3_CFG.plic.sources:1] irq_src;   // the devices: TbMig3Irq is source 1
     int          lat [6];               // its six numbers
     logic        expect_trap;
     logic        first_ebreak_traps;
@@ -119,7 +120,8 @@ module TbMig3;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
-    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached, .meip, .halt, .retire, .pipe_trace, .dbg_req,
+    assign irq_src = {{(MIG3_CFG.plic.sources - 1){1'b0}}, meip};
+    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached, .irq_src, .halt, .retire, .pipe_trace, .dbg_req,
                        .dbg_rsp);
 
     TbMig3PipeView u_pipe_view(.clk, .rst_n, .halt, .retire, .pipe_trace);

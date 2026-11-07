@@ -1,0 +1,49 @@
+type: decision
+title: The PLIC beside Mig3Core in Mig3Cpu, behind the memory port; meip is its context 0
+date: 2026-11-06
+question: >
+  Mig3 has a machine external interrupt input (meip); the library has a PLIC. Where does it
+  go, how do the core's loads and stores reach its registers, and what drives it?
+decision: >
+  In Mig3Cpu, beside the core (the core keeps meip as an input and knows only an uncached
+  I/O region, kb rtl/design/mig3/io_region). AddrDecode with one rule (the PLIC at
+  CFG.io_base + CFG.plic.offset, 1 << CFG.plic.addr_width bytes; miss the memory) and
+  ReqDemux (2 targets, answers in order) split the core's memory port; the PLIC's register
+  port takes the word of the line the address names (the line's word and strobes), and its
+  answer goes into every word of the line. Plic with CFG.plic.sources sources, one context
+  (the hart's machine mode, no S-mode), CFG.plic.prio_width bits; eip[0] is meip. Mig3Cpu's
+  meip port becomes irq_src[sources:1], the devices; the testbench's TbMig3Irq is a device on
+  source 1, acknowledged by a store to its word irq_claim. The interrupt programs enable
+  source 1 (priority 1) and their handlers claim at the PLIC, acknowledge the device and
+  complete. The retire check does not compare load data of the I/O region with the memory.
+why: >
+  The PLIC is a platform part, not the core's (the spec's PLIC serves several harts): the
+  core stays a core and Mig3Cpu is the platform. The library's routing blocks and the
+  generated map make a next device a rule and a port. The memory port's exact uncached
+  requests (byte address and size, kb rtl/lib/block/cache/uncached) let the PLIC see only the
+  accesses the program made.
+rejected:
+  - choice: The PLIC inside Mig3Core
+    why_not: >
+      The core would hold a platform's interrupt controller; several harts later share one
+      PLIC.
+  - choice: A separate I/O port on the core for the devices
+    why_not: >
+      A larger change in the core (the LSU, a second source of load data); the memory port
+      with exact uncached requests serves the PLIC (user: option B).
+relies_on:
+  - rtl/design/mig3/io_region
+  - rtl/design/mig3/interrupts
+  - rtl/lib/block/plic/top
+  - rtl/lib/block/addr_decode/design
+  - rtl/lib/block/req_demux/design
+evidence: >
+  2026-11-06, Verilator: the Mig3 suite passes (114 tests). irq.S (interrupts placed on
+  chosen instructions, one handler run without a claim taken again) and irq_random.S (random
+  interrupts during work) run with the PLIC between the testbench's device and meip: the
+  handlers' claim reads go through the D-cache as no-cache requests and reach the PLIC
+  exactly, the completes as stores; every other program's memory traffic goes through
+  AddrDecode and ReqDemux to the memory.
+code:
+  - rtl/design/mig3/mig3_cpu.sv#u_plic
+  - test/design/mig3/irq.S

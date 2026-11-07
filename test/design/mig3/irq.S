@@ -1,8 +1,10 @@
 /* Program for TbMig3 with +irq_random +expect_trap +expect_regs: the machine external
  * interrupt (meip) taken on chosen instructions.
  *
- * The interrupt source of the testbench (TbMig3Irq) raises meip at random times and drops
- * it when the handler claims, with a store to irq_claim. The program places every interrupt
+ * The interrupt source of the testbench (TbMig3Irq), a device on source 1 of the PLIC,
+ * raises its line at random times and drops it when the handler acknowledges it, with a
+ * store to irq_claim; the handler claims at the PLIC first and completes after; the
+ * program enables source 1 (priority 1) at the start. The program places every interrupt
  * exactly, without counting cycles: with MIE = 0 it waits until mip.MEIP is 1 (ARM), then
  * sets MIE; the spec takes the interrupt right after that CSR write, so on the next
  * instruction, c<n>. The handler checks mcause (0x8000000b), mtval (0), mstatus (MIE 0,
@@ -21,6 +23,7 @@
  *     (a5 = 1).
  * 10. On the halting EBREAK: it halts after MRET (s8 = c10, s7 = 10 interrupts, s6 = 0).
  */
+#include "mig3_config.h"
     .macro EXPECT_REG r, value
     .word \r, \value
     .endm
@@ -57,6 +60,12 @@ _start:
     li    a5, 0
     li    t0, 0x800
     csrs  mie, t0                   # MEIE = 1; MIE is 0 after reset
+    li    t0, MIG3_PLIC_PRIORITY(1)
+    li    t1, 1
+    sw    t1, 0(t0)                 # source 1, the testbench's device: priority 1
+    li    t0, MIG3_PLIC_ENABLE
+    li    t1, 2
+    sw    t1, 0(t0)                 # ... enabled for context 0 (threshold 0)
 
     # 1. MIE = 0 masks.
 1:  csrr  t0, mip
@@ -160,8 +169,12 @@ handler:
     mv    s9, s8
     csrr  s8, mepc
     bnez  s10, 3f
+    li    a6, MIG3_PLIC_CLAIM
+    lw    a7, 0(a6)                 # claim at the PLIC: source 1
     la    a6, irq_claim
-    sw    zero, 0(a6)               # claim: the source drops meip
+    sw    zero, 0(a6)               # the device drops its interrupt
+    li    a6, MIG3_PLIC_CLAIM
+    sw    a7, 0(a6)                 # complete
     li    a6, 0x80
     csrc  mstatus, a6               # MPIE = 0: MRET leaves MIE 0
     mret

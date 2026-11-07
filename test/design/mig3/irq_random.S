@@ -12,6 +12,7 @@
  * error), a store that the D-cache does not take at once. Expected: the same checksum
  * (s3 = 0), at least one interrupt (s4 = 1), mcause right every time (s6 = 0).
  */
+#include "mig3_config.h"
     .macro EXPECT_REG r, value
     .word \r, \value
     .endm
@@ -23,6 +24,12 @@ _start:
     csrw  mtvec, t0
     li    t0, 0x800
     csrs  mie, t0                   # MEIE = 1; MIE is 0 after reset
+    li    t0, MIG3_PLIC_PRIORITY(1)
+    li    t1, 1
+    sw    t1, 0(t0)                 # source 1, the testbench's device: priority 1
+    li    t0, MIG3_PLIC_ENABLE
+    li    t1, 2
+    sw    t1, 0(t0)                 # ... enabled for context 0 (threshold 0)
     la    s0, counter
     li    s5, 1103515245            # multiplier of the sequence
     li    s6, 0
@@ -91,8 +98,12 @@ handler:
     xor   a6, a6, a7
     or    s6, s6, a6
     addi  s7, s7, 1
+    li    a6, MIG3_PLIC_CLAIM
+    lw    a7, 0(a6)                 # claim at the PLIC: source 1
     la    a6, irq_claim
-    sw    zero, 0(a6)               # claim: the source drops meip
+    sw    zero, 0(a6)               # the device drops its interrupt
+    li    a6, MIG3_PLIC_CLAIM
+    sw    a7, 0(a6)                 # complete
     mret                            # MPIE = 1: MIE = 1 again
 
     .data

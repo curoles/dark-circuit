@@ -110,6 +110,15 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     } mem_kind_e;
 
     // Kind of memory access of insn.
+    // The I/O region (the PLIC): its loads read a device, not the memory. Only the bits
+    // above the region are compared.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic logic in_io(input word_t a);
+    /* verilator lint_on UNUSEDSIGNAL */
+        return a[WIDTH-1:MIG3_CFG.io_addr_width] ==
+               MIG3_CFG.io_base[WIDTH-1:MIG3_CFG.io_addr_width];
+    endfunction
+
     function automatic mem_kind_e mem_kind(input insn_t insn);
         casez (insn)
             LB, LH, LW, LBU, LHU: return MEM_LOAD;
@@ -298,7 +307,7 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             else if (retire.mem_rmask != 0 || retire.mem_wmask != 0)
                 $fatal(1, "Mig3: pc %h is not a load or store (or trapped), but has a memory access",
                        retire_pc);
-            if (retire.mem_rmask != 0 &&
+            if (retire.mem_rmask != 0 && !in_io(retire.mem_addr) &&
                 !dmem_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata))
                 $fatal(1, "Mig3: load at pc %h from %h mask %b got %h, dmem has %h",
                        retire_pc, retire.mem_addr, retire.mem_rmask, retire.mem_rdata,

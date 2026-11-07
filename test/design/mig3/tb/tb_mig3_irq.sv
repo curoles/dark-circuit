@@ -1,5 +1,5 @@
-/* Interrupt source of Mig3 for testbenches: drives meip, the machine external interrupt of
- * Mig3Cpu, as an interrupt controller (a PLIC) would.
+/* Interrupt source of Mig3 for testbenches: a device, its interrupt line (meip here) is
+ * source 1 of the PLIC of Mig3Cpu.
  *
  * With enable (+irq_random=<seed>) meip rises max_gap clocks after reset (+irq_max_gap=<n>,
  * default 200), later after a random gap of 1 to max_gap clocks, and stays 1 until the

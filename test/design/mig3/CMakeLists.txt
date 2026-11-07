@@ -4,7 +4,8 @@ set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
 # Mig3 uses blocks of the library (behave versions are fast to simulate)
 # and RISC-V formats and encodings.
-set(FLISTS ${LIB}/sim/sim.flist ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
+set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist
+           ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
            ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Files generated from cfg/mig3_config.yaml are up to date.
@@ -161,9 +162,9 @@ if(DARK_CIRCUIT_RISCV)
     # Interrupts: the machine external interrupt (meip) of the testbench's source
     # (TbMig3Irq, +irq_random), taken on chosen instructions (irq.S), and at random places
     # without changing what a program computes (irq_random.S).
-    mig3_program_test(irq SOURCES irq.S ARCH rv32ima
+    mig3_program_test(irq SOURCES irq.S ARCH rv32ima FLAGS -I${SW}
                       ARGS +expect_trap +expect_regs +irq_random=1)
-    mig3_program_test(irq_random SOURCES irq_random.S ARCH rv32ima
+    mig3_program_test(irq_random SOURCES irq_random.S ARCH rv32ima FLAGS -I${SW}
                       ARGS +expect_trap +expect_regs +irq_random=7 +irq_max_gap=60)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
