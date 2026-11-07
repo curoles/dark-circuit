@@ -72,43 +72,6 @@ numeric:
         versions: [behave, struct]
         path: rtl/lib/numeric/int32/mul/comb/behave/int32_mul.sv
         test: test/numeric/int32/mul
-part:
-  BrentKungAdder:
-    what: "Brent-Kung adder: {co, sum} = in1 + in2 + ci, parallel prefix"
-    path: rtl/lib/part/brent_kung_adder.sv
-    test: test/part/brent_kung_adder
-  CarrySaveAdder:
-    what: "Carry Save Adder: adds 3 numbers into partial sum and shifted carry, in1 + in2 + in3 = ps + (sc << 1)"
-    path: rtl/lib/part/carry_save_adder.sv
-    test: test/part/carry_save_adder
-  Crc8CcittLfsr:
-    what: "CRC-8 with the CCITT polynomial x^8 + x^2 + x + 1 (0x07), bit-serial"
-    path: rtl/lib/part/crc8_ccitt_lfsr.sv
-    test: test/part/crc8_ccitt_lfsr
-  EdgeDetector:
-    what: "Edge detector: edge_detected is 1 while in differs from its value at the last rising edge of clk in the way EDGE asks: 0 a falling edge (in went 1 -> 0), 1 a rising edge (0 -> 1), 2 any edge"
-    path: rtl/lib/part/edge_detector.sv
-    test: test/part/edge_detector
-  GatedClk:
-    what: "Gated clock"
-    path: rtl/lib/part/gated_clk.sv
-    test: test/part/gated_clk
-  KoggeStoneAdder:
-    what: "Kogge-Stone adder: {co, sum} = in1 + in2 + ci, parallel prefix"
-    path: rtl/lib/part/kogge_stone_adder.sv
-    test: test/part/kogge_stone_adder
-  LimDff:
-    what: "Logic-in-Memory DFF"
-    path: rtl/lib/part/lim_dff.sv
-    test: test/part/lim_dff
-  RippleCarryAdder:
-    what: "Ripple Carry Adder: {co, sum} = in1 + in2 + ci"
-    path: rtl/lib/part/ripple_carry_adder.sv
-    test: test/part/ripple_carry_adder
-  SignalClockSync:
-    what: "Signal clock synchronizer: brings in, a signal of clk1's clock domain, into clk2's domain, through a chain of STAGES flip-flops on clk2"
-    path: rtl/lib/part/signal_clock_sync.sv
-    test: test/part/signal_clock_sync
 riscv:
   RiscvCsrPkg:
     kind: package
@@ -683,6 +646,43 @@ block:
     SkidBufferT:
       what: "Skid buffer of type T: SkidBuffer with DATA_WIDTH = $bits(T); items are values of T"
       path: rtl/lib/block/skid_buffer/skid_buffer_t.sv
+part:
+  BrentKungAdder:
+    what: "Brent-Kung adder: {co, sum} = in1 + in2 + ci, parallel prefix"
+    path: rtl/lib/part/brent_kung_adder.sv
+    test: test/part/brent_kung_adder
+  CarrySaveAdder:
+    what: "Carry Save Adder: adds 3 numbers into partial sum and shifted carry, in1 + in2 + in3 = ps + (sc << 1)"
+    path: rtl/lib/part/carry_save_adder.sv
+    test: test/part/carry_save_adder
+  Crc8CcittLfsr:
+    what: "CRC-8 with the CCITT polynomial x^8 + x^2 + x + 1 (0x07), bit-serial"
+    path: rtl/lib/part/crc8_ccitt_lfsr.sv
+    test: test/part/crc8_ccitt_lfsr
+  EdgeDetector:
+    what: "Edge detector: edge_detected is 1 while in differs from its value at the last rising edge of clk in the way EDGE asks: 0 a falling edge (in went 1 -> 0), 1 a rising edge (0 -> 1), 2 any edge"
+    path: rtl/lib/part/edge_detector.sv
+    test: test/part/edge_detector
+  GatedClk:
+    what: "Gated clock"
+    path: rtl/lib/part/gated_clk.sv
+    test: test/part/gated_clk
+  KoggeStoneAdder:
+    what: "Kogge-Stone adder: {co, sum} = in1 + in2 + ci, parallel prefix"
+    path: rtl/lib/part/kogge_stone_adder.sv
+    test: test/part/kogge_stone_adder
+  LimDff:
+    what: "Logic-in-Memory DFF"
+    path: rtl/lib/part/lim_dff.sv
+    test: test/part/lim_dff
+  RippleCarryAdder:
+    what: "Ripple Carry Adder: {co, sum} = in1 + in2 + ci"
+    path: rtl/lib/part/ripple_carry_adder.sv
+    test: test/part/ripple_carry_adder
+  SignalClockSync:
+    what: "Signal clock synchronizer: brings in, a signal of clk1's clock domain, into clk2's domain, through a chain of STAGES flip-flops on clk2"
+    path: rtl/lib/part/signal_clock_sync.sv
+    test: test/part/signal_clock_sync
 gate:
   And2:
     what: "2-input AND"
