@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the AtomicUnit test (behave version)
+date: 2026-11-06
+tests: [block_atomic_unit_behave]
+mutants:
+  - name: an atomic request is taken while reads wait for their answers
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv
+        old: "assign take_atomic = state == IDLE && req_valid && atomic && pending == '0;"
+        new: "assign take_atomic = state == IDLE && req_valid && atomic;"
+    expect: model
+  - name: SMAX as an unsigned max
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv
+        old: "3'd4:    return Alu2Pkg::ALU2_MAX;"
+        new: "3'd4:    return Alu2Pkg::ALU2_MAXU;"
+    expect: model
+  - name: the new word written in lane 0 whatever its address
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv
+        old: "assign lane_strb     = STRB_WIDTH'({ATOM_BYTES{1'b1}}) << (ATOM_BYTES * lane);"
+        new: "assign lane_strb     = STRB_WIDTH'({ATOM_BYTES{1'b1}});"
+    expect: model
+  - name: a swap writes the ALU's result
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv
+        old: "assign new_word = (atop_q == ATOP_SWAP) ? operand_q : alu_out;"
+        new: "assign new_word = alu_out;"
+    expect: model

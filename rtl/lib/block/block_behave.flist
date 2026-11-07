@@ -54,6 +54,7 @@
 -F strb_reg/behave/strb_reg.flist
 -F plic/plic.flist
 -F atomic/atomic.flist
+-F atomic/atomic_unit/behave/atomic_unit.flist
 -F plic/plic_gateway/behave/plic_gateway.flist
 -F plic/plic_target/behave/plic_target.flist
 -F plic/plic_claim/behave/plic_claim.flist
