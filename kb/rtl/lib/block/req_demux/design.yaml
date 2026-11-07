@@ -1,0 +1,52 @@
+type: decision
+title: ReqDemux routes a request channel to one of N targets, one target's answers at a time
+date: 2026-11-06
+question: >
+  Mig3's memory port goes to the RAM or to the PLIC, later to more devices; each target
+  answers its reads in order, with a latency of its own. What routes the requests and brings
+  the answers back in order, for any channel of the library's kind?
+decision: >
+  ReqDemux #(N_TARGETS, RSP_WIDTH, PENDING_WIDTH): req_sel, one-hot, names the target
+  (AddrDecode's selects with miss as the default target); only valid and ready are routed,
+  the request's fields go to every target by the caller's wires. A request to another target
+  than the one whose reads wait for answers waits until they are back, and a read waits while
+  1 << PENDING_WIDTH reads wait; requests to the same target flow on. The answer is the
+  owner's (the target of the waiting reads), by a one-hot mux. req_ready is the selected
+  target's ready when the request does not wait, without a flop. Assertions: one target per
+  request, answers only from the owner while reads wait. Struct: gates, the library Counter
+  for the reads waiting, a DffEn for the owner, MuxOneHot for the answer.
+why: >
+  Answers of two targets of different latencies would pass each other; waiting at a switch
+  of targets keeps them in order with a counter and a register, where tags and a reorder
+  buffer would cost far more for accesses that rarely switch (a device after memory). Fields
+  to every target cost wires only (PULP's axi_demux copies them too). A demux that does not
+  decode serves any select (user: AddrDecode and ReqDemux apart, as PULP, OpenTitan).
+rejected:
+  - choice: Tags on the requests, answers reordered
+    why_not: A buffer of answers and tag logic for no gain on Mig3's traffic.
+  - choice: Writes pass while reads of another target wait
+    why_not: >
+      Correct for their answers (none), but holding every request keeps the order a program
+      made between devices simple: first done, first at its target.
+  - choice: A default target inside the demux for no select
+    why_not: The caller names it (AddrDecode's miss), so the select is always one-hot.
+  - choice: A register on req_ready (a cut)
+    why_not: >
+      Not needed in Mig3: the requests come from the arbiter's flow-through buffer, the
+      targets' readies from flops; a cut block later where a path needs it.
+relies_on:
+  - rtl/lib/block/addr_decode/design
+  - rtl/lib/block/plic/register_port
+evidence: >
+  2026-11-06: test/block/req_demux, behave and struct versions on Verilator and Icarus (at
+  most 0.08 s): 2 targets with up to 2 reads waiting, 3 with up to 4; random requests, mostly
+  to the target before, targets ready in 70 % of the clocks and answering in order after 1 to
+  2 << PENDING_WIDTH clocks; a model checks tgt_req_valid, req_ready and every answer's
+  token in order; every case seen (a switch that waits, a read that waits for the full
+  count, reads to the same target while one waits, writes, every target). 5 of 5 mutants
+  caught (kb test/block/req_demux/mutants). A mutant that reversed the count's direction
+  was equivalent: the count holds -k mod 2^(PENDING_WIDTH+1), 0 and MAX map to themselves,
+  so busy and full do not change.
+code:
+  - rtl/lib/block/req_demux/behave/req_demux.sv#blocked
+  - rtl/lib/block/req_demux/struct/req_demux.sv#u_or2_blocked

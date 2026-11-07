@@ -201,7 +201,8 @@ the chunk that establishes it:
   later `DelayLine`, an arbiter `RoundRobinArbiter` (by position) or `MatrixLruArbiter`
   (least recently granted), a channel's ready path cut without a clock more
   `FlowThroughBuffer`, the largest of N valid values and its index `ArgMaxTree`, which of
-  N address regions holds an address `AddrDecode`.
+  N address regions holds an address `AddrDecode`, a request channel to one of N targets
+  by a one-hot select, the answers in order `ReqDemux`.
 - Logic only one parameter value needs: a generate branch `g_<variant>`, so the other
   variants do not have it (the round-robin flop in `block/cache/insn_data_cache_arbiter/struct`).
   A variant that is another block with some logic left out: a parameter of that block

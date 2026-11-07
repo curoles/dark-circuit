@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the ReqDemux test (behave and struct versions)
+date: 2026-11-06
+tests: [block_req_demux_behave, block_req_demux_struct]
+mutants:
+  - name: behave, a request to another target does not wait for the answers
+    edits:
+      - file: rtl/lib/block/req_demux/behave/req_demux.sv
+        old: "assign blocked    = (busy && other) || (pending == MAX && !req_we);"
+        new: "assign blocked    = (busy && other && 1'b0) || (pending == MAX && !req_we);"
+    expect: model
+  - name: behave, a read does not wait for a full count
+    edits:
+      - file: rtl/lib/block/req_demux/behave/req_demux.sv
+        old: "assign blocked    = (busy && other) || (pending == MAX && !req_we);"
+        new: "assign blocked    = (busy && other) || (pending == MAX && !req_we && 1'b0);"
+    expect: model
+  - name: behave, the answer of the selected target, not the owner's
+    edits:
+      - file: rtl/lib/block/req_demux/behave/req_demux.sv
+        old: "assign rsp_data  = answer_of(tgt_rsp_data, owner);"
+        new: "assign rsp_data  = answer_of(tgt_rsp_data, req_sel);"
+    expect: model
+  - name: struct, an answer does not count down
+    edits:
+      - file: rtl/lib/block/req_demux/struct/req_demux.sv
+        old: ".in2(rsp_valid), .out(count_en)"
+        new: ".in2(1'b0), .out(count_en)"
+    expect: model
+  - name: struct, a blocked request still goes to its target
+    edits:
+      - file: rtl/lib/block/req_demux/struct/req_demux.sv
+        old: ".in2({N_TARGETS{go}}),"
+        new: ".in2({N_TARGETS{go | req_valid}}),"
+    expect: model
