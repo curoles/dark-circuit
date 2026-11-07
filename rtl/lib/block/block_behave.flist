@@ -27,6 +27,7 @@
 -F branch_counter/branch_counter.flist
 -F gshare_branch_predictor/behave/gshare_branch_predictor.flist
 -F branch_target_buffer/behave/branch_target_buffer.flist
+-F atomic/atomic.flist
 -F cache/cache_valid_ram/behave/cache_valid_ram.flist
 -F cache/cache_tag_ram/behave/cache_tag_ram.flist
 -F cache/cache_data_ram/behave/cache_data_ram.flist
@@ -53,7 +54,6 @@
 -F reg_port_target/behave/reg_port_target.flist
 -F strb_reg/behave/strb_reg.flist
 -F plic/plic.flist
--F atomic/atomic.flist
 -F atomic/atomic_unit/behave/atomic_unit.flist
 -F plic/plic_gateway/behave/plic_gateway.flist
 -F plic/plic_target/behave/plic_target.flist

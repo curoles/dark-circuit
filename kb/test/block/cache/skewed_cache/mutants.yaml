@@ -1,12 +1,14 @@
 type: mutants
-title: Mutants of exact uncached and no-cache requests (SkewedCache test, DirectCache, arbiter)
+title: >-
+  Mutants of exact uncached, no-cache and atomic requests (SkewedCache test, DirectCache,
+  arbiter)
 date: 2026-11-06
 tests: [block_skewed_cache_behave]
 mutants:
   - name: an uncached request with its line's address (offset 0), as before
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "assign mem_req_addr  = unc_pass     ? req_addr :"
+        old: "assign mem_req_addr  = unc_pass   ? req_addr :"
         new: >-
           assign mem_req_addr  = unc_pass
           ? {req_addr[ADDR_WIDTH-1:SETS_OFFSET], {SETS_OFFSET{1'b0}}} :
@@ -16,10 +18,10 @@ mutants:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
         old: >-
           assign mem_req_size  = unc_pass ? req_size :
-          look_nocache ? look_size : 3'(SETS_OFFSET);
+          look_exact ? look_size : 3'(SETS_OFFSET);
         new: >-
           assign mem_req_size  = unc_pass ? 3'(SETS_OFFSET)
-          : look_nocache ? look_size : 3'(SETS_OFFSET);
+          : look_exact ? look_size : 3'(SETS_OFFSET);
     expect: caught
   - name: the size mux the wrong way round (struct)
     edits:
@@ -51,20 +53,55 @@ mutants:
   - name: a no-cache request with its line's address
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "look_nocache ? {look_line, look_offset}"
-        new: "look_nocache ? {look_line, look_offset & {SETS_OFFSET{1'b0}}}"
+        old: "look_exact ? {look_line, look_offset}"
+        new: "look_exact ? {look_line, look_offset & {SETS_OFFSET{1'b0}}}"
     expect: caught
   - name: a no-cache request with the line's size (struct)
     edits:
       - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
-        old: ".in1(look_size), .sel(look_nocache),"
+        old: ".in1(look_size), .sel(look_exact),"
         new: ".in1(look_size), .sel(1'b0),"
     tests: [block_skewed_cache_struct]
     expect: caught
   - name: a no-cache load's answer fills its line (struct)
     edits:
       - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
-        old: ".en(served), .in(look_nocache),"
+        old: ".en(served), .in(look_exact),"
         new: ".en(served), .in(1'b0),"
+    tests: [block_skewed_cache_struct]
+    expect: caught
+  - name: an atomic may hit
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "assign load_hit  = look_ok && !look_we && hit && !look_atomic;"
+        new: "assign load_hit  = look_ok && !look_we && hit;"
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "assign load_miss = look_ok && !look_we && (!hit || look_atomic);"
+        new: "assign load_miss = look_ok && !look_we && !hit;"
+    expect: caught
+  - name: an atomic keeps the line it hits
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "assign drop       = served && look_atomic && hit;"
+        new: "assign drop       = served && look_atomic && hit && 1'b0;"
+    expect: caught
+  - name: an atomic goes to memory as a plain load
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "assign mem_req_atop  = unc_pass ? req_atop  : look_atop;"
+        new: "assign mem_req_atop  = unc_pass ? req_atop  : ATOP_NONE;"
+    expect: caught
+  - name: an atomic that hits is neither a hit nor a miss (struct)
+    edits:
+      - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
+        old: ".in2(look_atomic), .out(miss_cond)"
+        new: ".in2(1'b0), .out(miss_cond)"
+    tests: [block_skewed_cache_struct]
+    expect: caught
+  - name: the drop sets the valid bit (struct SkewedCache)
+    edits:
+      - file: rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv
+        old: ".wr_en(valid_wr), .wr_set(look_index[w]), .wr_val(refill));"
+        new: ".wr_en(valid_wr), .wr_set(look_index[w]), .wr_val(1'b1));"
     tests: [block_skewed_cache_struct]
     expect: caught

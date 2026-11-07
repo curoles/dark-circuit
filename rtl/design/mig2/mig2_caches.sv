@@ -60,6 +60,10 @@ module Mig2Caches import Mig2Pkg::*; #(
     logic [2:0]       d_mem_size;
     word_t            d_mem_wdata;
     strb_t            d_mem_wstrb;
+    // Mig2 sends no atomics.
+    /* verilator lint_off UNUSEDSIGNAL */
+    AtomicPkg::atop_t d_mem_atop;
+    /* verilator lint_on UNUSEDSIGNAL */
     logic             d_mem_rsp_valid;
     word_t            d_mem_rsp_data;
     // The word address goes to the memory port: the offset of the byte address is 0.
@@ -88,11 +92,12 @@ module Mig2Caches import Mig2Pkg::*; #(
         .req_uncached_dbg_bypass(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
         .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb), .req_size(3'd2),
-        .req_nocache(1'b0),
+        .req_nocache(1'b0), .req_atop(AtomicPkg::ATOP_NONE),
         .rsp_valid(dcache_rsp.valid), .rsp_data(dcache_rsp.data),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
         .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb), .mem_req_size(d_mem_size),
+        .mem_req_atop(d_mem_atop),
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
     // @kb: rtl/design/mig2/single_memory

@@ -32,7 +32,7 @@
 
 `include "dark_circuit_assert.svh"
 
-module SetAssocCache import CachePkg::*; #(
+module SetAssocCache import CachePkg::*, AtomicPkg::*; #(
     parameter  ADDR_WIDTH  = 32,            // byte address
     parameter  SETS_WIDTH  = 6,             // 1 << SETS_WIDTH sets
     parameter  SETS_OFFSET = 2,             // 1 << SETS_OFFSET bytes in a line (2: one word)
@@ -64,6 +64,7 @@ module SetAssocCache import CachePkg::*; #(
     input  wire [ADDR_WIDTH-1:0] req_addr,
     input  wire [DATA_WIDTH-1:0] req_wdata,     // store: the line with its new bytes
     input  wire [STRB_WIDTH-1:0] req_wstrb,     // store: the bytes to write
+    input  atop_t                req_atop,      // ATOP_NONE, or an atomic operation (a load)
     /* verilator lint_on UNUSEDSIGNAL */
     output wire                  rsp_valid,     // rsp_data is the line a load asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
@@ -76,6 +77,7 @@ module SetAssocCache import CachePkg::*; #(
     output wire [2:0]            mem_req_size,  // 1 << mem_req_size bytes: the line, or uncached
     output wire [DATA_WIDTH-1:0] mem_req_wdata, // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
+    output atop_t                mem_req_atop,  // an atomic's operation, else ATOP_NONE
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
 );
@@ -95,6 +97,7 @@ module SetAssocCache import CachePkg::*; #(
     logic                  load_hit;
     logic                  store_write; // a store that hits is taken by memory: write merged
     logic                  refill;      // the line from memory comes: write it
+    logic                  drop;        // an atomic's line hits: clear its valid bit
     logic                  miss_taken;  // memory takes the read of a load miss
     logic                  fill_conflict;   // the request is at the place the refill writes
     logic [DATA_WIDTH-1:0] ram_wr_line; // what a data RAM write writes: the fill or merged
@@ -110,11 +113,11 @@ module SetAssocCache import CachePkg::*; #(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_uncached_dbg_bypass,
             .req_we, .req_addr, .req_wdata, .req_wstrb,
-            .req_size, .req_nocache, .rsp_valid, .rsp_data,
+            .req_size, .req_nocache, .req_atop, .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-            .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data,
+            .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_rsp_valid, .mem_rsp_data,
             .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
-            .replay, .ram_wr_line, .merged, .hit, .hit_line, .fill_conflict);
+            .replay, .ram_wr_line, .merged, .drop, .hit, .hit_line, .fill_conflict);
 
     // The RAMs read the request's set, or the lookup's on a replay (CacheControl).
     assign rd_set = replay ? look_line[SETS_OFFSET +: SETS_WIDTH]
@@ -133,7 +136,8 @@ module SetAssocCache import CachePkg::*; #(
         CacheValidRam #(.SETS_WIDTH(SETS_WIDTH)) u_cache_valid_ram(
             .clk, .rst_n, .invalidate,
             .rd_en(ram_rd), .rd_set(rd_set), .valid(valid[w]),
-            .wr_en(fill_wr), .wr_set(look_line[SETS_OFFSET +: SETS_WIDTH]), .wr_val(1'b1));
+            .wr_en(fill_wr || (drop && hits[w])),   // an atomic's drop clears it
+            .wr_set(look_line[SETS_OFFSET +: SETS_WIDTH]), .wr_val(refill));
 
         CacheTagRam #(.SETS_WIDTH(SETS_WIDTH), .TAG_WIDTH(TAG_WIDTH)) u_cache_tag_ram(
             .clk,

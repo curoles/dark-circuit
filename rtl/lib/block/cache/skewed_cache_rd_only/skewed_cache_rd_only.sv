@@ -48,11 +48,13 @@ module SkewedCacheRdOnly #(
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
 );
-    // A read-only cache writes nothing to memory: these are always 0.
+    // A read-only cache writes nothing to memory and sends no atomics: these are
+    // always 0.
     /* verilator lint_off UNUSEDSIGNAL */
     wire                  mem_req_we;
     wire [DATA_WIDTH-1:0] mem_req_wdata;
     wire [STRB_WIDTH-1:0] mem_req_wstrb;
+    AtomicPkg::atop_t     mem_req_atop;
     /* verilator lint_on UNUSEDSIGNAL */
 
     // @kb: rtl/lib/block/cache/variant_parameter
@@ -61,10 +63,10 @@ module SkewedCacheRdOnly #(
                   .READ_ONLY(1)) u_skewed_cache(
         .clk, .rst_n, .invalidate,
         .req_valid, .req_ready, .req_uncached_dbg_bypass,
-        .req_size, .req_nocache, .req_we(1'b0), .req_addr,
+        .req_size, .req_nocache, .req_atop(AtomicPkg::ATOP_NONE), .req_we(1'b0), .req_addr,
         .req_wdata({DATA_WIDTH{1'b0}}),
         .req_wstrb({STRB_WIDTH{1'b0}}), .rsp_valid, .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-        .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data);
+        .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_rsp_valid, .mem_rsp_data);
 
 endmodule

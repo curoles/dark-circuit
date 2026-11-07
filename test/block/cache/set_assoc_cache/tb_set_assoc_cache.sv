@@ -94,6 +94,10 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     logic  [2:0] mem_req_size;
     data_t mem_req_wdata;
     strb_t mem_req_wstrb;
+    // No atomics in this test (the SkewedCache test has them).
+    /* verilator lint_off UNUSEDSIGNAL */
+    AtomicPkg::atop_t mem_req_atop;
+    /* verilator lint_on UNUSEDSIGNAL */
     logic  mem_rsp_valid;
     data_t mem_rsp_data;
     // The random policy's Lfsr, a copy of the cache's: the model knows every random victim.
@@ -174,9 +178,10 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         .clk, .rst_n, .invalidate,
         .req_valid, .req_ready, .req_uncached_dbg_bypass,
         .req_we, .req_addr, .req_wdata, .req_wstrb,
-        .req_size, .req_nocache(1'b0), .rsp_valid, .rsp_data,
+        .req_size, .req_nocache(1'b0), .req_atop(AtomicPkg::ATOP_NONE), .rsp_valid,
+        .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-        .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data);
+        .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_rsp_valid, .mem_rsp_data);
 
     Lfsr #(.WIDTH(8)) u_lfsr(.clk, .rst_n, .q(lfsr_q));
 

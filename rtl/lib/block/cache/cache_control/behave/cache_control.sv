@@ -41,9 +41,17 @@
  * cached or not, never both) and goes to memory as asked, its own address and size from
  * the lookup's registers; a load is served as a miss and answered with memory's line,
  * which is not written (refill 0, no victim), a store writes memory only.
- * READ_ONLY=1 (an instruction cache): no stores (req_we, req_wdata and req_wstrb are not used;
- * mem_req_we, mem_req_wdata and mem_req_wstrb are 0; store_write and merged are 0), so the
- * logic only stores need is left out.
+ * Atomic: a load with req_atop other than ATOP_NONE (AtomicPkg, AXI5's AWATOP values; the
+ * operation is done further down, at the point of coherence: kb rtl/lib/block/atomic/design)
+ * is taken and looked up as a no-cache one, but its line may be in the cache: it never hits,
+ * goes to memory as asked with its operand in the store's fields (req_wdata, req_wstrb) and
+ * its operation (mem_req_atop), and is answered with memory's line, the old value, which is
+ * not written. A line it hits is dropped in the clock memory takes its read (drop: the
+ * cache clears the valid bit of the way that hits); no request is taken in that clock (a
+ * load miss is looked up), so the next access misses and reads the new value from memory.
+ * READ_ONLY=1 (an instruction cache): no stores and no atomics (req_we, req_wdata, req_wstrb
+ * and req_atop are not used; mem_req_we, mem_req_wdata and mem_req_wstrb are 0, mem_req_atop
+ * ATOP_NONE; store_write, merged and drop are 0), so the logic only they need is left out.
  *
  *   CPU side ---> ram_rd, replay, look_line  ---> the cache's ways ---> hit, hit_line ---+
  *                                                                                        |
@@ -51,6 +59,7 @@
  *   v
  *   load_hit, load_miss, store ---> memory request (store or miss, or uncached), held
  *   merged, store_write, refill, ram_wr_line ---> the cache's data RAM writes
+ *   drop ---> the cache's valid RAM write (an atomic's line)
  *   rsp_valid, rsp_data <--- hit_line, or memory's line (a served miss, an uncached read)
  *
  * @author    Igor Lesik
@@ -59,7 +68,7 @@
 
 `include "dark_circuit_assert.svh"
 
-module CacheControl #(
+module CacheControl import AtomicPkg::*; #(
     parameter  ADDR_WIDTH  = 32,            // byte address
     parameter  SETS_OFFSET = 2,             // 1 << SETS_OFFSET bytes in a line (2: one word)
     parameter  READ_ONLY   = 0,             // 1: loads only, no store logic
@@ -78,12 +87,13 @@ module CacheControl #(
                                                 // no cache
     input  wire                  req_nocache,   // the address may not be cached (a
                                                 // device's): looked up, never filled
-    // The fields of a store are not used when READ_ONLY=1.
+    // The fields of a store and an atomic are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
     input  wire [ADDR_WIDTH-1:0] req_addr,
     input  wire [DATA_WIDTH-1:0] req_wdata,     // store: the line with its new bytes
     input  wire [STRB_WIDTH-1:0] req_wstrb,     // store: the bytes to write
+    input  atop_t                req_atop,      // ATOP_NONE, or an atomic operation (a load)
     /* verilator lint_on UNUSEDSIGNAL */
     output wire                  rsp_valid,     // rsp_data is the line a load asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
@@ -96,6 +106,7 @@ module CacheControl #(
     output wire [2:0]            mem_req_size,  // 1 << mem_req_size bytes: the line, or uncached
     output wire [DATA_WIDTH-1:0] mem_req_wdata, // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
+    output atop_t                mem_req_atop,  // an atomic's operation, else ATOP_NONE
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data,
 
@@ -110,6 +121,7 @@ module CacheControl #(
     output wire                  miss_taken,    // memory takes a load miss's read: the victim
     output wire [DATA_WIDTH-1:0] ram_wr_line,   // what a data RAM write writes: refill or merged
     output wire [DATA_WIDTH-1:0] merged,        // the hit line with the store's bytes
+    output wire                  drop,          // an atomic's line hits: clear its valid bit
     input  wire                  hit,           // a way hits the lookup
     input  wire                  fill_conflict, // the request is at the place the refill writes
     input  wire [DATA_WIDTH-1:0] hit_line       // the line of the way that hits
@@ -130,6 +142,8 @@ module CacheControl #(
     logic                  idle;        // nothing looked up or served: uncached may pass
     logic                  unc_pass;    // an uncached request goes to memory now
     logic                  look_nocache; // the lookup's request may not be cached
+    logic                  look_atomic; // ... is atomic
+    logic                  look_exact;  // ... goes to memory as asked: no cache, or atomic
     logic [SETS_OFFSET-1:0] look_offset; // its offset and size: memory gets them as asked
     logic [2:0]            look_size;
     logic                  served;      // memory takes a load miss's read
@@ -176,9 +190,12 @@ module CacheControl #(
     // A replay takes one clock: the lookup follows, with the RAM outputs it read.
     `DC_ASSERT_NEXT(a_replay_one_clock, replay, look_ok)
 
+    // An atomic never hits: its line, if there, is dropped when memory takes its read.
+    // @kb: rtl/lib/block/cache/atomic
     assign store     = look_ok && look_we;
-    assign load_hit  = look_ok && !look_we && hit;
-    assign load_miss = look_ok && !look_we && !hit;
+    assign load_hit  = look_ok && !look_we && hit && !look_atomic;
+    assign load_miss = look_ok && !look_we && (!hit || look_atomic);
+    assign look_exact = look_nocache || look_atomic;
 
     // Write-through: a store always goes to memory; a load only when it misses. A cached
     // request comes from the lookup's registers; an uncached one straight from the CPU side
@@ -187,18 +204,20 @@ module CacheControl #(
     assign look_req      = store || load_miss;
     assign mem_req_valid = unc_pass || look_req;
     assign held          = look_req && !mem_req_ready;
-    // An uncached request goes as the CPU asked it, exactly its bytes, a no-cache one as its
-    // lookup kept it; a cached one moves a whole line.
+    // An uncached request goes as the CPU asked it, exactly its bytes, a no-cache or atomic
+    // one as its lookup kept it; a cached one moves a whole line.
     // @kb: rtl/lib/block/cache/uncached
-    assign mem_req_addr  = unc_pass     ? req_addr :
-                           look_nocache ? {look_line, look_offset}
-                                        : {look_line, {SETS_OFFSET{1'b0}}};
-    assign mem_req_size  = unc_pass ? req_size : look_nocache ? look_size : 3'(SETS_OFFSET);
+    assign mem_req_addr  = unc_pass   ? req_addr :
+                           look_exact ? {look_line, look_offset}
+                                      : {look_line, {SETS_OFFSET{1'b0}}};
+    assign mem_req_size  = unc_pass ? req_size : look_exact ? look_size : 3'(SETS_OFFSET);
 
-    // An uncached or no-cache request is aligned to its size and fits its line.
-    `DC_ASSERT(a_unc_exact, !(unc_pass || (accept && req_nocache)) ||
+    // An uncached, no-cache or atomic request is aligned to its size and fits its line; an
+    // atomic one is a load.
+    `DC_ASSERT(a_unc_exact, !(unc_pass || (accept && (req_nocache || is_atomic(req_atop)))) ||
         (int'(req_size) <= SETS_OFFSET &&
          (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
+    `DC_ASSERT(a_atomic_load, !(req_valid && is_atomic(req_atop) && req_we))
 
     // The merged line goes into the cache once: in the clock memory takes the store.
     function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,
@@ -210,12 +229,13 @@ module CacheControl #(
                 merge[8*b +: 8] = new_bytes[8*b +: 8];
     endfunction
 
-    // The logic only stores need; a read-only cache has none of it. Both branches drive
-    // look_we, store_write, merged, ram_wr_line and the fields of a memory write (mem_req_we,
-    // mem_req_wdata, mem_req_wstrb).
+    // The logic only stores and atomics need; a read-only cache has none of it. Both
+    // branches drive look_we, look_atomic, store_write, merged, ram_wr_line and the fields of
+    // a memory write (mem_req_we, mem_req_wdata, mem_req_wstrb) and mem_req_atop.
     // @kb: rtl/lib/block/cache/read_only
     if (READ_ONLY) begin: g_read_only
         assign look_we     = 1'b0;
+        assign look_atomic = 1'b0;
         assign store_write = 1'b0;
         assign merged      = '0;
         assign ram_wr_line = mem_rsp_data;
@@ -223,21 +243,28 @@ module CacheControl #(
         assign mem_req_we    = 1'b0;
         assign mem_req_wdata = '0;
         assign mem_req_wstrb = '0;
+        assign mem_req_atop  = ATOP_NONE;
     end else begin: g_store
         logic [DATA_WIDTH-1:0] look_wdata;
         logic [STRB_WIDTH-1:0] look_wstrb;
+        atop_t                 look_atop;
 
         always_ff @(posedge clk)
             if (accept) begin
                 look_we    <= req_we;
                 look_wdata <= req_wdata;
                 look_wstrb <= req_wstrb;
+                look_atop  <= req_atop;
             end
 
-        // A memory write: an uncached store as it comes, else the lookup's store.
+        assign look_atomic = is_atomic(look_atop);
+
+        // A memory write, an atomic's operand: an uncached request's as it comes, else the
+        // lookup's.
         assign mem_req_we    = unc_pass ? req_we    : look_we;
         assign mem_req_wdata = unc_pass ? req_wdata : look_wdata;
         assign mem_req_wstrb = unc_pass ? req_wstrb : look_wstrb;
+        assign mem_req_atop  = unc_pass ? req_atop  : look_atop;
 
         assign merged      = merge(hit_line, look_wdata, look_wstrb);
         assign store_write = store && hit && mem_req_ready;
@@ -247,7 +274,8 @@ module CacheControl #(
     // A load miss is served from the clock memory takes its read until the answer comes
     // (look_line holds: no request is taken meanwhile).
     assign served     = load_miss && mem_req_ready;
-    assign miss_taken = served && !look_nocache;   // a victim only for a line to fill
+    assign miss_taken = served && !look_exact;     // a victim only for a line to fill
+    assign drop       = served && look_atomic && hit;   // an atomic drops the line it hits
 
     always_ff @(posedge clk)
         if (!rst_n)             waiting <= 1'b0;
@@ -256,7 +284,7 @@ module CacheControl #(
 
     always_ff @(posedge clk)
         if (served)
-            wait_nocache <= look_nocache;
+            wait_nocache <= look_exact;
 
     assign answer = waiting && mem_rsp_valid;     // the served read's answer
     assign refill = answer && !wait_nocache;      // ... fills its line
@@ -271,7 +299,9 @@ module CacheControl #(
     // follow the CPU side, which may withdraw (kb rtl/lib/block/cache/uncached).
     `DC_ASSERT_NEXT(a_look_req_held, look_req && !mem_req_ready,
                     look_req && $stable(mem_req_addr) && $stable(mem_req_we) &&
-                    (!mem_req_we || ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
+                    $stable(mem_req_atop) &&
+                    ((!mem_req_we && !is_atomic(mem_req_atop)) ||
+                     ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
 
     // An uncached read is served from the clock memory takes it until the answer comes; its
     // line is not written into the cache.
