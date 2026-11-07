@@ -11,7 +11,8 @@
  * when uses_rs1, rs2 when uses_rs2, funct3 when the kind has it, alt for OP and OP-IMM
  * shifts, imm when the kind has an immediate (the CSR address for CSR instructions).
  * LR.W and SC.W: a load and a store with imm 0 and their atomic controls, rd_src LOAD and
- * ATOMIC. At the end every kind must have had a case; KIND_BITMANIP only with +zbb (its
+ * ATOMIC. An AMO: a load of rs1 to rd (imm 0) that reads rs2, its atop by its encoding.
+ * At the end every kind must have had a case; KIND_BITMANIP only with +zbb (its
  * cases need a compiler that knows Zbb).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
@@ -67,7 +68,7 @@ module TbMig3Decode;
     function automatic logic has_funct3(input kind_e kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC:
+            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC, KIND_AMO:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -77,7 +78,7 @@ module TbMig3Decode;
     function automatic logic has_imm(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE,
-            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC:
+            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC, KIND_AMO:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -93,7 +94,7 @@ module TbMig3Decode;
     function automatic rd_src_e rd_src_of(input kind_e kind);
         case (kind)
             KIND_JAL, KIND_JALR: return RD_LINK;
-            KIND_LOAD, KIND_LR:  return RD_LOAD;
+            KIND_LOAD, KIND_LR, KIND_AMO: return RD_LOAD;
             KIND_SC:             return RD_ATOMIC;
             KIND_CSR:            return RD_CSR;
             KIND_MULDIV:         return RD_MULDIV;
@@ -106,7 +107,7 @@ module TbMig3Decode;
     function automatic logic uses_alu(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_LR, KIND_SC:   // the address rs1 + 0
+            KIND_LR, KIND_SC, KIND_AMO:   // the address rs1 + 0
                 return 1'b1;
             default:
                 return 1'b0;
@@ -196,12 +197,27 @@ module TbMig3Decode;
     endfunction
 
     function automatic mem_ctrl_t mem_of(input kind_e kind);
-        return '{read: kind == KIND_LOAD || kind == KIND_LR,
+        return '{read: kind == KIND_LOAD || kind == KIND_LR || kind == KIND_AMO,
                  write: kind == KIND_STORE || kind == KIND_SC};
     endfunction
 
-    function automatic atomic_ctrl_t atomic_of(input kind_e kind);
-        return '{lr: kind == KIND_LR, sc: kind == KIND_SC};
+    // The operation of an AMO by its encoding (AMOAND: a clear of ~rs2).
+    function automatic AtomicPkg::atop_t atop_model(input insn_t w);
+        if (w ==? AMOADD_W)  return AtomicPkg::ATOP_LD_ADD;
+        if (w ==? AMOAND_W)  return AtomicPkg::ATOP_LD_CLR;
+        if (w ==? AMOXOR_W)  return AtomicPkg::ATOP_LD_EOR;
+        if (w ==? AMOOR_W)   return AtomicPkg::ATOP_LD_SET;
+        if (w ==? AMOMIN_W)  return AtomicPkg::ATOP_LD_SMIN;
+        if (w ==? AMOMAX_W)  return AtomicPkg::ATOP_LD_SMAX;
+        if (w ==? AMOMINU_W) return AtomicPkg::ATOP_LD_UMIN;
+        if (w ==? AMOMAXU_W) return AtomicPkg::ATOP_LD_UMAX;
+        if (w ==? AMOSWAP_W) return AtomicPkg::ATOP_SWAP;
+        return AtomicPkg::ATOP_NONE;
+    endfunction
+
+    function automatic atomic_ctrl_t atomic_of(input kind_e kind, input insn_t w);
+        return '{lr: kind == KIND_LR, sc: kind == KIND_SC,
+                 atop: kind == KIND_AMO ? atop_model(w) : AtomicPkg::ATOP_NONE};
     endfunction
 
     function automatic sys_ctrl_t sys_of(input kind_e kind);
@@ -249,7 +265,7 @@ module TbMig3Decode;
             check(c, insn, "kind",   32'(dec.kind),   e[0]);
             check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind, e[4][4:0], e[5][4:0])));
             check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
-            check(c, insn, "atomic", 32'(dec.atomic), 32'(atomic_of(exp_kind)));
+            check(c, insn, "atomic", 32'(dec.atomic), 32'(atomic_of(exp_kind, insn)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
             check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));

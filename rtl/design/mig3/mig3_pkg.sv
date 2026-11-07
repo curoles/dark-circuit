@@ -167,6 +167,9 @@ package Mig3Pkg;
     // memory field that the instruction does not use is 0. Memory is RVFI "aligned
     // memory": mem_addr is word aligned, masks select the bytes of mem_rdata/mem_wdata.
     // RVFI fields that are constant for Mig3 are not here: intr=0, mode=3 (M), ixl=1.
+    // An AMO reads and writes its word (mem_rmask, mem_wmask; mem_rdata the old word),
+    // but its mem_wdata is 0, unlike RVFI: the new word is made in front of the memory
+    // (AtomicUnit, kb rtl/design/mig3/amo), the testbench computes it.
     // bubble is not RVFI: with valid=0 it tells why nothing retires in this cycle.
     typedef struct packed {
         logic        valid;      // an instruction retires: it completes, or traps
@@ -315,7 +318,8 @@ package Mig3Pkg;
         KIND_MULDIV,    // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
         KIND_BITMANIP,  // Zbb in ComputeCoreBitmanip: SEXT.B/H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP
         KIND_LR,        // LR.W (Zalrsc): a load that reserves its word (Mig3Atomic)
-        KIND_SC         // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
+        KIND_SC,        // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
+        KIND_AMO        // AMO*.W (Zaamo): a load with an atop, done in front of memory
     } kind_e;
 
     // Source of the value written to rd.
@@ -352,13 +356,14 @@ package Mig3Pkg;
     } br_ctrl_t;
 
     typedef struct packed {
-        logic   read;       // LOAD, LR.W
+        logic   read;       // LOAD, LR.W, AMO*.W
         logic   write;      // STORE, SC.W
     } mem_ctrl_t;
 
     typedef struct packed {
         logic   lr;         // LR.W: reserves its word
         logic   sc;         // SC.W: stores only when its word is reserved
+        AtomicPkg::atop_t atop; // AMO*.W: its operation (Mig3Lsu), else ATOP_NONE
     } atomic_ctrl_t;
 
     typedef struct packed {

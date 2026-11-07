@@ -14,6 +14,11 @@
  * - LR.W is a load of rs1, SC.W a store of rs1 when it succeeds: a shadow reservation
  *   (an LR takes it; an SC, a trap and MRET end it) says whether it does; rd must be 0
  *   then, else 1 and no access,
+ * - AMO (Zaamo): a load of rs1 (mem_rdata the old word, checked as a load's) and a
+ *   write of its word (mem_wmask; mem_wdata is 0, see Mig3Pkg): the first write behind
+ *   AtomicUnit after it retires (ram_write) must be its new word, computed here from
+ *   the old word and rs2 (amo_new); it is not one of the stores below (the memory port
+ *   sees the AMO as a read),
  * - store: it is the next write the memory takes, in program order: mem_addr, mem_wmask and
  *   the bytes of mem_wdata under it (the D-cache writes through: the memory takes the store
  *   in the cycle it retires or later, uncached in EX, before it retires; a store still on
@@ -26,7 +31,7 @@
  * are kept in a shadow copy of the registers. The trace gets a line per retired
  * instruction, debugger register write and resume. Memory is read with peek() of the
  * memory of Mig3Cpu, all in mem_byte(), and the writes the memory takes are seen in
- * dmem_write(): the two places that name it. Stops at the first failure with $fatal.
+ * dmem_write() and, behind AtomicUnit, ram_write(): the places that name it. Stops at the first failure with $fatal.
  *
  * TbMig3 instantiates it; it reads its ports, TbMig3 reads its outputs.
  *
@@ -79,6 +84,12 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     store_t retired_stores [$];             // retired, not taken by dmem yet
     store_t dmem_writes [$];                // taken by dmem, not retired yet (uncached)
     store_t dmem_taken;                     // the write dmem takes at this edge
+    logic   amo_pending;                    // an AMO retired, its write not seen yet
+    store_t amo_expect;                     // its write: the new word
+    // The write the RAM takes at this edge (its pc, 0, is not used).
+    /* verilator lint_off UNUSEDSIGNAL */
+    store_t ram_taken;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     assign retire_pc = retire.pc_rdata;
 
@@ -102,11 +113,12 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
 
     // Access that the load or store in retire must make
 
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         MEM_NONE,
         MEM_LOAD,
         MEM_STORE,
-        MEM_SC      // a store when it succeeds
+        MEM_SC,     // a store when it succeeds
+        MEM_AMO     // a read and a write of its word
     } mem_kind_e;
 
     // Kind of memory access of insn.
@@ -125,14 +137,16 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             LR_W:                 return MEM_LOAD;
             SB, SH, SW:           return MEM_STORE;
             SC_W:                 return MEM_SC;
+            AMOADD_W, AMOSWAP_W, AMOXOR_W, AMOOR_W, AMOAND_W, AMOMIN_W, AMOMAX_W,
+            AMOMINU_W, AMOMAXU_W: return MEM_AMO;
             default:              return MEM_NONE;
         endcase
     endfunction
 
     // Byte address of the load or store insn when rs1 is base: base + S or I immediate;
-    // LR and SC have none.
+    // LR, SC and the AMOs have none.
     function automatic word_t mem_byte_addr(input insn_t insn, input word_t base);
-        if (insn ==? LR_W || insn ==? SC_W)
+        if (insn ==? LR_W || insn ==? SC_W || mem_kind(insn) == MEM_AMO)
             return base;
         return base + (mem_kind(insn) == MEM_STORE ? imm_s_of(insn) : imm_i_of(insn));
     endfunction
@@ -171,25 +185,55 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
         return 1'b1;
     endfunction
 
-    // The write the memory of Mig3Cpu takes at this edge: 1 and the write in w, or 0. The
-    // memory moves lines; a store writes one word of it, the one its strobes are in.
-    function automatic logic dmem_write(output store_t w);
-        line_t      data;
-        line_strb_t strb;
-        int         k;      // the word of the line
-        data = TbMig3.u_mig3_cpu.mem_req.wdata;
-        strb = TbMig3.u_mig3_cpu.mem_req.wstrb;
-        k    = 0;
+    // A write of a line: the word its strobes are in (a store or an AMO writes one word).
+    // The offset of addr is not used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic store_t word_write(input word_t addr, input line_t data,
+                                          input line_strb_t strb);
+    /* verilator lint_on UNUSEDSIGNAL */
+        store_t w;
+        int     k;      // the word of the line
+        k = 0;
         for (int i = 0; i < LINE_WORDS; i++)
             if (strb[STRB_WIDTH*i +: STRB_WIDTH] != '0)
                 k = i;
         w.pc   = '0;
-        w.addr = {TbMig3.u_mig3_cpu.mem_req.addr[WIDTH-1:LINE_START], {LINE_START{1'b0}}} +
-                 word_t'(STRB_WIDTH * k);
+        w.addr = {addr[WIDTH-1:LINE_START], {LINE_START{1'b0}}} + word_t'(STRB_WIDTH * k);
         w.mask = strb[STRB_WIDTH*k +: STRB_WIDTH];
         w.data = data[WIDTH*k +: WIDTH];
+        return w;
+    endfunction
+
+    // The write the memory port of Mig3Cpu takes at this edge: 1 and the write in w, or 0.
+    function automatic logic dmem_write(output store_t w);
+        w = word_write(TbMig3.u_mig3_cpu.mem_req.addr, TbMig3.u_mig3_cpu.mem_req.wdata,
+                       TbMig3.u_mig3_cpu.mem_req.wstrb);
         return TbMig3.u_mig3_cpu.mem_req.valid && TbMig3.u_mig3_cpu.mem_req.we &&
                TbMig3.u_mig3_cpu.mem_rsp.ready;
+    endfunction
+
+    // The write the RAM of Mig3Cpu takes at this edge, behind AtomicUnit (the stores, and
+    // the AMOs' new words): 1 and the write in w, or 0.
+    function automatic logic ram_write(output store_t w);
+        w = word_write(TbMig3.u_mig3_cpu.ram_addr, TbMig3.u_mig3_cpu.ram_wdata,
+                       TbMig3.u_mig3_cpu.ram_wstrb);
+        return TbMig3.u_mig3_cpu.ram_valid && TbMig3.u_mig3_cpu.ram_we &&
+               TbMig3.u_mig3_cpu.ram_ready;
+    endfunction
+
+    // The new word of the AMO insn: its operation on the old word and rs2 (b).
+    function automatic word_t amo_new(input insn_t insn, input word_t old, input word_t b);
+        casez (insn)
+            AMOSWAP_W: return b;
+            AMOADD_W:  return old + b;
+            AMOXOR_W:  return old ^ b;
+            AMOAND_W:  return old & b;
+            AMOOR_W:   return old | b;
+            AMOMIN_W:  return $signed(old) < $signed(b) ? old : b;
+            AMOMAX_W:  return $signed(old) > $signed(b) ? old : b;
+            AMOMINU_W: return old < b ? old : b;
+            default:   return old > b ? old : b;    // AMOMAXU_W
+        endcase
     endfunction
 
     // Each retired store is the next write dmem takes: pairs them in order.
@@ -229,16 +273,20 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     endtask
 
     // Load or store in retire that did not trap: its address and mask are access_addr
-    // and access_mask, the mask of the other direction is 0.
+    // and access_mask, the mask of the other direction is 0; an AMO has both.
     task automatic check_access;
         logic  load;
+        logic  amo;
         word_t word_addr;     // access_addr, word aligned
         strb_t mask;          // mem_rmask of a load, mem_wmask of a store
         strb_t other_mask;    // the other one
         load       = mem_kind(retire.insn) == MEM_LOAD;
+        amo        = mem_kind(retire.insn) == MEM_AMO;
         word_addr  = {access_addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}};
         mask       = load ? retire.mem_rmask : retire.mem_wmask;
-        other_mask = load ? retire.mem_wmask : retire.mem_rmask;
+        // An AMO's mem_rmask is its bytes too: then other_mask is 0.
+        other_mask = load ? retire.mem_wmask : amo ? retire.mem_rmask ^ access_mask
+                                                   : retire.mem_rmask;
         if (retire.mem_addr !== word_addr || mask !== access_mask || other_mask !== '0)
             $fatal(1, "Mig3: pc %h accesses mem[%h] r %b w %b, expected address %h mask %b",
                    retire_pc, retire.mem_addr, retire.mem_rmask, retire.mem_wmask,
@@ -312,7 +360,17 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
                 $fatal(1, "Mig3: load at pc %h from %h mask %b got %h, dmem has %h",
                        retire_pc, retire.mem_addr, retire.mem_rmask, retire.mem_rdata,
                        mem_word(1'b0, retire.mem_addr));
-            if (retire.mem_wmask != 0)
+            // An AMO: its new word is the next write behind AtomicUnit.
+            if (mem_kind(retire.insn) == MEM_AMO && !retire.trap) begin
+                if (amo_pending)
+                    $fatal(1, "Mig3: AMO at pc %h, the write of the AMO at %h not seen",
+                           retire_pc, amo_expect.pc);
+                amo_pending <= 1'b1;
+                amo_expect  <= '{pc: retire_pc, addr: retire.mem_addr,
+                                 mask: retire.mem_wmask,
+                                 data: amo_new(retire.insn, retire.mem_rdata,
+                                               retire.rs2_rdata)};
+            end else if (retire.mem_wmask != 0)
                 retired_stores.push_back('{pc: retire_pc, addr: retire.mem_addr,
                                            mask: retire.mem_wmask, data: retire.mem_wdata});
             if (retire.trap && !allow_trap)
@@ -354,6 +412,14 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             $fdisplay(trace_fd, "%8d resume", cycle);
         if (rst_n && dmem_write(dmem_taken))
             dmem_writes.push_back(dmem_taken);
+        if (rst_n && amo_pending && ram_write(ram_taken)) begin
+            if (ram_taken.addr !== amo_expect.addr || ram_taken.mask !== amo_expect.mask ||
+                ram_taken.data !== amo_expect.data)
+                $fatal(1, "Mig3: AMO at %h to %h mask %b new %h, the RAM took %h mask %b data %h",
+                       amo_expect.pc, amo_expect.addr, amo_expect.mask, amo_expect.data,
+                       ram_taken.addr, ram_taken.mask, ram_taken.data);
+            amo_pending <= 1'b0;
+        end
         match_stores();
     end
 
@@ -362,6 +428,7 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
         retired           = 0;
         traps             = 0;
         ebreak_trapped    = 1'b0;
+        amo_pending       = 1'b0;
         written           = '0;
         prev_pc           = '0;
         prev_pc_wdata     = '0;

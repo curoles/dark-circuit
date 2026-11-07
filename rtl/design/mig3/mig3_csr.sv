@@ -15,8 +15,8 @@
  *   cycle, Mig3 has no real-time clock). mcycle counts every clock after reset, minstret
  *   every completed instruction (not traps); a CSR write wins over the count of its cycle.
  * - mscratch: read and write, for the trap handler.
- * - misa (RV32IM, writes ignored: Zbb and the LR/SC of Zalrsc have no bit, B and A stand
- *   for whole extensions); mvendorid, marchid, mimpid, mhartid read 0.
+ * - misa (RV32IMA, writes ignored: Zbb has no bit, B stands for the whole extension);
+ *   mvendorid, marchid, mimpid, mhartid read 0.
  * - mstatus: MIE and MPIE; MPP reads 3 (machine mode only), other bits 0; mstatush 0.
  * - mtvec: direct mode only, bits 1:0 read 0; mepc: bits 1:0 read 0 (no C extension).
  * - mcause, mtval: written by traps, and by CSR instructions.
@@ -56,9 +56,9 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     output wire      illegal,    // CSR does not exist, or write to a read-only CSR
     output csr_t     csr         // mtvec and mepc, for traps and MRET
 );
-    // misa: XLEN 32, extensions I and M.
+    // misa: XLEN 32, extensions I, M and A (LR/SC and the AMOs).
     localparam word_t MISA = {MISA_MXL_32, {(WIDTH-2){1'b0}}} | (word_t'(1) << MISA_EXT_I) |
-                             (word_t'(1) << MISA_EXT_M);
+                             (word_t'(1) << MISA_EXT_M) | (word_t'(1) << MISA_EXT_A);
 
     logic [11:0] addr;          // CSR address (immediate of the CSR instruction)
     assign addr = dec.imm[11:0];

@@ -190,7 +190,9 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
             ex_cause = CAUSE_MISALIGNED_FETCH;
             ex_tval  = {ex_branch.target, 2'b10};
         end else if (ex_lsu_misaligned) begin
-            ex_cause = ex_dec.mem.write ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
+            // An AMO is a load for the core, but its fault is store/AMO misaligned.
+            ex_cause = ex_dec.mem.write || AtomicPkg::is_atomic(ex_dec.atomic.atop)
+                       ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
             ex_tval  = ex_addr;
         end else
             ex_fault = 1'b0;

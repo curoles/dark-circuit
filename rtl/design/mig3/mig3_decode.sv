@@ -7,8 +7,9 @@
  * computes the controls of every part, grouped in decoded_t (the table below); parts
  * use funct3 and alt only to choose an operation within their part. The immediates come from
  * RiscvPkg (imm_*_of), sign-extended to 32 bits. LR.W and SC.W (Zalrsc) are a load and
- * a store whose address is rs1 (imm 0), with dec.atomic for Mig3Atomic; the AMOs of the
- * A extension are illegal.
+ * a store whose address is rs1 (imm 0), with dec.atomic for Mig3Atomic; an AMO (Zaamo)
+ * is a load of rs1 to rd with its operation in dec.atomic.atop, done in front of the
+ * memory (kb rtl/design/mig3/amo).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -44,6 +45,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             CLZ, CTZ, CPOP:                                         kind = KIND_BITMANIP;
             LR_W:                                                   kind = KIND_LR;
             SC_W:                                                   kind = KIND_SC;
+            AMOADD_W, AMOSWAP_W, AMOXOR_W, AMOOR_W, AMOAND_W:       kind = KIND_AMO;
+            AMOMIN_W, AMOMAX_W, AMOMINU_W, AMOMAXU_W:               kind = KIND_AMO;
             MRET:                                                   kind = KIND_MRET;
             WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
@@ -116,6 +119,24 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             ROL:                return ALU2_ROL;
             ROR, RORI_RV32:     return ALU2_ROR;
             default:            return ALU2_ADD;    // ADD, ADDI and the address sums
+        endcase
+    endfunction
+
+    // The operation of an AMO at the point of coherence (AtomicPkg: AXI5 AWATOP's values),
+    // by the encodings. AMOAND clears the bits of ~rs2 (Mig3Lsu inverts the operand).
+    // @kb: rtl/design/mig3/amo
+    function automatic AtomicPkg::atop_t atop_of(insn_t w);
+        casez (w)
+            AMOADD_W:  return AtomicPkg::ATOP_LD_ADD;
+            AMOAND_W:  return AtomicPkg::ATOP_LD_CLR;
+            AMOXOR_W:  return AtomicPkg::ATOP_LD_EOR;
+            AMOOR_W:   return AtomicPkg::ATOP_LD_SET;
+            AMOMIN_W:  return AtomicPkg::ATOP_LD_SMIN;
+            AMOMAX_W:  return AtomicPkg::ATOP_LD_SMAX;
+            AMOMINU_W: return AtomicPkg::ATOP_LD_UMIN;
+            AMOMAXU_W: return AtomicPkg::ATOP_LD_UMAX;
+            AMOSWAP_W: return AtomicPkg::ATOP_SWAP;
+            default:   return AtomicPkg::ATOP_NONE;
         endcase
     endfunction
 
@@ -202,6 +223,11 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
                 dec.rd_we = 1'b1;  dec.rd_src = RD_ATOMIC;
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.mem.write = 1'b1;
                 dec.atomic.sc = 1'b1;
+            end
+            KIND_AMO: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_LOAD;
+                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.mem.read = 1'b1;
+                dec.atomic.atop = atop_of(insn);
             end
             KIND_OP_IMM: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;

@@ -95,6 +95,7 @@ package RiscvPkg;
 
     // misa: MXL in the two top bits (1: XLEN 32), one bit per extension, its letter - 'A'.
     localparam logic [1:0] MISA_MXL_32 = 2'd1;
+    localparam int         MISA_EXT_A  = "A" - "A";
     localparam int         MISA_EXT_I  = "I" - "A";
     localparam int         MISA_EXT_M  = "M" - "A";
 

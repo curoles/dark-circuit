@@ -1,0 +1,56 @@
+type: decision
+title: Mig3's AMOs are loads with an atop, done by AtomicUnit in front of the memory
+date: 2026-11-07
+question: >
+  With atomics at the point of coherence (kb rtl/lib/block/atomic/design) and the caches
+  passing them (kb rtl/lib/block/cache/atomic), how does Mig3 run the AMOs of the A
+  extension (Zaamo), and how is it checked?
+decision: >
+  Decode makes AMOADD.W, AMOSWAP.W, AMOXOR.W, AMOOR.W, AMOAND.W, AMOMIN.W, AMOMAX.W,
+  AMOMINU.W and AMOMAXU.W one kind, KIND_AMO: a load of rs1 (imm 0) to rd that reads rs2,
+  with its operation in dec.atomic.atop (AXI5 AWATOP's values; AMOAND is a clear, so Mig3Lsu
+  sends ~rs2 as the operand). Mig3Lsu sends it as a word load with its atop and operand
+  (dmem_req_t.atop); the D-cache never hits it and drops the line it hits; the arbiter
+  carries the atop to the memory port (mem_req_t.atop); AtomicUnit in Mig3Cpu, in front of
+  the RAM and behind the split to the PLIC, reads the word, writes the new one and answers
+  the old, which comes back as a load's and goes to rd. Nothing else in the pipeline
+  changes: forwarding and the load-use hold treat it as a load. A misaligned AMO traps with
+  store/AMO misaligned (cause 6), as the spec says, though it is a load for the core. aq
+  and rl are ignored, as for LR/SC: one hart, every access in order. misa.A is 1 (Zalrsc and
+  Zaamo: the whole A extension). The retire trace has the AMO's read and write (mem_rmask,
+  mem_wmask, mem_rdata the old word), but mem_wdata 0, unlike RVFI: the core never sees the
+  new word. The retire check computes it from the old word and rs2 and expects it as the
+  first write behind AtomicUnit after the AMO retires (AtomicUnit takes no request before
+  that write, and the AMO retires in the clock its answer comes, before the write).
+why: >
+  An AMO as a load keeps the pipeline as it is (no state machine in EX, no second ALU, no
+  store after the load), and the operation is done where every agent's accesses meet, so
+  the same core is right with DMA or a second core later (kb rtl/lib/block/atomic/design).
+  Inverting AMOAND's operand in the core keeps AtomicPkg's operations those of AXI (CLR
+  clears the bits of its operand), so the bus adapter maps one to one. Making the new word
+  in the core only for the trace would cost an ALU in MEM/WB for nothing the hardware
+  needs; the testbench has the old word and rs2 and checks the memory's write itself.
+rejected:
+  - choice: Report the new word in the retire trace (RVFI mem_wdata)
+    why_not: >
+      The core would compute every operation a second time in MEM/WB, in the synthesized
+      core, only for the trace.
+  - choice: An AND operation in AtomicPkg, no inversion in the core
+    why_not: AXI5 has no AND in AtomicLoad (CLR); the encoding stays AXI's.
+relies_on:
+  - rtl/lib/block/atomic/design
+  - rtl/lib/block/cache/atomic
+  - rtl/design/mig3/lr_sc
+evidence: >
+  2026-11-07, Verilator: riscv-tests rv32ua pass (the nine AMOs, each stored, then the AMO,
+  then a load of its word, also after a miss; and lrsc), with the retire check computing
+  every AMO's new word and checking the RAM's write of it; the decode test has a case per
+  AMO (atop by its encoding) and amoadd.d stays illegal; csr.S reads misa with A; the whole
+  Mig3 suite passes (125 tests). Timing, sky130: 5.5 ns as before, 334 746 um2 (+0.4 %:
+  the D-cache's atop and the decode of the AMOs). The cause of a misaligned AMO is set but
+  not exercised by a test.
+code:
+  - rtl/design/mig3/mig3_decode.sv#atop_of
+  - rtl/design/mig3/mig3_lsu.sv#clear
+  - rtl/design/mig3/mig3_cpu.sv#u_atomic_unit
+  - test/design/mig3/tb/tb_mig3_retire_check.sv#amo_new

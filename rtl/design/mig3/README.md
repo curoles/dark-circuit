@@ -90,16 +90,24 @@ counter. Why 64, and the sizes measured: `kb/rtl/design/mig3/btb_size.yaml`.
 sky130: 5.2 ns, 331 045 um2 (+28 %: the BTB is flops). The ceilings are measured again:
 btb_if 506; Dhrystone 1 956 000, qsort 168 000, towers 238 000.
 
-### LR/SC (Zalrsc)
+### Atomics (A: Zalrsc and Zaamo)
 
-Mig3 runs LR.W and SC.W, the load-reserved and store-conditional of the A extension (its
-AMOs are illegal; misa.A stays 0). Everything of them that is not a load or a store is
+Mig3 runs LR.W and SC.W, the load-reserved and store-conditional of the A extension
+(its AMOs: below). Everything of them that is not a load or a store is
 in one part, Mig3Atomic, in EX: the reservation of one word, which an LR takes and an SC,
 a trap or MRET ends. A failing SC cancels its store in Mig3Lsu and writes 1 to rd, a
 succeeding one 0; that result comes in MEM/WB, like a load's (forwarded from EX it made
 the longest path 5.7 ns; so it stays 5.2). The test lrsc.S runs LR/SC in the corners of
 the pipeline, and the retire check checks every SC against a reservation of its own.
 Why: `kb/rtl/design/mig3/lr_sc.yaml`.
+
+The AMOs (AMOADD.W ... AMOMAXU.W) are done in front of the memory, where every access
+to it meets: AtomicUnit (`rtl/lib/block/atomic`) in Mig3Cpu, behind the caches. The core
+sends an AMO as a word load with its operation (atop, AXI5's values; AMOAND sends ~rs2,
+a clear); the D-cache never hits it and drops the line it hits; the old word comes back
+as a load's and goes to rd. misa.A is 1. riscv-tests rv32ua pass; the retire check
+computes every AMO's new word and checks the memory's write of it. Why:
+`kb/rtl/design/mig3/amo.yaml`.
 
 ### Interrupts
 

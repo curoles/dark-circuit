@@ -77,8 +77,8 @@ evidence: >
   on Verilator and Icarus (beats of 64 bits with words of 32, 32 with 32, 64 with 64;
   random reads, writes and atomics of all nine operations against an ideal memory, every
   answer and the memory at the end compared); 7 of 7 mutants caught (kb
-  test/block/atomic/atomic_unit/mutants). Not built yet: the atop field on the caches'
-  channels, their pass-through, and Mig3's AMOs.
+  test/block/atomic/atomic_unit/mutants). The caches' pass-through: kb
+  rtl/lib/block/cache/atomic. Mig3's AMOs, 2026-11-07: kb rtl/design/mig3/amo.
 code:
   - rtl/lib/block/atomic/atomic_pkg.sv
   - rtl/lib/bus/axi/axi_pkg.sv

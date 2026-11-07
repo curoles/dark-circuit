@@ -6,7 +6,8 @@ question: >
   reservation, and what ends it?
 decision: >
   Only LR.W and SC.W (Zalrsc); the AMOs of A stay illegal, misa.A stays 0 (A stands for the
-  whole extension, as B for Zbb). The rest of the core sees a load and a store: decode
+  whole extension, as B for Zbb; later, 2026-11-07, the AMOs came and misa.A is 1: kb
+  rtl/design/mig3/amo). The rest of the core sees a load and a store: decode
   gives LR mem.read and RD_LOAD, SC mem.write and RD_ATOMIC, both with the address rs1
   (imm 0), and one control group, atomic {lr, sc}, read only by Mig3Atomic in EX.
   Mig3Atomic holds the reservation (valid and a word address): an LR that completes

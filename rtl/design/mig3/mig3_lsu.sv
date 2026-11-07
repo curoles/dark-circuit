@@ -14,7 +14,9 @@
  * read is added in MEM/WB. dmem_req also carries the byte and the size of the access, so
  * an uncached one reaches memory or a device exactly. cancel=1 (an SC that fails,
  * Mig3Atomic) does not do the store: no request, no write in mem; a misaligned SC still
- * traps.
+ * traps. An AMO is a word load with its atop (dec.atomic.atop) and its operand rs2 in
+ * wdata (AMOAND: ~rs2, a clear); mem has its read and its write, mem.wdata 0 (the new
+ * word is made in front of the memory, kb rtl/design/mig3/amo).
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig3Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -56,6 +58,8 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     logic  load;
     logic  store;       // a store, also one that is cancelled (it may be misaligned)
     logic  write;       // a store that writes: not cancelled
+    logic  amo;         // an AMO: a load with an atop
+    logic  clear;       // AMOAND: the operand is ~rs2
     logic  unaligned;   // offset is not aligned to the size of funct3
     word_t wr_data;
     strb_t strb;        // bytes of the access: size of funct3 at offset
@@ -68,6 +72,8 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     assign load  = valid && dec.mem.read;
     assign store = valid && dec.mem.write;
     assign write = store && !cancel;
+    assign amo   = load && AtomicPkg::is_atomic(dec.atomic.atop);
+    assign clear = dec.atomic.atop == AtomicPkg::ATOP_LD_CLR;
 
     always_comb
         case (dec.funct3)
@@ -106,14 +112,14 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     assign dmem_req.addr   = addr[WIDTH-1:DADDR_START];
     assign dmem_req.offset = offset;
     assign dmem_req.size   = size;
-    assign dmem_req.wdata = wr_data;
+    assign dmem_req.wdata = wr_data ^ {WIDTH{clear}};
     assign dmem_req.wstrb = strb;
-    assign dmem_req.atop  = AtomicPkg::ATOP_NONE;     // no AMOs yet
+    assign dmem_req.atop  = dec.atomic.atop;
 
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
     assign mem.rmask = (load && !misaligned) ? strb : '0;
-    assign mem.wmask = (write && !misaligned) ? strb : '0;
+    assign mem.wmask = ((write || amo) && !misaligned) ? strb : '0;
     assign mem.wdata = (write && !misaligned) ? wr_data : '0;
 
 endmodule

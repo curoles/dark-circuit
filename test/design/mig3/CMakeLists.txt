@@ -339,6 +339,15 @@ if(DARK_CIRCUIT_RISCV)
                               LABELS riscv-tests rv32um)
         endforeach()
 
+        # rv32ua: the A extension, LR/SC and the AMOs (done in front of the memory,
+        # AtomicUnit in Mig3Cpu: kb rtl/design/mig3/amo).
+        foreach(test IN ITEMS amoadd_w amoand_w amomax_w amomaxu_w amomin_w amominu_w
+                              amoor_w amoswap_w amoxor_w lrsc)
+            mig3_program_test(rv32ua_${test} SOURCES ${RISCV_TESTS}/isa/rv32ua/${test}.S
+                              ARCH rv32ima FLAGS ${RISCV_TESTS_FLAGS} ARGS ${RISCV_TESTS_ARGS}
+                              LABELS riscv-tests rv32ua)
+        endforeach()
+
         # rv32uzbb: Zbb, the groups done so far; only when the compiler knows Zbb.
         if(DARK_CIRCUIT_RISCV_ZBB)
             foreach(test IN ITEMS andn orn xnor min minu max maxu rol ror rori
