@@ -39,6 +39,8 @@ rejected:
     why_not: >
       Tags, valid bits and the line of the filled way forwarded into the hit logic: a mux on
       the late path of every lookup, to save one clock only for a request at the fill place.
+publications:
+  - publications/2026-11-replay-instead-of-refuse.md
 code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#replay
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_replay_one_clock

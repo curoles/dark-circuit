@@ -73,7 +73,6 @@ module BranchTargetBuffer import BranchCounterPkg::*; #(
     wire [ENTRIES-1:0]      clear_line;         // one-hot: the entry the invalidate clears
     wire [ENTRIES-1:0]      clear_line_n;
     wire [ENTRIES-1:0]      lookup_line;        // one-hot: the entry of lookup_pc
-    wire [ENTRIES-1:0]      lookup_valid_line;
     wire                    lookup_valid;
 
     // Direct-mapped: the low bits of the pc pick the entry, the rest is its tag.
@@ -99,12 +98,11 @@ module BranchTargetBuffer import BranchCounterPkg::*; #(
             .wr_en(update_write), .wr_addr(update_index),
             .wr_data({update_target, counter_new}));
 
-    // Lookup: valid of the entry by its one-hot line, AND and OR, as a RegFile read.
+    // Lookup: valid of the entry by its one-hot line, as a RegFile read.
     Decoder  #(.SIZE(INDEX_WIDTH)) u_decoder_lookup(.in(lookup_index), .en(1'b1),
                                                     .out(lookup_line));
-    And2     #(ENTRIES) u_and2_lookup_valid(.in1(valid), .in2(lookup_line),
-                                            .out(lookup_valid_line));
-    OrReduce #(ENTRIES) u_or_reduce_lookup_valid(.in(lookup_valid_line), .out(lookup_valid));
+    MuxOneHot #(.N(ENTRIES), .WIDTH(1)) u_mux_one_hot_lookup_valid(
+        .in(valid), .sel(lookup_line), .out(lookup_valid));
 
     CmpEq #(TAG_WIDTH) u_cmp_eq_lookup(.in1(lookup_tag), .in2(lookup_pc[PC_WIDTH-1:INDEX_WIDTH]),
                                        .eq(lookup_tag_eq));

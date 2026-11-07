@@ -43,8 +43,10 @@ was decided or measured, YYYY-MM-DD). Each type has its own fields:
 | `pattern` | `problem`, `solution`, `why` | `known_as` (its names elsewhere), `rejected`: list of `choice`, `why_not` |
 | `mutants` | `tests`, `mutants` (list, see Mutants below) | |
 
-Every type may have `evidence` (text: numbers, where they come from), `code` (anchors) and
-`relies_on` (ids of records this one builds on). No other fields.
+Every type may have `evidence` (text: numbers, where they come from), `code` (anchors),
+`relies_on` (ids of records this one builds on) and `publications` (notes in
+`publications/` that tell the story at length and easy to read; checked like anchors).
+No other fields.
 
 A `decision` says what was chosen here; a `pattern` says what to do for a kind of problem
 wherever it comes up (a design pattern of RTL), with the names it has elsewhere. A pattern

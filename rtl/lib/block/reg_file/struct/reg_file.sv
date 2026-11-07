@@ -59,17 +59,11 @@ module RegFile #(
         Dff #(DATA_WIDTH) u_dff(.clk(clk), .in(next[WR_PORTS]), .out(regs[r]));
     end
 
-    // Read ports: for every data bit, AND bit column with read word lines, then OR.
+    // Read ports: the register of the one-hot read word line.
     for (genvar k = 0; k < RD_PORTS; k++) begin : g_rd_port
         Decoder #(.SIZE(ADDR_WIDTH)) u_decoder(.in(rd_addr[k]), .en(1'b1), .out(rd_wordline[k]));
-        for (genvar b = 0; b < DATA_WIDTH; b++) begin : g_bit
-            wire [REGS-1:0] column, selected;
-            for (genvar r = 0; r < REGS; r++) begin : g_column
-                assign column[r] = regs[r][b];
-            end
-            And2     #(REGS) u_and2     (.in1(column), .in2(rd_wordline[k]), .out(selected));
-            OrReduce #(REGS) u_or_reduce(.in(selected), .out(rd_data[k][b]));
-        end
+        MuxOneHot #(.N(REGS), .WIDTH(DATA_WIDTH)) u_mux_one_hot(
+            .in(regs), .sel(rd_wordline[k]), .out(rd_data[k]));
     end
 
 endmodule

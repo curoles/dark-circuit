@@ -7,7 +7,8 @@ Usage:
 Checks:
 - every kb/**/*.yaml is a YAML mapping with type, title, date and the fields of its type,
   and no other fields;
-- every anchor (code, checked_by, guarded_by) names an existing file or directory, and its
+- every anchor (code, checked_by, guarded_by, publications) names an existing file or
+  directory, and its
   #name is in the file as a whole word;
 - every relies_on is the id of an existing record;
 - every `@kb: <id>` in the files of the repository names an existing record;
@@ -26,7 +27,7 @@ import sys
 import yaml
 
 COMMON_REQUIRED = {"type", "title", "date"}
-COMMON_OPTIONAL = {"evidence", "code", "relies_on"}
+COMMON_OPTIONAL = {"evidence", "code", "relies_on", "publications"}
 TYPES = {
     "decision":    ({"question", "decision", "why"}, {"rejected"}),
     "invariant":   ({"statement", "why"}, {"checked_by"}),
@@ -38,7 +39,7 @@ TYPES = {
 # The fields of one mutant (tools/mutate.py says what they do).
 MUTANT_KEYS = {"name", "edits", "python_code", "verilog_code", "hook", "quiet", "tests",
                "expect", "why"}
-ANCHOR_FIELDS = ("code", "checked_by", "guarded_by")
+ANCHOR_FIELDS = ("code", "checked_by", "guarded_by", "publications")
 # Where @kb: tags may be: the repository without kb/ itself, old code and build output.
 SKIP_DIRS = {".git", "kb", "old2020", "build", "__pycache__"}
 TAG_FILES = re.compile(r".*\.(sv|svh|v|S|s|c|h|py|cmake|txt|yaml|yml|j2|flist|md|ld)$|Makefile$")

@@ -30,6 +30,8 @@ rejected:
     why_not: >
       Misses the evicted line: a store to it has another line address but the same place,
       and would write into the new line.
+publications:
+  - publications/2026-11-replay-instead-of-refuse.md
 relies_on:
   - rtl/lib/block/cache/uncached
   - rtl/lib/block/cache/cache_control/replay

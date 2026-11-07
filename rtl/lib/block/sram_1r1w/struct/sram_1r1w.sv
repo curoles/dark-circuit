@@ -35,23 +35,18 @@ module Sram1R1W #(
     Decoder #(.SIZE(ADDR_WIDTH)) u_decoder_wr(.in(wr_addr), .en(wr_en), .out(wr_wordline));
     Decoder #(.SIZE(ADDR_WIDTH)) u_decoder_rd(.in(rd_addr), .en(rd_en), .out(rd_wordline));
 
-    genvar k, b;
+    genvar k;
     generate
     // Words: write when write word line is 1, otherwise hold.
     for (k = 0; k < WORDS; k = k + 1) begin: g_word
         DffEn #(DATA_WIDTH) u_dff_en(.clk(clk), .en(wr_wordline[k]), .in(data_in),
                                      .out(words[k*DATA_WIDTH +: DATA_WIDTH]));
     end
-    // Read: for every data bit, AND bit column with read word lines, then OR.
-    for (b = 0; b < DATA_WIDTH; b = b + 1) begin: g_bit
-        wire [WORDS-1:0] column, selected;
-        for (k = 0; k < WORDS; k = k + 1) begin: g_column
-            assign column[k] = words[k*DATA_WIDTH + b];
-        end
-        And2     #(WORDS) u_and2     (.in1(column), .in2(rd_wordline), .out(selected));
-        OrReduce #(WORDS) u_or_reduce(.in(selected), .out(read_val[b]));
-    end
     endgenerate
+
+    // Read: the word of the one-hot read word line.
+    MuxOneHot #(.N(WORDS), .WIDTH(DATA_WIDTH)) u_mux_one_hot_rd(
+        .in(words), .sel(rd_wordline), .out(read_val));
 
     // data_out holds while rd_en is 0.
     DffEn #(DATA_WIDTH) u_dff_en_out(.clk(clk), .en(rd_en), .in(read_val), .out(data_out));

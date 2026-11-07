@@ -1,0 +1,36 @@
+type: pattern
+title: EXPECT_REG, register expectations in the test binary, checked by the testbench
+date: 2026-11-06
+problem: >
+  A directed assembly test must say whether the core got it right. A test that checks itself
+  (compute, compare, branch to fail, as riscv-tests) asks the core under test to grade its own
+  exam with the instructions being tested, and cannot run before the core's branches work.
+solution: >
+  Each program defines EXPECT_REG r, value (.word r, value) and puts after its halting EBREAK
+  a table: the number of entries, then pairs register, value (assembler expressions: labels,
+  macros of the generated configuration header). With +expect_regs the testbench reads the
+  table at halt_pc + 4 and compares every register in it with a shadow register file built
+  from the retire trace (and the debugger's writes); a register in the table that was never
+  written fails, a missing table fails, and a failure is $fatal, so the test fails by its exit
+  code. The testbenches of Mig1, Mig2 and Mig3 have it (check_regs).
+why: >
+  Pass or fail does not depend on the core's branches or compares, so it works from the first
+  straight-line test of a new core (Mig1 began as a 2-stage RV32I core); the expectation sits
+  next to the code that produces it, and labels keep addresses right when code moves. The
+  shadow registers check what the core retired, not what its register file holds.
+known_as: [self-checking test, golden register values, end-state check]
+rejected:
+  - choice: Self-check in the program (riscv-tests' TEST_CASE)
+    why_not: >
+      The core grades itself and needs working branches; kept for riscv-tests, which run in
+      their own style next to these tests.
+  - choice: A signature compared with a reference model (riscv-arch-test)
+    why_not: A reference model and memory dumps for what a table in the binary says directly.
+evidence: >
+  Directed tests of Mig1, Mig2 and Mig3 use it (alu.S, branch.S, csr.S, irq.S, plic.S, ...),
+  next to the retire checker, cycle ceilings and riscv-tests.
+publications:
+  - publications/2026-11-expect-reg.md
+code:
+  - test/design/mig3/tb/tb_mig3.sv#check_regs
+  - test/design/mig1/alu.S#EXPECT_REG
