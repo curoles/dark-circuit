@@ -7,8 +7,8 @@
  * Content is unknown until written.
  *
  * Decoders make one-hot word lines from addresses. Every word is a DffEn: write
- * when its write word line is 1, otherwise hold. Read selects word by AND of
- * every data bit column with read word lines, then OR of the column.
+ * when its write word line is 1, otherwise hold. Read selects the word of the one-hot
+ * read word line (MuxOneHot: AND of every data bit column with the word lines, then OR).
  * Size is WORDS*DATA_WIDTH flops, use it for small memories and for learning.
  *
  * @author    Igor Lesik

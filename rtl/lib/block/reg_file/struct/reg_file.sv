@@ -13,8 +13,8 @@
  * of Mux2 in front, one per write port: Mux2 of port p passes wr_data[p] when its word
  * line is 1, otherwise the value from before it; the chain starts with the register
  * itself, so it holds when no port writes it. Higher port is closer to Dff, so it wins.
- * Read port k selects register by AND of every data bit column with its word lines,
- * then OR of the column.
+ * Read port k selects the register of its one-hot word line (MuxOneHot: AND of every data
+ * bit column with the word lines, then OR of the column).
  *
  * Why not GatedClk per register instead of hold Mux2: ASIC synthesis tools insert
  * clock gating cells by themselves where a Mux2 feeds a flop back to itself, and

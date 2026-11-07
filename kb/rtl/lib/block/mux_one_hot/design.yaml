@@ -31,6 +31,7 @@ evidence: >
   selects against a bit-by-bit model, every input selected alone; 4 of 4 mutants caught (kb
   test/block/mux_one_hot/mutants). The library had no such block (searched 2026-11-05): only
   the gates Mux1hot2, Mux1hot3 and the And-Or written inline in RegFile, Sram1r1w and the
-  BTB.
+  BTB. 2026-11-06: those three struct versions use MuxOneHot instead (the same gates); their
+  struct tests pass on Verilator and Icarus.
 code:
   - rtl/lib/block/mux_one_hot/struct/mux_one_hot.sv#g_bit
