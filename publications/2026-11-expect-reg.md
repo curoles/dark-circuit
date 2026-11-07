@@ -170,12 +170,17 @@ follows.
 
 ## 6. How it compares
 
-| Approach | Who decides pass/fail | What it needs | Weak spot |
-|---|---|---|---|
-| Self-check in the program (riscv-tests) | the CPU under test, then a write to `tohost` | branches, compares, a reporting convention | a broken CPU can grade itself wrong |
-| Signature (riscv-arch-test) | a comparison after the run with a reference model's signature | a memory region dumped, a reference model (Sail, Spike) | setup; memory results only |
-| Co-simulation (Spike in lock step, RVFI with riscv-formal) | an instruction set simulator or formal checks, every instruction | the most infrastructure | the most infrastructure |
-| EXPECT_REG | the testbench, from a table in the binary | a halting instruction and a retire trace | end state only |
+- **Self-check in the program (riscv-tests).** The CPU under test decides pass or fail,
+  then writes to `tohost`. It needs branches, compares and a reporting convention. Weak
+  spot: a broken CPU can grade itself wrong.
+- **Signature (riscv-arch-test).** After the run, a script compares a dumped memory region
+  with a reference model's signature (Sail, Spike). Weak spot: the setup, and it sees only
+  what ends up in memory.
+- **Co-simulation (Spike in lock step, RVFI with riscv-formal).** An instruction set
+  simulator or formal checks judge every instruction. It needs the most infrastructure,
+  and that is also its weak spot.
+- **EXPECT_REG.** The testbench decides, from a table in the binary. It needs a halting
+  instruction and a retire trace. Weak spot: it checks the end state only.
 
 EXPECT_REG sits at the cheap end: no reference model, no extra files, and it does not depend
 on the CPU being right about anything but the instructions under test and the halt. I use it
