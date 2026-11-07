@@ -33,6 +33,13 @@
  * the clock memory takes it, so req_ready then follows mem_req_ready without a flop; a load is
  * answered in the clock memory answers, with memory's line. An address is used either cached
  * or uncached, never both: the cache does not check.
+ * No cache: a request with req_nocache=1 (an address that may not be cached, a device's;
+ * the CPU decides it from the address) is taken and looked up as a cached one, so neither
+ * req_ready nor the memory side depends on it in the clock it comes, but it is never
+ * filled: in its lookup it misses (its line is never in the cache: an address is used
+ * cached or not, never both) and goes to memory as asked, its own address and size from
+ * the lookup's registers; a load is served as a miss and answered with memory's line,
+ * which is not written (refill 0, no victim), a store writes memory only.
  * READ_ONLY=1 (an instruction cache): no stores (req_we, req_wdata and req_wstrb are not used;
  * mem_req_we, mem_req_wdata and mem_req_wstrb are 0; store_write and merged are 0), so the
  * logic only stores need is left out.
@@ -65,7 +72,8 @@ module CacheControl #(
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
     input  wire                  req_uncached,  // the request bypasses the lines
-    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
+    input  wire [2:0]            req_size,      // uncached, no cache: 1 << req_size bytes
+    input  wire                  req_nocache,   // the address may not be cached: no fill
     // The fields of a store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
@@ -117,6 +125,12 @@ module CacheControl #(
     logic                  unc_busy;    // ... and does not answer now
     logic                  idle;        // nothing looked up or served: uncached may pass
     logic                  unc_pass;    // an uncached request goes to memory now
+    logic                  look_nocache; // the lookup's request may not be cached
+    logic [SETS_OFFSET-1:0] look_offset; // its offset and size: memory gets them as asked
+    logic [2:0]            look_size;
+    logic                  served;      // memory takes a load miss's read
+    logic                  wait_nocache; // the read served may not be cached: no fill
+    logic                  answer;      // the served read's answer comes
 
     // A cached request is taken only when the lookup is done: no load miss found, none served
     // (the clock its line comes counts as done), no replay, memory took the lookup's own
@@ -136,8 +150,12 @@ module CacheControl #(
         else        look <= accept || held || replay;
 
     always_ff @(posedge clk)
-        if (accept)
-            look_line <= req_addr[ADDR_WIDTH-1:SETS_OFFSET];
+        if (accept) begin
+            look_line    <= req_addr[ADDR_WIDTH-1:SETS_OFFSET];
+            look_offset  <= req_addr[SETS_OFFSET-1:0];
+            look_size    <= req_size;
+            look_nocache <= req_nocache;
+        end
 
     // A request taken in the refill clock at the place the refill writes read the old line
     // there: in the next clock its lookup reads the RAMs again and does nothing else, then is
@@ -165,15 +183,18 @@ module CacheControl #(
     assign look_req      = store || load_miss;
     assign mem_req_valid = unc_pass || look_req;
     assign held          = look_req && !mem_req_ready;
-    // An uncached request goes as the CPU asked it, exactly its bytes; a cached one moves a
-    // whole line.
+    // An uncached request goes as the CPU asked it, exactly its bytes, a no-cache one as its
+    // lookup kept it; a cached one moves a whole line.
     // @kb: rtl/lib/block/cache/uncached
-    assign mem_req_addr  = unc_pass ? req_addr : {look_line, {SETS_OFFSET{1'b0}}};
-    assign mem_req_size  = unc_pass ? req_size : 3'(SETS_OFFSET);
+    assign mem_req_addr  = unc_pass     ? req_addr :
+                           look_nocache ? {look_line, look_offset}
+                                        : {look_line, {SETS_OFFSET{1'b0}}};
+    assign mem_req_size  = unc_pass ? req_size : look_nocache ? look_size : 3'(SETS_OFFSET);
 
-    // An uncached request is aligned to its size and fits its line.
-    `DC_ASSERT(a_unc_exact, !unc_pass || (int'(req_size) <= SETS_OFFSET &&
-        (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
+    // An uncached or no-cache request is aligned to its size and fits its line.
+    `DC_ASSERT(a_unc_exact, !(unc_pass || (accept && req_nocache)) ||
+        (int'(req_size) <= SETS_OFFSET &&
+         (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
 
     // The merged line goes into the cache once: in the clock memory takes the store.
     function automatic [DATA_WIDTH-1:0] merge(input [DATA_WIDTH-1:0] old,
@@ -221,14 +242,20 @@ module CacheControl #(
 
     // A load miss is served from the clock memory takes its read until the answer comes
     // (look_line holds: no request is taken meanwhile).
-    assign miss_taken = load_miss && mem_req_ready;
+    assign served     = load_miss && mem_req_ready;
+    assign miss_taken = served && !look_nocache;   // a victim only for a line to fill
 
     always_ff @(posedge clk)
         if (!rst_n)             waiting <= 1'b0;
-        else if (miss_taken)    waiting <= 1'b1;
+        else if (served)        waiting <= 1'b1;
         else if (mem_rsp_valid) waiting <= 1'b0;
 
-    assign refill = waiting && mem_rsp_valid;
+    always_ff @(posedge clk)
+        if (served)
+            wait_nocache <= look_nocache;
+
+    assign answer = waiting && mem_rsp_valid;     // the served read's answer
+    assign refill = answer && !wait_nocache;      // ... fills its line
 
     // A lookup ends when memory takes its read, and no request is taken while the miss is
     // served: so a refill never meets a store's write, and the refill writes look_line's
@@ -252,7 +279,7 @@ module CacheControl #(
     // It passed while idle, and nothing is taken while it waits: alone with memory.
     `DC_ASSERT(a_unc_alone, !(unc_waiting && (look || waiting)))
 
-    assign rsp_valid = load_hit || refill || (unc_waiting && mem_rsp_valid);
+    assign rsp_valid = load_hit || answer || (unc_waiting && mem_rsp_valid);
     assign rsp_data  = (waiting || unc_waiting) ? mem_rsp_data : hit_line;
 
 endmodule

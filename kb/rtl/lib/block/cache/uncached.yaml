@@ -25,7 +25,12 @@ decision: >
   byte address and its size (req_size, mem_req_size: 1 << size bytes, AXI's AxSIZE; the
   address aligned to it, within a line), a cached one its line's address and the line's
   size (SETS_OFFSET); writes keep their strobes. The arbiter carries the size with its
-  request.
+  request. No cache (2026-11-06): a request with req_nocache=1 is taken and looked up as
+  a cached one (req_ready does not depend on it), misses, and goes to memory with its own
+  address and size from the lookup's registers; a load is served as a miss whose answer is
+  not written (no victim, no refill), a store writes memory only. The CPU decides it from
+  the address (an I/O region), so it must not reach req_ready: req_uncached stays the fast
+  bypass for a whole-cache mode, a pin of constant timing.
 why: >
   With latency-1 memory an uncached request has the memory's own timing: a load taken in clock
   t is answered in t+1, as without a cache, so programs that count cycles run unchanged (user:
@@ -59,6 +64,11 @@ rejected:
     why_not: >
       No 1-byte access. A line bigger than the memory port goes as a burst (AXI's
       AxLEN) when the port gets narrower; the size describes one beat.
+  - choice: An I/O address as an uncached request (req_uncached from the address)
+    why_not: >
+      The address compare then decides req_ready in the same clock: Mig3 5.5 -> 5.7 ns
+      (kb rtl/design/mig3/io_region). PMA checks act alongside the lookup, a clock
+      later.
 relies_on:
   - rtl/design/mig2/fetch_waits
 evidence: >
@@ -76,7 +86,10 @@ evidence: >
   address and size; the read-only tests the line's size; the arbiter's test a size that
   comes with its request; all pass on both versions, Verilator and Icarus; Mig2 and Mig3
   (word size) 225 tests pass; 5 of 5 mutants caught (kb
-  test/block/cache/skewed_cache/mutants).
+  test/block/cache/skewed_cache/mutants). No cache, 2026-11-06: half of the SkewedCache
+  test's requests of the uncached tag are no-cache (taken as cached, sent as asked from the
+  lookup, never filled; no-cache loads and stores seen); all cache tests pass on both
+  versions, Verilator and Icarus; 9 of 9 mutants of the record caught.
 code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#unc_pass
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_unc_alone

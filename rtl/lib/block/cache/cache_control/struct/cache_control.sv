@@ -8,14 +8,14 @@
  *   store       = look_ok AND look_we          load = look_ok AND ~look_we
  *   load_hit    = load AND hit                 load_miss = load AND ~hit
  *   look_req    = store OR load_miss           held = look_req AND ~mem_req_ready
- *   miss_taken  = load_miss AND mem_req_ready  waiting = DffSyncRst(miss_taken OR
+ *   served      = load_miss AND mem_req_ready  waiting = DffSyncRst(served OR
  *                                                         (waiting AND ~mem_rsp_valid))
- *   refill      = waiting AND mem_rsp_valid
+ *   answer      = waiting AND mem_rsp_valid    refill = answer AND ~wait_nocache
  *   replay      = DffSyncRst(accept AND refill AND fill_conflict)   ram_rd = accept OR replay
  *   store_write = store AND hit AND mem_req_ready (g_store); merged: per byte a Mux2 of the hit
  *                 line and the store's byte on its strobe; ram_wr_line = Mux2(merged,
  *                 mem_rsp_data, refill)
- *   rsp_valid   = load_hit OR refill OR (unc_waiting AND mem_rsp_valid)
+ *   rsp_valid   = load_hit OR answer OR (unc_waiting AND mem_rsp_valid)
  *   rsp_data    = Mux2(hit_line, mem_rsp_data, waiting OR unc_waiting)
  * Uncached (see the behave version):
  *   idle      = Nor3(look, waiting, unc_busy)      unc_busy = unc_waiting AND ~mem_rsp_valid
@@ -25,6 +25,10 @@
  *               and the request's own on unc_pass, the size one of SETS_OFFSET and req_size,
  *               the fields of a write (g_store) one of the store kept
  *               and the request's; unc_waiting a DffSyncRst like waiting
+ * No cache (see the behave version): look_nocache, look_size and look_offset kept with the
+ *   request (DffEn); the lookup's memory address has look_offset AND look_nocache, its
+ *   size a Mux2 of SETS_OFFSET and look_size; miss_taken = served AND ~look_nocache;
+ *   wait_nocache a DffEn of look_nocache on served
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -46,7 +50,8 @@ module CacheControl #(
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
     input  wire                  req_uncached,  // the request bypasses the lines
-    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
+    input  wire [2:0]            req_size,      // uncached, no cache: 1 << req_size bytes
+    input  wire                  req_nocache,   // the address may not be cached: no fill
     // The fields of a store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
@@ -119,6 +124,16 @@ module CacheControl #(
     wire                  unc_rsp;      // memory answers the uncached read
     wire                  mem_we_n;
     wire                  rsp_mem;      // the answer is memory's line
+    wire                  look_nocache; // the lookup's request may not be cached
+    wire                  nocache_n;
+    wire [SETS_OFFSET-1:0] look_offset; // its offset and size: memory gets them as asked
+    wire [2:0]            look_size;
+    wire [SETS_OFFSET-1:0] look_mem_offset; // the lookup's: its own, or 0 for a line
+    wire [2:0]            look_mem_size;
+    wire                  served;       // memory takes a load miss's read
+    wire                  wait_nocache; // the read served may not be cached: no fill
+    wire                  wait_cache;
+    wire                  answer;       // the served read's answer comes
 
     // A cached request is taken when the lookup is done and no uncached read waits; an
     // uncached one passes to memory while idle and is taken when memory takes it.
@@ -143,6 +158,10 @@ module CacheControl #(
     // The line address of the request taken, kept for its lookup.
     assign req_line = req_addr[ADDR_WIDTH-1:SETS_OFFSET];
     DffEn #(LINE_WIDTH) u_dff_en_line(.clk, .en(accept), .in(req_line), .out(look_line));
+    DffEn #(SETS_OFFSET + 4) u_dff_en_nocache(
+        .clk, .en(accept), .in({req_addr[SETS_OFFSET-1:0], req_size, req_nocache}),
+        .out({look_offset, look_size, look_nocache}));
+    Inv   #(1) u_inv_nocache(.in(look_nocache), .out(nocache_n));
 
     // Lookup.
     Inv  #(1) u_inv_hit       (.in(hit), .out(hit_n));
@@ -160,16 +179,22 @@ module CacheControl #(
     Or2  #(1) u_or2_mem_valid(.in1(unc_pass), .in2(look_req), .out(mem_req_valid));
     Inv  #(1) u_inv_mem_ready(.in(mem_req_ready), .out(mem_ready_n));
     And2 #(1) u_and2_held    (.in1(look_req), .in2(mem_ready_n), .out(held));
-    // An uncached request as the CPU asked it (address and size), a cached one a line.
+    // An uncached request as the CPU asked it (address and size), a no-cache one as its
+    // lookup kept it, a cached one a line.
     // @kb: rtl/lib/block/cache/uncached
-    Mux2 #(ADDR_WIDTH) u_mux2_mem_addr(.in0({look_line, {SETS_OFFSET{1'b0}}}), .in1(req_addr),
+    And2 #(SETS_OFFSET) u_and2_look_offset(.in1(look_offset), .in2({SETS_OFFSET{look_nocache}}),
+                                          .out(look_mem_offset));
+    Mux2 #(3) u_mux2_look_size(.in0(3'(SETS_OFFSET)), .in1(look_size), .sel(look_nocache),
+                               .out(look_mem_size));
+    Mux2 #(ADDR_WIDTH) u_mux2_mem_addr(.in0({look_line, look_mem_offset}), .in1(req_addr),
                                        .sel(unc_pass), .out(mem_req_addr));
-    Mux2 #(3) u_mux2_mem_size(.in0(3'(SETS_OFFSET)), .in1(req_size), .sel(unc_pass),
+    Mux2 #(3) u_mux2_mem_size(.in0(look_mem_size), .in1(req_size), .sel(unc_pass),
                               .out(mem_req_size));
 
-    // An uncached request is aligned to its size and fits its line.
-    `DC_ASSERT(a_unc_exact, !unc_pass || (int'(req_size) <= SETS_OFFSET &&
-        (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
+    // An uncached or no-cache request is aligned to its size and fits its line.
+    `DC_ASSERT(a_unc_exact, !(unc_pass || (accept && req_nocache)) ||
+        (int'(req_size) <= SETS_OFFSET &&
+         (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
 
     // The logic only stores need; a read-only cache has none of it. Both branches drive
     // look_we, store_write, merged, ram_wr_line and the fields of a memory write (mem_req_we,
@@ -211,12 +236,17 @@ module CacheControl #(
     end
 
     // Load miss served from the clock memory takes its read until the answer comes.
-    And2 #(1) u_and2_miss_taken(.in1(load_miss), .in2(mem_req_ready), .out(miss_taken));
+    And2 #(1) u_and2_served    (.in1(load_miss), .in2(mem_req_ready), .out(served));
+    And2 #(1) u_and2_miss_taken(.in1(served), .in2(nocache_n), .out(miss_taken));
     Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
     And2 #(1) u_and2_kept      (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
-    Or2  #(1) u_or2_wait       (.in1(miss_taken), .in2(waiting_kept), .out(waiting_next));
+    Or2  #(1) u_or2_wait       (.in1(served), .in2(waiting_kept), .out(waiting_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_wait(.clk, .rst_n, .in(waiting_next), .out(waiting));
-    And2 #(1) u_and2_refill    (.in1(waiting), .in2(mem_rsp_valid), .out(refill));
+    And2 #(1) u_and2_answer    (.in1(waiting), .in2(mem_rsp_valid), .out(answer));
+    DffEn #(1) u_dff_en_wait_nocache(.clk, .en(served), .in(look_nocache),
+                                     .out(wait_nocache));
+    Inv  #(1) u_inv_wait_nocache(.in(wait_nocache), .out(wait_cache));
+    And2 #(1) u_and2_refill    (.in1(answer), .in2(wait_cache), .out(refill));
 
     // Replay (see the behave version).
     // @kb: rtl/lib/block/cache/cache_control/refill_take
@@ -248,7 +278,7 @@ module CacheControl #(
     // See the behave version.
     `DC_ASSERT(a_unc_alone, !(unc_waiting && (look || waiting)))
 
-    Or3  #(1)          u_or3_rsp    (.in1(load_hit), .in2(refill), .in3(unc_rsp), .out(rsp_valid));
+    Or3  #(1)          u_or3_rsp    (.in1(load_hit), .in2(answer), .in3(unc_rsp), .out(rsp_valid));
     Or2  #(1)          u_or2_rsp_mem(.in1(waiting), .in2(unc_waiting), .out(rsp_mem));
     Mux2 #(DATA_WIDTH) u_mux2_data  (.in0(hit_line), .in1(mem_rsp_data), .sel(rsp_mem),
                                      .out(rsp_data));

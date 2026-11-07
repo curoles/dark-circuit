@@ -9,9 +9,11 @@ decision: >
   The configuration (cfg/mig3_config.yaml) has one I/O region, io_base and io_addr_width
   (0x0C000000, 64 MiB: where QEMU virt and SiFive put the PLIC), and a section per device
   with its offset in the region and its size, the PLIC's with its sources and priority bits
-  (offset 0, 4 MiB, 8 sources, 3 bits). Mig3Caches sends every load and store of the region
-  past the D-cache (req_uncached of the library cache, by an address compare); the core knows
-  nothing else of the devices, Mig3Cpu decodes the region. Mig3ConfigPkg has a struct per
+  (offset 0, 4 MiB, 8 sources, 3 bits). Mig3Caches marks every load and store of the region
+  no-cache (req_nocache of the library cache, by an address compare): the D-cache looks it
+  up, never fills it and sends it to memory as asked, the compare acting only through the
+  cache's lookup register; the core knows nothing else of the devices, Mig3Cpu decodes the
+  region. Mig3ConfigPkg has a struct per
   device (CFG.plic.sources); mig3_config.h gives programs the region, the PLIC's base and
   its register addresses.
 why: >
@@ -25,14 +27,22 @@ rejected:
     why_not: >
       A section per device keeps a device's offset, size and parameters together (user),
       as more devices come.
+  - choice: The region past the D-cache as uncached requests (req_uncached)
+    why_not: >
+      sky130 5.5 -> 5.7 ns: the compare of the ALU's address sat in front of the cache's
+      req_ready and EX's stall. No-cache in the lookup costs a device access a clock.
 relies_on:
+  - rtl/lib/block/cache/uncached
   - rtl/lib/block/plic/top
 evidence: >
   2026-11-06, Verilator: the whole Mig3 suite passes (114 tests, the config check among
   them), nothing in it touches the region yet. That the D-cache is bypassed there shows with
   the PLIC (Mig3Cpu): two claim reads in a row get different IDs. Mig3 sends loads and
   stores to the D-cache with their byte address and size, and its memory port carries
-  them (kb rtl/lib/block/cache/uncached): the suite passes again with them.
+  them (kb rtl/lib/block/cache/uncached): the suite passes again with them. Timing, sky130:
+  before the region 5.5 ns, with it as uncached requests 5.7 (bisect: the sizes after it
+  changed nothing), as no-cache requests 5.5 again (333 436 um2, the lookup registers);
+  the Mig2 and Mig3 suites pass (225 tests).
 code:
-  - rtl/design/mig3/mig3_caches.sv#d_uncached
+  - rtl/design/mig3/mig3_caches.sv#d_io
   - rtl/design/mig3/cfg/mig3_config.yaml

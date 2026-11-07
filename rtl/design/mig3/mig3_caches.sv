@@ -23,7 +23,8 @@
  * own
  * timing, but for a fetch and a load or store that want memory in the same clock (tests that
  * count cycles). A load or store of the I/O region (CFG.io_base, 1 << CFG.io_addr_width
- * bytes) always bypasses the D-cache; code is never fetched from it. invalidate is 0:
+ * bytes) is never cached (req_nocache: looked up, never a hit or a fill); code is never
+ * fetched from it. invalidate is 0:
  * Mig3 has no FENCE.I; a store to an address the I-cache
  * holds is not seen by a later fetch that hits (self-modifying code is not supported).
  *
@@ -58,11 +59,13 @@ module Mig3Caches import Mig3Pkg::*; #(
     `DC_STATIC_ASSERT(a_line_words, LINE_WORDS == 1 || LINE_WORDS == 2)
     `DC_STATIC_ASSERT(a_io_aligned, CFG.io_base % (1 << CFG.io_addr_width) == 0)
 
-    // A load or store of the I/O region bypasses the D-cache: a device's register is read
-    // and written where it is, every time (a PLIC claim is a read).
+    // A load or store of the I/O region is never cached: a device's register is read and
+    // written where it is, every time (a PLIC claim is a read). req_nocache acts in the
+    // D-cache's lookup, through a register: the address compare is not on the path to
+    // req_ready and EX's stall.
     // @kb: rtl/design/mig3/io_region
-    logic d_uncached;   // the data request bypasses the D-cache
-    assign d_uncached = uncached ||
+    logic d_io;         // the data request is in the I/O region
+    assign d_io =
         dcache_req.addr[WIDTH-1:CFG.io_addr_width] == CFG.io_base[WIDTH-1:CFG.io_addr_width];
 
     // The caches' memory sides, to the arbiter: byte addresses, a line's (offset 0) or an
@@ -93,7 +96,8 @@ module Mig3Caches import Mig3Pkg::*; #(
                         .SETS_OFFSET(LINE_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
-        .req_uncached(uncached), .req_size(SIZE_W), .req_ready(icache_rsp.ready),
+        .req_uncached(uncached), .req_size(SIZE_W), .req_nocache(1'b0),
+        .req_ready(icache_rsp.ready),
         .rsp_valid(icache_rsp.valid), .rsp_data(i_line),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
         .mem_req_addr(i_mem_addr), .mem_req_size(i_mem_size),
@@ -103,9 +107,10 @@ module Mig3Caches import Mig3Pkg::*; #(
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
                   .SETS_OFFSET(LINE_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
-        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(d_uncached),
+        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
+        .req_nocache(d_io),
         .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),

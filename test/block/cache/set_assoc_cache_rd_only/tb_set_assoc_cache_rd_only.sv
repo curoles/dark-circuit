@@ -132,7 +132,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
                           .SETS_OFFSET(SETS_OFFSET), .WAYS(WAYS), .REPLACEMENT(REPLACEMENT))
         u_set_assoc_cache_rd_only(
             .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_uncached(1'b0), .req_ready,
-            .req_size(3'd2), .rsp_valid,
+            .req_size(3'd2), .req_nocache(1'b0), .rsp_valid,
             .rsp_data, .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_req_size,
             .mem_rsp_valid, .mem_rsp_data);
 

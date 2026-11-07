@@ -31,7 +31,8 @@ module DirectCacheRdOnly #(
     input  wire                  req_valid,
     input  wire [ADDR_WIDTH-1:0] req_addr,
     input  wire                  req_uncached,  // the request bypasses the lines
-    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
+    input  wire [2:0]            req_size,      // uncached, no cache: 1 << req_size bytes
+    input  wire                  req_nocache,   // the address may not be cached: no fill
     output wire                  req_ready,     // 0 while a miss is served: hold the request
     output wire                  rsp_valid,     // rsp_data is the line asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
@@ -56,7 +57,7 @@ module DirectCacheRdOnly #(
     DirectCache #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET),
                   .READ_ONLY(1)) u_direct_cache(
         .clk, .rst_n, .invalidate,
-        .req_valid, .req_ready, .req_uncached, .req_size, .req_we(1'b0), .req_addr,
+        .req_valid, .req_ready, .req_uncached, .req_size, .req_nocache, .req_we(1'b0), .req_addr,
         .req_wdata({DATA_WIDTH{1'b0}}),
         .req_wstrb({STRB_WIDTH{1'b0}}), .rsp_valid, .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,

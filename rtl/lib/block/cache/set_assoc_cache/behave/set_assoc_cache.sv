@@ -52,7 +52,8 @@ module SetAssocCache import CachePkg::*; #(
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
     input  wire                  req_uncached,  // the request bypasses the lines
-    input  wire [2:0]            req_size,      // uncached: 1 << req_size bytes (AXI AxSIZE)
+    input  wire [2:0]            req_size,      // uncached, no cache: 1 << req_size bytes
+    input  wire                  req_nocache,   // the address may not be cached: no fill
     // The offset in the line is not used: the cache works on whole lines. The fields of a
     // store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -105,7 +106,7 @@ module SetAssocCache import CachePkg::*; #(
         u_control(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_uncached, .req_we, .req_addr, .req_wdata, .req_wstrb,
-            .req_size, .rsp_valid, .rsp_data,
+            .req_size, .req_nocache, .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
             .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data,
             .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,

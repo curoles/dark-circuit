@@ -1,28 +1,31 @@
 type: mutants
-title: Mutants of exact uncached requests (SkewedCache test, also DirectCache and the arbiter)
+title: Mutants of exact uncached and no-cache requests (SkewedCache test, DirectCache, arbiter)
 date: 2026-11-06
 tests: [block_skewed_cache_behave]
 mutants:
   - name: an uncached request with its line's address (offset 0), as before
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "assign mem_req_addr  = unc_pass ? req_addr : {look_line, {SETS_OFFSET{1'b0}}};"
+        old: "assign mem_req_addr  = unc_pass     ? req_addr :"
         new: >-
           assign mem_req_addr  = unc_pass
-          ? {req_addr[ADDR_WIDTH-1:SETS_OFFSET], {SETS_OFFSET{1'b0}}}
-          : {look_line, {SETS_OFFSET{1'b0}}};
+          ? {req_addr[ADDR_WIDTH-1:SETS_OFFSET], {SETS_OFFSET{1'b0}}} :
     expect: caught
   - name: an uncached request with the line's size
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "assign mem_req_size  = unc_pass ? req_size : 3'(SETS_OFFSET);"
-        new: "assign mem_req_size  = 3'(SETS_OFFSET);"
+        old: >-
+          assign mem_req_size  = unc_pass ? req_size :
+          look_nocache ? look_size : 3'(SETS_OFFSET);
+        new: >-
+          assign mem_req_size  = unc_pass ? 3'(SETS_OFFSET)
+          : look_nocache ? look_size : 3'(SETS_OFFSET);
     expect: caught
   - name: the size mux the wrong way round (struct)
     edits:
       - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
-        old: "Mux2 #(3) u_mux2_mem_size(.in0(3'(SETS_OFFSET)), .in1(req_size), .sel(unc_pass),"
-        new: "Mux2 #(3) u_mux2_mem_size(.in0(req_size), .in1(3'(SETS_OFFSET)), .sel(unc_pass),"
+        old: "Mux2 #(3) u_mux2_mem_size(.in0(look_mem_size), .in1(req_size), .sel(unc_pass),"
+        new: "Mux2 #(3) u_mux2_mem_size(.in0(req_size), .in1(look_mem_size), .sel(unc_pass),"
     tests: [block_direct_cache_struct]
     expect: caught
   - name: the arbiter sends the other side's size
@@ -38,4 +41,30 @@ mutants:
         old: "Mux2 #(3) u_mux2_size(.in0(i_size), .in1(d_size), .sel(side), .out(mem_req_size));"
         new: "Mux2 #(3) u_mux2_size(.in0(d_size), .in1(i_size), .sel(side), .out(mem_req_size));"
     tests: [block_insn_data_cache_arbiter_struct]
+    expect: caught
+  - name: a no-cache load's answer fills its line
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "assign refill = answer && !wait_nocache;"
+        new: "assign refill = answer && (!wait_nocache || 1'b1);"
+    expect: caught
+  - name: a no-cache request with its line's address
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "look_nocache ? {look_line, look_offset}"
+        new: "look_nocache ? {look_line, look_offset & {SETS_OFFSET{1'b0}}}"
+    expect: caught
+  - name: a no-cache request with the line's size (struct)
+    edits:
+      - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
+        old: ".in1(look_size), .sel(look_nocache),"
+        new: ".in1(look_size), .sel(1'b0),"
+    tests: [block_skewed_cache_struct]
+    expect: caught
+  - name: a no-cache load's answer fills its line (struct)
+    edits:
+      - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
+        old: ".en(served), .in(look_nocache),"
+        new: ".en(served), .in(1'b0),"
+    tests: [block_skewed_cache_struct]
     expect: caught

@@ -72,7 +72,7 @@ module Mig2Caches import Mig2Pkg::*; #(
                         .SETS_OFFSET(IADDR_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
-        .req_uncached(uncached), .req_size(3'd2), .req_ready(icache_rsp.ready),
+        .req_uncached(uncached), .req_size(3'd2), .req_nocache(1'b0), .req_ready(icache_rsp.ready),
         .rsp_valid(icache_rsp.valid), .rsp_data(icache_rsp.data),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
         .mem_req_addr(i_mem_addr), .mem_req_size(i_mem_size),
@@ -85,6 +85,7 @@ module Mig2Caches import Mig2Pkg::*; #(
         .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
         .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb), .req_size(3'd2),
+        .req_nocache(1'b0),
         .rsp_valid(dcache_rsp.valid), .rsp_data(dcache_rsp.data),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
