@@ -79,7 +79,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     logic  invalidate;
     logic  req_valid;
     wire   req_ready;
-    logic  req_uncached;
+    logic  req_uncached_dbg_bypass;
     logic  [2:0] req_size;      // 1 << req_size bytes
     logic  req_we;
     addr_t req_addr;
@@ -172,7 +172,8 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     SetAssocCache #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET),
                     .WAYS(WAYS), .REPLACEMENT(REPLACEMENT)) u_set_assoc_cache(
         .clk, .rst_n, .invalidate,
-        .req_valid, .req_ready, .req_uncached, .req_we, .req_addr, .req_wdata, .req_wstrb,
+        .req_valid, .req_ready, .req_uncached_dbg_bypass,
+        .req_we, .req_addr, .req_wdata, .req_wstrb,
         .req_size, .req_nocache(1'b0), .rsp_valid, .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
         .mem_req_wstrb, .mem_req_size, .mem_rsp_valid, .mem_rsp_data);
@@ -236,7 +237,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     endfunction
 
     function automatic logic exp_unc_pass;
-        return req_valid && req_uncached && exp_idle();
+        return req_valid && req_uncached_dbg_bypass && exp_idle();
     endfunction
 
     function automatic logic exp_mem_valid;
@@ -250,7 +251,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
     endfunction
 
     function automatic logic exp_ready;
-        if (req_uncached)
+        if (req_uncached_dbg_bypass)
             return exp_idle() && mem_req_ready;
         return !(waiting && !mem_rsp_valid) && !replay && !exp_load_miss() &&
                !(exp_look_req() && !mem_req_ready) && !exp_unc_busy();
@@ -312,7 +313,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         set_t s;
         taken        = exp_look_req() && mem_req_ready;
         held         = exp_look_req() && !mem_req_ready;
-        accept       = req_valid && !req_uncached && exp_ready();
+        accept       = req_valid && !req_uncached_dbg_bypass && exp_ready();
         // Taken in the refill clock at the place the refill writes: the cache reads it again
         // in the next clock (replay), then looks it up.
         replay_next = accept && waiting && mem_rsp_valid && exp_fill_conflict();
@@ -321,7 +322,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
             else             n_refill_take   = n_refill_take + 1;
         end
         unc_taken    = exp_unc_pass() && mem_req_ready;
-        if (req_valid && req_uncached && !exp_idle())
+        if (req_valid && req_uncached_dbg_bypass && !exp_idle())
             n_unc_idle_wait = n_unc_idle_wait + 1;
         if (exp_unc_pass() && !mem_req_ready)
             n_unc_mem_wait = n_unc_mem_wait + 1;
@@ -455,8 +456,8 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         end
         req_addr.offset = r[16 +: SETS_OFFSET];
         // An address is used either cached or uncached, never both.
-        req_uncached = r[13:11] == 3'b000;
-        if (req_uncached)
+        req_uncached_dbg_bypass = r[13:11] == 3'b000;
+        if (req_uncached_dbg_bypass)
             req_addr.tag = unc_tag;
         else if (req_addr.tag == unc_tag)
             req_addr.tag = pool[r[8:6] % TAGS];
@@ -468,7 +469,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         // Uncached: a size up to a word that fits the line, the address aligned to it, a
         // store's strobes on exactly its bytes, as a CPU makes them.
         req_size = 3'(SETS_OFFSET);
-        if (req_uncached) begin
+        if (req_uncached_dbg_bypass) begin
             req_size        = 3'($unsigned($random(seed)) % 3);
             if (int'(req_size) > SETS_OFFSET)
                 req_size = 3'(SETS_OFFSET);
@@ -575,7 +576,7 @@ module TbSetAssocCacheCheck import CachePkg::*; #(
         rst_n         = 1'b0;
         invalidate    = 1'b0;
         req_valid     = 1'b0;
-        req_uncached  = 1'b0;
+        req_uncached_dbg_bypass  = 1'b0;
         req_we        = 1'b0;
         req_addr      = '0;
         req_addr.tag  = pool[0];

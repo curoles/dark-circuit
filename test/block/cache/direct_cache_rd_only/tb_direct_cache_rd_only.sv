@@ -103,7 +103,8 @@ module TbCacheCheck #(
 
     DirectCacheRdOnly #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH),
                         .SETS_OFFSET(SETS_OFFSET)) u_direct_cache_rd_only(
-        .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_uncached(1'b0), .req_ready,
+        .clk, .rst_n, .invalidate, .req_valid, .req_addr, .req_uncached_dbg_bypass(1'b0),
+        .req_ready,
         .req_size(3'd2), .req_nocache(1'b0), .rsp_valid, .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_addr, .mem_req_size, .mem_rsp_valid,
         .mem_rsp_data);

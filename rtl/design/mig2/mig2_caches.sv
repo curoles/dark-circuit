@@ -14,7 +14,8 @@
  * arbiter's flow-through buffer, so neither cache sees memory's ready or the other cache's
  * valid without a flop (kb pattern rtl/lib/block/flow_through_buffer/design). uncached=1
  * makes every request bypass both caches: it passes to the arbiter as it comes
- * (req_uncached of the library caches), so the pipeline sees the memory's own timing, but
+ * (req_uncached_dbg_bypass of the library caches), so the pipeline sees the memory's own timing,
+ * but
  * for a fetch and a load or store that want memory in the same clock (tests that count
  * cycles). invalidate is 0: Mig2 has no FENCE.I; a store to an address the I-cache holds is
  * not seen by a later fetch that hits (self-modifying code is not supported).
@@ -72,7 +73,8 @@ module Mig2Caches import Mig2Pkg::*; #(
                         .SETS_OFFSET(IADDR_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
-        .req_uncached(uncached), .req_size(3'd2), .req_nocache(1'b0), .req_ready(icache_rsp.ready),
+        .req_uncached_dbg_bypass(uncached),
+        .req_size(3'd2), .req_nocache(1'b0), .req_ready(icache_rsp.ready),
         .rsp_valid(icache_rsp.valid), .rsp_data(icache_rsp.data),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
         .mem_req_addr(i_mem_addr), .mem_req_size(i_mem_size),
@@ -82,7 +84,8 @@ module Mig2Caches import Mig2Pkg::*; #(
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
                   .SETS_OFFSET(DADDR_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
-        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
+        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready),
+        .req_uncached_dbg_bypass(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
         .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb), .req_size(3'd2),
         .req_nocache(1'b0),

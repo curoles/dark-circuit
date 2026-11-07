@@ -27,7 +27,7 @@ rejected:
     why_not: >
       A section per device keeps a device's offset, size and parameters together (user),
       as more devices come.
-  - choice: The region past the D-cache as uncached requests (req_uncached)
+  - choice: The region past the D-cache as uncached requests (req_uncached_dbg_bypass)
     why_not: >
       sky130 5.5 -> 5.7 ns: the compare of the ALU's address sat in front of the cache's
       req_ready and EX's stall. No-cache in the lookup costs a device access a clock.

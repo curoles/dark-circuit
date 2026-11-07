@@ -6,9 +6,11 @@ question: >
   caches come into the core, and I/O addresses will later need requests that do not use the
   lines. How does a cache let a request bypass its lines, and what does it cost?
 decision: >
-  A per-request input req_uncached. An uncached request does not read or write the lines (no
+  A per-request input req_uncached_dbg_bypass. An uncached request does not read or write the lines
+  (no
   lookup, no fill, no recent-bit update) and passes straight to the memory side while the
-  cache is idle: mem_req_valid = req_valid && req_uncached && idle, the address and the fields
+  cache is idle: mem_req_valid = req_valid && req_uncached_dbg_bypass && idle, the address and the
+  fields
   of a store from the request; it is taken in the clock memory takes it (req_ready =
   idle && mem_req_ready). Idle: nothing looked up, no load miss served, no uncached read
   waiting (the clock memory answers it counts as idle). A load is answered in the clock memory
@@ -29,7 +31,8 @@ decision: >
   a cached one (req_ready does not depend on it), misses, and goes to memory with its own
   address and size from the lookup's registers; a load is served as a miss whose answer is
   not written (no victim, no refill), a store writes memory only. The CPU decides it from
-  the address (an I/O region), so it must not reach req_ready: req_uncached stays the fast
+  the address (an I/O region), so it must not reach req_ready: req_uncached_dbg_bypass stays the
+  fast
   bypass for a whole-cache mode, a pin of constant timing.
 why: >
   With latency-1 memory an uncached request has the memory's own timing: a load taken in clock
@@ -64,7 +67,7 @@ rejected:
     why_not: >
       No 1-byte access. A line bigger than the memory port goes as a burst (AXI's
       AxLEN) when the port gets narrower; the size describes one beat.
-  - choice: An I/O address as an uncached request (req_uncached from the address)
+  - choice: An I/O address as an uncached request (req_uncached_dbg_bypass from the address)
     why_not: >
       The address compare then decides req_ready in the same clock: Mig3 5.5 -> 5.7 ns
       (kb rtl/design/mig3/io_region). PMA checks act alongside the lookup, a clock
@@ -75,7 +78,8 @@ evidence: >
   SkewedCache, 2026-10-30: its test with uncached requests (one in 8, a tag of their own; the
   model checks req_ready, the memory request and the answer in every clock; uncached loads,
   stores, a wait for idle and a wait for memory must happen) passes on both versions, Icarus
-  and Verilator; the read-only test (req_uncached 0) passes unchanged. 13 of 13 mutants of
+  and Verilator; the read-only test (req_uncached_dbg_bypass 0) passes unchanged. 13 of 13 mutants
+  of
   the uncached logic caught (7 behave, 6 struct: idle, the cached ready, the answer, the
   memory address and write fields, accept). DirectCache and SetAssocCache, 2026-10-30: the
   same uncached requests in their tests pass on both versions, Icarus and Verilator (all ways
@@ -95,9 +99,9 @@ code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_unc_alone
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_unc_exact
   - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_mux2_ready
-  - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached
+  - rtl/lib/block/cache/skewed_cache_rd_only/skewed_cache_rd_only.sv#req_uncached_dbg_bypass
   - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_unc_idle_wait
-  - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#req_uncached
+  - rtl/lib/block/cache/direct_cache_rd_only/direct_cache_rd_only.sv#req_uncached_dbg_bypass
   - test/block/cache/direct_cache/tb_direct_cache.sv#n_unc_idle_wait
-  - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#req_uncached
+  - rtl/lib/block/cache/set_assoc_cache_rd_only/set_assoc_cache_rd_only.sv#req_uncached_dbg_bypass
   - test/block/cache/set_assoc_cache/tb_set_assoc_cache.sv#n_unc_idle_wait

@@ -18,7 +18,8 @@
  * (a load that waits stalls every stage); each side's request goes through the arbiter's
  * flow-through buffer, so neither cache sees memory's ready or the other cache's valid
  * without a flop (kb pattern rtl/lib/block/flow_through_buffer/design). uncached=1 makes
- * every request bypass both caches: it passes to the arbiter as it comes (req_uncached of
+ * every request bypass both caches: it passes to the arbiter as it comes (req_uncached_dbg_bypass
+ * of
  * the library caches: exactly its bytes, address and size), so the pipeline sees the memory's
  * own
  * timing, but for a fetch and a load or store that want memory in the same clock (tests that
@@ -96,7 +97,7 @@ module Mig3Caches import Mig3Pkg::*; #(
                         .SETS_OFFSET(LINE_START)) u_icache(
         .clk, .rst_n, .invalidate(1'b0),
         .req_valid(icache_req.valid), .req_addr({icache_req.addr, {IADDR_START{1'b0}}}),
-        .req_uncached(uncached), .req_size(SIZE_W), .req_nocache(1'b0),
+        .req_uncached_dbg_bypass(uncached), .req_size(SIZE_W), .req_nocache(1'b0),
         .req_ready(icache_rsp.ready),
         .rsp_valid(icache_rsp.valid), .rsp_data(i_line),
         .mem_req_valid(i_mem_valid), .mem_req_ready(i_mem_ready),
@@ -107,7 +108,8 @@ module Mig3Caches import Mig3Pkg::*; #(
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
                   .SETS_OFFSET(LINE_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
-        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready), .req_uncached(uncached),
+        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready),
+        .req_uncached_dbg_bypass(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
         .req_nocache(d_io),

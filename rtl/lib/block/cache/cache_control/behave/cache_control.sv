@@ -25,7 +25,8 @@
  * its lookup reads the RAMs again (replay: no hit, no miss, req_ready 0; ram_rd with the
  * lookup's place) and is looked up in the clock after. req_ready does not depend on the
  * request's address.
- * Uncached: a request with req_uncached=1 does not use the lines (no lookup, fill or update)
+ * Uncached: a request with req_uncached_dbg_bypass=1 does not use the lines (no lookup, fill or
+ * update)
  * and passes straight to the memory side with its own address and size (req_size, 1 <<
  * req_size bytes as AXI's AxSIZE, the address aligned to it, within a line): exactly the
  * bytes asked for, so a device sees no access the program did not make (kb
@@ -71,9 +72,12 @@ module CacheControl #(
     // CPU side: requests (a channel), answers to loads
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
-    input  wire                  req_uncached,  // the request bypasses the lines
-    input  wire [2:0]            req_size,      // uncached, no cache: 1 << req_size bytes
-    input  wire                  req_nocache,   // the address may not be cached: no fill
+    input  wire                  req_uncached_dbg_bypass,   // debug/test mode: straight to
+                                                            // memory, no lookup
+    input  wire [2:0]            req_size,      // 1 << req_size bytes (AXI AxSIZE): bypass,
+                                                // no cache
+    input  wire                  req_nocache,   // the address may not be cached (a
+                                                // device's): looked up, never filled
     // The fields of a store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
@@ -139,11 +143,11 @@ module CacheControl #(
     // @kb: rtl/lib/block/cache/uncached
     assign unc_busy  = unc_waiting && !mem_rsp_valid;
     assign idle      = !look && !waiting && !unc_busy;
-    assign unc_pass  = req_valid && req_uncached && idle;
+    assign unc_pass  = req_valid && req_uncached_dbg_bypass && idle;
     assign wait_busy = waiting && !mem_rsp_valid;
-    assign req_ready = req_uncached ? idle && mem_req_ready
+    assign req_ready = req_uncached_dbg_bypass ? idle && mem_req_ready
                                     : !wait_busy && !replay && !load_miss && !held && !unc_busy;
-    assign accept    = req_valid && !req_uncached && req_ready;
+    assign accept    = req_valid && !req_uncached_dbg_bypass && req_ready;
 
     always_ff @(posedge clk)
         if (!rst_n) look <= 1'b0;

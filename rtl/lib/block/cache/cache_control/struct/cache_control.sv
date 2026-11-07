@@ -20,8 +20,9 @@
  * Uncached (see the behave version):
  *   idle      = Nor3(look, waiting, unc_busy)      unc_busy = unc_waiting AND ~mem_rsp_valid
  *   req_ready = Mux2(NorReduce(waiting_kept, replay, load_miss, held, unc_busy),
- *                    idle AND mem_req_ready, req_uncached)
- *   unc_pass  = req_valid AND req_uncached AND idle; the memory address a Mux2 of the line's
+ *                    idle AND mem_req_ready, req_uncached_dbg_bypass)
+ *   unc_pass  = req_valid AND req_uncached_dbg_bypass AND idle; the memory address a Mux2 of the
+ * line's
  *               and the request's own on unc_pass, the size one of SETS_OFFSET and req_size,
  *               the fields of a write (g_store) one of the store kept
  *               and the request's; unc_waiting a DffSyncRst like waiting
@@ -49,9 +50,12 @@ module CacheControl #(
     // CPU side: requests (a channel), answers to loads
     input  wire                  req_valid,
     output wire                  req_ready,     // uncached: follows mem_req_ready, no flop
-    input  wire                  req_uncached,  // the request bypasses the lines
-    input  wire [2:0]            req_size,      // uncached, no cache: 1 << req_size bytes
-    input  wire                  req_nocache,   // the address may not be cached: no fill
+    input  wire                  req_uncached_dbg_bypass,   // debug/test mode: straight to
+                                                            // memory, no lookup
+    input  wire [2:0]            req_size,      // 1 << req_size bytes (AXI AxSIZE): bypass,
+                                                // no cache
+    input  wire                  req_nocache,   // the address may not be cached (a
+                                                // device's): looked up, never filled
     // The fields of a store are not used when READ_ONLY=1.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                  req_we,        // 1: store, 0: load
@@ -144,12 +148,12 @@ module CacheControl #(
     NorReduce #(5) u_nor_reduce_ready_cached(
         .in({waiting_kept, replay, load_miss, held, unc_busy}), .out(ready_cached));
     And2 #(1) u_and2_ready_unc(.in1(idle), .in2(mem_req_ready), .out(ready_unc));
-    Mux2 #(1) u_mux2_ready    (.in0(ready_cached), .in1(ready_unc), .sel(req_uncached),
+    Mux2 #(1) u_mux2_ready    (.in0(ready_cached), .in1(ready_unc), .sel(req_uncached_dbg_bypass),
                                .out(req_ready));
-    Inv  #(1) u_inv_uncached  (.in(req_uncached), .out(uncached_n));
+    Inv  #(1) u_inv_uncached  (.in(req_uncached_dbg_bypass), .out(uncached_n));
     And3 #(1) u_and3_accept   (.in1(req_valid), .in2(uncached_n), .in3(req_ready),
                                .out(accept));
-    And3 #(1) u_and3_unc_pass (.in1(req_valid), .in2(req_uncached), .in3(idle),
+    And3 #(1) u_and3_unc_pass (.in1(req_valid), .in2(req_uncached_dbg_bypass), .in3(idle),
                                .out(unc_pass));
 
     Or3 #(1) u_or3_look(.in1(accept), .in2(held), .in3(replay), .out(look_next));

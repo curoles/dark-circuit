@@ -125,7 +125,7 @@ clock after the request, as memory of latency 1 does; a miss costs one clock mor
 comes a clock later; the cache takes the next request in the clock the word comes, and one
 at the place the word is written is replayed: kb
 `rtl/lib/block/cache/cache_control/refill_take`), so with latency-1 memory the caches
-still add the cycles of their misses: they pay off with slow memory (`+mem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached`
+still add the cycles of their misses: they pay off with slow memory (`+mem_latency`). TbMig2's `+uncached` makes every request bypass both caches (`req_uncached_dbg_bypass`
 of the library caches), so a program sees the memory's own timing: the tests that count
 cycles (csr, muldiv, branch_id, btb_if, ras_id) and the benchmarks run uncached, the others
 cached. No FENCE.I: the caches are never invalidated (a fetch that hits does not see a later store

@@ -13,7 +13,7 @@ decision: >
   64 one-word lines (cfg icache_sets_width, dcache_sets_width = 6); no configuration without
   caches; invalidate tied to 0 (no FENCE.I, imem is not written). An input uncached of
   Mig2Core and Mig2Cpu, driven by TbMig2's +uncached, makes every request bypass both caches
-  (req_uncached of the library caches, kb rtl/lib/block/cache/uncached): the tests that
+  (req_uncached_dbg_bypass of the library caches, kb rtl/lib/block/cache/uncached): the tests that
   count cycles (csr, muldiv, branch_id, btb_if, ras_id) and the benchmarks run uncached,
   every other test cached. Synthesis keeps the tag and data RAMs as black boxes
   (BLACKBOX_RAM_MODULES CacheTagRam CacheDataRam): memory macros in a chip.
