@@ -1,7 +1,7 @@
 type: mutants
-title: Mutants of the AtomicUnit test (behave version)
+title: Mutants of the AtomicUnit test (behave and struct versions)
 date: 2026-11-06
-tests: [block_atomic_unit_behave]
+tests: [block_atomic_unit_behave, block_atomic_unit_struct]
 mutants:
   - name: an atomic request is taken while reads wait for their answers
     edits:
@@ -26,4 +26,22 @@ mutants:
       - file: rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv
         old: "assign new_word = (atop_q == ATOP_SWAP) ? operand_q : alu_out;"
         new: "assign new_word = alu_out;"
+    expect: model
+  - name: struct, MIN and MAX swapped in the table of Alu2's controls
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/struct/atomic_unit.sv
+        old: "Alu2Pkg::ctrl_of(Alu2Pkg::ALU2_MIN),  Alu2Pkg::ctrl_of(Alu2Pkg::ALU2_MAX),"
+        new: "Alu2Pkg::ctrl_of(Alu2Pkg::ALU2_MAX),  Alu2Pkg::ctrl_of(Alu2Pkg::ALU2_MIN),"
+    expect: model
+  - name: struct, an atomic request ready while reads wait for their answers
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/struct/atomic_unit.sv
+        old: ".in1(pend_zero), .sel(atomic),"
+        new: ".in1(1'b1), .sel(atomic),"
+    expect: model
+  - name: struct, no strobe for the atomic's write
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/struct/atomic_unit.sv
+        old: ".in(addr_q[ATOM_OFFSET +: LANE_BITS]), .en(1'b1), .out(lane_one));"
+        new: ".in(addr_q[ATOM_OFFSET +: LANE_BITS]), .en(1'b0), .out(lane_one));"
     expect: model

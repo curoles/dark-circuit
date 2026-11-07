@@ -53,6 +53,7 @@
 -F strb_reg/struct/strb_reg.flist
 -F plic/plic.flist
 -F atomic/atomic.flist
+-F atomic/atomic_unit/struct/atomic_unit.flist
 -F plic/plic_gateway/struct/plic_gateway.flist
 -F plic/plic_target/struct/plic_target.flist
 -F plic/plic_claim/struct/plic_claim.flist

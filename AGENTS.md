@@ -279,6 +279,9 @@ Icarus means Icarus 13, the version the project uses.
 - Icarus evaluates a `?:` on a genvar written directly in an instance port connection,
   `.wr_data((w == 0) ? a : b)`, as X (Verilator gets it right). Assign a vector and connect
   its element, `assign v = {b, a};` and `.wr_data(v[w])`, or a wire per generate branch.
+- Icarus gets `$onehot` of a concatenation wrong, `$onehot({write, wait_rsp, read, idle})`
+  is false for `4'b0001` (Verilator gets it right). Give the vector a name and pass
+  that, `$onehot(state)`.
 - Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
   (IMPLICIT; in an expression always an error), and every design is built with it.
   sv2v declares an undeclared name of a port connection as a wire, and Yosys makes
