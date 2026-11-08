@@ -9,29 +9,40 @@ decision: >
   Two models in rtl/lib/sim/sim_uart.sv, as SimVldRdySource and Sink: SimUartTx sends the
   frames of its queue (push, send a string, push_bad a frame with a stop bit 0 or a wrong
   parity bit, gap idle bits between frames, 0 back to back), SimUartRx receives (bytes in
-  received, characters in text, framing_errors, parity_errors; ECHO prints with $write).
+  received, got() them as a string, framing_errors, parity_errors; ECHO prints with $write).
   Parameters: CLKS_PER_BIT (at least 4), DATA_BITS 5 to 8, PARITY 0 none, 1 even, 2 odd,
   STOP_BITS 1 or 2; 8N1 by default. They count clocks, no time delays (Icarus and
   Verilator). The Rx takes a falling edge from a line seen at 1 as a start bit, checks it in
   its middle, samples every bit in its middle; after a frame it waits for the line at 1 (so a
   stop bit 0 is no start). The Tx puts at least one idle bit after a frame with a stop bit 0.
+  Their state changes with nonblocking assignments only: each clocked process computes the
+  next values in locals (blocking, read only inside it) and assigns the state with <=, as
+  SimVldRdySink does.
 why: >
   The user: the frame format as parameters (the UART engine will support them, so its test
   can cover every format with these models) and the rate as a parameter (the testbench knows
   the rate it set). Counting clocks keeps them exact and simulator-neutral. At least 4 clocks
   a bit: the Rx samples a stop bit in its middle and must see the line at 1 for a clock
-  before a start bit that follows at once.
+  before a start bit that follows at once. Nonblocking state (the user asked whether mixing =
+  and <= is good style; it is not): a testbench reads the state (idle(), the error counts)
+  at the same edge, and with blocking state what it sees depends on which process the
+  simulator runs first, a race.
 rejected:
   - choice: 8N1 only
     why_not: The engine's other formats would have no model to test against.
   - choice: A div input like the hardware's
     why_not: The testbench knows the rate; a parameter is simpler and exact.
+  - choice: The state with blocking assignments in the clocked process (lint_off BLKSEQ)
+    why_not: >
+      The first version: a race with a testbench that reads the state at the same edge,
+      hidden by the lint pragma; replaced 2026-11-08.
 relies_on: []
 evidence: >
   2026-11-08: test/sim/tb_sim_uart.sv (sim_uart on Icarus and Verilator): formats 8N1 at 16
   clocks a bit, 8E2 at 4, 7O1 at 5, 5N2 at 7; random bytes with gaps of 0 to 2 bits (back to
   back seen), a framing and a parity error counted with every byte still received, a string
-  printed and compared; 2 of 2 mutants caught (kb test/sim/mutants).
+  printed and compared; 2 of 2 mutants caught (kb test/sim/mutants), before and after the
+  change to nonblocking state.
 code:
   - rtl/lib/sim/sim_uart.sv#SimUartRx
   - test/sim/tb_sim_uart.sv#TbSimUartCheck

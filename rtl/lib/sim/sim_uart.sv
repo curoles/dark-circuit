@@ -5,7 +5,9 @@
  * (5 to 8), least significant first, a parity bit when PARITY is not 0 (1 even: the data and
  * parity bits have an even number of ones; 2 odd), STOP_BITS stop bits 1 (1 or 2). A bit
  * lasts CLKS_PER_BIT clocks (at least 4); the models count clocks, no time delays, so they
- * run on Icarus and Verilator alike. Both run on the rising edge of clk.
+ * run on Icarus and Verilator alike. Both run on the rising edge of clk; their state changes
+ * with nonblocking assignments only (the next values are computed in locals of the clocked
+ * process), so a testbench that reads it at the same edge sees the values of that clock.
  *
  *   tx/rx:  1 1 1 | 0 | d0 d1 ... d(n-1) | p | 1 (1) | 1 1 ...
  *                 start  data, LSB first  parity stop   idle
@@ -87,54 +89,68 @@ module SimUartTx #(
         return b;
     endfunction
 
-    // A model: its state changes at once inside the clocked process (blocking assignments);
-    // only the line is a delayed assignment.
-    /* verilator lint_off BLKSEQ */
-
-    // The next frame of the queue goes on the line now.
-    task automatic start_frame();
-        frame_t f;
-        f            = queue.pop_front();
-        bits         = frame_bits(f);
-        cur_bad_stop = f[8];
-        bit_n        = 0;
-        clk_n        = 0;
-        busy         = 1'b1;
-        tx          <= bits[0];
-    endtask
-
-    always @(posedge clk)
+    always @(posedge clk) begin: p_line
+        // The next state, from the state of this clock.
+        logic [NBITS-1:0] n_bits;
+        int               n_bit;
+        int               n_clk;
+        int               n_idle;
+        bit               n_busy;
+        bit               n_bad_stop;
+        logic             n_tx;
+        bit               start;        // the next frame of the queue goes on the line now
+        frame_t           f;
+        n_bits     = bits;
+        n_bit      = bit_n;
+        n_clk      = clk_n;
+        n_idle     = idle_left;
+        n_busy     = busy;
+        n_bad_stop = cur_bad_stop;
+        n_tx       = tx;
+        start      = 1'b0;
         if (!rst_n) begin
-            tx       <= 1'b1;
-            busy      = 1'b0;
-            idle_left = 0;
+            n_tx   = 1'b1;
+            n_busy = 1'b0;
+            n_idle = 0;
         end else if (busy) begin
             if (clk_n < CLKS_PER_BIT - 1)
-                clk_n = clk_n + 1;
+                n_clk = clk_n + 1;
             else begin
-                clk_n = 0;
-                bit_n = bit_n + 1;
-                if (bit_n < NBITS)
-                    tx <= bits[bit_n];
+                n_clk = 0;
+                n_bit = bit_n + 1;
+                if (n_bit < NBITS)
+                    n_tx = bits[n_bit];
                 else begin
                     // The frame is sent: gap idle bits (at least one after a stop bit 0, so
                     // that the next start bit is a falling edge), else the next frame now.
-                    busy      = 1'b0;
-                    idle_left = ((cur_bad_stop && gap == 0) ? 1 : gap) * CLKS_PER_BIT;
-                    if (idle_left == 0 && queue.size() > 0)
-                        start_frame();
-                    else
-                        tx <= 1'b1;
+                    n_busy = 1'b0;
+                    n_tx   = 1'b1;
+                    n_idle = ((cur_bad_stop && gap == 0) ? 1 : gap) * CLKS_PER_BIT;
+                    start  = n_idle == 0 && queue.size() > 0;
                 end
             end
         end else if (idle_left > 0) begin
-            idle_left = idle_left - 1;
-            if (idle_left == 0 && queue.size() > 0)
-                start_frame();
-        end else if (queue.size() > 0)
-            start_frame();
-
-    /* verilator lint_on BLKSEQ */
+            n_idle = idle_left - 1;
+            start  = n_idle == 0 && queue.size() > 0;
+        end else
+            start = queue.size() > 0;
+        if (start) begin
+            f          = queue.pop_front();
+            n_bits     = frame_bits(f);
+            n_bad_stop = f[8];
+            n_bit      = 0;
+            n_clk      = 0;
+            n_busy     = 1'b1;
+            n_tx       = n_bits[0];
+        end
+        tx           <= n_tx;
+        bits         <= n_bits;
+        bit_n        <= n_bit;
+        clk_n        <= n_clk;
+        idle_left    <= n_idle;
+        busy         <= n_busy;
+        cur_bad_stop <= n_bad_stop;
+    end
 
     initial if (CLKS_PER_BIT < 4 || DATA_BITS < 5 || DATA_BITS > 8 || PARITY < 0 || PARITY > 2 ||
                 STOP_BITS < 1 || STOP_BITS > 2)
@@ -144,9 +160,9 @@ endmodule
 
 /* SimUartRx: receives frames on rx. A start bit is a falling edge from 1, checked again in the
  * middle of the bit (still 0, else a glitch: ignored); every later bit is sampled in its
- * middle, CLKS_PER_BIT clocks apart. A byte is kept (received, the characters in text) also
- * when its frame has an error: a stop bit 0 counts in framing_errors, a wrong parity bit in
- * parity_errors. With ECHO = 1 every character is printed with $write as it comes. After a
+ * middle, CLKS_PER_BIT clocks apart. A byte is kept (received; got() gives them as a string)
+ * also when its frame has an error: a stop bit 0 counts in framing_errors, a wrong parity bit
+ * in parity_errors. With ECHO = 1 every character is printed with $write as it comes. After a
  * frame it waits for the line to be 1 before a new start bit (a stop bit 0 is no start).
  */
 module SimUartRx #(
@@ -163,7 +179,6 @@ module SimUartRx #(
     localparam NBITS = 1 + DATA_BITS + (PARITY != 0 ? 1 : 0) + STOP_BITS;  // bits of a frame
 
     logic [7:0] received[$];            // the bytes, in order
-    string      text;                   // ... as characters
     int         framing_errors;
     int         parity_errors;
     bit         armed;                  // the line was 1 since the last frame: a 0 is a start
@@ -173,79 +188,99 @@ module SimUartRx #(
     logic [NBITS-1:0] bits;             // the bits sampled
 
     initial begin
-        text           = "";
         framing_errors = 0;
         parity_errors  = 0;
         armed          = 1'b0;
         busy           = 1'b0;
     end
 
+    // The bytes received, as characters.
     function automatic string got();
-        return text;
+        string s;
+        s = "";
+        foreach (received[i])
+            s = $sformatf("%s%c", s, received[i]);
+        return s;
     endfunction
 
     function automatic void clear();
         received.delete();
-        text           = "";
         framing_errors = 0;
         parity_errors  = 0;
     endfunction
 
-    // The frame is complete: keep its byte, check its parity and stop bits.
-    function automatic void frame_done();
+    // A complete frame: {a stop bit 0, a wrong parity bit, the data}.
+    function automatic logic [9:0] decode(input logic [NBITS-1:0] f);
         logic [7:0] data;
         logic       p;
+        logic       perr;
+        logic       ferr;
         data = '0;
         p    = 1'b0;
+        perr = 1'b0;
+        ferr = 1'b0;
         for (int i = 0; i < DATA_BITS; i++) begin
-            data[i] = bits[1 + i];
-            p       = p ^ bits[1 + i];
+            data[i] = f[1 + i];
+            p       = p ^ f[1 + i];
         end
-        if (PARITY != 0 && bits[1 + DATA_BITS] !== ((PARITY == 2) ? !p : p))
-            parity_errors = parity_errors + 1;
+        if (PARITY != 0 && f[1 + DATA_BITS] !== ((PARITY == 2) ? !p : p))
+            perr = 1'b1;
         for (int s = NBITS - STOP_BITS; s < NBITS; s++)
-            if (bits[s] !== 1'b1) begin
-                framing_errors = framing_errors + 1;
-                break;
-            end
-        received.push_back(data);
-        text = $sformatf("%s%c", text, data);
-        if (ECHO != 0)
-            $write("%c", data);
+            if (f[s] !== 1'b1)
+                ferr = 1'b1;
+        return {ferr, perr, data};
     endfunction
 
-    // A model: its state changes at once inside the clocked process (blocking assignments);
-    // only the line is a delayed assignment.
-    /* verilator lint_off BLKSEQ */
-    always @(posedge clk)
+    always @(posedge clk) begin: p_line
+        // The next state, from the state of this clock.
+        logic [NBITS-1:0] n_bits;
+        int               n_bit;
+        int               n_wait;
+        bit               n_busy;
+        bit               n_armed;
+        logic [9:0]       frame;        // a complete frame, decoded
+        n_bits  = bits;
+        n_bit   = bit_n;
+        n_wait  = wait_n;
+        n_busy  = busy;
+        n_armed = armed;
         if (!rst_n) begin
-            armed = 1'b0;
-            busy  = 1'b0;
+            n_armed = 1'b0;
+            n_busy  = 1'b0;
         end else if (!busy) begin
             if (rx === 1'b1)
-                armed = 1'b1;
+                n_armed = 1'b1;
             else if (armed && rx === 1'b0) begin       // a falling edge: maybe a start bit
-                busy   = 1'b1;
-                bit_n  = 0;
-                wait_n = (CLKS_PER_BIT - 1) / 2 - 1;    // the middle of the start bit
+                n_busy = 1'b1;
+                n_bit  = 0;
+                n_wait = (CLKS_PER_BIT - 1) / 2 - 1;    // the middle of the start bit
             end
         end else if (wait_n > 0)
-            wait_n = wait_n - 1;
+            n_wait = wait_n - 1;
         else begin
-            bits[bit_n] = rx;
+            n_bits[bit_n] = rx;
             if (bit_n == 0 && rx !== 1'b0)
-                busy = 1'b0;                            // a glitch, no start bit
+                n_busy = 1'b0;                          // a glitch, no start bit
             else if (bit_n == NBITS - 1) begin
-                frame_done();
-                busy  = 1'b0;
-                armed = 1'b0;
+                frame = decode(n_bits);
+                received.push_back(frame[7:0]);
+                framing_errors <= framing_errors + int'(frame[9]);
+                parity_errors  <= parity_errors + int'(frame[8]);
+                if (ECHO != 0)
+                    $write("%c", frame[7:0]);
+                n_busy  = 1'b0;
+                n_armed = 1'b0;
             end else begin
-                bit_n  = bit_n + 1;
-                wait_n = CLKS_PER_BIT - 1;
+                n_bit  = bit_n + 1;
+                n_wait = CLKS_PER_BIT - 1;
             end
         end
-
-    /* verilator lint_on BLKSEQ */
+        bits   <= n_bits;
+        bit_n  <= n_bit;
+        wait_n <= n_wait;
+        busy   <= n_busy;
+        armed  <= n_armed;
+    end
 
     initial if (CLKS_PER_BIT < 4 || DATA_BITS < 5 || DATA_BITS > 8 || PARITY < 0 || PARITY > 2 ||
                 STOP_BITS < 1 || STOP_BITS > 2)

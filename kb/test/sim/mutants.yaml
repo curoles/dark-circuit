@@ -6,8 +6,8 @@ mutants:
   - name: SimUartRx, even and odd parity swapped
     edits:
       - file: rtl/lib/sim/sim_uart.sv
-        old: "if (PARITY != 0 && bits[1 + DATA_BITS] !== ((PARITY == 2) ? !p : p))"
-        new: "if (PARITY != 0 && bits[1 + DATA_BITS] !== ((PARITY == 2) ? p : !p))"
+        old: "if (PARITY != 0 && f[1 + DATA_BITS] !== ((PARITY == 2) ? !p : p))"
+        new: "if (PARITY != 0 && f[1 + DATA_BITS] !== ((PARITY == 2) ? p : !p))"
     expect: caught
   - name: SimUartTx, the start bit 1 (no frame starts)
     edits:
