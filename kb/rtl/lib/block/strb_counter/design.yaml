@@ -1,0 +1,38 @@
+type: decision
+title: StrbCounter, a counter that is also a strobed register; a write wins over a count
+date: 2026-11-07
+question: >
+  A timer's time (mtime) counts every tick and software also sets it through the register
+  port, a word or a byte at a time. StrbReg only holds, Counter only loads its whole width.
+  One block for a counter that software writes byte by byte?
+decision: >
+  StrbCounter #(WIDTH, RST_VAL): StrbReg's ports and write (with we, every byte whose strobe
+  is 1 takes wdata's byte, the others keep theirs) plus inc: without we it counts, q + 1,
+  wrapping to 0 after all ones. A write wins: in a clock with we it does not count, also for
+  the bytes not written. The struct version: Incr, a Mux2 per byte for the write, a Mux2
+  between the count and the write on we, one DffSyncRstEn enabled by we | inc.
+why: >
+  A write and a tick in the same clock must give one defined value; the written value is
+  what software asked for, and a tick lost in the clock of a write is the usual rule of
+  memory-mapped timers (software that writes the time does not expect it to have moved).
+  Not counting the bytes left as they were keeps the write a plain byte merge, as StrbReg's;
+  the carry from a written low word into a kept high word is software's business (it writes
+  the time with the timer stopped, or both words).
+rejected:
+  - choice: Counter with a load of the whole width
+    why_not: A word or byte write would need the other bytes read and merged outside.
+  - choice: Count also in the clock of a write (the written value plus one)
+    why_not: >
+      Software reads back a value it did not write; and with some bytes written the carry
+      into the written bytes has no clean meaning.
+relies_on:
+  - rtl/lib/block/strb_reg/design
+evidence: >
+  2026-11-07: test/block/strb_counter (block_strb_counter_behave, block_strb_counter_struct
+  on Verilator and Icarus): WIDTH 1, 3, 8, 12, 33, 64 with reset values not 0, random we,
+  strobes, data and inc against a byte model, one write in four with the low bytes all ones;
+  every case covered (a write and inc in one clock, a carry out of byte 0 or a wrap); 3 of 3
+  mutants caught (kb test/block/strb_counter/mutants).
+code:
+  - rtl/lib/block/strb_counter/behave/strb_counter.sv#a_count
+  - rtl/lib/block/strb_counter/struct/strb_counter.sv#u_mux2_next

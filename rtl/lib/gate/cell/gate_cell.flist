@@ -33,6 +33,7 @@ nor_reduce.sv
 parity.sv
 cmp_eq.sv
 cmp_ne.sv
+cmp_ge.sv
 half_adder.sv
 full_adder.sv
 full_adder_maj3.sv

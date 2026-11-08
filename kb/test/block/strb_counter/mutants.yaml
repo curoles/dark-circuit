@@ -1,0 +1,23 @@
+type: mutants
+title: Mutants of the StrbCounter test (behave and struct versions)
+date: 2026-11-07
+tests: [block_strb_counter_behave, block_strb_counter_struct]
+mutants:
+  - name: behave, a count subtracts one
+    edits:
+      - file: rtl/lib/block/strb_counter/behave/strb_counter.sv
+        old: "q <= q + 1'b1;"
+        new: "q <= q - 1'b1;"
+    expect: model
+  - name: struct, the write and the count swapped
+    edits:
+      - file: rtl/lib/block/strb_counter/struct/strb_counter.sv
+        old: ".in0(count), .in1(written), .sel(we)"
+        new: ".in0(written), .in1(count), .sel(we)"
+    expect: model
+  - name: struct, a write without inc is lost
+    edits:
+      - file: rtl/lib/block/strb_counter/struct/strb_counter.sv
+        old: ".in1(we), .in2(inc), .out(en)"
+        new: ".in1(inc), .in2(inc), .out(en)"
+    expect: model

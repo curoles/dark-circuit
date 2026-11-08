@@ -326,6 +326,12 @@ block:
     versions: [behave, struct]
     path: rtl/lib/block/stochastic_bitstream_gen
     test: test/block/stochastic_bitstream_gen
+  StrbCounter:
+    what: "Strobed counter: a counter that is also a strobed register (StrbReg), written byte by byte through the register port and counting otherwise"
+    versions: [behave, struct]
+    path: rtl/lib/block/strb_counter
+    test: test/block/strb_counter
+    kb: [rtl/lib/block/strb_counter/design]
   StrbReg:
     what: "Strobed register: a register written byte by byte, as a device's registers are written through the register port"
     versions: [behave, struct]
@@ -738,6 +744,11 @@ gate:
     what: "Comparator, returns 1 if in1 equals in2"
     versions: [cell, generic]
     path: rtl/lib/gate/generic/cmp_eq.sv
+    test: test/gate
+  CmpGe:
+    what: "Comparator, returns 1 if in1 is greater than or equal to in2, both unsigned"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/cmp_ge.sv
     test: test/gate
   CmpNe:
     what: "Comparator, returns 1 if in1 mismatches in2"

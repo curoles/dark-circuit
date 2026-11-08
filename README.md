@@ -117,7 +117,7 @@ then modules that the design does not use are not elaborated.
 - complex: Aoi21, Aoi22, Aoi31, Oai21, Oai22, Ind2, Ind3, Iind3
 - multiplexer: Mux2, Mux2i, Mux3, Mux4, Mux8, Mux1hot2, Mux1hot3
 - arithmetic: HalfAdder, FullAdder, FullAdderMaj3, FullAdderAoi, Maj3, Benc, Bml
-- reduction: AndReduce, OrReduce, NorReduce, Parity, CmpEq, CmpNe
+- reduction: AndReduce, OrReduce, NorReduce, Parity, CmpEq, CmpNe, CmpGe
 - sequential: Dff, DffEn, DffAsyncRst, DffAsyncRstEn, DffSyncRst, DffSyncRstEn, Latch
 
 ### Tests

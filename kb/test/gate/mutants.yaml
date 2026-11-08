@@ -1,0 +1,11 @@
+type: mutants
+title: Mutants of the gate test (cell flavor)
+date: 2026-11-07
+tests: [gate_cell_generic]
+mutants:
+  - name: CmpGe of the cell flavor, the lower and the higher part swapped in a node
+    edits:
+      - file: rtl/lib/gate/cell/cmp_ge.sv
+        old: ".in1(eq[2*n+2]), .in2(gt[2*n+1]), .in3(gt[2*n+2]), .out(gt[n])"
+        new: ".in1(eq[2*n+1]), .in2(gt[2*n+2]), .in3(gt[2*n+1]), .out(gt[n])"
+    expect: caught

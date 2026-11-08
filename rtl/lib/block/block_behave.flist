@@ -53,6 +53,7 @@
 -F arg_max_tree/behave/arg_max_tree.flist
 -F reg_port_target/behave/reg_port_target.flist
 -F strb_reg/behave/strb_reg.flist
+-F strb_counter/behave/strb_counter.flist
 -F plic/plic.flist
 -F atomic/atomic_unit/behave/atomic_unit.flist
 -F plic/plic_gateway/behave/plic_gateway.flist

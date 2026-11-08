@@ -63,6 +63,7 @@ module TbGate;
     wire         par_r1, par_r3, par_r12;
     wire         cmp_eq;
     wire         cmp_ne;
+    wire         cmp_ge1, cmp_ge3, cmp_ge6;
     integer i;
 
     assign sel2 = sel3[1:0];
@@ -137,6 +138,10 @@ module TbGate;
 
     CmpEq #(W) u_cmp_eq(.in1(a), .in2(b), .eq(cmp_eq));
     CmpNe #(W) u_cmp_ne(.in1(a), .in2(b), .ne(cmp_ne));
+    // CmpGe with widths 1, W and 2*W: in the cell flavor trees of 1, 4 and 8 bits.
+    CmpGe #(1)   u_cmp_ge_1(.in1(a[0]), .in2(b[0]), .ge(cmp_ge1));
+    CmpGe #(W)   u_cmp_ge_w(.in1(a), .in2(b), .ge(cmp_ge3));
+    CmpGe #(2*W) u_cmp_ge_2w(.in1({b, a}), .in2({d, c}), .ge(cmp_ge6));
 
     initial begin
         for (i = 0; i < 2**(4*W+3); i = i + 1) begin
@@ -223,6 +228,10 @@ module TbGate;
                 $fatal(1, "Parity: in=%b got w1=%b w3=%b w12=%b", dcba, par_r1, par_r3, par_r12);
             if (cmp_eq !== (a == b) || cmp_ne !== (a != b))
                 $fatal(1, "CmpEq/CmpNe: a=%b b=%b got eq=%b ne=%b", a, b, cmp_eq, cmp_ne);
+            if (cmp_ge1 !== (a[0] >= b[0]) || cmp_ge3 !== (a >= b) ||
+                cmp_ge6 !== ({b, a} >= {d, c}))
+                $fatal(1, "CmpGe: a=%b b=%b c=%b d=%b got w1=%b w3=%b w6=%b", a, b, c, d,
+                       cmp_ge1, cmp_ge3, cmp_ge6);
         end
         $display("PASS");
         $finish;

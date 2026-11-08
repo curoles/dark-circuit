@@ -26,6 +26,7 @@ nor_reduce.sv
 parity.sv
 cmp_eq.sv
 cmp_ne.sv
+cmp_ge.sv
 mux2.sv
 mux2i.sv
 mux3.sv
