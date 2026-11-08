@@ -26,7 +26,9 @@
  *
  * Interrupts. csr.irq = MEIP && MEIE && MIE: an interrupt is pending and enabled; from
  * flops and meip only, so Mig3Control takes it on the instruction after a CSR write or
- * MRET that enables it. An interrupt trap sets the interrupt bit of mcause.
+ * MRET that enables it. csr.pending = MEIP && MEIE, whatever MIE: what wakes a WFI (the
+ * spec: an interrupt pending and enabled in mie). An interrupt trap sets the interrupt
+ * bit of mcause.
  *
  * Traps and MRET. A trap (trap.valid) sets mepc to pc, mcause and mtval from trap, MPIE
  * to MIE and MIE to 0; MRET, when it completes, sets MIE to MPIE and MPIE to 1. A
@@ -207,6 +209,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
 
     assign csr.mtvec = mtvec;
     assign csr.mepc  = mepc;
-    assign csr.irq   = meip && mie_meie && mstatus_mie;
+    assign csr.irq     = meip && mie_meie && mstatus_mie;
+    assign csr.pending = meip && mie_meie;
 
 endmodule

@@ -13,12 +13,14 @@
  * follows a load,
  * and the next instruction reads its rd; division bubbles come right before a division;
  * fill bubbles only before the first instruction after reset or resume; imem bubbles
- * (IF2 waits for imem) at any time; dmem bubbles come right before a load or store. The trace
+ * (IF2 waits for imem) at any time; dmem bubbles come right before a load or store; wfi
+ * bubbles (asleep) right before a WFI. The trace
  * gets a
  * line per bubble; report() at the end of the run prints the count per reason and checks
  * that every counted cycle retired an instruction or a bubble. It also gives the pipeline
  * cycles: the cycles minus the imem and dmem bubbles (waits for memory, through the
- * caches), the number cycle ceilings judge. A pipeline bubble in a cycle that also waits
+ * caches) and the wfi bubbles (asleep), the number cycle ceilings judge. A pipeline
+ * bubble in a cycle that also waits
  * for memory counts as memory, so they can be a little below the pipeline's own cost,
  * never above (kb test/design/mig2/pipeline_cycles). Stops at the first failure
  * with $fatal.
@@ -59,6 +61,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                                     // its rd also comes in MEM/WB), 0: none
     reg_id_t use_rd;                // after a load-use bubble: the next one reads it
     logic    div_pending;           // after a division bubble: the next one divides
+    logic    wfi_pending;           // after a wfi bubble: the next one is a WFI
     logic    dmem_pending;          // after a dmem bubble: the next one loads or stores
     logic    prev_ret;              // the last retired instruction is a return (also one that
                                     // trapped: ID predicted it all the same)
@@ -100,6 +103,10 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
         endcase
     endfunction
 
+    function automatic logic is_wfi(input insn_t insn);
+        return insn ==? WFI;
+    endfunction
+
     function automatic logic is_div(input insn_t insn);
         casez (insn)
             DIV, DIVU, REM, REMU: return 1'b1;
@@ -121,6 +128,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             BUBBLE_DIV: ;   // the next retired instruction must be a division
             BUBBLE_IMEM: ;  // ID waits for imem: at any time
             BUBBLE_DMEM: ;  // the next retired instruction must load or store
+            BUBBLE_WFI: ;   // the next retired instruction must be a WFI
             BUBBLE_BTB_FIX:     // ID corrects the BTB: first, right after the instruction
                 if (BTB_FULL_TAG)
                     $fatal(1, "Mig3: cycle %0d: btb_fix bubble after pc %h, but the BTB tag covers imem",
@@ -143,6 +151,9 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                            cycle, bubble_name(b), prev_pc, bubble_name(redirect_class),
                            redirect_bubbles);
         endcase
+        if (wfi_pending && b != BUBBLE_WFI)
+            $fatal(1, "Mig3: cycle %0d: %s bubble between wfi bubbles and the WFI",
+                   cycle, bubble_name(b));
         if (div_pending && b != BUBBLE_DIV)
             $fatal(1, "Mig3: cycle %0d: %s bubble between division bubbles and the division",
                    cycle, bubble_name(b));
@@ -170,7 +181,10 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             $fdisplay(trace_fd, "%0d cycles = %0d retired + %0d bubbles:%s",
                       core_cycles, retired, total, s);
         memory   = bubbles[BUBBLE_IMEM] + bubbles[BUBBLE_DMEM];
-        pipeline = core_cycles - memory;
+        pipeline = core_cycles - memory - bubbles[BUBBLE_WFI];
+        if (bubbles[BUBBLE_WFI] != 0)
+            $display("Mig3: wfi %0d cycles asleep, not pipeline cycles",
+                     bubbles[BUBBLE_WFI]);
         $display("Mig3: pipeline %0d cycles, memory %0d (imem %0d + dmem %0d bubbles)",
                  pipeline, memory, bubbles[BUBBLE_IMEM], bubbles[BUBBLE_DMEM]);
         if (trace_fd != 0)
@@ -192,6 +206,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                     use_rd <= load_rd;
                 if (retire.bubble == BUBBLE_DIV)
                     div_pending <= 1'b1;
+                if (retire.bubble == BUBBLE_WFI)
+                    wfi_pending <= 1'b1;
                 if (retire.bubble == BUBBLE_DMEM)
                     dmem_pending <= 1'b1;
             end
@@ -205,6 +221,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             if (use_rd != 0 && retire.rs1_addr != use_rd && retire.rs2_addr != use_rd)
                 $fatal(1, "Mig3: pc %h after a load-use bubble does not read x%0d",
                        retire.pc_rdata, use_rd);
+            if (wfi_pending && !is_wfi(retire.insn))
+                $fatal(1, "Mig3: pc %h after wfi bubbles is not a WFI", retire.pc_rdata);
             if (div_pending && !is_div(retire.insn))
                 $fatal(1, "Mig3: pc %h after division bubbles is not a division", retire.pc_rdata);
             if (dmem_pending && retire.mem_rmask == '0 && retire.mem_wmask == '0)
@@ -221,6 +239,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                                 retire.rd_addr : '0;
             use_rd           <= '0;
             div_pending      <= 1'b0;
+            wfi_pending      <= 1'b0;
             dmem_pending     <= 1'b0;
             filling          <= 1'b0;
         end
@@ -238,6 +257,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
         load_rd          = '0;
         use_rd           = '0;
         div_pending      = 1'b0;
+        wfi_pending      = 1'b0;
         dmem_pending     = 1'b0;
         prev_ret         = 1'b0;
     end

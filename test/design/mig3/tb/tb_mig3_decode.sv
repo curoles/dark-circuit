@@ -222,7 +222,8 @@ module TbMig3Decode;
 
     function automatic sys_ctrl_t sys_of(input kind_e kind);
         return '{csr: kind == KIND_CSR, mret: kind == KIND_MRET, ecall: kind == KIND_ECALL,
-                 ebreak: kind == KIND_EBREAK, illegal: kind == KIND_ILLEGAL};
+                 ebreak: kind == KIND_EBREAK, illegal: kind == KIND_ILLEGAL,
+                 wfi: kind == KIND_WFI};
     endfunction
 
     // M controls expected, by the encodings of the instructions (RiscvInstrPkg).

@@ -132,6 +132,7 @@ module Mig3Core import Mig3Pkg::*; #(
                                     // now, rd and retire in MEM/WB
     trap_t        ex_trap;          // instruction in EX faults: retires as a trap
     logic         ex_irq;           // an interrupt is taken on it: it does nothing
+    logic         ex_wfi_wait;      // WFI in EX waits for an interrupt
     logic         ex_rd_write;      // instruction in EX will write rd (not x0)
     reg_id_t      ex_rd;            // rd written by the instruction in EX, 0 when none
     word_t        ex_rd_data;       // rd value in EX: forwarding and the retire entry
@@ -181,7 +182,8 @@ module Mig3Core import Mig3Pkg::*; #(
         .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
         .ras_ctrl,
-        .id_redirected, .ex_done, .ex_trap, .ex_irq, .ex_next_pc, .halt, .halt_pc);
+        .id_redirected, .ex_done, .ex_trap, .ex_irq, .ex_wfi_wait, .ex_next_pc, .halt,
+        .halt_pc);
 
     Mig3Decode u_mig3_decode(.insn(id_insn), .dec(id_dec));
 
@@ -318,14 +320,15 @@ module Mig3Core import Mig3Pkg::*; #(
                           mem_wdata: ex_lsu_mem.wdata};
 
     // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
-    // a division or for the D-cache to take its request (EX/MEM keeps its load while it waits
-    // for its word: no bubble goes in then).
+    // a division, an interrupt (WFI) or the D-cache to take its request (EX/MEM keeps its
+    // load while it waits for its word: no bubble goes in then).
     assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
                        !ex_fetch.valid ? ex_fetch.bubble :
-                       ex_muldiv_stall ? BUBBLE_DIV : BUBBLE_DMEM;
+                       ex_muldiv_stall ? BUBBLE_DIV :
+                       ex_wfi_wait     ? BUBBLE_WFI : BUBBLE_DMEM;
 
     `DC_ASSERT(a_ex_bubble_why, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall ||
-                                ex_dmem_wait || mem_wait)
+                                ex_wfi_wait || ex_dmem_wait || mem_wait)
 
     // load: a load that sent its read (a misaligned one traps and reads nothing); MEM/WB
     // waits for its word.

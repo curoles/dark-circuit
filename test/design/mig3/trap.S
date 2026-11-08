@@ -6,7 +6,6 @@
  *   mcause 11, mepc the ECALL; the handler moves mepc to the next instruction and
  *   returns with MRET, which restores MIE=1, MPIE=1 (0x1888).
  * - minstret does not count the ECALL (a trap), but counts the handler.
- * - WFI is a no-op.
  * - EBREAK traps (the testbench is not yet attached as debugger, +first_ebreak_traps):
  *   mcause 3, mepc and mtval the EBREAK. The handler halts with EBREAK, which now
  *   halts the core.
@@ -36,7 +35,6 @@ ecall_insn:
     rdinstret x21
     sub    x22, x21, x20
     csrr   x16, mstatus
-    wfi
     addi   x17, x0, 1
 ebreak_insn:
     ebreak

@@ -6,7 +6,10 @@
 package TbMig3Pkg;
 
     // Name of a bubble reason for traces and logs: BUBBLE_LOAD_USE gives load_use.
+    // Bits of b look unused to the linter: the enum has fewer values than its width allows.
+    /* verilator lint_off UNUSEDSIGNAL */
     function automatic string bubble_name(input Mig3Pkg::bubble_e b);
+    /* verilator lint_on UNUSEDSIGNAL */
         string s;
         s = b.name();
         s = s.substr(7, s.len() - 1);

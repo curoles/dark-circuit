@@ -1,0 +1,54 @@
+type: decision
+title: WFI waits in EX for an interrupt pending in mie; never interrupted itself
+date: 2026-11-07
+question: >
+  Mig3 ran WFI as a no-op (legal: WFI is a hint). With a timer, programs can sleep until an
+  alarm. How does WFI wait, how does it wake, and what about an interrupt that is pending
+  as it comes?
+decision: >
+  Decode gives WFI sys.wfi. In EX it waits (ex_wfi_wait, a stall like a division's) while no
+  interrupt is pending and enabled in mie (csr.pending = MEIP && MEIE, whatever mstatus.MIE,
+  as the spec asks), then completes and retires. With MIE = 1 the interrupt is then taken on
+  the next instruction, mepc = WFI + 4: the WFI acted in an earlier cycle, so ex_irq (first
+  acting cycle only) cannot take it on the WFI. An interrupt is never taken on a WFI, also
+  when one is pending as the WFI comes into EX (ex_irq has && !sys.wfi): the WFI completes
+  at once and the next instruction takes it. The cycles asleep are BUBBLE_WFI (bubble_e
+  grows to 5 bits); the bubble check wants a WFI right after them, and they count outside
+  the pipeline cycles, as memory waits do. Timing: ex_wfi_wait comes from flops only (ID/EX's
+  sys.wfi, mie.MEIE, meip from a flop of the PLIC); it is grouped with the divider's stall
+  (ex_hold) before the late D-cache stalls, so they pass no more gates than before.
+why: >
+  The user agreed both points. Not interrupting the WFI: with the trap on the WFI, MRET
+  returns to it and it sleeps again; an idle loop `while (!flag) wfi;` whose last interrupt
+  set the flag would hang. The spec says the trap is taken on the following instruction.
+  Sleeping is not pipeline cost, so the ceilings do not count it. The user asked to keep the
+  wake condition off the slow paths: it is early by construction (all from flops); a fully
+  registered wait (one clock later wake, allowed) stays the fallback if timing shows a cost.
+rejected:
+  - choice: WFI stays a no-op
+    why_not: Legal, but no sleep to test or measure; with a timer the real behavior is cheap.
+  - choice: Take an interrupt on a WFI that comes with one pending (as on any instruction)
+    why_not: The idle loop above hangs after MRET; the spec takes it on the next instruction.
+  - choice: WFI a no-op when no interrupt is enabled in mie (nothing could wake it)
+    why_not: >
+      Legal and no dead hart, but it hides the program's bug (a sleep with no wake source,
+      which real hardware hangs on); the user kept the plain rule.
+  - choice: A registered wait (wfi_wait_q), waking one clock late
+    why_not: >
+      Correct in the first cycle only with logic for flushes and interrupts ahead; not
+      needed while the combinational wait is early (kept as the fallback).
+relies_on:
+  - rtl/design/mig3/interrupts
+  - rtl/design/mig3/timer
+evidence: >
+  2026-11-07, Verilator: wfi.S passes (sleeps until the Timer's alarm with MIE 0, no sleep
+  with an interrupt pending, the trap after the WFI with MIE 1, the idle loop with MIE set
+  right before the WFI ends; 584 wfi bubbles, outside the pipeline cycles); with ex_irq also
+  on a WFI it hangs in the idle loop (MRET back to the WFI). The Mig3 suite passes (129
+  tests); trap.S no longer runs a WFI (it checked WFI as a no-op, and with nothing enabled it
+  now sleeps for good: the program's bug, the user's choice over a no-op without enables).
+  Timing, sky130: 5.5 ns as before, 334 741 um2 (the same).
+code:
+  - rtl/design/mig3/mig3_control.sv#ex_wfi_wait
+  - rtl/design/mig3/mig3_control.sv#ex_hold
+  - test/design/mig3/wfi.S#w4

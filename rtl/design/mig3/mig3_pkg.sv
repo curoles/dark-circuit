@@ -77,7 +77,7 @@ package Mig3Pkg;
     // or a bubble, so the reasons add up to all cycles that retire nothing. Redirect
     // classes are those of branch prediction; a return is a JALR whose rs1 is a link
     // register (x1, x5), unless rd = rs1 (hint table of JAL/JALR, RISC-V unprivileged spec).
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         BUBBLE_NONE,        // not a bubble: an instruction
         BUBBLE_FILL,        // the pipeline fills: after reset, after a halt (resume)
         BUBBLE_COND_BRANCH, // conditional branch guessed wrong: EX corrects the guess
@@ -93,7 +93,8 @@ package Mig3Pkg;
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
         BUBBLE_DIV,         // EX holds a division
         BUBBLE_IMEM,        // ID waits for the instruction from imem
-        BUBBLE_DMEM         // a load or store waits for dmem: to take it, or a load's word
+        BUBBLE_DMEM,        // a load or store waits for dmem: to take it, or a load's word
+        BUBBLE_WFI          // WFI in EX waits for an interrupt (sleeps)
     } bubble_e;
 
     // Ports of Mig3Core
@@ -284,6 +285,7 @@ package Mig3Pkg;
         iaddr_t mtvec;      // trap handler
         iaddr_t mepc;       // MRET target
         logic   irq;        // an interrupt is pending and enabled: MEIP, MEIE and MIE
+        logic   pending;    // ... pending and enabled in mie, whatever MIE: wakes WFI
     } csr_t;
 
     // Lsu -> retire: memory access of the instruction in EX, RVFI fields, 0 when none;
@@ -372,6 +374,7 @@ package Mig3Pkg;
         logic   ecall;
         logic   ebreak;
         logic   illegal;    // no instruction of Mig3: illegal instruction trap
+        logic   wfi;        // WFI: waits in EX for an interrupt (Mig3Control)
     } sys_ctrl_t;
 
     typedef struct packed {

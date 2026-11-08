@@ -118,8 +118,14 @@ taken on the instruction in EX in the first cycle that instruction acts: it does
 traps with mcause 0x8000000b, and runs again after MRET. The testbench raises meip at
 random times (+irq_random) and drops it when the handler claims with a store to
 irq_claim. irq.S places interrupts on chosen instructions; irq_random.S checks that
-interrupts at random places do not change what a program computes. WFI is a no-op. Why:
+interrupts at random places do not change what a program computes. Why:
 `kb/rtl/design/mig3/interrupts.yaml`.
+
+WFI waits in EX until an interrupt is pending and enabled in mie (whatever mstatus.MIE),
+then completes; with MIE = 1 the interrupt is taken on the next instruction (mepc =
+WFI + 4), never on the WFI itself, so an idle loop `wfi; check a flag` cannot fall
+asleep again after MRET. Its cycles asleep are wfi bubbles, outside the pipeline cycles.
+wfi.S sleeps until the Timer's alarm. Why: `kb/rtl/design/mig3/wfi.yaml`.
 
 The PLIC and a Timer sit in the I/O region of Mig3Cpu, beside the core. The Timer is the
 RISC-V machine timer of the library (`rtl/lib/block/timer`: mtime counting every clock,

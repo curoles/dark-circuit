@@ -172,6 +172,8 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_regs +irq_random=3 +irq_max_gap=1000)
     # The Timer of Mig3Cpu: periodic interrupts through the PLIC, a handler (timer.S).
     mig3_program_test(timer SOURCES timer.S FLAGS -I${SW} ARGS +expect_trap +expect_regs)
+    # WFI sleeps until the Timer's interrupt; never interrupted itself (wfi.S).
+    mig3_program_test(wfi SOURCES wfi.S FLAGS -I${SW} ARGS +expect_trap +expect_regs)
     # The drivers sw/riscv/drivers/timer.h and plic.h from C, a C handler (timer_c.c): exit 0
     # when the interrupts came as they should.
     mig3_program_test(timer_c

@@ -39,7 +39,14 @@
  * Interrupts: an interrupt that is pending and enabled (csr.irq) is taken on the
  * instruction in EX in the first cycle it acts, before it sends a request or starts a
  * division: ex_irq=1, the instruction does nothing and traps (mepc = its pc, it runs
- * again after MRET).
+ * again after MRET); not on a WFI (below).
+ * WFI waits in EX (ex_wfi_wait, a stall) until an interrupt is pending and enabled in mie
+ * (csr.pending, whatever mstatus.MIE), then completes. With MIE = 1 the interrupt is then
+ * taken on the next instruction (mepc = WFI + 4): the WFI acted in an earlier cycle. An
+ * interrupt is never taken on the WFI itself, also when it is pending as the WFI comes:
+ * the WFI completes at once and the next instruction takes it; otherwise MRET would
+ * return to the WFI, which would sleep again (an idle loop `wfi; check a flag` would
+ * hang). Its bubbles are BUBBLE_WFI (kb rtl/design/mig3/wfi).
  * Every bubble carries its reason (bubble_e, Mig3Pkg): the redirect class (JAL, branch
  * guessed taken, return, BTB corrected from ID; branch guessed wrong, JALR or return (not
  * predicted, predicted wrong), trap, MRET from EX), fill
@@ -107,16 +114,24 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     output wire                        ex_done,
     output trap_t                      ex_trap,
     output wire                        ex_irq,      // an interrupt is taken on the insn in EX
+    output wire                        ex_wfi_wait, // WFI in EX waits for an interrupt
     output iaddr_t                     ex_next_pc,  // next pc of the instruction in EX (retire)
     output wire                        halt,
     output iaddr_t                     halt_pc
 );
     logic       rst;         // reset active
     logic       ex_stall;    // the instruction in EX stays for another cycle
+    logic       ex_hold;     // ... from flops only: a division, a WFI that waits
     logic       ex_act;      // the instruction in EX acts now: it does not wait behind MEM/WB
     assign rst      = !rst_n;
+    // The stalls that come from flops (the divider's state; WFI: ID/EX, mie, meip, a flop
+    // of the PLIC) are grouped, so the late ones (the D-cache's handshake) pass no more
+    // gates than before.
     // @kb: rtl/design/mig2/data_waits
-    assign ex_stall = ex_muldiv_stall || ex_dmem_wait || mem_wait;
+    // @kb: rtl/design/mig3/wfi
+    assign ex_wfi_wait = ex_fetch.valid && ex_dec.sys.wfi && !csr.pending;
+    assign ex_hold     = ex_muldiv_stall || ex_wfi_wait;
+    assign ex_stall    = ex_hold || ex_dmem_wait || mem_wait;
     assign ex_act   = ex_fetch.valid && !mem_wait;
 
     logic       running;     // 1 from reset until EBREAK halts the core, again after resume
@@ -160,7 +175,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     always_ff @(posedge clk)
         if (rst || !ex_stall)    ex_acted <= 1'b0;
         else if (ex_act)         ex_acted <= 1'b1;
-    assign ex_irq = ex_act && !ex_acted && csr.irq;
+    assign ex_irq = ex_act && !ex_acted && csr.irq && !ex_dec.sys.wfi;
 
     // Traps, MRET, a halting EBREAK and redirects of EX happen once, in a cycle the
     // instruction acts (not while it waits behind a load in MEM/WB); an interrupted

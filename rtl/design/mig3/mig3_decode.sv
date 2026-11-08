@@ -249,10 +249,11 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
                 dec.sys.csr = 1'b1;
             end
             KIND_ECALL:   dec.sys.ecall   = 1'b1;
+            KIND_WFI:     dec.sys.wfi     = 1'b1;
             KIND_EBREAK:  dec.sys.ebreak  = 1'b1;
             KIND_MRET:    dec.sys.mret    = 1'b1;
             KIND_ILLEGAL: dec.sys.illegal = 1'b1;
-            default: ;  // FENCE, WFI: no-ops
+            default: ;  // FENCE: a no-op
         endcase
     end
 
