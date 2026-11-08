@@ -107,6 +107,14 @@ sim:
   SimRstGen:
     what: "Simple reset signal generator to use in RTL simulations"
     path: rtl/lib/sim/sim_rst_gen.sv
+  SimUartRx:
+    what: "SimUartRx: receives frames on rx"
+    path: rtl/lib/sim/sim_uart.sv
+    kb: [rtl/lib/sim/sim_uart]
+  SimUartTx:
+    what: "SimUartTx: sends the frames of its queue on tx, back to back or with gap idle bits between them (set by the testbench). push() a byte (its DATA_BITS low bits), send() a string; push_bad() a frame with a wrong stop bit (0, a framing error) or a wrong parity bit, to test a receiver (it is followed by at least one idle bit); idle() is 1 when everything is sent"
+    path: rtl/lib/sim/sim_uart.sv
+    kb: [rtl/lib/sim/sim_uart]
   SimVldRdySink:
     what: "Valid/ready sink for testbenches: raises ready at random (ready_pct is the percent of cycles with ready=1), keeps the items it takes (received), and checks the valid/ready rules on its side with $fatal: valid=0 during reset; while valid=1 and ready=0, valid and data must stay until the transfer. ready is a flip-flop, so the sink makes no combinational loop"
     path: rtl/lib/sim/sim_vld_rdy.sv

@@ -1,0 +1,17 @@
+type: mutants
+title: Mutants of the simulation models' tests (SimUartTx, SimUartRx)
+date: 2026-11-08
+tests: [sim_uart]
+mutants:
+  - name: SimUartRx, even and odd parity swapped
+    edits:
+      - file: rtl/lib/sim/sim_uart.sv
+        old: "if (PARITY != 0 && bits[1 + DATA_BITS] !== ((PARITY == 2) ? !p : p))"
+        new: "if (PARITY != 0 && bits[1 + DATA_BITS] !== ((PARITY == 2) ? p : !p))"
+    expect: caught
+  - name: SimUartTx, the start bit 1 (no frame starts)
+    edits:
+      - file: rtl/lib/sim/sim_uart.sv
+        old: "        b[0] = 1'b0;\n        p = 1'b0;"
+        new: "        b[0] = 1'b1;\n        p = 1'b0;"
+    expect: caught

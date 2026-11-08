@@ -5,3 +5,4 @@ sim_ram.sv
 sim_latency_ram.sv
 sim_rom.sv
 sim_vld_rdy.sv
+sim_uart.sv
