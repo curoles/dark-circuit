@@ -1,0 +1,53 @@
+type: decision
+title: Timer, a machine timer (mtime, mtimecmp per hart) whose irq the platform wires
+date: 2026-11-07
+question: >
+  Mig3 needs a timer interrupt. A RISC-V machine timer (mip.MTIP, mtime and mtimecmp) needs
+  a new core input, CSR bits and a time CSR that reads mtime; a timer device whose
+  interrupt is a PLIC source needs nothing in the core. Which timer does the library have,
+  and how does Mig3 get it first?
+decision: >
+  A library block Timer, the RISC-V ACLINT MTIMER (the timer part of SiFive's CLINT): a 64-bit
+  mtime counting on a tick input (the platform's rate) and a 64-bit alarm mtimecmp per hart
+  (N_HARTS); irq[h] is mtime >= mtimecmp[h], a level, registered (one clock late, also after
+  a write of mtimecmp). mtime resets to 0, mtimecmp to all ones (no alarm before software
+  sets one). The registers are behind the register port at the CLINT's addresses (TimerPkg:
+  mtimecmp[h] at 0x4000 + 8h, mtime at 0xbff8, a 64 KiB map; msip at 0x0 reserved), 64-bit
+  registers as two 32-bit words, written byte by byte; a reserved address reads 0. Wiring
+  only, like Plic: RegPortTarget, a CmpEq per register word for the decode, StrbCounter for
+  mtime (a write wins over a tick), StrbReg for mtimecmp, CmpGe and a flop per hart,
+  MuxOneHot for reads. The irq outputs go where the platform wants them: Mig3 wires them to
+  a PLIC source first (no change in the core: a peripheral timer); wiring the same block to a
+  hart's mtip, with mie.MTIE, mip.MTIP and time reading mtime, is a later step (an OS: Mig4).
+why: >
+  The user: Mig3 needs a timer but no OS (Linux, Zephyr), so the PLIC path gives the better
+  steps: a tested block, then a working timer interrupt without touching the core (its
+  timing, its interrupt logic). The same hardware is the standard timer when wired to mtip,
+  so nothing is built twice. mtime and an absolute mtimecmp let one counter serve every
+  hart, and the >= compare cannot miss an alarm set in the past. The CLINT's addresses are
+  what RISC-V software and toolchains know. A registered irq keeps the 64-bit compare off
+  the paths of whatever the irq drives; one clock of delay does not matter for a timer.
+rejected:
+  - choice: The machine timer in the core first (mtip, MTIE/MTIP, time from mtime)
+    why_not: Core changes Mig3 does not need yet; the PLIC path gives a working timer first.
+  - choice: A countdown timer (a reload value, a down-counter, an interrupt at zero)
+    why_not: >
+      More state for software (start, stop, reload modes), one alarm per counter, and not
+      the RISC-V shape: Mig4 could not wire it to mtip.
+  - choice: A combinational irq
+    why_not: A 64-bit compare on the path of the irq's user; the spec allows the delay.
+relies_on:
+  - rtl/lib/block/plic/register_port
+  - rtl/lib/block/strb_counter/design
+  - rtl/lib/block/strb_reg/design
+evidence: >
+  2026-11-07: test/block/timer (block_timer_behave, block_timer_struct on Verilator and
+  Icarus): N_HARTS 1 and 2, random ticks and register traffic against a model (alarms set
+  near mtime and re-armed, mtime writes that make the low word carry), irq and every answer
+  checked in every clock; every case covered (each hart's irq rising and falling, a write of
+  mtime with a tick, a carry, reads of every word and of reserved addresses); 3 of 3 mutants
+  caught (kb test/block/timer/mutants).
+code:
+  - rtl/lib/block/timer/timer.sv#g_decode
+  - rtl/lib/block/timer/timer.sv#u_dff_sync_rst_irq
+  - rtl/lib/block/timer/timer_pkg.sv#MTIMECMP_BASE

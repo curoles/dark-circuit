@@ -1,0 +1,23 @@
+type: mutants
+title: Mutants of the Timer test (behave and struct libraries)
+date: 2026-11-07
+tests: [block_timer_behave, block_timer_struct]
+mutants:
+  - name: the compare the wrong way round (mtimecmp >= mtime)
+    edits:
+      - file: rtl/lib/block/timer/timer.sv
+        old: ".in1(mtime), .in2(mtimecmp[h]), .ge(reached[h])"
+        new: ".in1(mtimecmp[h]), .in2(mtime), .ge(reached[h])"
+    expect: model
+  - name: mtimecmp resets to 0 (an alarm right after reset)
+    edits:
+      - file: rtl/lib/block/timer/timer.sv
+        old: "StrbReg #(.WIDTH(64), .RST_VAL('1))"
+        new: "StrbReg #(.WIDTH(64), .RST_VAL('0))"
+    expect: model
+  - name: the strobes of mtime's low and high words swapped
+    edits:
+      - file: rtl/lib/block/timer/timer.sv
+        old: ".in2({{STRB_WIDTH{sel[1]}}, {STRB_WIDTH{sel[0]}}}),"
+        new: ".in2({{STRB_WIDTH{sel[0]}}, {STRB_WIDTH{sel[1]}}}),"
+    expect: model

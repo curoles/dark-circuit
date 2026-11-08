@@ -60,6 +60,8 @@
 -F plic/plic_claim/struct/plic_claim.flist
 -F plic/plic_decode/struct/plic_decode.flist
 -F plic/struct/plic.flist
+-F timer/timer.flist
+-F timer/struct/timer.flist
 -F compute_core_bitmanip/struct/compute_core_bitmanip.flist
 -F noc/noc.flist
 -F noc/noc_virt_ch_out/struct/noc_virt_ch_out.flist

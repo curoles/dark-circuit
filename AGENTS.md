@@ -221,7 +221,8 @@ the chunk that establishes it:
   `req_we`, `req_addr`, `req_wdata`, `req_wstrb`, `rsp_valid`, `rsp_rdata` with
   parameters `ADDR_WIDTH` and `DATA_WIDTH`, as the caches' CPU side; no bus inside, a
   bus through an adapter block (kb `rtl/lib/block/plic/register_port`). The port's end in
-  the device `RegPortTarget`, its registers `StrbReg` (any width, written byte by byte),
+  the device `RegPortTarget`, its registers `StrbReg` (any width, written byte by byte;
+  a counter software sets: `StrbCounter`),
   the register map a block of one select per register (`block/plic/plic_decode`).
 - Behave versions: combinational logic with bit or field selects as `assign` or an
   `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a

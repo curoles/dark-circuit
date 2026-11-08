@@ -338,6 +338,11 @@ block:
     path: rtl/lib/block/strb_reg
     test: test/block/strb_reg
     kb: [rtl/lib/block/strb_reg/design]
+  Timer:
+    what: "Timer: a machine timer, the time mtime and an alarm mtimecmp per hart (the RISC-V ACLINT MTIMER, the timer part of SiFive's CLINT), wiring only"
+    path: rtl/lib/block/timer
+    test: test/block/timer
+    kb: [rtl/lib/block/timer/design]
   WallaceMultiplier:
     what: "Wallace tree multiplier: product = a * b, unsigned"
     versions: [behave, struct]
@@ -652,6 +657,12 @@ block:
     SkidBufferT:
       what: "Skid buffer of type T: SkidBuffer with DATA_WIDTH = $bits(T); items are values of T"
       path: rtl/lib/block/skid_buffer/skid_buffer_t.sv
+  timer:
+    TimerPkg:
+      kind: package
+      what: "The register map of Timer: the timer part of SiFive's CLINT (the RISC-V ACLINT MTIMER), so that software which knows the CLINT finds mtime and mtimecmp where it expects them"
+      path: rtl/lib/block/timer/timer_pkg.sv
+      kb: [rtl/lib/block/timer/design]
 part:
   BrentKungAdder:
     what: "Brent-Kung adder: {co, sum} = in1 + in2 + ci, parallel prefix"
