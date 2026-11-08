@@ -128,7 +128,9 @@ the hart's mtimecmp, at the CLINT's offsets); its interrupt is a PLIC source
 the PLIC, with no change in the core; time still reads mcycle. The handler moves
 mtimecmp, reads the Timer back, then completes: the Timer's line drops a clock after the
 write, and a complete right after it would see the old level and pend again. timer.S
-runs periodic timer interrupts through a handler. Why: `kb/rtl/design/mig3/timer.yaml`.
+runs periodic timer interrupts through a handler; timer_c.c does the same in C with the
+drivers `sw/riscv/drivers/timer.h` and `plic.h`, which keep that rule. Why:
+`kb/rtl/design/mig3/timer.yaml`.
 
 ## CoreMark
 

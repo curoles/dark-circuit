@@ -445,6 +445,10 @@ document intent and stop the simulation in the cycle a rule breaks.
   limits, tests. Update it in the same change as the design.
 - Design configuration: edit `rtl/design/<d>/cfg/<d>_config.yaml` or a template,
   run `make config`, commit the YAML and the generated files.
+- Device driver: `sw/riscv/drivers/<device>.h`, header-only static inline functions that
+  take the device's base address (the same code for every Mig); its comment says how the
+  hardware works and what software must do, its functions keep those rules
+  (`drivers/timer.h`, kb `sw/riscv/drivers/design`).
 - RISC-V encodings and CSR addresses: `tools/riscv_opcodes.sh` regenerates
   `rtl/lib/riscv/riscv_instr_pkg.sv` and `riscv_csr_pkg.sv`.
 - Generated files start with "THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!":

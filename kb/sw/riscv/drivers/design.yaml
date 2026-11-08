@@ -1,0 +1,43 @@
+type: decision
+title: Device drivers in sw/riscv/drivers, header-only, the hardware's rules written there
+date: 2026-11-07
+question: >
+  Programs for the Migs drive the library's devices (the PLIC, the Timer), and the Timer
+  behind a PLIC has a rule software must keep (read it back after moving mtimecmp, before
+  the complete) that takes knowing the RTL to find. Where does that knowledge live for
+  software?
+decision: >
+  sw/riscv/drivers/<device>.h, one header per library device (plic.h, timer.h): static inline
+  functions that take the device's base address (a design's config header gives it:
+  MIG3_PLIC_BASE, MIG3_TIMER_BASE), so every Mig uses the same code; a function per design
+  (mig3_...) or an #ifdef only where a design differs. The header's comment says how the
+  hardware works and what software must do and why (timer.h: the level, the flop, the
+  clock-by-clock reason for the read-back, the RV32 word orders). The functions keep the
+  rules (timer_rearm and timer_off write, then read back; timer_set writes the words in the
+  safe order; timer_mtime retries on a carry), so a program that uses them needs no RTL.
+why: >
+  The user: a firmware engineer should not need to know the RTL to get this right. Vendors
+  carry such rules in driver code and datasheets (ARM's ISR read-back advice, Linux's flush
+  of posted writes); here the driver is the datasheet. Header-only and base-address
+  arguments: no library to build or link, and the same header for Mig3, Mig4, Mig6.
+rejected:
+  - choice: The rule only in the RTL comments and the kb
+    why_not: Software engineers read the driver, not the RTL.
+  - choice: Drivers per design (sw/riscv/mig3/...)
+    why_not: The devices are library blocks used by every Mig; addresses differ, code does not.
+relies_on:
+  - rtl/design/mig3/timer
+  - rtl/lib/block/timer/design
+evidence: >
+  2026-11-07, Verilator: test/design/mig3/timer_c.c (the drivers from C, a handler with GCC's
+  interrupt attribute) exits 0: three timer interrupts through the PLIC, the Timer's ID, the
+  alarm due each time, no spurious entry, none after timer_off. It passes also with the
+  read-back removed from timer_rearm or timer_off: timer_rearm's three stores drop the line
+  with the first, and the compiler puts an instruction between timer_off's store and the
+  complete, which gives the line its clock. The need for the read-back shows in timer.S,
+  stores back to back: without it a fourth interrupt (kb rtl/design/mig3/timer). The
+  read-back stays: correct whatever the compiler and the path to the device do.
+code:
+  - sw/riscv/drivers/timer.h#timer_rearm
+  - sw/riscv/drivers/plic.h#plic_complete
+  - test/design/mig3/timer_c.c#handler

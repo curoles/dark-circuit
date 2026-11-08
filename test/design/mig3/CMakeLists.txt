@@ -172,6 +172,12 @@ if(DARK_CIRCUIT_RISCV)
                       ARGS +expect_regs +irq_random=3 +irq_max_gap=1000)
     # The Timer of Mig3Cpu: periodic interrupts through the PLIC, a handler (timer.S).
     mig3_program_test(timer SOURCES timer.S FLAGS -I${SW} ARGS +expect_trap +expect_regs)
+    # The drivers sw/riscv/drivers/timer.h and plic.h from C, a C handler (timer_c.c): exit 0
+    # when the interrupts came as they should.
+    mig3_program_test(timer_c
+                      SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c timer_c.c
+                      FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
+                      ARGS +expect_exit=0 +expect_trap)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)
