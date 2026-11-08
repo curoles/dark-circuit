@@ -1,0 +1,56 @@
+type: decision
+title: Mig3's timer is the library Timer in Mig3Cpu, its interrupt a PLIC source
+date: 2026-11-07
+question: >
+  Mig3 needs a timer interrupt; the library has Timer (kb rtl/lib/block/timer/design). Where
+  does it go, and how does its interrupt reach the hart?
+decision: >
+  In Mig3Cpu's I/O region beside the PLIC, at CFG.io_base + CFG.timer.offset (0x0c400000:
+  after the PLIC's 4 MiB, a multiple of the Timer's 64 KiB), one hart, mtime counting every
+  clock (tick tied to 1). AddrDecode gets a second rule, ReqDemux a third target; the Timer's
+  register port takes the word of the line, as the PLIC's (the same device word). Its irq is
+  PLIC source CFG.timer.source (2; source 1 stays the testbench's device, irq_src at the
+  Timer's source is not used), so a timer interrupt is a machine external interrupt (mcause
+  0x8000000b), claimed and completed at the PLIC. The core does not change: no mtip, no
+  mie.MTIE or mip.MTIP, the time CSR still reads mcycle (equal to mtime while it counts every
+  clock from reset, unless software writes mtime). The generated mig3_config.h gives programs
+  MIG3_TIMER_BASE, MIG3_TIMER_SOURCE, MIG3_TIMER_MTIMECMP and MIG3_TIMER_MTIME.
+  The rule for software: the timer's handler claims, moves mtimecmp (or sets it to all
+  ones), reads a Timer register back (any, the value does not matter; volatile in C), then
+  completes. The Timer's irq drops one clock after the write of mtimecmp (a flop); a
+  complete stored right after the write reaches the PLIC in that clock, the level-triggered
+  source is still high and pends again. The read is answered only after the Timer took the
+  write (one channel, in order), and the complete leaves the core only after the answer. A
+  read of the device itself, not of another target: interconnects order requests per target.
+  The same rule holds for every level-triggered device behind the PLIC.
+why: >
+  The user: Mig3 needs a timer but no OS, so the PLIC path gives the better steps; nothing in
+  the core changes (its timing, its interrupt logic). The read-back keeps the Timer's
+  registered irq (its 64-bit compare off the path of the PLIC's source) and is what drivers
+  do anyway: on a bus a write to a device may land later, so a read of the device is the way
+  to know it did.
+rejected:
+  - choice: The timer's interrupt on a new core input mtip (cause 7)
+    why_not: Core changes Mig3 does not need; the step for an OS (Mig4).
+  - choice: A combinational irq, or one that drops in the clock of a write of mtimecmp
+    why_not: >
+      Found by timer.S (a fourth interrupt without the read-back); the user chose the
+      read-back: the 64-bit compare stays registered, no special case in the Timer.
+  - choice: The Timer at the CLINT's usual address 0x02000000
+    why_not: >
+      Outside Mig3's I/O region (0x0c000000, 64 MiB): it would need a second uncached
+      region in the core; programs get the address from mig3_config.h either way.
+relies_on:
+  - rtl/lib/block/timer/design
+  - rtl/design/mig3/plic
+  - rtl/design/mig3/io_region
+evidence: >
+  2026-11-07, Verilator: timer.S passes (registers; three periodic interrupts through the
+  PLIC, each claimed with the Timer's ID, none early; none after the alarm is off); without
+  the read-back in its handler it took four (the old level at the complete). The Mig3 suite
+  passes (127 tests, the config check among them). Mig3Cpu only: not in the synthesized
+  core, no timing to measure.
+code:
+  - rtl/design/mig3/mig3_cpu.sv#u_timer
+  - rtl/design/mig3/mig3_cpu.sv#g_src
+  - test/design/mig3/timer.S#handler

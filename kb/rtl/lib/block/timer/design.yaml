@@ -19,6 +19,9 @@ decision: >
   MuxOneHot for reads. The irq outputs go where the platform wants them: Mig3 wires them to
   a PLIC source first (no change in the core: a peripheral timer); wiring the same block to a
   hart's mtip, with mie.MTIE, mip.MTIP and time reading mtime, is a later step (an OS: Mig4).
+  The registered irq asks one thing of software: after moving mtimecmp, read a Timer
+  register before completing the interrupt at a level-triggered controller (kb
+  rtl/design/mig3/timer: without it Mig3 took the interrupt a second time).
 why: >
   The user: Mig3 needs a timer but no OS (Linux, Zephyr), so the PLIC path gives the better
   steps: a tested block, then a working timer interrupt without touching the core (its

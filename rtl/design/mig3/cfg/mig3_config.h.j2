@@ -27,3 +27,11 @@
 #define MIG3_PLIC_ENABLE       (MIG3_PLIC_BASE + 0x2000)
 #define MIG3_PLIC_THRESHOLD    (MIG3_PLIC_BASE + 0x200000)
 #define MIG3_PLIC_CLAIM        (MIG3_PLIC_BASE + 0x200004)
+
+/* Timer (the CLINT's timer: mtime, mtimecmp of hart 0), its interrupt PLIC source
+ * MIG3_TIMER_SOURCE. 64-bit registers as two words, the low word first; the offsets are
+ * the CLINT's, as in TimerPkg (rtl/lib/block/timer/timer_pkg.sv). */
+#define MIG3_TIMER_BASE {{ (io_base + timer.offset) | c_hex }}
+#define MIG3_TIMER_SOURCE {{ timer.source }}
+#define MIG3_TIMER_MTIMECMP    (MIG3_TIMER_BASE + 0x4000)
+#define MIG3_TIMER_MTIME       (MIG3_TIMER_BASE + 0xbff8)

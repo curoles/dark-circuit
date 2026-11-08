@@ -112,14 +112,23 @@ computes every AMO's new word and checks the memory's write of it. Why:
 ### Interrupts
 
 Mig3 takes the machine external interrupt: one input, meip, the level an interrupt
-controller holds until the interrupt is claimed (a PLIC in Mig3Cpu later; the testbench
-now). mie.MEIE enables it, mip.MEIP shows it, mstatus.MIE is the global enable. It is
+controller holds until the interrupt is claimed (the PLIC in Mig3Cpu, its context 0).
+mie.MEIE enables it, mip.MEIP shows it, mstatus.MIE is the global enable. It is
 taken on the instruction in EX in the first cycle that instruction acts: it does nothing,
 traps with mcause 0x8000000b, and runs again after MRET. The testbench raises meip at
 random times (+irq_random) and drops it when the handler claims with a store to
 irq_claim. irq.S places interrupts on chosen instructions; irq_random.S checks that
 interrupts at random places do not change what a program computes. WFI is a no-op. Why:
 `kb/rtl/design/mig3/interrupts.yaml`.
+
+The PLIC and a Timer sit in the I/O region of Mig3Cpu, beside the core. The Timer is the
+RISC-V machine timer of the library (`rtl/lib/block/timer`: mtime counting every clock,
+the hart's mtimecmp, at the CLINT's offsets); its interrupt is a PLIC source
+(MIG3_TIMER_SOURCE), so a timer interrupt is an external one, claimed and completed at
+the PLIC, with no change in the core; time still reads mcycle. The handler moves
+mtimecmp, reads the Timer back, then completes: the Timer's line drops a clock after the
+write, and a complete right after it would see the old level and pend again. timer.S
+runs periodic timer interrupts through a handler. Why: `kb/rtl/design/mig3/timer.yaml`.
 
 ## CoreMark
 

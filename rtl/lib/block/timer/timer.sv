@@ -5,7 +5,9 @@
  * rate: tie it to 1 to count clocks). mtimecmp[h] is an absolute time: irq[h] is 1 while
  * mtime >= mtimecmp[h], a level, until software writes a later mtimecmp[h] (an alarm in the
  * past fires at once, it is not missed). irq[h] is registered: it follows the compare one
- * clock later, also after a write of mtimecmp. mtimecmp resets to all ones (no alarm before
+ * clock later, also after a write of mtimecmp: software that completes the interrupt at a
+ * level-triggered controller (a PLIC) reads a Timer register after moving mtimecmp, so that
+ * the old level is gone by then. mtimecmp resets to all ones (no alarm before
  * software sets one), mtime to 0. The registers are behind the library's register port
  * (kb pattern rtl/lib/block/plic/register_port) at the CLINT's addresses (TimerPkg): 64-bit
  * registers as two 32-bit words, the low word first, written byte by byte; software reads

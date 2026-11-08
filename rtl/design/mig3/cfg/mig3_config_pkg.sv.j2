@@ -14,6 +14,12 @@ package Mig3ConfigPkg;
         int unsigned prio_width;       // bits of a priority
     } mig3_plic_cfg_t;
 
+    // The Timer in the I/O region (Mig3Cpu): 64 KiB (TimerPkg), its interrupt a PLIC source.
+    typedef struct packed {
+        logic [31:0] offset;           // from io_base, a multiple of 64 KiB
+        int unsigned source;           // the PLIC source of its interrupt
+    } mig3_timer_cfg_t;
+
     typedef struct packed {
         logic [31:0] rst_addr;         // PC after reset, byte address
         int unsigned mem_addr_width;   // Mig3Cpu memories: 1 << mem_addr_width bytes each
@@ -21,6 +27,7 @@ package Mig3ConfigPkg;
                                        // its size
         int unsigned io_addr_width;    // I/O region: 1 << io_addr_width bytes
         mig3_plic_cfg_t plic;          // the PLIC in the I/O region (Mig3Cpu)
+        mig3_timer_cfg_t timer;        // the Timer in the I/O region (Mig3Cpu)
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
         int unsigned btb_tag_width;    // BTB tag; with the index it should cover the word
                                        // address of imem: then no two pcs share an entry
@@ -37,6 +44,7 @@ package Mig3ConfigPkg;
         io_addr_width:   {{ io_addr_width }},   // {{ 2 ** io_addr_width }} bytes
         plic: '{offset: {{ plic.offset | sv_hex(32) }}, addr_width: {{ plic.addr_width }},
                 sources: {{ plic.sources }}, prio_width: {{ plic.prio_width }}},
+        timer: '{offset: {{ timer.offset | sv_hex(32) }}, source: {{ timer.source }}},
         btb_index_width: {{ btb_index_width }},    // {{ 2 ** btb_index_width }} entries
         btb_tag_width:   {{ btb_tag_width }},
         ras_addr_width:  {{ ras_addr_width }},    // {{ 2 ** ras_addr_width }} entries
