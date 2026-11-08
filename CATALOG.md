@@ -338,6 +338,12 @@ block:
     path: rtl/lib/block/strb_reg
     test: test/block/strb_reg
     kb: [rtl/lib/block/strb_reg/design]
+  TickGen:
+    what: "Tick generator: a one-clock tick every div + 1 clocks, on average"
+    versions: [behave, struct]
+    path: rtl/lib/block/tick_gen
+    test: test/block/tick_gen
+    kb: [rtl/lib/block/tick_gen/design]
   Timer:
     what: "Timer: a machine timer, the time mtime and an alarm mtimecmp per hart (the RISC-V ACLINT MTIMER, the timer part of SiFive's CLINT), wiring only"
     path: rtl/lib/block/timer

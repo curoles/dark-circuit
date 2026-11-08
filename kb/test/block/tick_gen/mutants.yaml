@@ -1,0 +1,23 @@
+type: mutants
+title: Mutants of the TickGen test (behave and struct versions)
+date: 2026-11-08
+tests: [block_tick_gen_behave, block_tick_gen_struct]
+mutants:
+  - name: behave, the carry ignored (a fractional divider rounds down)
+    edits:
+      - file: rtl/lib/block/tick_gen/behave/tick_gen.sv
+        old: "count <= CW'(div[WIDTH-1:FRAC_BITS]) + CW'(carry);"
+        new: "count <= CW'(div[WIDTH-1:FRAC_BITS]) + CW'(carry & 1'b0);"
+    expect: model
+  - name: struct, no restart when en is low
+    edits:
+      - file: rtl/lib/block/tick_gen/struct/tick_gen.sv
+        old: "Inv       #(1)  u_inv_en(.in(en), .out(en_n));"
+        new: "Inv       #(1)  u_inv_en(.in(1'b1), .out(en_n));"
+    expect: model
+  - name: struct, the accumulator kept while en is low
+    edits:
+      - file: rtl/lib/block/tick_gen/struct/tick_gen.sv
+        old: ".in1(rst_n), .in2(en), .out(acc_rst_n)"
+        new: ".in1(rst_n), .in2(1'b1), .out(acc_rst_n)"
+    expect: model

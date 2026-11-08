@@ -53,6 +53,7 @@
 -F reg_port_target/struct/reg_port_target.flist
 -F strb_reg/struct/strb_reg.flist
 -F strb_counter/struct/strb_counter.flist
+-F tick_gen/struct/tick_gen.flist
 -F plic/plic.flist
 -F atomic/atomic_unit/struct/atomic_unit.flist
 -F plic/plic_gateway/struct/plic_gateway.flist

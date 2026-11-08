@@ -1,0 +1,44 @@
+type: decision
+title: TickGen, a tick every div + 1 clocks; FRAC_BITS makes it fractional-N
+date: 2026-11-08
+question: >
+  A UART needs a baud rate (and 16 times it for RX), I2C an SCL rate, SPI an SCLK, the Timer
+  a prescaled tick. One block for them? Integer or fractional, and how does it stay open to
+  the other kind?
+decision: >
+  TickGen #(WIDTH, FRAC_BITS): a one-clock tick (a clock enable, never a clock: the library
+  stays on one clock) every div + 1 clocks on average, div a fixed-point number of clocks
+  with FRAC_BITS fractional bits (SiFive's UART: baud = f / (div + 1); div = 0 ticks in every
+  clock). FRAC_BITS = 0, the default: an integer divider, no extra logic. FRAC_BITS > 0:
+  fractional-N, the integer part counted down, the fractional part added to an accumulator
+  at each tick, a carry making the next period a clock longer: periods of floor(div) + 1 or
+  + 2 clocks, the average exact. en = 0 reloads the count and clears the accumulator (a
+  restart: the first tick floor(div) + 1 clocks after en rises); after reset the count is 0.
+  div is read at a reload. The struct version: Counter (down, load at zero or !en),
+  NorReduce for zero, a RippleCarryAdder for acc + frac (two operands), Incr and Mux2 for the
+  reload (the integer part, + 1 after a carry: an increment, not an addition), DffSyncRstEn
+  for the accumulator.
+why: >
+  The user: an integer divider is enough now, but keep it open to a fractional one. One
+  parameter that keeps the meaning of div (a period in clocks, now with a fraction) is
+  cleaner than a divider-type switch that changes what the input means; FRAC_BITS = 0 costs
+  nothing. Fractional-N gives exact average rates from any clock (a 50 MHz clock and
+  115200 baud: div 433.03), the accuracy a UART needs, and each period stays an integer
+  number of clocks.
+rejected:
+  - choice: A parameter for the kind of divider (integer, phase accumulator)
+    why_not: >
+      A phase accumulator takes an increment (rate), not a period: the same input would
+      mean two things; FRAC_BITS keeps one meaning.
+  - choice: A divided clock (a register toggling at the rate)
+    why_not: A second clock domain; the library uses enables on one clock.
+relies_on: []
+evidence: >
+  2026-11-08: test/block/tick_gen (block_tick_gen_behave, block_tick_gen_struct on Verilator
+  and Icarus): WIDTH/FRAC_BITS 4/0, 8/0, 12/4, 10/7 against a closed-form model (tick times
+  from floor(k * f / 2**F)), random runs of en and values of div; every case covered (a tick
+  in every clock, two in a row from a fraction, a carry, a long period, a restart); 3 of 3
+  mutants caught (kb test/block/tick_gen/mutants).
+code:
+  - rtl/lib/block/tick_gen/behave/tick_gen.sv#g_frac
+  - rtl/lib/block/tick_gen/struct/tick_gen.sv#u_counter
