@@ -107,8 +107,7 @@ module ReqMux #(
 
     // See the behave version.
     `DC_ASSERT(a_one_grant, $onehot0(grant))
-    `DC_ASSERT_NEXT(a_offer_held, tgt_req_valid && !tgt_req_ready,
-                    tgt_req_valid && $stable(tgt_req_we) && $stable(tgt_req_fields))
+    `DC_ASSERT_NEXT(a_grant_held, tgt_req_valid && !tgt_req_ready, $stable(grant))
     `DC_ASSERT(a_answer_expected, !tgt_rsp_valid || !empty)
 
 endmodule

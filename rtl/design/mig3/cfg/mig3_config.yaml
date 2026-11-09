@@ -6,7 +6,7 @@ io_addr_width:   26           # I/O region: 1 << 26 = 64 MiB, its devices below
 plic:                         # PLIC (rtl/lib/block/plic), one context: the hart's M-mode
   offset:        0x0000000    # from io_base, a multiple of its size
   addr_width:    22           # 1 << 22 = 4 MiB: the spec's map up to context 0's claim register
-  sources:       8            # interrupt sources, IDs 1 to 8
+  sources:       16           # interrupt sources, IDs 1 to 16
   prio_width:    3            # priorities 1 to 7 (0: never)
 timer:                        # Timer (rtl/lib/block/timer): mtime, the hart's mtimecmp
   offset:        0x0400000    # from io_base, a multiple of its 64 KiB (the CLINT's map)
@@ -15,6 +15,10 @@ uart:                         # UartSifive (rtl/lib/io/uart/uart_sifive): SiFive
   offset:        0x0410000    # from io_base, a multiple of its 4 KiB
   source:        3            # its interrupt: this PLIC source
   div_rst:       15           # div after reset, the boot rate: 16 clocks a bit (the testbench's)
+dma:                          # DmaSifive (rtl/lib/block/dma/dma_sifive): SiFive's PDMA
+  offset:        0x0420000    # from io_base, a multiple of its size (0x1000 a channel)
+  channels:      4            # as the FU540: 16 KiB of registers
+  source:        4            # channel c: done at source + 2c, error at source + 2c + 1
 btb_index_width: 6            # BTB in IF: 1 << 6 = 64 entries (kb rtl/design/mig3/btb_size)
 btb_tag_width:   8            # BTB tag: index + tag = 14 bits, the word address of 64 KiB
 ras_addr_width:  3            # return-address stack in ID: 1 << 3 = 8 entries

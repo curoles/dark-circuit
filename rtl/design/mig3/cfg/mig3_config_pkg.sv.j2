@@ -28,6 +28,14 @@ package Mig3ConfigPkg;
         int unsigned div_rst;          // div after reset: the boot rate, f / (div_rst + 1)
     } mig3_uart_cfg_t;
 
+    // The DMA in the I/O region (Mig3Cpu): DmaSifive, 4 KiB of registers a channel
+    // (DmaSifivePkg), a second agent on the memory; two PLIC sources a channel.
+    typedef struct packed {
+        logic [31:0] offset;           // from io_base, a multiple of its size
+        int unsigned channels;         // 1 or more
+        int unsigned source;           // channel c: done at source + 2c, error + 1
+    } mig3_dma_cfg_t;
+
     typedef struct packed {
         logic [31:0] rst_addr;         // PC after reset, byte address
         int unsigned mem_addr_width;   // Mig3Cpu memories: 1 << mem_addr_width bytes each
@@ -37,6 +45,7 @@ package Mig3ConfigPkg;
         mig3_plic_cfg_t plic;          // the PLIC in the I/O region (Mig3Cpu)
         mig3_timer_cfg_t timer;        // the Timer in the I/O region (Mig3Cpu)
         mig3_uart_cfg_t uart;          // the UART in the I/O region (Mig3Cpu)
+        mig3_dma_cfg_t dma;            // the DMA in the I/O region (Mig3Cpu)
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
         int unsigned btb_tag_width;    // BTB tag; with the index it should cover the word
                                        // address of imem: then no two pcs share an entry
@@ -56,6 +65,8 @@ package Mig3ConfigPkg;
         timer: '{offset: {{ timer.offset | sv_hex(32) }}, source: {{ timer.source }}},
         uart: '{offset: {{ uart.offset | sv_hex(32) }}, source: {{ uart.source }},
                 div_rst: {{ uart.div_rst }}},
+        dma: '{offset: {{ dma.offset | sv_hex(32) }}, channels: {{ dma.channels }},
+               source: {{ dma.source }}},
         btb_index_width: {{ btb_index_width }},    // {{ 2 ** btb_index_width }} entries
         btb_tag_width:   {{ btb_tag_width }},
         ras_addr_width:  {{ ras_addr_width }},    // {{ 2 ** ras_addr_width }} entries

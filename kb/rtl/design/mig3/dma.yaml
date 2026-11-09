@@ -1,0 +1,57 @@
+type: decision
+title: Mig3's DMA is the library's DmaSifive in Mig3Cpu, a second agent meeting the core at ReqMux
+date: 2026-11-09
+question: >
+  The library has a DMA (kb rtl/lib/block/dma/design). How does it join Mig3: where do its
+  registers and interrupts go, how does its memory side reach the RAM so that atomics stay
+  atomic and software sees memory in a sane order, and how is it tested before Zicbom?
+decision: >
+  DmaSifive with CFG.dma.channels channels (4, the FU540's) in Mig3Cpu: its registers in the
+  I/O region at CFG.io_base + CFG.dma.offset (0x0c420000, 16 KiB, after the UART), AddrDecode
+  a fourth rule, ReqDemux a fifth target, the register port on the word of the line as the
+  other devices. Its memory side (beats of a line, any alignment) and the core's requests to
+  the memory meet at ReqMux (round-robin, no buffer, answers routed in order) in front of
+  AtomicUnit: AtomicUnit stays where every access to the memory meets, so an AMO is atomic
+  with the DMA's writes too. Its interrupts are PLIC sources CFG.dma.source + 2c (done) and
+  + 2c + 1 (error); plic.sources is now 16 (the user chose 4 channels over 2 for realism).
+  Programs get MIG3_DMA_BASE, MIG3_DMA_CHANNELS, MIG3_DMA_DONE_SOURCE(c) and
+  MIG3_DMA_ERROR_SOURCE(c); sw/riscv/drivers/dma.h is the driver (fence w,o before run, fence
+  i,r after done; no clock in it: the caller's deadline). The first test copies into buffers
+  the program never loaded (Mig3's data cache does not allocate on stores), so loads after
+  the DMA see its writes without cbo.inval; Zicbom comes next.
+why: >
+  The atomics decision (kb rtl/lib/block/atomic/design) put AtomicUnit where every agent's
+  accesses meet, for exactly this second agent. No buffer in ReqMux keeps the order software
+  relies on: a store the core sent is in the RAM before a later MMIO write (run) reaches the
+  DMA, both leaving the core in order on one path; the DMA reports done after its last write
+  is taken. The fences cost nothing on Mig3 and make the driver right for later cores. A
+  deadline on the Timer (clocks) rather than a semihosting call: no halt per poll,
+  deterministic, the same on hardware; TbMig3's +max_cycles stays the guard against a hang.
+rejected:
+  - choice: The DMA's memory side behind AtomicUnit (straight to the RAM)
+    why_not: An AMO's read and write could have a DMA write between them.
+  - choice: 2 channels, plic.sources 8
+    why_not: The user chose 4 channels, the FU540's, and 16 sources.
+  - choice: A semihosting time call for the deadlines (SYS_CLOCK, SYS_ELAPSED)
+    why_not: Each call halts the core (a debugger round trip) and host time is not simulated
+      time; mtime counts clocks.
+relies_on:
+  - rtl/lib/block/dma/design
+  - rtl/lib/block/req_mux/design
+  - rtl/lib/block/atomic/design
+  - rtl/design/mig3/plic
+evidence: >
+  2026-11-09, Verilator: dma_c.c passes (exit 0: 4 channels at once, 1 to 157 bytes, every
+  alignment pair different, channels 0 to 2 polled, channel 3 by its done interrupt through
+  PLIC source 10 with dma_clear's read-back; every destination byte right and the guard
+  bytes around each still 0; 14744 instructions, 16267 cycles). The Mig3 suite passes with
+  the DMA, ReqMux and 16 PLIC sources (131 tests, sv2v and the config check among them).
+  The first run failed load_store_slow_mem on ReqMux's assertion that a waiting offer keeps
+  every field: the core's read kept its address, size and we, but its unused wdata and wstrb
+  changed while the slow memory did not take it; ReqMux now asserts its own part (the
+  waiting requester keeps the grant), kb rtl/lib/block/req_mux/design.
+code:
+  - rtl/design/mig3/mig3_cpu.sv#u_req_mux
+  - rtl/design/mig3/mig3_cpu.sv#u_dma
+  - sw/riscv/drivers/dma.h#dma_run
+  - test/design/mig3/dma_c.c#main

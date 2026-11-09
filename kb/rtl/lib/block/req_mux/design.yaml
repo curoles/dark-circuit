@@ -44,7 +44,13 @@ evidence: >
   2; every case counted: two requesters offering, an offer waiting, a read waiting for a
   full FIFO, reads and writes of each requester); 4 of 4 mutants caught on both simulators
   (kb test/block/req_mux/mutants). Not checked: the fairness of the order (a ReqMux that
-  never rotates would still finish every requester's requests in this test).
+  never rotates would still finish every requester's requests in this test). With Mig3,
+  2026-11-09 (kb rtl/design/mig3/dma): the assertion a_offer_held (the target's offer
+  stays, every field) failed in load_store_slow_mem: the core's read kept its address, size
+  and we while it waited, but its wdata and wstrb (unused by a read) changed. ReqMux now
+  asserts what it guarantees itself, a_grant_held (the waiting requester keeps the grant);
+  a requester's own offer is the requester's part of the rule (the test still checks the
+  whole offer, its requesters hold every field).
 code:
   - rtl/lib/block/req_mux/behave/req_mux.sv#grant
   - rtl/lib/block/req_mux/struct/req_mux.sv#u_fifo_owner

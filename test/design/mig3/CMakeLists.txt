@@ -187,6 +187,12 @@ if(DARK_CIRCUIT_RISCV)
                       FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
                       ARGS +expect_exit=0 +expect_trap
                       OUTPUT "Hello from Mig3 over the UART[\r\n]+Interrupt-driven: the")
+    # The DMA of Mig3Cpu and sw/riscv/drivers/dma.h from C (dma_c.c): every channel at once,
+    # polled and by its interrupt, into buffers never loaded before: exit 0.
+    mig3_program_test(dma_c
+                      SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c dma_c.c
+                      FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
+                      ARGS +expect_exit=0 +expect_trap)
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)

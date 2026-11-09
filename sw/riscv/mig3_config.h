@@ -20,7 +20,7 @@
  * MIG3_PLIC_SOURCES, priorities 0 to MIG3_PLIC_PRIO_MAX. The offsets are the spec's, as in
  * PlicPkg (rtl/lib/block/plic/plic_pkg.sv). */
 #define MIG3_PLIC_BASE 0x0c000000
-#define MIG3_PLIC_SOURCES 8
+#define MIG3_PLIC_SOURCES 16
 #define MIG3_PLIC_PRIO_MAX 7
 #define MIG3_PLIC_PRIORITY(k)  (MIG3_PLIC_BASE + 4 * (k))
 #define MIG3_PLIC_PENDING      (MIG3_PLIC_BASE + 0x1000)
@@ -42,3 +42,12 @@
 #define MIG3_UART_BASE 0x0c410000
 #define MIG3_UART_SOURCE 3
 #define MIG3_UART_DIV_RST 15
+
+/* DMA (SiFive's PDMA: a channel's registers every 0x1000; sw/riscv/drivers/dma.h), a second
+ * agent on the memory. Channel c's interrupts are PLIC sources MIG3_DMA_SOURCE + 2c (done)
+ * and MIG3_DMA_SOURCE + 2c + 1 (error). */
+#define MIG3_DMA_BASE 0x0c420000
+#define MIG3_DMA_CHANNELS 4
+#define MIG3_DMA_SOURCE 4
+#define MIG3_DMA_DONE_SOURCE(c)   (MIG3_DMA_SOURCE + 2 * (c))
+#define MIG3_DMA_ERROR_SOURCE(c)  (MIG3_DMA_SOURCE + 2 * (c) + 1)

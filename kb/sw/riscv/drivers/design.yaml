@@ -8,7 +8,9 @@ question: >
   software?
 decision: >
   sw/riscv/drivers/<device>.h, one header per library device (plic.h, timer.h, uart.h since
-  2026-11-08: its pop on every read of rxdata, the read-back after writes): static inline
+  2026-11-08: its pop on every read of rxdata, the read-back after writes; dma.h since
+  2026-11-09: the fences around a transfer, the stale cache lines, no clock in a driver,
+  deadlines are the caller's): static inline
   functions that take the device's base address (a design's config header gives it:
   MIG3_PLIC_BASE, MIG3_TIMER_BASE), so every Mig uses the same code; a function per design
   (mig3_...) or an #ifdef only where a design differs. The header's comment says how the

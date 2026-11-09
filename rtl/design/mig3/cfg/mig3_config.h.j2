@@ -42,3 +42,12 @@
 #define MIG3_UART_BASE {{ (io_base + uart.offset) | c_hex }}
 #define MIG3_UART_SOURCE {{ uart.source }}
 #define MIG3_UART_DIV_RST {{ uart.div_rst }}
+
+/* DMA (SiFive's PDMA: a channel's registers every 0x1000; sw/riscv/drivers/dma.h), a second
+ * agent on the memory. Channel c's interrupts are PLIC sources MIG3_DMA_SOURCE + 2c (done)
+ * and MIG3_DMA_SOURCE + 2c + 1 (error). */
+#define MIG3_DMA_BASE {{ (io_base + dma.offset) | c_hex }}
+#define MIG3_DMA_CHANNELS {{ dma.channels }}
+#define MIG3_DMA_SOURCE {{ dma.source }}
+#define MIG3_DMA_DONE_SOURCE(c)   (MIG3_DMA_SOURCE + 2 * (c))
+#define MIG3_DMA_ERROR_SOURCE(c)  (MIG3_DMA_SOURCE + 2 * (c) + 1)

@@ -11,11 +11,13 @@
  * stays in its order at the target, and a request is at the target before anything its
  * requester sends later. While the target does not take an offer, the requester of that
  * offer keeps the grant (the arbiter sees only its request), so the target's offer stays
- * the same. Each read taken leaves its requester's number in a FIFO of
- * 1 << PENDING_WIDTH entries; the target's answer goes to the oldest (rsp_valid of that
- * requester; rsp_data to all), so every requester gets its answers in order. A read waits
- * while the FIFO is full. req_ready follows the requests and the target's ready without a
- * flop (allowed: valid never depends on ready).
+ * the one of that requester, whose offer stays the same by the rules (fields a request
+ * does not use, as a read's data, may change: they pass as they come). Each read taken
+ * leaves its requester's number in a FIFO of 1 << PENDING_WIDTH entries; the target's
+ * answer goes to the oldest (rsp_valid of that requester; rsp_data to all), so every
+ * requester gets its answers in order. A read waits while the FIFO is full. req_ready
+ * follows the requests and the target's ready without a flop (allowed: valid never depends
+ * on ready).
  *
  *   req[0..N-1] --RoundRobinArbiter (kept while the offer waits)--> the winner --> target
  *   read taken --> FIFO of requester numbers --oldest--> rsp_valid of that requester
@@ -130,10 +132,11 @@ module ReqMux #(
     assign rsp_valid = tgt_rsp_valid ? owner[0] : '0;
     assign rsp_data  = tgt_rsp_data;
 
-    // One winner; an offer the target did not take stays; answers only for reads waiting.
+    // One winner; the requester of an offer the target did not take keeps the grant (its
+    // offer stays the same by the rules, the requester's part: fields a request does not
+    // use, a read's data, may change); answers only for reads waiting.
     `DC_ASSERT(a_one_grant, $onehot0(grant))
-    `DC_ASSERT_NEXT(a_offer_held, tgt_req_valid && !tgt_req_ready,
-                    tgt_req_valid && $stable(tgt_req_we) && $stable(tgt_req_fields))
+    `DC_ASSERT_NEXT(a_grant_held, tgt_req_valid && !tgt_req_ready, $stable(grant))
     `DC_ASSERT(a_answer_expected, !tgt_rsp_valid || count != '0)
 
 endmodule
