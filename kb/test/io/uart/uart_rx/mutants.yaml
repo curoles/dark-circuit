@@ -1,0 +1,30 @@
+type: mutants
+title: Mutants of the UartRx test (behave and struct versions)
+date: 2026-11-08
+tests: [io_uart_rx_behave, io_uart_rx_struct]
+mutants:
+  - name: behave, any sample of 1 wins (no majority against glitches)
+    edits:
+      - file: rtl/lib/io/uart/uart_rx/behave/uart_rx.sv
+        old: "(samples[1] & rx_s)"
+        new: "(samples[1] | rx_s)"
+  - name: behave, the stop bit not checked
+    edits:
+      - file: rtl/lib/io/uart/uart_rx/behave/uart_rx.sv
+        old: "frame_err  <= !maj;"
+        new: "frame_err  <= 1'b0;"
+  - name: struct, odd and even parity swapped
+    edits:
+      - file: rtl/lib/io/uart/uart_rx/struct/uart_rx.sv
+        old: ".in2(par[1]), .out(exp_par)"
+        new: ".in2(par[0]), .out(exp_par)"
+  - name: struct, data bits one place off
+    edits:
+      - file: rtl/lib/io/uart/uart_rx/struct/uart_rx.sv
+        old: "at_bit[8:1]"
+        new: "at_bit[7:0]"
+  - name: struct, a glitch on the idle line taken as a start bit
+    edits:
+      - file: rtl/lib/io/uart/uart_rx/struct/uart_rx.sv
+        old: ".in3(maj), .out(no_start)"
+        new: ".in3(1'b0), .out(no_start)"

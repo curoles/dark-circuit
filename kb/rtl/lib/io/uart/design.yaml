@@ -1,0 +1,56 @@
+type: decision
+title: A UART of sub-blocks; the serial engine UartTx and UartRx on a shared 16x tick
+date: 2026-11-08
+question: >
+  The library needs a UART (programs print through it, a device beside the PLIC and the
+  Timer), with SiFive's register map now and possibly a 16550 later. How is it divided, where
+  does the bit timing live, and how robust is the receiver?
+decision: >
+  rtl/lib/io/uart. The device top holds a TickGen, UartTx, UartRx, two Fifos and a register
+  front end with the register map (UartSifiveRegs now; a Uart16550Regs later on the same
+  rest), and a watermark part for its interrupts. The bit timing is shared, in the top: one
+  TickGen gives a tick at 16 times the bit rate (with FRAC_BITS 4 it is exactly 16 ticks a bit
+  for SiFive's integer div, div - 15 in fixed point); UartTx and UartRx take the tick and the
+  frame format (UartPkg: data_bits coded as a 16550's WLS, 5 to 8 bits; parity none, even,
+  odd; stop2 for the transmitter) and nothing else about rates. UartTx: a byte on a
+  valid/ready channel (in_ready = !busy, a flop), the frame starts at a tick, 16 ticks a bit
+  exactly, tx from a flop. UartRx: the pin through two synchronizer flops (metastability:
+  SignalClockSync in the struct version), a start bit as a falling edge between ticks, every
+  bit by the majority of three samples at ticks 7, 8 and 9 (a glitch of one sample changes
+  no bit and starts no frame), the first stop bit only (as a 16550); a byte with frame_err
+  and parity_err for a clock, also when it has an error.
+why: >
+  The user: a top with TickGen, Rx and Tx as sub-blocks, sub-modules for the rest, flexible
+  for a 16550. The references split the same way (registers, FIFOs, Tx, Rx, baud timing);
+  they differ only in where the timing lives: shared (OpenTitan's NCO, PULP's baud
+  generator) or in each of Tx and Rx (ZipCPU, SiFive, LiteX). Shared fits the library: TickGen
+  is a block, and a 16550 front end reuses everything but the registers. The synchronizer
+  and the majority vote solve two different problems (the user asked): metastability of an
+  asynchronous pin, and noise on the line deciding a bit.
+rejected:
+  - choice: A divider inside each of UartTx and UartRx (ZipCPU, SiFive)
+    why_not: Two counters for one rate; the front end owns the rate with one TickGen.
+  - choice: One sample in the middle of a bit
+    why_not: A glitch at that moment flips the bit or starts a false frame; three samples cost
+      two flops.
+  - choice: Check both stop bits in the receiver
+    why_not: A 16550 checks the first; ending at its middle leaves time for the next start.
+relies_on:
+  - rtl/lib/block/tick_gen/design
+  - rtl/lib/sim/sim_uart
+  - rtl/lib/block/plic/register_port
+evidence: >
+  2026-11-08: io_uart_tx_{behave,struct} and io_uart_rx_{behave,struct} pass on Verilator
+  5.052 and Icarus 13, against SimUartRx and SimUartTx in four formats (8N1, 7E2, 5O1, 6N2;
+  a tick every 1, 3, 2 and 1 clocks). The receiver's test sends frames with bad stop and parity bits
+  and glitches of one sample, inside frames and on the idle line; every byte, error flag and
+  frame count matches. The first behave run caught a frame one bit short (bits_of 6 + ...,
+  141 of 200 bytes received). Mutants (kb test/io/uart/uart_tx/mutants,
+  test/io/uart/uart_rx/mutants): 9 of 9 caught on both simulators: swapped parity, a lost stop
+  bit, a dropped data bit, a cut last bit, no majority, an unchecked stop bit, data bits one
+  place off, an idle glitch taken as a start.
+code:
+  - rtl/lib/io/uart/uart_pkg.sv#data_bits_t
+  - rtl/lib/io/uart/uart_tx/behave/uart_tx.sv#frame_of
+  - rtl/lib/io/uart/uart_rx/behave/uart_rx.sv#maj
+  - rtl/lib/io/uart/uart_rx/struct/uart_rx.sv#u_signal_clock_sync

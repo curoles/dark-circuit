@@ -1,0 +1,25 @@
+type: mutants
+title: Mutants of the UartTx test (behave and struct versions)
+date: 2026-11-08
+tests: [io_uart_tx_behave, io_uart_tx_struct]
+mutants:
+  - name: behave, odd and even parity swapped
+    edits:
+      - file: rtl/lib/io/uart/uart_tx/behave/uart_tx.sv
+        old: "f[1 + n] = (par == PARITY_ODD) ? !p : p;"
+        new: "f[1 + n] = (par == PARITY_ODD) ? p : !p;"
+  - name: behave, stop2 ignored (one stop bit always)
+    edits:
+      - file: rtl/lib/io/uart/uart_tx/behave/uart_tx.sv
+        old: "(two ? 1 : 0)"
+        new: "(two ? 0 : 0)"
+  - name: struct, data bit 6 dropped from 7-bit frames
+    edits:
+      - file: rtl/lib/io/uart/uart_tx/struct/uart_tx.sv
+        old: ".in1(w[3]), .in2(w[2])"
+        new: ".in1(w[3]), .in2(w[3])"
+  - name: struct, busy ends a bit early (the last stop bit cut)
+    edits:
+      - file: rtl/lib/io/uart/uart_tx/struct/uart_tx.sv
+        old: ".in2(4'd1), .eq(left_one)"
+        new: ".in2(4'd2), .eq(left_one)"

@@ -23,6 +23,25 @@ bus:
       what: "AXI (AMBA AXI4 and AXI5) encodings, for the adapters between AXI and the library's channels"
       path: rtl/lib/bus/axi/axi_pkg.sv
       kb: [rtl/lib/block/atomic/design]
+io:
+  uart:
+    UartPkg:
+      kind: package
+      what: "UART: the frame format and the bit timing shared by the serial engine (UartTx, UartRx) and the devices built on it (the register front ends)"
+      path: rtl/lib/io/uart/uart_pkg.sv
+      kb: [rtl/lib/io/uart/design]
+    UartRx:
+      what: "UART receiver: receives asynchronous serial frames on rx, a byte a frame"
+      versions: [behave, struct]
+      path: rtl/lib/io/uart/uart_rx
+      test: test/io/uart/uart_rx
+      kb: [rtl/lib/io/uart/design]
+    UartTx:
+      what: "UART transmitter: sends each byte it takes as an asynchronous serial frame on tx"
+      versions: [behave, struct]
+      path: rtl/lib/io/uart/uart_tx
+      test: test/io/uart/uart_tx
+      kb: [rtl/lib/io/uart/design]
 macro:
   clog2.svh:
     kind: macros
