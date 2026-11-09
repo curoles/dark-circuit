@@ -1,0 +1,56 @@
+type: decision
+title: UartSifive's register front end, UartSifiveRegs, and its interrupts, UartWatermark
+date: 2026-11-08
+question: >
+  The UART's first register front end has SiFive's map (the user's choice, kb
+  rtl/lib/io/uart/design). What is in it and what is outside, how do txdata and rxdata reach
+  the FIFOs, and where do the interrupt conditions come from?
+decision: >
+  UartSifivePkg holds the map (offsets, field bits, 8-entry FIFOs, a 4 KiB window).
+  UartSifiveRegs is wiring only, one file for both libraries (as Timer): RegPortTarget
+  (hold 0), a Decoder of the word address (the seven registers are the words 0 to 6, a static
+  assertion keeps the map in that shape; word 7 and everything above 0x1c reads 0), StrbRegs
+  for the fields (txen and nstop, txcnt, rxen, rxcnt, ie, div; each register's fields in their
+  own bytes, so a byte write sets only them), a MuxOneHot for reads. The FIFOs stay outside:
+  a write of txdata's byte 0 is tx_push with tx_data, also when the FIFO is full (the FIFO
+  drops it, SiFive's rule: software reads full first); a read of rxdata is rx_pop in the
+  clock it is taken (RegPortTarget's once per read), its answer the byte then, 0 when empty.
+  div resets to a parameter DIV_RST (the platform's boot rate), the rest to 0. ip is an input,
+  from UartWatermark: txwm = tx_count < txcnt, rxwm = rx_count > rxcnt (SiFive's conditions),
+  irq = any of ip & ie, combinational from the FIFOs' counters and the registers (CmpGe, Inv,
+  And2, OrReduce; gates only, no flop).
+why: >
+  The front end is the only SiFive-specific part: a 16550 front end is another map over the
+  same engine, FIFOs and TickGen. Pushes and pops as one-clock pulses fit the library's Fifo
+  as it is (it ignores a write when full and a read when empty, first-word fall-through), so
+  the regs need no FIFO state. The watermark as its own part keeps the conditions testable
+  exhaustively and out of the map. An irq without a flop drops in the clock after the push or
+  pop that ends the condition, before the answer of the read that popped: no read-back rule
+  for software, unlike the Timer's registered compare.
+rejected:
+  - choice: The FIFOs inside the register module
+    why_not: A register module with logic of its own (the user's rule for register
+      interfaces); the top wires FIFOs, engine and regs.
+  - choice: A CmpEq per register (as Timer)
+    why_not: The seven registers are consecutive words from 0; one Decoder is less logic, and
+      the static assertion says when it would stop being right.
+  - choice: A registered irq
+    why_not: Its inputs are flops already, and it would bring back a one-clock race with the
+      PLIC's completion.
+relies_on:
+  - rtl/lib/io/uart/design
+  - rtl/lib/block/reg_port_target/design
+  - rtl/lib/block/strb_reg/design
+evidence: >
+  2026-11-08: io_uart_sifive_regs_{behave,struct} pass on Verilator 5.052 and Icarus 13
+  (the testbench is the requester and the FIFOs, random full, empty, byte and ip every clock;
+  a model of the fields byte by byte; 6000 clocks on Verilator, 1500 on Icarus; every case
+  counted: each register read and written, a push while full, pops while empty and with a
+  byte, a partial write of a control register, reserved addresses including an alias at
+  0x800). io_uart_watermark passes exhaustively (65536 inputs). Mutants (kb
+  test/io/uart/uart_sifive/uart_sifive_regs/mutants, test/io/uart/uart_watermark/mutants):
+  6 of 6 caught by the model on both simulators.
+code:
+  - rtl/lib/io/uart/uart_sifive/uart_sifive_pkg.sv
+  - rtl/lib/io/uart/uart_sifive/uart_sifive_regs.sv#u_decoder_word
+  - rtl/lib/io/uart/uart_watermark.sv#u_cmp_ge_tx

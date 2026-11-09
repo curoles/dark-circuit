@@ -1,3 +1,4 @@
 -F uart/uart.flist
 -F uart/uart_tx/struct/uart_tx.flist
 -F uart/uart_rx/struct/uart_rx.flist
+-F uart/uart_sifive/uart_sifive.flist

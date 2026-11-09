@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the UartSifiveRegs test (behave and struct libraries)
+date: 2026-11-08
+tests: [io_uart_sifive_regs_behave, io_uart_sifive_regs_struct]
+mutants:
+  - name: a write of txdata pushes without its byte 0
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive_regs.sv
+        old: ".in2(acc_wstrb[0]), .out(tx_push)"
+        new: ".in2(1'b1), .out(tx_push)"
+    expect: model
+  - name: rxdata shows the stale byte when empty
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive_regs.sv
+        old: ".in(rx_empty), .out(rx_empty_n)"
+        new: ".in(1'b0), .out(rx_empty_n)"
+    expect: model
+  - name: the top address bit ignored (the registers alias at 0x800)
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive_regs.sv
+        old: ".in(acc_addr[ADDR_WIDTH-1:5])"
+        new: ".in({1'b0, acc_addr[ADDR_WIDTH-2:5]})"
+    expect: model
+  - name: ip's bits swapped in the read
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive_regs.sv
+        old: "{{(DATA_WIDTH - 2){1'b0}}, ip};"
+        new: "{{(DATA_WIDTH - 2){1'b0}}, ip[0], ip[1]};"
+    expect: model

@@ -42,6 +42,22 @@ io:
       path: rtl/lib/io/uart/uart_tx
       test: test/io/uart/uart_tx
       kb: [rtl/lib/io/uart/design]
+    UartWatermark:
+      what: "UART watermarks: the interrupt conditions of a UART's FIFOs from their fill levels; made of gates, wiring only"
+      path: rtl/lib/io/uart/uart_watermark.sv
+      test: test/io/uart/uart_watermark
+      kb: [rtl/lib/io/uart/uart_sifive/design]
+    uart_sifive:
+      UartSifivePkg:
+        kind: package
+        what: "The register map of UartSifive: SiFive's UART (FE310, the Freedom platforms), so that software which knows it (drivers, the SiFive BSPs) finds every register where it expects it"
+        path: rtl/lib/io/uart/uart_sifive/uart_sifive_pkg.sv
+        kb: [rtl/lib/io/uart/uart_sifive/design]
+      UartSifiveRegs:
+        what: "UartSifive's registers: SiFive's UART register map (UartSifivePkg) behind the register port, wiring only"
+        path: rtl/lib/io/uart/uart_sifive/uart_sifive_regs.sv
+        test: test/io/uart/uart_sifive/uart_sifive_regs
+        kb: [rtl/lib/io/uart/uart_sifive/design]
 macro:
   clog2.svh:
     kind: macros

@@ -1,0 +1,1 @@
+add_subdirectory(uart_sifive_regs)

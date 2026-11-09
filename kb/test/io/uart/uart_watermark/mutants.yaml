@@ -1,0 +1,17 @@
+type: mutants
+title: Mutants of the UartWatermark test
+date: 2026-11-08
+tests: [io_uart_watermark]
+mutants:
+  - name: txwm the wrong way round (more than the level, not fewer)
+    edits:
+      - file: rtl/lib/io/uart/uart_watermark.sv
+        old: ".in1(tx_count), .in2(tx_at)"
+        new: ".in1(tx_at), .in2(tx_count)"
+    expect: model
+  - name: the enables swapped
+    edits:
+      - file: rtl/lib/io/uart/uart_watermark.sv
+        old: ".in1(ip), .in2(ie)"
+        new: ".in1(ip), .in2({ie[0], ie[1]})"
+    expect: model
