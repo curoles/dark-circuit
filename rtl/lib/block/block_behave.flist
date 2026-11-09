@@ -4,6 +4,7 @@
 -F mux_one_hot/behave/mux_one_hot.flist
 -F addr_decode/behave/addr_decode.flist
 -F req_demux/behave/req_demux.flist
+-F req_mux/behave/req_mux.flist
 -F priority_encoder/behave/priority_encoder.flist
 -F shift_reg/behave/shift_reg.flist
 -F delay_line/behave/delay_line.flist
@@ -60,6 +61,7 @@
 -F dma/dma_mover/behave/dma_mover.flist
 -F dma/dma_channel/behave/dma_channel.flist
 -F dma/dma_engine/dma_engine.flist
+-F dma/dma_sifive/dma_sifive.flist
 -F plic/plic_gateway/behave/plic_gateway.flist
 -F plic/plic_target/behave/plic_target.flist
 -F plic/plic_claim/behave/plic_claim.flist

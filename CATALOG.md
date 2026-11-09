@@ -338,6 +338,12 @@ block:
     path: rtl/lib/block/req_demux
     test: test/block/req_demux
     kb: [rtl/lib/block/req_demux/design]
+  ReqMux:
+    what: "Request multiplexer: N_REQ request channels to one target, round-robin, the answers back to their requesters in order"
+    versions: [behave, struct]
+    path: rtl/lib/block/req_mux
+    test: test/block/req_mux
+    kb: [rtl/lib/block/req_mux/design]
   ReturnAddressStack:
     what: "Return-address stack: predicts where a return goes"
     versions: [behave, struct]
@@ -528,6 +534,28 @@ block:
       path: rtl/lib/block/dma/dma_mover
       test: test/block/dma/dma_mover
       kb: [rtl/lib/block/dma/design]
+    DmaSifive:
+      what: "DmaSifive: a DMA with SiFive's PDMA register map (DmaSifivePkg) behind the register port and N_CHANNELS channels on one memory channel, the device top, wiring only"
+      path: rtl/lib/block/dma/dma_sifive
+      test: test/block/dma/dma_sifive
+      kb: [rtl/lib/block/dma/design]
+    dma_sifive:
+      DmaSifiveChannelRegs:
+        what: "The registers of one DmaSifive channel (DmaSifivePkg) and their control of a DMA channel (DmaEngine's start and stop), wiring only"
+        path: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        kb: [rtl/lib/block/dma/design]
+      DmaSifivePair:
+        what: "A 64-bit register of DmaSifive as two words (the low one first) that keeps WIDTH bits, written byte by byte (StrbReg), cleared to 0 by clear; lo and hi read the two words, the bits above WIDTH 0"
+        path: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        kb: [rtl/lib/block/dma/design]
+      DmaSifivePkg:
+        kind: package
+        what: "The register map of DmaSifive: SiFive's platform DMA (PDMA, FU540-C000 manual chapter 12; Linux drivers/dma/sf-pdma), so that software which knows it finds every register where it expects it"
+        path: rtl/lib/block/dma/dma_sifive/dma_sifive_pkg.sv
+        kb: [rtl/lib/block/dma/design]
+      DmaSifiveRegs:
+        what: "DmaSifive's registers: SiFive's PDMA register map (DmaSifivePkg) for N_CHANNELS channels behind the register port, wiring only"
+        path: rtl/lib/block/dma/dma_sifive/dma_sifive_regs.sv
   fifo:
     FifoT:
       what: "FIFO of type T: Fifo with DATA_WIDTH = $bits(T); entries are values of T (a struct, an enum, a vector typedef)"

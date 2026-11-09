@@ -4,6 +4,7 @@
 -F mux_one_hot/struct/mux_one_hot.flist
 -F addr_decode/struct/addr_decode.flist
 -F req_demux/struct/req_demux.flist
+-F req_mux/struct/req_mux.flist
 -F priority_encoder/struct/priority_encoder.flist
 -F shift_reg/struct/shift_reg.flist
 -F delay_line/struct/delay_line.flist
@@ -59,6 +60,7 @@
 -F dma/dma_mover/struct/dma_mover.flist
 -F dma/dma_channel/struct/dma_channel.flist
 -F dma/dma_engine/dma_engine.flist
+-F dma/dma_sifive/dma_sifive.flist
 -F plic/plic_gateway/struct/plic_gateway.flist
 -F plic/plic_target/struct/plic_target.flist
 -F plic/plic_claim/struct/plic_claim.flist

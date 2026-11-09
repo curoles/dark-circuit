@@ -1,0 +1,4 @@
+dma_sifive_pkg.sv
+dma_sifive_channel_regs.sv
+dma_sifive_regs.sv
+dma_sifive.sv

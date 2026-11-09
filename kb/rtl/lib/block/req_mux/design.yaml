@@ -1,0 +1,50 @@
+type: decision
+title: ReqMux merges N request channels into one target, round-robin, answers routed in order
+date: 2026-11-09
+question: >
+  Mig3's memory gets a second agent, the DMA, beside the core: both must reach the RAM
+  through AtomicUnit (the point of coherence, kb rtl/lib/block/atomic/design). What merges
+  request channels of the library's kind into one, and brings each answer back to its
+  requester, for any number of requesters?
+decision: >
+  ReqMux #(N_REQ, REQ_WIDTH, RSP_WIDTH, PENDING_WIDTH), the inverse of ReqDemux: the
+  requesters compete round-robin (RoundRobinArbiter, advanced when the target takes the
+  winner); the winner's request (we and a vector of the other fields, packed by the caller)
+  goes to the target with no buffer, so a request taken by ReqMux is taken by the target in
+  the same clock; while the target does not take an offer the arbiter sees only that
+  requester (a flop keeps the grant), so the target's offer stays the same. A FIFO of
+  1 << PENDING_WIDTH one-hot requester numbers (the library's Fifo) remembers the owner of
+  each read taken; the target's answer (in order) goes to the oldest: its rsp_valid, the
+  data to all. A read waits while the FIFO is full. req_ready follows the requests and the
+  target's ready without a flop (valid never depends on ready). Behave and struct versions.
+why: >
+  One target that answers in order needs no waiting at switches (ReqDemux needs it because
+  two targets' answers could pass each other): the order of the answers is the order of the
+  reads, so a FIFO of owners routes them. No buffer keeps memory order simple for software:
+  a store the core sent is in the RAM before a later MMIO write (a DMA's run) reaches its
+  device, and a DMA's write is taken before it reports done. The lock is DmaEngine's rule
+  for the same reason: an offer not taken stays the same.
+rejected:
+  - choice: InsnDataCacheArbiter for the DMA and the core
+    why_not: Cache-specific (two requesters, line format, the atop of one side) and it
+      buffers the data side's requests (a flow-through buffer).
+  - choice: A buffer (skid or flow-through) on the target side
+    why_not: Not needed for Mig3's timing; it would let a request be taken before the target
+      has it, and the order across paths (a store, then an MMIO write) would need care.
+relies_on:
+  - rtl/lib/block/req_demux/design
+  - rtl/lib/block/dma/design
+evidence: >
+  2026-11-09: behave and struct versions pass test/block/req_mux on Verilator 5.052 and
+  Icarus 13 (the testbench is every requester and the target: random reads and writes with
+  tokens, offers held; the target ready in 60 % of the clocks, answering 1 to 6 clocks late,
+  one read in eight 10 to 19; every clock a waiting offer must stay the same, a write at the
+  target must be its requester's next, an answer must go to exactly the requester of the
+  oldest read, with its token; 3 requesters with 2 reads waiting at most, 2 with 4, 1 with
+  2; every case counted: two requesters offering, an offer waiting, a read waiting for a
+  full FIFO, reads and writes of each requester); 4 of 4 mutants caught on both simulators
+  (kb test/block/req_mux/mutants). Not checked: the fairness of the order (a ReqMux that
+  never rotates would still finish every requester's requests in this test).
+code:
+  - rtl/lib/block/req_mux/behave/req_mux.sv#grant
+  - rtl/lib/block/req_mux/struct/req_mux.sv#u_fifo_owner

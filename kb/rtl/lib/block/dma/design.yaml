@@ -70,10 +70,26 @@ evidence: >
   of 6 mutants caught on both simulators (kb test/block/dma/dma_engine/mutants; the lost
   stop only by the cover check, no stop ever seen). The first run on Icarus found the
   behave Decoder giving X with en 0 and an unknown input (the mover's done_id before its
-  first command): it now gives 0, as the struct version's gates do. The regs and the top: to
-  come.
+  first command): it now gives 0, as the struct version's gates do. DmaSifivePkg,
+  DmaSifiveChannelRegs, DmaSifiveRegs and DmaSifive, 2026-11-09, at
+  rtl/lib/block/dma/dma_sifive (the user chose the place: a front end's directory under
+  dma/, a later DesignWare-like one beside it). Two more choices made in writing them:
+  setting claim clears the Next registers, done and error only on its rising edge (Linux
+  writes claim again with every run, after the Next registers); a run written while the
+  channel still finishes a stopped transfer waits (armed) and starts once it is idle.
+  test/block/dma/dma_sifive passes with both libraries on Verilator and Icarus (software on
+  the register port, the memory ready in 70 % of the clocks; claim clears Next, wsize and
+  rsize read the beat, high words 0 for 13-bit addresses and 16-bit counts; every channel
+  copying at once with done interrupts, Control, Exec registers and the cleared interrupt
+  checked; a stop: claim kept while run, ExecBytes above 0 and the bytes before it copied;
+  repeat restarting with run kept until lowered; 0 bytes; the error interrupt written by
+  software; the memory against a reference; 4 channels with beats of 64 bits, 2 with 32);
+  6 of 6 mutants caught on both simulators (kb test/block/dma/dma_sifive/mutants). Not
+  checked yet: real software (Linux's sf-pdma, a C driver) on a core: that comes with Mig3.
 code:
   - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv#bytes_of
   - rtl/lib/block/dma/dma_mover/struct/dma_mover.sv#u_incr_room
   - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#stopping
   - rtl/lib/block/dma/dma_engine/dma_engine.sv#u_mux2_arb_req
+  - rtl/lib/block/dma/dma_sifive/dma_sifive_pkg.sv
+  - rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv#claim_set

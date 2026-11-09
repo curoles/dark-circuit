@@ -1,0 +1,41 @@
+type: mutants
+title: Mutants of the DmaSifive test (behave and struct libraries)
+date: 2026-11-09
+tests: [block_dma_sifive_behave, block_dma_sifive_struct]
+mutants:
+  - name: every write of claim clears the Next registers (not only 0 to 1)
+    edits:
+      - file: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        old: ".in3(claim_n), .out(claim_set)"
+        new: ".in3(claim_n | 1'b1), .out(claim_set)"
+    expect: model
+  - name: claim cleared while run is 1
+    edits:
+      - file: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        old: ".in1(claim), .in2(run), .out(claim_keep)"
+        new: ".in1(claim), .in2(run & 1'b0), .out(claim_keep)"
+    expect: model
+  - name: repeat starts no new transfer
+    edits:
+      - file: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        old: ".in1(done_ev), .in2(cfg[0]), .in3(run), .out(restart)"
+        new: ".in1(done_ev), .in2(cfg[0] & 1'b0), .in3(run), .out(restart)"
+    expect: model
+  - name: ExecDestination's bit 0 flipped
+    edits:
+      - file: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        old: "assign dst64     = 64'(cur_dst);"
+        new: "assign dst64     = 64'(cur_dst) ^ 64'(1);"
+    expect: model
+  - name: offset bit 8 ignored (the Exec registers read as the Next ones)
+    edits:
+      - file: rtl/lib/block/dma/dma_sifive/dma_sifive_regs.sv
+        old: ".in({acc_addr[8], acc_addr[4:2]})"
+        new: ".in({1'b0, acc_addr[4:2]})"
+    expect: model
+  - name: writing run 0 does not stop the channel
+    edits:
+      - file: rtl/lib/block/dma/dma_sifive/dma_sifive_channel_regs.sv
+        old: ".in1(run_clr), .in2(busy), .out(stop)"
+        new: ".in1(run_clr), .in2(busy & 1'b0), .out(stop)"
+    expect: model

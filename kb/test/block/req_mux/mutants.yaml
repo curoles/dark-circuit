@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the ReqMux test (behave and struct versions)
+date: 2026-11-09
+tests: [block_req_mux_behave, block_req_mux_struct]
+mutants:
+  - name: behave, no lock of the grant while an offer waits
+    tests: [block_req_mux_behave]
+    edits:
+      - file: rtl/lib/block/req_mux/behave/req_mux.sv
+        old: "assign grant      = lock ? lock_grant : pick(req_valid, last);"
+        new: "assign grant      = (lock & 1'b0) ? lock_grant : pick(req_valid, last);"
+  - name: behave, a read taken while the owners' FIFO is full
+    tests: [block_req_mux_behave]
+    edits:
+      - file: rtl/lib/block/req_mux/behave/req_mux.sv
+        old: "!(full && win_read);"
+        new: "!(full && win_read && 1'b0);"
+  - name: struct, the wrong requester's number in the FIFO
+    tests: [block_req_mux_struct]
+    edits:
+      - file: rtl/lib/block/req_mux/struct/req_mux.sv
+        old: ".write(read_taken), .data_in(grant),"
+        new: ".write(read_taken), .data_in(grant ^ N'(1)),"
+  - name: struct, writes counted as reads waiting
+    tests: [block_req_mux_struct]
+    edits:
+      - file: rtl/lib/block/req_mux/struct/req_mux.sv
+        old: ".in1(tgt_take), .in2(win_read), .out(read_taken)"
+        new: ".in1(tgt_take), .in2(1'b1), .out(read_taken)"

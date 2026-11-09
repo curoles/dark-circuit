@@ -7,19 +7,18 @@ An atomic memory operation reads a word, changes it and writes it back, and noth
 touch the word in between. RISC-V's `amoadd.w rd, rs2, (rs1)` adds rs2 to the word at rs1 and
 returns the old value in rd; counters, locks and reference counts are built on such
 instructions. The obvious place to do the read-modify-write is the core: load, add, store,
-with the pipeline held so nothing comes between. This place seems obvious
-because we used to think about core's pipeline as the place where instructions
-are executed, thus we project our mental picture on a design we make, mental
-"representation" defines design choices.
+with the pipeline held so nothing comes between. This place seems obvious because we are
+used to thinking of the core's pipeline as the place where instructions are executed. We
+project that picture onto the design we make, and the picture, not the problem, makes the
+choice. An AMO is an instruction, but what it changes is memory, and memory is shared.
 
-I did it elsewhere. My core sends an AMO as
-a load with a tag that says which operation; a block next to the memory does the read, the
-operation and the write; the caches on the way step aside. The core came out simpler, not
-more complex: no new state in the pipeline, 0.4 % more area, the clock unchanged. This note
-explains why, and how the pieces fit.
+I did it elsewhere. My core sends an AMO as a load with a tag that says which operation; a
+block next to the memory does the read, the operation and the write; the caches on the way
+step aside. The core came out simpler, not more complex: no new state in the pipeline,
+0.4 % more area, the clock unchanged. This note explains why, and how the pieces fit.
 
-The core is a 5-stage in-order RISC-V core (RV32IM with Zbb, now the A extension) with
-an instruction cache and a write-through data cache in front of one memory.
+The core is Mig3, my 5-stage in-order RISC-V core (RV32IM with Zbb, now the A extension),
+with an instruction cache and a write-through data cache in front of one memory.
 
 ## 1. Atomic with respect to whom?
 
@@ -37,9 +36,10 @@ The DMA's write is lost: X ends at 6, as if the DMA had never written. Done atom
 would end at 100 (the DMA's write after the AMO) or 101 (before it). The core cannot prevent
 this by holding its own pipeline; the other writer does not see the core's pipeline at all.
 
-My Mig3 CPU has one core and no DMA today. But the chips this library is heading for have both: a
-next core with an L2 cache, and a chip for AI work with several cores and DMA engines. I
-wanted atomics that stay right when those come, without redoing the core.
+Mig3 has one core and no DMA yet (the library has a DMA block now; Mig3 does not use it
+yet). But the chips this library is heading for have both: a next core with an L2 cache,
+and a chip for AI work with several cores and DMA engines. I wanted atomics that stay right
+when those come, without redoing the core.
 
 ## 2. Four places to do it
 
