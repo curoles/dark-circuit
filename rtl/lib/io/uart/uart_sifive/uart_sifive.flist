@@ -1,2 +1,3 @@
 uart_sifive_pkg.sv
 uart_sifive_regs.sv
+uart_sifive.sv

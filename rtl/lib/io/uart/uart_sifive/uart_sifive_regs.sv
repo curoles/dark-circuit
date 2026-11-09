@@ -6,9 +6,10 @@
  * FIFO drops it when full, as SiFive's: software reads full first, or loses the byte); a read
  * gives full. rxdata: a read pops the receive FIFO (rx_pop, in the clock the read is taken:
  * once per read, RegPortTarget's rule) and gives the byte popped and empty; the data is 0 when
- * empty. txctrl, rxctrl, ie, div: StrbRegs, written byte by byte; their fields are outputs.
- * ip: an input (UartWatermark), read only. A reserved address (0x1c and above) reads 0, a write
- * there is ignored; reserved bits read 0. div resets to DIV_RST (SiFive leaves the value to the
+ * empty. txctrl, rxctrl, ie, div: StrbRegs, written byte by byte; their fields are outputs,
+ * and div_wr says div is written (the top restarts the tick with the new value). ip: an input
+ * (UartWatermark), read only. A reserved address (0x1c and above) reads 0, a write there is
+ * ignored; reserved bits read 0. div resets to DIV_RST (SiFive leaves the value to the
  * platform: its boot rate), every other field to 0 (nothing sent or received, no interrupt).
  *
  *              register port (req_*, rsp_*)
@@ -67,6 +68,7 @@ module UartSifiveRegs import UartSifivePkg::*; #(
     output wire [CNT_BITS-1:0]   rxcnt,
     output wire [1:0]            ie,        // [1] rxwm, [0] txwm
     output wire [DIV_BITS-1:0]   div,
+    output wire                  div_wr,    // div is written now (the new value next clock)
     input  wire [1:0]            ip         // [1] rxwm, [0] txwm
 );
     localparam CB = CNT_LSB / 8;                    // the byte of txcnt and rxcnt
@@ -137,6 +139,7 @@ module UartSifiveRegs import UartSifivePkg::*; #(
     StrbReg #(.WIDTH(DIV_BITS), .RST_VAL(DIV_RST)) u_strb_reg_div(
         .clk, .rst_n, .we(wr[DIV / 4]), .wstrb(acc_wstrb[DIV_BITS / 8 - 1:0]),
         .wdata(acc_wdata[DIV_BITS-1:0]), .q(div));
+    assign div_wr = wr[DIV / 4];
 
     // Reads: every register by its select; a reserved address selects none (0).
     Inv  #(1) u_inv_rx_empty(.in(rx_empty), .out(rx_empty_n));

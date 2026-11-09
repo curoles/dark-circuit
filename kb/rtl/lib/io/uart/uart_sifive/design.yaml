@@ -15,7 +15,8 @@ decision: >
   a write of txdata's byte 0 is tx_push with tx_data, also when the FIFO is full (the FIFO
   drops it, SiFive's rule: software reads full first); a read of rxdata is rx_pop in the
   clock it is taken (RegPortTarget's once per read), its answer the byte then, 0 when empty.
-  div resets to a parameter DIV_RST (the platform's boot rate), the rest to 0. ip is an input,
+  div resets to a parameter DIV_RST (the platform's boot rate), the rest to 0; div_wr says div
+  is written (added with the top, kb rtl/lib/io/uart/uart_sifive/top). ip is an input,
   from UartWatermark: txwm = tx_count < txcnt, rxwm = rx_count > rxcnt (SiFive's conditions),
   irq = any of ip & ie, combinational from the FIFOs' counters and the registers (CmpGe, Inv,
   And2, OrReduce; gates only, no flop).

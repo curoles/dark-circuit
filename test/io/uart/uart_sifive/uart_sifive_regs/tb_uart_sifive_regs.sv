@@ -6,7 +6,8 @@
  * register with random strobes (often all), and of reserved addresses (0x1c, above 0x1c, a
  * register's offset with a high address bit set). In every clock: the fields, tx_push with
  * tx_data (a write of txdata's byte 0, in the clock it is taken, also when the FIFO is full),
- * rx_pop (a read of rxdata, in the clock it is taken), rsp_valid and rsp_rdata (a read answers
+ * rx_pop (a read of rxdata, in the clock it is taken), div_wr (a write of div, any bytes, in
+ * the clock it is taken), rsp_valid and rsp_rdata (a read answers
  * one clock later with the value of the clock it was taken: full, empty and the byte, 0 when
  * empty, as they were then; a reserved address 0). After reset div is DIV_RST, the rest 0.
  * 6000 clocks on Verilator, 1500 on Icarus. Every case must happen (checks named cover): a
@@ -51,6 +52,7 @@ module TbUartSifiveRegs;
     wire  [2:0]  txcnt, rxcnt;
     wire  [1:0]  ie;
     wire  [15:0] div;
+    wire         div_wr;
     logic [1:0]  ip;
 
     logic        m_txen, m_nstop, m_rxen;   // the model
@@ -69,7 +71,7 @@ module TbUartSifiveRegs;
     UartSifiveRegs #(.DIV_RST(DIV_RST)) u_uart_sifive_regs(
         .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_addr, .req_wdata, .req_wstrb,
         .rsp_valid, .rsp_rdata, .tx_push, .tx_data, .tx_full, .rx_pop, .rx_data, .rx_empty,
-        .txen, .nstop, .txcnt, .rxen, .rxcnt, .ie, .div, .ip);
+        .txen, .nstop, .txcnt, .rxen, .rxcnt, .ie, .div, .div_wr, .ip);
 
     // The register at a byte address: 0 .. N_REGS-1 (offset / 4), or -1 for a reserved one
     // (the byte in the word does not matter).
@@ -174,10 +176,11 @@ module TbUartSifiveRegs;
                     txen, nstop, txcnt, rxen, rxcnt, ie, div,
                     m_txen, m_nstop, m_txcnt, m_rxen, m_rxcnt, m_ie, m_div))
             if (tx_push !== push || (push && tx_data !== req_wdata[7:0]) || rx_pop !== pop ||
+                div_wr !== (taken && req_we && r == DIV / 4) ||
                 rsp_valid !== m_rsp || (m_rsp && rsp_rdata !== m_rdata))
                 `DC_TEST_FAIL(model, $sformatf(
-                    "push %b %h pop %b rsp %b %h, expected push %b %h pop %b rsp %b %h",
-                    tx_push, tx_data, rx_pop, rsp_valid, rsp_rdata,
+                    "push %b %h pop %b div_wr %b rsp %b %h, expected push %b %h pop %b rsp %b %h",
+                    tx_push, tx_data, rx_pop, div_wr, rsp_valid, rsp_rdata,
                     push, req_wdata[7:0], pop, m_rsp, m_rdata))
             // The edge: the model, from the values of this clock.
             m_rsp   = taken && !req_we;
