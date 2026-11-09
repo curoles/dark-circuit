@@ -6,20 +6,25 @@ blocks and the small RISC-V cores built from them.*
 Every device a program talks to (an interrupt controller, a timer, a UART) has registers. The
 program reads and writes them with ordinary loads and stores to the device's addresses, and
 the device has to take each request, find the register it names and, for a read, answer with
-its value. That handshake is the same in every device, and it is easy to get slightly wrong
+its value. Such registers often are called Control and Status Registers (CSR)
+and a memory region where they are accessed is usually refered to as Memory
+Mapped I/O (MMIO) region.
+
+Once memory access reaches a device using any kind of memory bus,
+the handshake is the same in every device, and it is easy to get slightly wrong
 in each one. In my library it is written once: a fixed set of signals, the *register port*,
 and a block of about twenty lines, `RegPortTarget`, that turns the port's handshake into
 accesses of exactly one clock. Behind it, a device is only its registers, a decoder of the
-address and a multiplexer for reads. Three devices use it now: a PLIC (the RISC-V platform
+address and a multiplexer for reads. For example, devices that use it: a PLIC (the RISC-V platform
 interrupt controller), a timer and a UART with SiFive's register map. This note explains the
 port, the three rules that make it work and what it leaves out on purpose.
 
-The CPU behind the requests is Mig3, a 5-stage in-order RISC-V core; its data port goes to
-memory or, by address, to the PLIC or the timer. The UART is next.
+The CPU behind the requests is custom 5-stage in-order RISC-V core; its data port goes to
+memory or, by address, to the PLIC or the timer or the UART.
 
 ## 1. The port
 
-The library does not assume a bus. The same device must work behind AXI, APB, TileLink or a
+The library does not (and should not) assume a bus. The same device must work behind AXI, APB, TileLink or a
 core's own data port, so the port is plain signals with two parameters, the address and data
 widths:
 
@@ -40,10 +45,15 @@ port reaches a device through an address decoder and a demultiplexer, with no co
 - **A request is taken when `req_valid` and `req_ready` are both 1.** An offer not taken
   stays the same until it is (the library's valid/ready rules).
 - **A read is answered exactly one clock after it is taken,** from a register, and the
-  answer has no ready: the requester always takes it.
+  answer has no ready signal corresponding to `rsp_valid`: the requester always takes it.
+  TODO: not sure how to read "exactly one clock after", not sooner or what? it
+  is answered when rsp_valid is 1, so confusing
 - **A write gets no answer.**
 - **There are no errors.** A read of an address with no register returns 0, a write there is
-  ignored.
+  ignored. TODO: perhaps when decoder does not find by address we should raise
+  err signal so external bus can raise bus error? not now, but we can mention it
+  as in plans or say that we delibertly do not do it because this mudule is to
+  be used in small CPUs only
 
 A bus connects through an adapter of its own. Write responses, error responses and other
 widths are the adapter's business, not the device's.
@@ -119,7 +129,7 @@ clock, and whoever builds the bus inherits it.
 RegPortTarget registers the answer, so the device's read path ends inside the device. The
 price is one clock on every read. The fixed latency pays for itself in another way: since
 every answer comes exactly one clock after its request, the answer needs no ready signal.
-The requester knows when it comes and must be able to take it; my caches and Mig3's
+The requester knows when it comes and must be able to take it; my caches and core's
 load/store unit always can.
 
 ## 5. Rule 3: hold comes from flops
@@ -142,6 +152,12 @@ ready that depends on valid in one and a valid that depends on ready in the othe
 combinational loop. With ready from flops it cannot happen, whatever is connected. It costs
 the device the ability to stall on something it computes in the same clock; so far no device
 has needed that.
+
+TODO: the problem is that reader saw one set of input/output signals, so they do
+not quite know which is interface to bus and which to device
+
+TODO: it is not really clear what is `hold` and what its purpose, hold after a
+read when side effects take place? or/adn after read?
 
 ## 6. Three devices on it
 
@@ -199,6 +215,9 @@ stops it.
   register stage on the request side can come as a parameter; it has not been needed yet.
 - **One access width.** A byte store is a full-width access with one strobe; the device's
   registers take the bytes the strobes say.
+
+TODO: at this point reader is curious if RegPortTarget even capable of working
+with a bus like AXI/APB or just useless toy.
 
 ## 9. How it compares
 

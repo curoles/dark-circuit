@@ -24,6 +24,7 @@ module TbMig3Mem;
     retire_t       retire;
     pipe_trace_t   pipe_trace;
     dbg_rsp_t      dbg_rsp;
+    logic          uart_tx;
     /* verilator lint_on UNUSEDSIGNAL */
 
     word_t         word [NR];   // word i is at byte address 4 * i
@@ -36,9 +37,8 @@ module TbMig3Mem;
 
     assign dbg_req = '0;
 
-    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached(1'b0), .irq_src('0), .halt, .retire, .pipe_trace,
-                       .dbg_req,
-                       .dbg_rsp);
+    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached(1'b0), .irq_src('0), .uart_tx, .uart_rx(1'b1),
+                       .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
 
     // Word at byte address a of the memory, little-endian.
     function automatic word_t mem_word(input logic [AW-1:0] a);

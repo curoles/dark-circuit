@@ -35,3 +35,10 @@
 #define MIG3_TIMER_SOURCE 2
 #define MIG3_TIMER_MTIMECMP    (MIG3_TIMER_BASE + 0x4000)
 #define MIG3_TIMER_MTIME       (MIG3_TIMER_BASE + 0xbff8)
+
+/* UART (SiFive's: txdata, rxdata, txctrl, rxctrl, ie, ip, div; sw/riscv/drivers/uart.h), its
+ * interrupt PLIC source MIG3_UART_SOURCE. div is MIG3_UART_DIV_RST after reset: the boot
+ * rate, f / (MIG3_UART_DIV_RST + 1), the rate of the testbench's line. */
+#define MIG3_UART_BASE 0x0c410000
+#define MIG3_UART_SOURCE 3
+#define MIG3_UART_DIV_RST 15

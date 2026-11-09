@@ -1,4 +1,4 @@
-/* Mig3 RISC-V CPU for simulation: Mig3Core with its memory, its PLIC and its Timer.
+/* Mig3 RISC-V CPU for simulation: Mig3Core with its memory, its PLIC, its Timer and its UART.
  *
  * load() puts the hex image (objcopy -O verilog, see sw/riscv/mig3.ld) into the memory, one
  * SimLatencyRAM behind the memory port of the core (code and data: the caches inside the
@@ -8,14 +8,17 @@
  * bytes; the core address bits above them are ignored, so addresses wrap around.
  * The PLIC (rtl/lib/block/plic) is in the I/O region at CFG.io_base + CFG.plic.offset, a
  * region of 1 << CFG.plic.addr_width bytes, the Timer (rtl/lib/block/timer: mtime and the
- * hart's mtimecmp, counting every clock) at CFG.io_base + CFG.timer.offset, 64 KiB:
- * AddrDecode sends a request there to them, any other to the memory (ReqDemux, the answers
- * in order). The core's loads and stores of the I/O region come as asked, a word at most
- * (the D-cache's no-cache requests), in the line format of the memory port: a device's
+ * hart's mtimecmp, counting every clock) at CFG.io_base + CFG.timer.offset, 64 KiB, the
+ * UART (rtl/lib/io/uart/uart_sifive: SiFive's map, div CFG.uart.div_rst after reset, its pins
+ * uart_tx and uart_rx Mig3Cpu's) at CFG.io_base + CFG.uart.offset, 4 KiB: AddrDecode sends a
+ * request there to them, any other to the memory (ReqDemux, the answers in order). The
+ * core's loads and stores of the I/O region come as asked, a word at most (the D-cache's
+ * no-cache requests), in the line format of the memory port: a device's
  * register port takes the word of the line the address names, and its answer goes into
  * every word of the line. The PLIC's sources are irq_src (the devices: the testbench) but
  * source CFG.timer.source, which is the Timer's interrupt (a peripheral timer: kb
- * rtl/design/mig3/timer); its context 0 is the hart's machine mode: eip[0] is the core's
+ * rtl/design/mig3/timer), and CFG.uart.source, the UART's (kb rtl/design/mig3/uart); its
+ * context 0 is the hart's machine mode: eip[0] is the core's
  * meip (kb rtl/design/mig3/plic).
  * Atomics (AMOs) are done in front of the memory, where every access to it meets
  * (AtomicUnit, kb rtl/lib/block/atomic/design): other requests pass, an AMO's word is
@@ -27,7 +30,9 @@
  *                                                        |    (miss)
  *            <--mem_rsp--------------------------------- +--> word of the line --> Plic
  *                                                        +--> word of the line --> Timer
- *            <--meip = eip[0] ------------------- Plic <-- irq_src, Timer's irq (source)
+ *                                                        +--> word of the line --> UartSifive
+ *            <--meip = eip[0] ------------------- Plic <-- irq_src, Timer's, UART's irq      |
+ *                                                                        uart_tx, uart_rx <--+
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -41,10 +46,13 @@ module Mig3Cpu import Mig3Pkg::*; #(
     input  wire                      clk,
     input  wire                      rst_n,     // synchronous reset, active low
     input  wire                      uncached,  // the core bypasses its caches, see Mig3Caches
-    // Interrupts of the devices: the PLIC's sources, but CFG.timer.source (the Timer's).
+    // Interrupts of the devices: the PLIC's sources, but CFG.timer.source and CFG.uart.source
+    // (the Timer's, the UART's).
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire [CFG.plic.sources:1] irq_src,
     /* verilator lint_on UNUSEDSIGNAL */
+    output wire                      uart_tx,   // the UART's pins
+    input  wire                      uart_rx,
     output wire                      halt,      // core halted at EBREAK, see Mig3Core
     output retire_t                  retire,    // for trace in testbench
     output pipe_trace_t              pipe_trace, // pipeline view for testbench
@@ -54,18 +62,24 @@ module Mig3Cpu import Mig3Pkg::*; #(
     localparam MEM_ADDR_WIDTH  = CFG.mem_addr_width;    // memory size: 1 << MEM_ADDR_WIDTH bytes
     localparam PLIC_ADDR_WIDTH = CFG.plic.addr_width;
     localparam TIMER_ADDR_WIDTH = TimerPkg::ADDR_BITS;
+    localparam UART_ADDR_WIDTH  = UartSifivePkg::ADDR_BITS;
 
     `DC_STATIC_ASSERT(a_plic_in_io, CFG.plic.offset % (1 << PLIC_ADDR_WIDTH) == 0 &&
                       CFG.plic.offset + (1 << PLIC_ADDR_WIDTH) <= (1 << CFG.io_addr_width))
     `DC_STATIC_ASSERT(a_timer_in_io, CFG.timer.offset % (1 << TIMER_ADDR_WIDTH) == 0 &&
                       CFG.timer.offset + (1 << TIMER_ADDR_WIDTH) <= (1 << CFG.io_addr_width)
                       && CFG.timer.source >= 1 && CFG.timer.source <= CFG.plic.sources)
+    `DC_STATIC_ASSERT(a_uart_in_io, CFG.uart.offset % (1 << UART_ADDR_WIDTH) == 0 &&
+                      CFG.uart.offset + (1 << UART_ADDR_WIDTH) <= (1 << CFG.io_addr_width)
+                      && CFG.uart.source >= 1 && CFG.uart.source <= CFG.plic.sources &&
+                      CFG.uart.source != CFG.timer.source)
 
     mem_rsp_t mem_rsp;
     mem_req_t mem_req;
     wire      meip;             // the PLIC's notification to the hart's machine mode
     wire      sel_plic;         // the request is for the PLIC
     wire      sel_timer;        // ... for the Timer
+    wire      sel_uart;         // ... for the UART
     wire      sel_mem;          // ... for the memory: no region of a device
     wire      mem_valid;        // the memory's request channel and answer
     wire      mem_ready;
@@ -95,29 +109,36 @@ module Mig3Cpu import Mig3Pkg::*; #(
     wire      timer_rsp_valid;
     word_t    timer_rdata;
     wire      timer_irq;        // mtime >= mtimecmp
-    wire [CFG.plic.sources:1] plic_src;     // irq_src, the Timer's irq at its source
+    wire      uart_valid;       // the UART's register port
+    wire      uart_ready;
+    wire      uart_rsp_valid;
+    word_t    uart_rdata;
+    wire      uart_irq;         // its watermarks
+    wire [CFG.plic.sources:1] plic_src;     // irq_src, the Timer's and the UART's irq at theirs
 
     Mig3Core #(.CFG(CFG)) u_mig3_core(
         .clk, .rst_n, .uncached, .meip, .mem_req, .mem_rsp, .halt, .retire, .pipe_trace, .dbg_req,
         .dbg_rsp);
 
     // @kb: rtl/design/mig3/plic
-    // Rule 0 the PLIC, rule 1 the Timer ({rule 1, rule 0}).
-    AddrDecode #(.ADDR_WIDTH(WIDTH), .N_RULES(2),
-                 .BASES({WIDTH'(CFG.io_base + CFG.timer.offset),
+    // Rule 0 the PLIC, rule 1 the Timer, rule 2 the UART ({rule 2, rule 1, rule 0}).
+    AddrDecode #(.ADDR_WIDTH(WIDTH), .N_RULES(3),
+                 .BASES({WIDTH'(CFG.io_base + CFG.uart.offset),
+                         WIDTH'(CFG.io_base + CFG.timer.offset),
                          WIDTH'(CFG.io_base + CFG.plic.offset)}),
-                 .WIDTHS({8'(TIMER_ADDR_WIDTH), 8'(PLIC_ADDR_WIDTH)})) u_addr_decode(
-        .addr(mem_req.addr), .sel({sel_timer, sel_plic}), .miss(sel_mem));
+                 .WIDTHS({8'(UART_ADDR_WIDTH), 8'(TIMER_ADDR_WIDTH), 8'(PLIC_ADDR_WIDTH)}))
+        u_addr_decode(.addr(mem_req.addr), .sel({sel_uart, sel_timer, sel_plic}), .miss(sel_mem));
 
-    ReqDemux #(.N_TARGETS(3), .RSP_WIDTH($bits(line_t))) u_req_demux(
+    ReqDemux #(.N_TARGETS(4), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
         .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_we(mem_req.we),
-        .req_sel({sel_timer, sel_plic, sel_mem}), .rsp_valid(mem_rsp.valid),
+        .req_sel({sel_uart, sel_timer, sel_plic, sel_mem}), .rsp_valid(mem_rsp.valid),
         .rsp_data(mem_rsp.data),
-        .tgt_req_valid({timer_valid, plic_valid, mem_valid}),
-        .tgt_req_ready({timer_ready, plic_ready, mem_ready}),
-        .tgt_rsp_valid({timer_rsp_valid, plic_rsp_valid, mem_rsp_valid}),
-        .tgt_rsp_data({{LINE_WORDS{timer_rdata}}, {LINE_WORDS{plic_rdata}}, mem_rsp_data}));
+        .tgt_req_valid({uart_valid, timer_valid, plic_valid, mem_valid}),
+        .tgt_req_ready({uart_ready, timer_ready, plic_ready, mem_ready}),
+        .tgt_rsp_valid({uart_rsp_valid, timer_rsp_valid, plic_rsp_valid, mem_rsp_valid}),
+        .tgt_rsp_data({{LINE_WORDS{uart_rdata}}, {LINE_WORDS{timer_rdata}},
+                       {LINE_WORDS{plic_rdata}}, mem_rsp_data}));
 
     // Atomics in front of the memory: the other requests pass as they come.
     // @kb: rtl/lib/block/atomic/design
@@ -172,10 +193,21 @@ module Mig3Cpu import Mig3Pkg::*; #(
         .req_addr(mem_req.addr[TIMER_ADDR_WIDTH-1:0]), .req_wdata(dev_wdata),
         .req_wstrb(dev_wstrb), .rsp_valid(timer_rsp_valid), .rsp_rdata(timer_rdata));
 
-    // The PLIC's sources: the devices', the Timer's at its source.
+    // The UART: SiFive's, booting at div CFG.uart.div_rst; its interrupt is a PLIC source.
+    // @kb: rtl/design/mig3/uart
+    UartSifive #(.DIV_RST(UartSifivePkg::DIV_BITS'(CFG.uart.div_rst))) u_uart(
+        .clk, .rst_n,
+        .req_valid(uart_valid), .req_ready(uart_ready), .req_we(mem_req.we),
+        .req_addr(mem_req.addr[UART_ADDR_WIDTH-1:0]), .req_wdata(dev_wdata),
+        .req_wstrb(dev_wstrb), .rsp_valid(uart_rsp_valid), .rsp_rdata(uart_rdata),
+        .tx(uart_tx), .rx(uart_rx), .irq(uart_irq));
+
+    // The PLIC's sources: the devices', the Timer's and the UART's at theirs.
     for (genvar k = 1; k <= CFG.plic.sources; k++) begin: g_src
         if (k == CFG.timer.source) begin: g_timer
             assign plic_src[k] = timer_irq;
+        end else if (k == CFG.uart.source) begin: g_uart
+            assign plic_src[k] = uart_irq;
         end else begin: g_device
             assign plic_src[k] = irq_src[k];
         end

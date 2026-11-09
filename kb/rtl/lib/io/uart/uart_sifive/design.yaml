@@ -25,9 +25,12 @@ why: >
   same engine, FIFOs and TickGen. Pushes and pops as one-clock pulses fit the library's Fifo
   as it is (it ignores a write when full and a read when empty, first-word fall-through), so
   the regs need no FIFO state. The watermark as its own part keeps the conditions testable
-  exhaustively and out of the map. An irq without a flop drops in the clock after the push or
-  pop that ends the condition, before the answer of the read that popped: no read-back rule
-  for software, unlike the Timer's registered compare.
+  exhaustively and out of the map. An irq without a flop drops in the clock after the access
+  that ends the condition: after a pop that is before the answer of the read that popped (no
+  read-back needed); after a write (pushes up to the watermark, ie cleared) a complete stored
+  right behind it can reach the PLIC in the clock irq drops, so software reads the UART back
+  first, the Timer's rule (corrected 2026-11-08 with Mig3's UART, kb rtl/design/mig3/uart:
+  this record first said no read-back at all; sw/riscv/drivers/uart.h keeps the rule).
 rejected:
   - choice: The FIFOs inside the register module
     why_not: A register module with logic of its own (the user's rule for register
@@ -36,8 +39,8 @@ rejected:
     why_not: The seven registers are consecutive words from 0; one Decoder is less logic, and
       the static assertion says when it would stop being right.
   - choice: A registered irq
-    why_not: Its inputs are flops already, and it would bring back a one-clock race with the
-      PLIC's completion.
+    why_not: Its inputs are flops already, and a clock more on every drop would make the race
+      with the PLIC's completion longer and bring it to pops too.
 relies_on:
   - rtl/lib/io/uart/design
   - rtl/lib/block/reg_port_target/design

@@ -2,11 +2,11 @@ set(LIB  ${DARK_CIRCUIT_RTL_LIB})
 set(MIG3 ${DARK_CIRCUIT_RTL_DESIGN}/mig3)
 set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
-# Mig3 uses blocks of the library (behave versions are fast to simulate)
-# and RISC-V formats and encodings.
-set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist
+# Mig3 uses blocks of the library (behave versions are fast to simulate), its devices
+# (io: the UART, which takes a part) and RISC-V formats and encodings.
+set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
            ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
-           ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
+           ${LIB}/io/io_behave.flist ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Files generated from cfg/mig3_config.yaml are up to date.
 dc_add_config_check(design_mig3 CONFIG ${MIG3}/cfg/mig3_config.yaml)
@@ -15,7 +15,7 @@ dc_add_config_check(design_mig3 CONFIG ${MIG3}/cfg/mig3_config.yaml)
 # (not the fast simulation models). Mig3Cpu is not included: its memories are simulation models.
 set(SYNTH_FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
                  ${LIB}/block/block_struct.flist ${LIB}/numeric/numeric_struct.flist
-                 ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
+                 ${LIB}/io/io_struct.flist ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Mig3Core converts to Verilog-2005 with sv2v and elaborates: the syntax of Mig3 is what
 # sv2v supports.
@@ -180,6 +180,13 @@ if(DARK_CIRCUIT_RISCV)
                       SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c timer_c.c
                       FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
                       ARGS +expect_exit=0 +expect_trap)
+    # The UART of Mig3Cpu and sw/riscv/drivers/uart.h from C (uart_hello.c): a line polled,
+    # a line by the transmit watermark's interrupt; TbMig3's console prints them.
+    mig3_program_test(uart_hello
+                      SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c uart_hello.c
+                      FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
+                      ARGS +expect_exit=0 +expect_trap
+                      OUTPUT "Hello from Mig3 over the UART[\r\n]+Interrupt-driven: the")
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)

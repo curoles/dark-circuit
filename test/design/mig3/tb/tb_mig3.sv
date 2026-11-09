@@ -42,6 +42,11 @@
  * +irq_random=<seed>: TbMig3Irq, a device, raises its interrupt, source 1 of the PLIC of
  * Mig3Cpu, at random times (+irq_max_gap=<n>) and drops it when the program acknowledges
  * it: a store to its word irq_claim (address from +symbols); without it the line stays 0.
+ * The UART of Mig3Cpu: its tx goes into SimUartRx, a console at the boot rate
+ * (MIG3_CFG.uart.div_rst + 1 clocks a bit, 8N1), which prints every character; its rx stays
+ * idle (1). Before a semihosting call and at the end of the run the testbench waits until the
+ * line has been idle for a frame, so the characters still in the UART's FIFO are printed
+ * first; a framing error on it fails the run (a program at another rate).
  * +uncached: every request of the core bypasses its caches (Mig3Caches), so the program sees
  * the memory's own timing: for tests that count cycles.
  * Bubbles, their checks, their trace lines and the count per reason at the end:
@@ -58,6 +63,8 @@ module TbMig3;
     import RiscvInstrPkg::*;
 
     localparam AW = MIG3_CFG.mem_addr_width;
+    localparam UART_CLKS  = MIG3_CFG.uart.div_rst + 1;  // clocks of a bit on the UART's line
+    localparam UART_FRAME = 10 * UART_CLKS;              // ... of a frame, 8N1
 
     logic        clk;
     logic        rst_n;
@@ -80,6 +87,8 @@ module TbMig3;
     word_t       irq_claim;             // address of irq_claim
     logic        meip;                  // the interrupt of TbMig3Irq
     wire  [MIG3_CFG.plic.sources:1] irq_src;   // the devices: TbMig3Irq is source 1
+    wire         uart_tx;               // the UART's line out, into the console
+    integer      uart_idle;             // clocks the line has been 1, up to a frame
     int          lat [6];               // its six numbers
     logic        expect_trap;
     logic        first_ebreak_traps;
@@ -121,8 +130,14 @@ module TbMig3;
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
     assign irq_src = {{(MIG3_CFG.plic.sources - 1){1'b0}}, meip};
-    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached, .irq_src, .halt, .retire, .pipe_trace, .dbg_req,
-                       .dbg_rsp);
+    Mig3Cpu u_mig3_cpu(.clk, .rst_n, .uncached, .irq_src, .uart_tx, .uart_rx(1'b1), .halt,
+                       .retire, .pipe_trace, .dbg_req, .dbg_rsp);
+
+    SimUartRx #(.CLKS_PER_BIT(UART_CLKS), .ECHO(1)) u_uart_console(.clk, .rst_n, .rx(uart_tx));
+
+    always @(posedge clk)
+        if (!rst_n || !uart_tx) uart_idle <= 0;
+        else if (uart_idle < UART_FRAME) uart_idle <= uart_idle + 1;
 
     TbMig3PipeView u_pipe_view(.clk, .rst_n, .halt, .retire, .pipe_trace);
 
@@ -226,6 +241,16 @@ module TbMig3;
             end
         end
 
+    // The UART's characters still in its FIFO: wait until its line has been idle for a frame
+    // (8 bytes in the FIFO at most), so that the console has printed them.
+    task automatic uart_drain;
+        for (int n = 0; uart_idle < UART_FRAME; n++) begin
+            if (n > 10 * UART_FRAME)
+                $fatal(1, "Mig3: the UART's line is not idle after %0d clocks", 10 * UART_FRAME);
+            @(posedge clk); #1;
+        end
+    endtask
+
     // Run
 
     // Cycles of the run: every rising edge out of reset until the run is done.
@@ -319,6 +344,7 @@ module TbMig3;
                 done = 1'b1;    // riscv-tests: the environment loops, the core runs on
             else if (u_debugger.semihost_call(halt_pc)) begin
                 halted = 1'b1;
+                uart_drain();   // what the program printed on the UART comes first
                 u_debugger.semihost(exited, exit_status);
                 done   = exited;
                 halted = exited;
@@ -334,6 +360,10 @@ module TbMig3;
             end
         end
         @(posedge clk); #1;         // the always block has seen the last retire
+        uart_drain();
+        if (u_uart_console.framing_errors != 0)
+            $fatal(1, "Mig3: %0d framing errors on the UART's line (another rate than %0d clocks a bit?)",
+                   u_uart_console.framing_errors, UART_CLKS);
         if (expect_trap && traps == 0)
             $fatal(1, "Mig3: +expect_trap, but no instruction trapped");
         if (check_exit && !exited)

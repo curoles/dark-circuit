@@ -20,6 +20,14 @@ package Mig3ConfigPkg;
         int unsigned source;           // the PLIC source of its interrupt
     } mig3_timer_cfg_t;
 
+    // The UART in the I/O region (Mig3Cpu): UartSifive, 4 KiB (UartSifivePkg), its interrupt a
+    // PLIC source, its pins Mig3Cpu's.
+    typedef struct packed {
+        logic [31:0] offset;           // from io_base, a multiple of 4 KiB
+        int unsigned source;           // the PLIC source of its interrupt
+        int unsigned div_rst;          // div after reset: the boot rate, f / (div_rst + 1)
+    } mig3_uart_cfg_t;
+
     typedef struct packed {
         logic [31:0] rst_addr;         // PC after reset, byte address
         int unsigned mem_addr_width;   // Mig3Cpu memories: 1 << mem_addr_width bytes each
@@ -28,6 +36,7 @@ package Mig3ConfigPkg;
         int unsigned io_addr_width;    // I/O region: 1 << io_addr_width bytes
         mig3_plic_cfg_t plic;          // the PLIC in the I/O region (Mig3Cpu)
         mig3_timer_cfg_t timer;        // the Timer in the I/O region (Mig3Cpu)
+        mig3_uart_cfg_t uart;          // the UART in the I/O region (Mig3Cpu)
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
         int unsigned btb_tag_width;    // BTB tag; with the index it should cover the word
                                        // address of imem: then no two pcs share an entry
@@ -45,6 +54,8 @@ package Mig3ConfigPkg;
         plic: '{offset: {{ plic.offset | sv_hex(32) }}, addr_width: {{ plic.addr_width }},
                 sources: {{ plic.sources }}, prio_width: {{ plic.prio_width }}},
         timer: '{offset: {{ timer.offset | sv_hex(32) }}, source: {{ timer.source }}},
+        uart: '{offset: {{ uart.offset | sv_hex(32) }}, source: {{ uart.source }},
+                div_rst: {{ uart.div_rst }}},
         btb_index_width: {{ btb_index_width }},    // {{ 2 ** btb_index_width }} entries
         btb_tag_width:   {{ btb_tag_width }},
         ras_addr_width:  {{ ras_addr_width }},    // {{ 2 ** ras_addr_width }} entries

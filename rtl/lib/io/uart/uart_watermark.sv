@@ -5,8 +5,10 @@
  * the receive FIFO has more than rx_level entries (drain it). These are SiFive's conditions
  * (txcnt, rxcnt; tx_level 0 never asks for bytes, rx_level 0 asks for every byte). ip has
  * both, ip & ie any of them is irq: a level, from the FIFOs' counters and the registers, so it
- * drops in the clock after the push or pop that ends the condition. That is before the answer
- * of the read that popped, so software needs no read-back before completing at a PLIC.
+ * drops in the clock after the push, pop or write of ie that ends the condition. After a pop
+ * that is before the answer of the read that popped; after a write a complete stored right
+ * behind it can reach a PLIC in the clock irq drops, so software reads the UART back first
+ * (sw/riscv/drivers/uart.h).
  *
  *   tx_count, tx_level --> CmpGe, Inv --> txwm --+--> ip --> And2 ie --> OrReduce --> irq
  *   rx_level, rx_count --> CmpGe, Inv --> rxwm --+

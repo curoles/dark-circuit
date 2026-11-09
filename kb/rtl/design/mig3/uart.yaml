@@ -1,0 +1,59 @@
+type: decision
+title: Mig3's UART is the library's UartSifive in Mig3Cpu, its pins Mig3Cpu's, a console in TbMig3
+date: 2026-11-08
+question: >
+  Programs on Mig3 should print through a real device, not only semihosting. Where does the
+  library's UartSifive go, how do its interrupt, its rate and its pins meet Mig3 and the
+  testbench, and how is a test that prints judged?
+decision: >
+  In Mig3Cpu's I/O region beside the PLIC and the Timer, at CFG.io_base + CFG.uart.offset
+  (0x0c410000: after the Timer's 64 KiB, a multiple of the UART's 4 KiB); AddrDecode a third
+  rule, ReqDemux a fourth target, the register port on the word of the line as the other
+  devices. Its irq is PLIC source CFG.uart.source (3). The boot rate is a knob,
+  CFG.uart.div_rst (15: 16 clocks a bit, the fastest the UART does), UartSifive's DIV_RST: the
+  testbench's line runs at that rate, and programs get it as MIG3_UART_DIV_RST. Its pins are
+  ports of Mig3Cpu (uart_tx, uart_rx), as a chip's pins; TbMig3 puts SimUartRx on uart_tx, a
+  console that prints every character, and holds uart_rx at 1. At the end of every run TbMig3
+  waits until the line has been idle for a frame (the bytes still in the FIFO), and a framing
+  error fails the run (a program at another rate). sw/riscv/drivers/uart.h is the driver
+  (kb sw/riscv/drivers/design). A test that prints is judged by its exit status and by the
+  console's text against the test's OUTPUT regex: the text is what it tests (as the
+  semihosting test).
+why: >
+  The same path as the Timer (kb rtl/design/mig3/timer): nothing in the core changes, the
+  device and its interrupt come through the I/O region and the PLIC. Pins as ports keep the
+  device a chip's device and leave the line to the testbench, which can put a sender on
+  uart_rx later. The rate in the configuration gives the hardware, the testbench and
+  programs one number.
+rejected:
+  - choice: SimUartRx inside Mig3Cpu
+    why_not: Mig3Cpu has simulation memories, but its devices should look like a chip's; the
+      line belongs to whatever is connected to the pins.
+  - choice: The program waits for the last byte before it exits
+    why_not: SiFive's UART has no "all sent" flag (an empty FIFO still has a byte on the
+      line); the testbench knows the line and waits for it once, for every program.
+  - choice: The console's text checked by the testbench against a plusarg
+    why_not: Text with spaces in a plusarg through CMake and CTest; OUTPUT already checks the
+      semihosting console's text.
+relies_on:
+  - rtl/lib/io/uart/uart_sifive/top
+  - rtl/design/mig3/timer
+  - rtl/design/mig3/plic
+  - sw/riscv/drivers/design
+evidence: >
+  2026-11-08, Verilator: uart_hello.c passes (exit 0, the console's two lines match OUTPUT:
+  a line polled, a line of 59 bytes by txwm interrupts through PLIC source 3, more than one
+  interrupt, no spurious entry, no wrong ID; 8390 instructions, 14630 cycles). The Mig3 suite
+  passes with the new testbench (139 tests with the io tests, sv2v and the config check among
+  them). One-off checks in a scratch tree (mutate.py builds no design tests): the UART's irq
+  not reaching its source makes it fail (no end, +max_cycles), a program at twice the
+  boot rate's period makes it fail (the line not idle in time, garbage on the console). The
+  first run showed the testbench's semihosting exit message in the middle of the UART's
+  text: the console is now drained before every semihosting call too. sv2v needed io_struct
+  in the synthesis flists (mig3.flist has Mig3Cpu, which names UartSifivePkg). Writing the
+  driver showed that the UART does need the read-back after writes (kb
+  rtl/lib/io/uart/uart_sifive/design corrected).
+code:
+  - rtl/design/mig3/mig3_cpu.sv#u_uart
+  - test/design/mig3/tb/tb_mig3.sv#u_uart_console
+  - test/design/mig3/uart_hello.c#handler
