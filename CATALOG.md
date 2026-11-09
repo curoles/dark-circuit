@@ -36,6 +36,11 @@ io:
       path: rtl/lib/io/uart/uart_rx
       test: test/io/uart/uart_rx
       kb: [rtl/lib/io/uart/design]
+    UartSifive:
+      what: "UartSifive: a UART with SiFive's register map (UartSifivePkg) behind the register port, the device top, wiring only"
+      path: rtl/lib/io/uart/uart_sifive
+      test: test/io/uart/uart_sifive
+      kb: [rtl/lib/io/uart/uart_sifive/design, rtl/lib/io/uart/uart_sifive/top]
     UartTx:
       what: "UART transmitter: sends each byte it takes as an asynchronous serial frame on tx"
       versions: [behave, struct]

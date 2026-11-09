@@ -1,0 +1,56 @@
+type: decision
+title: UartSifive, the device top, wiring of the regs, two Fifos, the engine and one TickGen
+date: 2026-11-08
+question: >
+  How do UartSifiveRegs, the FIFOs, UartTx, UartRx, TickGen and UartWatermark connect, what
+  do txen and rxen gate, and how does SiFive's div become a 16x tick?
+decision: >
+  UartSifive, one file for both libraries. The tick: TickGen #(16, FRAC_BITS 4) with div - 15
+  (a RippleCarryAdder with the constant -15): a tick every (div + 1) / 16 clocks, so 16 ticks
+  are exactly div + 1 clocks, every bit, also for a div that is not a multiple of 16; the
+  tick runs whatever txen and rxen are (a frame on the line always finishes), and a write of
+  div restarts it: UartSifiveRegs' div_wr through a DffSyncRst makes en 0 for the clock after
+  the write, when TickGen reloads from the new value; div >= 15 is asserted while txen or
+  rxen. Transmit: the library's Fifo (8 bytes) into UartTx, in_valid = txen and
+  not empty, the FIFO read = in_valid and in_ready; txen = 0 keeps the bytes. Receive: UartRx
+  always follows the line, its out_valid and rxen write the receive Fifo (a full FIFO drops
+  the byte, SiFive's rule); frame_err and parity_err are not used (SiFive's UART has no error
+  flags). UartWatermark from the FIFOs' counts, txcnt, rxcnt and ie gives ip and irq.
+why: >
+  Every part was built for this wiring: the Fifo ignores a write when full and a read when
+  empty and shows its oldest byte, which is what the regs' push and pop and UartTx's channel
+  need, so the top has no logic but an And2 or two. Gating rxen at the FIFO, not the
+  receiver, means a receiver enabled in the middle of a frame gives no broken byte (it was
+  following the line all along). A tick that always runs keeps a frame from stopping half
+  sent when software clears txen.
+rejected:
+  - choice: TickGen's en tied to 1 (the first version)
+    why_not: TickGen reads div at a reload, so a new div waited for the end of a period of the
+      old one; after reset, with div all ones, 4096 clocks. The end-to-end test showed it, a
+      mutant that ignores txen was not caught by the phase that sends with txen 0, because
+      nothing moved yet.
+  - choice: TickGen's en = txen or rxen
+    why_not: Clearing both in the middle of a frame would freeze the line, maybe at 0.
+  - choice: Hold UartRx in reset while rxen is 0
+    why_not: Enabled in the middle of a frame it would take a data bit's falling edge for a
+      start bit and receive a wrong byte.
+  - choice: Clamp div below 15 to 15
+    why_not: Logic for a value software must not write; an assertion says it in simulation.
+relies_on:
+  - rtl/lib/io/uart/uart_sifive/design
+  - rtl/lib/block/tick_gen/design
+  - rtl/lib/io/uart/design
+evidence: >
+  2026-11-08: io_uart_sifive_{behave,struct} pass on Verilator 5.052 and Icarus 13 (the
+  testbench is software on the register port, the lines into SimUartRx and from SimUartTx;
+  div 31 with one stop bit and div 40, a fractional tick, with two; five phases: txen 0 holds
+  the bytes, the first start bit within two bits of txen, a string longer than the FIFO
+  polling full, a string received by rxwm interrupts, 8 of 10 bytes kept without reads and
+  none with rxen 0, the txwm interrupt). Mutants (kb test/io/uart/uart_sifive/mutants): 5 of 5
+  caught on both simulators (txen ignored, rxen ignored, a quarter-fast tick, no restart at a
+  write of div, the watermark levels swapped); the regs' 4 still caught with div_wr added.
+  The first run found a testbench bug (a parameter named DIV hid the package's DIV address,
+  so div was never written) and, through a mutant caught only late, the wait for an old
+  period that the restart removes.
+code:
+  - rtl/lib/io/uart/uart_sifive/uart_sifive.sv#u_tick_gen

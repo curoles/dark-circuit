@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the UartSifive test (behave and struct libraries)
+date: 2026-11-08
+tests: [io_uart_sifive_behave, io_uart_sifive_struct]
+mutants:
+  - name: txen ignored (bytes go out while it is 0)
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive.sv
+        old: ".in1(txen), .in2(tx_empty_n), .out(tx_valid)"
+        new: ".in1(1'b1), .in2(tx_empty_n), .out(tx_valid)"
+    expect: model
+  - name: rxen ignored (bytes kept while it is 0)
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive.sv
+        old: ".in1(rx_valid), .in2(rxen), .out(rx_keep)"
+        new: ".in1(rx_valid), .in2(1'b1), .out(rx_keep)"
+    expect: model
+  - name: the tick a quarter fast (div - 7 for div - 15)
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive.sv
+        old: "DIV_BITS'(-(UartPkg::OVERSAMPLE - 1));"
+        new: "DIV_BITS'(-(UartPkg::OVERSAMPLE / 2 - 1));"
+    expect: model
+  - name: no restart of the tick at a write of div
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive.sv
+        old: ".in(div_wr), .out(div_new)"
+        new: ".in(div_wr & 1'b0), .out(div_new)"
+    expect: model
+  - name: the watermark levels swapped
+    edits:
+      - file: rtl/lib/io/uart/uart_sifive/uart_sifive.sv
+        old: ".tx_level(txcnt), .rx_count, .rx_level(rxcnt)"
+        new: ".tx_level(rxcnt), .rx_count, .rx_level(txcnt)"
+    expect: model
