@@ -446,7 +446,7 @@ block:
       what: "Control of a read-write cache (write-through): the part DirectCache, SetAssocCache and SkewedCache share"
       versions: [behave, struct]
       path: rtl/lib/block/cache/cache_control
-      kb: [rtl/lib/block/cache/atomic, rtl/lib/block/cache/cache_control/refill_take, rtl/lib/block/cache/cache_control/replay, rtl/lib/block/cache/read_only, rtl/lib/block/cache/uncached, rtl/lib/block/cache/variant_parameter]
+      kb: [rtl/lib/block/cache/atomic, rtl/lib/block/cache/cache_control/refill_take, rtl/lib/block/cache/cache_control/replay, rtl/lib/block/cache/cbo, rtl/lib/block/cache/read_only, rtl/lib/block/cache/uncached, rtl/lib/block/cache/variant_parameter]
     CacheDataRam:
       what: "Data of a cache, one line per set"
       versions: [behave, struct]
@@ -455,7 +455,7 @@ block:
       kind: package
       what: "Constants shared by the cache blocks"
       path: rtl/lib/block/cache/cache_pkg.sv
-      kb: [rtl/lib/block/cache/insn_data_cache_arbiter/design]
+      kb: [rtl/lib/block/cache/cbo, rtl/lib/block/cache/insn_data_cache_arbiter/design]
     CacheReplacement:
       what: "Replacement of a set-associative cache: which way of a set a fill replaces"
       versions: [behave, struct]

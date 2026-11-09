@@ -29,6 +29,7 @@
 -F gshare_branch_predictor/behave/gshare_branch_predictor.flist
 -F branch_target_buffer/behave/branch_target_buffer.flist
 -F atomic/atomic.flist
+-F cache/cache.flist
 -F cache/cache_valid_ram/behave/cache_valid_ram.flist
 -F cache/cache_tag_ram/behave/cache_tag_ram.flist
 -F cache/cache_data_ram/behave/cache_data_ram.flist

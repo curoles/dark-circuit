@@ -1,0 +1,55 @@
+type: decision
+title: A cache-block operation is a store without strobes with a cmo field, carried down
+date: 2026-11-09
+question: >
+  Mig3 gets Zicbom (cbo.clean, cbo.inval, cbo.flush) for its DMA: a buffer the DMA wrote may
+  be in the data cache, stale. How does a cache-block operation (CBO) travel on the
+  library's request channels, what does a cache do with it, and how far does it go?
+decision: >
+  The library's request channels get a field cmo (CachePkg: CMO_NONE, CMO_CLEAN, CMO_INVAL,
+  CMO_FLUSH; bit 0 clean, bit 1 invalidate), next to atop. A CBO is a store without
+  strobes with its cmo: CacheControl looks it up and sends it to memory as a store of the
+  line (mem_req_cmo, no answer), so it travels on down: a level below may hold the line
+  too (Mig4's L2), and a level that holds no lines (a memory) takes it as the write it is,
+  writing nothing. It writes no byte into the line (no store_write). An inval or flush that
+  hits drops the line in the clock memory takes it (drop, the atomics' valid-RAM write); no
+  request is taken in the clock it is looked up (cbo_drop in req_ready, from the lookup's
+  flops), because a request taken then would read the line still valid. A clean does
+  nothing in a write-through cache (nothing is dirty) but goes down. The read-only caches
+  tie req_cmo to CMO_NONE. First step (this record): the field through CacheControl and the
+  read-write caches; the instruction/data arbiter carries it next, then Mig3 decodes the
+  CBOs.
+why: >
+  The user chose (b) over stopping the CBO at the data cache: the field travels like atop,
+  so Mig4's L2 only has to act on a field that already arrives (the scale-to-Mig4/5/6 rule);
+  AXI5's cache maintenance transactions and CHI's CleanInvalid go down the same way.
+  Write-like with no answer (the user): the core does not wait, and the one in-order path
+  keeps a later load behind it. A store without strobes reuses the whole store path (lookup,
+  memory request, held); one bubble per inval or flush buys a drop without forwarding the
+  valid bit.
+rejected:
+  - choice: The CBO stops at the data cache (nothing below Mig3's data cache holds lines)
+    why_not: The field would have to be added later for an L2 anyway (the user chose (b)).
+  - choice: A CBO answered (read-like), the core waiting for it
+    why_not: Nothing to answer; the order is kept by the path (the user).
+  - choice: The valid bit's clear forwarded to a request taken in the drop clock
+    why_not: More logic in every cache for one clock per CBO; a bubble is enough.
+relies_on:
+  - rtl/lib/block/cache/atomic
+  - rtl/lib/block/dma/design
+evidence: >
+  2026-11-09: the SkewedCache test sends CBOs (one in 16 requests, to lines of the pool, a
+  random operation): its model expects them at memory as a store of the line with their
+  cmo, no request taken while an inval or flush is looked up, the line invalid after memory
+  takes an inval or flush that hits, a clean leaving the line and its recent bits; its
+  memory changes a line when it takes an inval or flush (as another agent would), so a kept
+  line would answer stale. A drop, a clean hit and a miss must happen. Both versions pass on
+  Verilator and Icarus, the other cache tests too (15), and the Mig2 and Mig3 suites with
+  their D-caches' req_cmo tied to CMO_NONE (242 tests, Verilator). Mutants (kb
+  test/block/cache/skewed_cache/mutants): no bubble, an inval keeping its line, a clean
+  dropping it: caught on both simulators, the record's older mutants too. CachePkg now has
+  a flist of its own listed first (cache/cache.flist): CacheControl imports it.
+code:
+  - rtl/lib/block/cache/cache_pkg.sv
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#cbo_drop
+  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_and2_cbo_drop

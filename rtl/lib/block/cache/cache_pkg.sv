@@ -24,4 +24,20 @@ package CachePkg;
     localparam int         ARB_ROUND_ROBIN = 2;     // the side not served last
     /* verilator lint_on UNUSEDPARAM */
 
+    // Cache-block operations (RISC-V Zicbom: cbo.clean, cbo.inval, cbo.flush) on the
+    // library's request channels: the field cmo of a request, CMO_NONE for every other
+    // request. A CBO is a store without strobes (it writes no byte) whose cmo says what each
+    // cache on the way does with the line of its address: clean writes it back if dirty (a
+    // write-through cache has nothing to write), inval drops it, flush does both. Bit 0:
+    // clean, bit 1: invalidate. It goes on down (the level below may hold the line too) and
+    // gets no answer; a level that holds no lines (a memory) takes it as the write it is.
+    // Plain constants, as above. (kb rtl/lib/block/cache/cbo)
+    typedef logic [1:0] cmo_t;
+    /* verilator lint_off UNUSEDPARAM */
+    localparam cmo_t CMO_NONE  = 2'b00;     // an ordinary request
+    localparam cmo_t CMO_CLEAN = 2'b01;
+    localparam cmo_t CMO_INVAL = 2'b10;
+    localparam cmo_t CMO_FLUSH = 2'b11;     // clean, then invalidate
+    /* verilator lint_on UNUSEDPARAM */
+
 endpackage

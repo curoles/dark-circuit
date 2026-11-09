@@ -16,7 +16,7 @@
 
 `include "dark_circuit_assert.svh"
 
-module DirectCache import AtomicPkg::*; #(
+module DirectCache import AtomicPkg::*, CachePkg::*; #(
     parameter  ADDR_WIDTH  = 32,            // byte address
     parameter  SETS_WIDTH  = 6,             // 1 << SETS_WIDTH sets
     parameter  SETS_OFFSET = 2,             // 1 << SETS_OFFSET bytes in a line (2: one word)
@@ -46,6 +46,7 @@ module DirectCache import AtomicPkg::*; #(
     input  wire [DATA_WIDTH-1:0] req_wdata,     // store: the line with its new bytes
     input  wire [STRB_WIDTH-1:0] req_wstrb,     // store: the bytes to write
     input  atop_t                req_atop,      // ATOP_NONE, or an atomic operation (a load)
+    input  cmo_t                 req_cmo,       // CMO_NONE, or a CBO (a store, no strobes)
     /* verilator lint_on UNUSEDSIGNAL */
     output wire                  rsp_valid,     // rsp_data is the line a load asked for
     output wire [DATA_WIDTH-1:0] rsp_data,
@@ -59,6 +60,7 @@ module DirectCache import AtomicPkg::*; #(
     output wire [DATA_WIDTH-1:0] mem_req_wdata, // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
     output atop_t                mem_req_atop,  // an atomic's operation, else ATOP_NONE
+    output cmo_t                 mem_req_cmo,   // a CBO's operation, else CMO_NONE
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data
 );
@@ -95,9 +97,10 @@ module DirectCache import AtomicPkg::*; #(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_uncached_dbg_bypass,
             .req_we, .req_addr, .req_wdata, .req_wstrb,
-            .req_size, .req_nocache, .req_atop, .rsp_valid, .rsp_data,
+            .req_size, .req_nocache, .req_atop, .req_cmo, .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-            .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_rsp_valid, .mem_rsp_data,
+            .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_req_cmo, .mem_rsp_valid,
+            .mem_rsp_data,
             .ram_rd, .look, .look_line, .load_hit, .store_write, .refill, .miss_taken,
             .replay, .ram_wr_line, .merged, .drop, .hit, .hit_line(line), .fill_conflict(same_set));
 

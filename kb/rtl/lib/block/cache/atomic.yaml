@@ -62,7 +62,7 @@ evidence: >
 code:
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#drop
   - rtl/lib/block/cache/cache_control/behave/cache_control.sv#look_atomic
-  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_and3_drop
+  - rtl/lib/block/cache/cache_control/struct/cache_control.sv#u_and3_atomic_drop
   - rtl/lib/block/cache/skewed_cache/behave/skewed_cache.sv#drop
   - rtl/lib/block/cache/skewed_cache/struct/skewed_cache.sv#u_and2_drop_wr
   - rtl/lib/block/cache/direct_cache/struct/direct_cache.sv#u_or2_valid_wr

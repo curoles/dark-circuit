@@ -37,6 +37,13 @@
  * written; a line an atomic hits is invalid after memory takes the atomic. Memory writes the
  * operand's bytes (the cache does not compute: a swap is enough to see a line kept against
  * the new value). Cases also: an atomic that drops the line it hits, one that misses.
+ * CBOs (one in 16 requests, to addresses of the pool: a store without strobes with a
+ * random cmo, CachePkg): they go to memory as a store of the line with their cmo
+ * (mem_req_cmo) and write no byte; an inval or flush that hits drops the line when memory
+ * takes it, and no request is taken in that clock; a clean leaves the line (no touch).
+ * Memory changes the line when it takes an inval or flush (as another agent would have
+ * written it), so a line kept against it would answer stale. Cases also: a CBO that drops
+ * the line it hits, a clean that hits, a CBO that misses.
  * Icarus runs 8 lines per way with lines of one word and of two words (8 strobes), 12-bit
  * addresses, 1000 clocks; Verilator also 64 lines per way with 32-bit addresses, 20000 clocks
  * each. Stops at the first mismatch with $fatal.
@@ -48,7 +55,7 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module TbSkewedCacheCheck import AtomicPkg::*; #(
+module TbSkewedCacheCheck import AtomicPkg::*, CachePkg::*; #(
     parameter ADDR_WIDTH  = 12,
     parameter SETS_WIDTH  = 3,      // up to 8
     parameter SETS_OFFSET = 2
@@ -91,6 +98,7 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
     data_t req_wdata;
     strb_t req_wstrb;
     atop_t req_atop;
+    cmo_t  req_cmo;
     wire   rsp_valid;
     data_t rsp_data;
     wire   mem_req_valid;
@@ -101,6 +109,7 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
     data_t mem_req_wdata;
     strb_t mem_req_wstrb;
     atop_t mem_req_atop;
+    cmo_t  mem_req_cmo;
     logic  mem_rsp_valid;
     data_t mem_rsp_data;
 
@@ -133,6 +142,7 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
     logic   look_nocache;   // the lookup's request may not be cached
     atop_t  look_atop;      // ... its operation, if atomic
     logic   look_atomic;
+    cmo_t   look_cmo;       // ... its cache-block operation
     logic   [2:0] look_size;
     logic   wait_nocache;   // the load miss served may not be cached: no fill
     addr_t  wait_line;      // its line address
@@ -176,16 +186,20 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
     integer n_nc_store;         // a no-cache store written to memory
     integer n_amo_drop;         // an atomic drops the line it hits
     integer n_amo_miss;         // an atomic misses
-    logic [24:0] missing;       // the cases that did not happen, in the order of the list
+    integer n_cbo_drop;         // an inval or flush drops the line it hits
+    integer n_cbo_clean;        // a clean hits: the line stays
+    integer n_cbo_miss;         // a CBO misses
+    logic [27:0] missing;       // the cases that did not happen, in the order of the list
 
     SkewedCache #(.ADDR_WIDTH(ADDR_WIDTH), .SETS_WIDTH(SETS_WIDTH), .SETS_OFFSET(SETS_OFFSET))
         u_skewed_cache(
             .clk, .rst_n, .invalidate,
             .req_valid, .req_ready, .req_uncached_dbg_bypass,
             .req_we, .req_addr, .req_wdata, .req_wstrb,
-            .req_size, .req_nocache, .req_atop, .rsp_valid, .rsp_data,
+            .req_size, .req_nocache, .req_atop, .req_cmo, .rsp_valid, .rsp_data,
             .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-            .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_rsp_valid, .mem_rsp_data);
+            .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_req_cmo, .mem_rsp_valid,
+            .mem_rsp_data);
 
     // The address of the line of a: offset 0.
     function automatic addr_t line_of(input addr_t a);
@@ -270,7 +284,8 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
         if (req_uncached_dbg_bypass)
             return exp_idle() && mem_req_ready;
         return !(waiting && !mem_rsp_valid) && !replay && !exp_load_miss() &&
-               !(exp_look_req() && !mem_req_ready) && !exp_unc_busy();
+               !(exp_look_req() && !mem_req_ready) && !exp_unc_busy() &&
+               !(exp_store() && look_cmo[1]);
     endfunction
 
     // The way a load miss replaces: an invalid candidate as read with the request (way 1
@@ -310,14 +325,14 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
                    exp_mem_valid(), exp_rsp, exp_data);
         if (exp_unc_pass() &&
             (mem_req_we !== req_we || mem_req_addr !== req_addr || mem_req_size !== req_size ||
-             mem_req_atop !== req_atop ||
+             mem_req_atop !== req_atop || mem_req_cmo !== req_cmo ||
              (req_we && (mem_req_wdata !== req_wdata || mem_req_wstrb !== req_wstrb))))
             $fatal(1, "SkewedCache %0d: uncached mem_req we %b %h %h %b, expected %b %h %h %b",
                    SETS, mem_req_we, mem_req_addr, mem_req_wdata, mem_req_wstrb,
                    req_we, req_addr, req_wdata, req_wstrb);
         // A no-cache or atomic request as asked; an atomic's operand in the store's fields.
         if (exp_look_req() &&
-            (mem_req_we !== look_we || mem_req_atop !== look_atop ||
+            (mem_req_we !== look_we || mem_req_atop !== look_atop || mem_req_cmo !== look_cmo ||
              mem_req_addr !== (look_nocache || look_atomic ? look_addr : line_of(look_addr)) ||
              mem_req_size !== (look_nocache || look_atomic ? look_size : 3'(SETS_OFFSET)) ||
              ((look_we || look_atomic) &&
@@ -375,6 +390,23 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
             mem[tag_index(look_addr.tag)][look_addr.set] = merge(wait_data, look_wdata, look_wstrb);
             mem_latency  = 1 + {$random(seed)} % MAX_LATENCY;
             mem_count    = mem_latency;
+        end else if (taken && look_we && look_cmo != CMO_NONE) begin
+            // A CBO writes no byte; an inval or flush drops the line it hits, and memory
+            // gets new content for it (as if another agent wrote it); a clean changes
+            // nothing, touches nothing.
+            ix = index_of(look_way, look_addr);
+            if (look_cmo[1]) begin
+                if (look_hit) begin
+                    m_valid[look_way][ix] = 1'b0;
+                    n_cbo_drop            = n_cbo_drop + 1;
+                end else
+                    n_cbo_miss = n_cbo_miss + 1;
+                mem[tag_index(look_addr.tag)][look_addr.set] =
+                    ~mem[tag_index(look_addr.tag)][look_addr.set];
+            end else if (look_hit)
+                n_cbo_clean = n_cbo_clean + 1;
+            else
+                n_cbo_miss = n_cbo_miss + 1;
         end else if (taken && look_we && look_nocache) begin
             // A no-cache store writes memory only.
             unc_mem[look_addr.set] = merge(unc_mem[look_addr.set], look_wdata, look_wstrb);
@@ -442,6 +474,7 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
             look_nocache = req_nocache;
             look_atop  = req_atop;
             look_atomic = is_atomic(req_atop);
+            look_cmo   = req_cmo;
             look_size  = req_size;
             look_we    = req_we;
             look_wdata = req_wdata;
@@ -514,7 +547,8 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
     // A new request, often to the line or the set of the one before.
     task automatic new_request;
         // Bits of r: 0..1 store, 2..3 same line, 4..5 same set, 6..8 tag, 9..10 all bytes,
-        // 11..13 the uncached tag (111 with 15: atomic), 14 uncached or no cache, 16 and up
+        // 11..13 the uncached tag (111 with 15: atomic, 110 with 15: CBO), 14 uncached or no
+        // cache, 16 and up
         // offset and set; the rest unused.
         /* verilator lint_off UNUSEDSIGNAL */
         integer r;
@@ -559,6 +593,14 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
             req_size        = 3'd2;
             req_addr.offset = req_addr.offset & ~SETS_OFFSET'(3);
             req_wstrb       = STRB_WIDTH'(4'b1111) << req_addr.offset;
+        end
+        // CBO: a store without strobes to a line of the pool, a random operation.
+        req_cmo = CMO_NONE;
+        if (r[15] && r[13:11] == 3'b110) begin
+            req_we    = 1'b1;
+            req_wstrb = '0;
+            req_size  = 3'(SETS_OFFSET);
+            req_cmo   = cmo_t'(1 + $unsigned($random(seed)) % 3);
         end
         req_valid = 1'b1;
     endtask
@@ -626,6 +668,9 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
         n_nc_store      = 0;
         n_amo_drop      = 0;
         n_amo_miss      = 0;
+        n_cbo_drop      = 0;
+        n_cbo_clean     = 0;
+        n_cbo_miss      = 0;
         // Different tags, with random high bits and different low bits (the skew of way 1).
         for (int t = 0; t < TAGS; t++)
             pool[t] = (TAG_WIDTH'($random(seed)) & ~TAG_WIDTH'(7)) | TAG_WIDTH'(t);
@@ -657,6 +702,7 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
         look_nocache  = 1'b0;
         look_atop     = ATOP_NONE;
         look_atomic   = 1'b0;
+        look_cmo      = CMO_NONE;
         look_size     = '0;
         wait_nocache  = 1'b0;
         wait_line     = '0;
@@ -673,6 +719,7 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
         req_uncached_dbg_bypass  = 1'b0;
         req_nocache   = 1'b0;
         req_atop      = ATOP_NONE;
+        req_cmo       = CMO_NONE;
         req_we        = 1'b0;
         req_addr      = '0;
         req_addr.tag  = pool[0];
@@ -688,15 +735,15 @@ module TbSkewedCacheCheck import AtomicPkg::*; #(
             $fatal(1, "SkewedCache %0d: mem_req_valid %b during reset", SETS, mem_req_valid);
         rst_n = 1'b1;
         random_test();
-        // Bit 24 load hits in way 0, ... bit 0 an atomic that misses: a 1 is a case that did
-        // not happen.
+        // Bit 27 load hits in way 0, ... bit 0 a CBO that misses: a 1 is a case that did not
+        // happen.
         missing = {n_load_hit0 == 0, n_load_hit1 == 0, n_hit1_skewed == 0, n_load_miss == 0,
                    n_store_hit == 0, n_store_partial == 0, n_store_miss == 0, n_fwd == 0,
                    n_fwd_ways == 0, n_fwd_index == 0, n_by_recent == 0, n_by_tie == 0,
                    n_store_held == 0, n_read_held == 0, n_lost == 0, n_lat1 == 0,
                    n_lat_more == 0, n_unc_load == 0, n_unc_store == 0, n_unc_idle_wait == 0,
                    n_unc_mem_wait == 0, n_nc_load == 0, n_nc_store == 0, n_amo_drop == 0,
-                   n_amo_miss == 0};
+                   n_amo_miss == 0, n_cbo_drop == 0, n_cbo_clean == 0, n_cbo_miss == 0};
         if (missing != '0)
             $fatal(1, "SkewedCache %0d: cases that did not happen (load hit way 0 first): %b",
                    SETS, missing);

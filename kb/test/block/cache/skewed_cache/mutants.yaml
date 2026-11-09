@@ -1,7 +1,7 @@
 type: mutants
 title: >-
-  Mutants of exact uncached, no-cache and atomic requests (SkewedCache test, DirectCache,
-  arbiter)
+  Mutants of exact uncached, no-cache and atomic requests and of CBOs (SkewedCache test,
+  DirectCache, arbiter)
 date: 2026-11-06
 tests: [block_skewed_cache_behave]
 mutants:
@@ -82,8 +82,27 @@ mutants:
   - name: an atomic keeps the line it hits
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "assign drop       = served && look_atomic && hit;"
-        new: "assign drop       = served && look_atomic && hit && 1'b0;"
+        old: "(served && look_atomic && hit)"
+        new: "(served && look_atomic && hit && 1'b0)"
+    expect: caught
+  - name: a request taken while an inval or flush is looked up (no bubble)
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "                                      !cbo_drop;"
+        new: "                                      !(cbo_drop && 1'b0);"
+    expect: caught
+  - name: an inval or flush keeps the line it hits
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "(cbo_drop && hit && mem_req_ready)"
+        new: "(cbo_drop && hit && mem_req_ready && 1'b0)"
+    expect: caught
+  - name: struct, a clean drops the line it hits too
+    tests: [block_skewed_cache_struct]
+    edits:
+      - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
+        old: "assign look_drops = look_cmo[1];"
+        new: "assign look_drops = look_cmo[1] | look_cmo[0];"
     expect: caught
   - name: an atomic goes to memory as a plain load
     edits:
