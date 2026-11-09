@@ -6,27 +6,27 @@ blocks and the small RISC-V cores built from them.*
 Every device a program talks to (an interrupt controller, a timer, a UART) has registers. The
 program reads and writes them with ordinary loads and stores to the device's addresses, and
 the device has to take each request, find the register it names and, for a read, answer with
-its value. Such registers often are called Control and Status Registers (CSR)
-and a memory region where they are accessed is usually refered to as Memory
-Mapped I/O (MMIO) region.
+its value. Such registers are often called control and status registers (in RISC-V that
+name belongs to the core's own registers, read with `csrr`), and the address range where
+they live is referred to as a memory-mapped I/O (MMIO) region.
 
-Once memory access reaches a device using any kind of memory bus,
-the handshake is the same in every device, and it is easy to get slightly wrong
-in each one. In my library it is written once: a fixed set of signals, the *register port*,
-and a block of about twenty lines, `RegPortTarget`, that turns the port's handshake into
-accesses of exactly one clock. Behind it, a device is only its registers, a decoder of the
-address and a multiplexer for reads. For example, devices that use it: a PLIC (the RISC-V platform
-interrupt controller), a timer and a UART with SiFive's register map. This note explains the
-port, the three rules that make it work and what it leaves out on purpose.
+Once a memory access reaches a device, over any kind of memory bus, the handshake is the
+same in every device, and it is easy to get slightly wrong in each one. In my library it is
+written once: a fixed set of signals, the *register port*, and a block of about twenty
+lines, `RegPortTarget`, that turns the port's handshake into accesses of exactly one clock.
+Behind it, a device is only its registers, a decoder of the address and a multiplexer for
+reads. For example, devices that use it: a PLIC (the RISC-V platform interrupt controller),
+a timer and a UART with SiFive's register map. This note explains the port, the three rules
+that make it work and what it leaves out on purpose.
 
-The CPU behind the requests is custom 5-stage in-order RISC-V core; its data port goes to
-memory or, by address, to the PLIC or the timer or the UART.
+The CPU behind the requests is a custom 5-stage in-order RISC-V core; its data port goes to
+memory or, by address, to the PLIC, the timer or the UART.
 
 ## 1. The port
 
-The library does not (and should not) assume a bus. The same device must work behind AXI, APB, TileLink or a
-core's own data port, so the port is plain signals with two parameters, the address and data
-widths:
+The library does not (and should not) assume a bus. The same device must work behind AXI,
+APB, TileLink or a core's own data port, so the port is plain signals with two parameters,
+the address and data widths:
 
 ```systemverilog
 input  req_valid,   // a request
@@ -40,27 +40,43 @@ output rsp_rdata
 ```
 
 These are the same signals the library's caches have on their CPU side, so a core's data
-port reaches a device through an address decoder and a demultiplexer, with no conversion. The rules:
+port reaches a device through an address decoder and a demultiplexer, with no conversion.
+The rules:
 
 - **A request is taken when `req_valid` and `req_ready` are both 1.** An offer not taken
   stays the same until it is (the library's valid/ready rules).
-- **A read is answered exactly one clock after it is taken,** from a register, and the
-  answer has no ready signal corresponding to `rsp_valid`: the requester always takes it.
-  TODO: not sure how to read "exactly one clock after", not sooner or what? it
-  is answered when rsp_valid is 1, so confusing
+- **A read's answer comes in the clock right after the read is taken,** never in the same
+  clock and never later: `rsp_valid` is 1 for that one clock, with `rsp_rdata`. The
+  requester knows when to look, so the answer has no ready signal of its own: the requester
+  must take it then.
 - **A write gets no answer.**
-- **There are no errors.** A read of an address with no register returns 0, a write there is
-  ignored. TODO: perhaps when decoder does not find by address we should raise
-  err signal so external bus can raise bus error? not now, but we can mention it
-  as in plans or say that we delibertly do not do it because this mudule is to
-  be used in small CPUs only
+- **There are no errors, on purpose.** An address outside every device never gets here: the
+  interconnect's address decoder sees that miss, and the bus error belongs there (AXI's
+  DECERR). A hole inside a device's window reads 0 and ignores writes, as the specs of these
+  devices ask. If a device ever has to refuse an access (a register that cannot be written
+  in some state), an error bit next to `rsp_valid` is the way to add it.
 
 A bus connects through an adapter of its own. Write responses, error responses and other
 widths are the adapter's business, not the device's.
 
 ## 2. RegPortTarget
 
-The device side of the port is one block. Its whole logic:
+The device side of the port is one block, with two sides of its own:
+
+```
+ requester        RegPortTarget    device
+ req_valid --->  +--------------+  --> acc_rd, acc_wr
+ req_ready <---  |ready = !hold |  --> acc_addr,
+ req_we ------>  |taken = v & r |      acc_wdata,
+ req_addr ---->  |answer: a flop|      acc_wstrb
+ req_wdata --->  |              |  <-- rd_data
+ req_wstrb --->  |              |  <-- hold
+ rsp_valid <---  |              |
+ rsp_rdata <---  +--------------+
+```
+
+On the left is the port as any requester sees it. On the right is what the device sees:
+accesses of one clock, no handshake. Its whole logic:
 
 ```systemverilog
 assign req_ready = !hold;
@@ -134,9 +150,12 @@ load/store unit always can.
 
 ## 5. Rule 3: hold comes from flops
 
-A device can make requests wait with `hold`, and `req_ready` is simply `!hold`. The PLIC
-needs it. Its claim register shows the ID of the interrupt to claim from a flop, so in the
-clock right after a claim it still shows the ID just claimed. A second claim in that clock
+`hold` is the device's only way to say "wait". While it is 1, `req_ready` is 0, and any
+request, read or write, stays offered until it drops. RegPortTarget does not care why; the
+device decides when. Most devices never need it: the timer and the UART tie it to 0. The
+PLIC needs it for one clock after every claim. Its claim register shows the ID of the
+interrupt to claim from a flop, so in the clock right after a claim it still shows the ID
+just claimed. A second claim in that clock
 would get the same interrupt again. So the PLIC holds for that one clock:
 
 ```systemverilog
@@ -152,12 +171,6 @@ ready that depends on valid in one and a valid that depends on ready in the othe
 combinational loop. With ready from flops it cannot happen, whatever is connected. It costs
 the device the ability to stall on something it computes in the same clock; so far no device
 has needed that.
-
-TODO: the problem is that reader saw one set of input/output signals, so they do
-not quite know which is interface to bus and which to device
-
-TODO: it is not really clear what is `hold` and what its purpose, hold after a
-read when side effects take place? or/adn after read?
 
 ## 6. Three devices on it
 
@@ -216,10 +229,30 @@ stops it.
 - **One access width.** A byte store is a full-width access with one strobe; the device's
   registers take the bytes the strobes say.
 
-TODO: at this point reader is curious if RegPortTarget even capable of working
-with a bus like AXI/APB or just useless toy.
+## 9. Behind a real bus
 
-## 9. How it compares
+So is it usable behind AXI or APB, or only behind my own core? Behind a bus it needs an
+adapter, a small block between the bus and the port; the library has none yet, but they
+are small, because the port's rules are strict and simple:
+
+- **APB.** A transfer has a setup phase (one clock) and an access phase that lasts until
+  the target sets PREADY. The adapter offers the request from the setup phase on, until it
+  is taken. A write is done when it is taken, so PREADY comes in the next clock; a read's
+  PREADY is `rsp_valid`, with `rsp_rdata` as PRDATA. Without `hold` every transfer takes
+  APB's minimum, no wait states; with `hold` the access phase simply lasts longer. A flop
+  or two.
+- **AXI-Lite.** A write comes on two channels, the address (AW) and the data (W): the
+  adapter offers one request when both are there and takes both at once. AXI wants a write
+  response (B), so the adapter makes it when the write is taken and keeps it until the bus
+  takes it. A read (AR) is a read request. The read answer (R) does have a ready on the AXI
+  side, unlike the port's, so the adapter keeps the answer in a register and takes no new
+  read until the bus has taken it. Errors for address ranges (DECERR) come from the
+  adapter's own address check.
+
+Everything a bus wants beyond plain accesses (responses, errors, its widths) lives in its
+adapter, written once per bus, and every device behind it stays plain wiring.
+
+## 10. How it compares
 
 The split into two layers, a protocol adapter in front of a plain register interface, is the
 usual one. I checked three open designs:
