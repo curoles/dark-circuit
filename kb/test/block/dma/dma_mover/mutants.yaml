@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the DmaMover test (behave and struct versions)
+date: 2026-11-09
+tests: [block_dma_mover_behave, block_dma_mover_struct]
+mutants:
+  - name: behave, the room one byte short
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+        old: "(OFF_WIDTH+1)'(STRB_WIDTH) - (OFF_WIDTH+1)'((so > d_o) ? so : d_o);"
+        new: "(OFF_WIDTH+1)'(STRB_WIDTH - 1) - (OFF_WIDTH+1)'((so > d_o) ? so : d_o);"
+    expect: model
+  - name: behave, the rotation the wrong way
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+        old: "rot_q     <= cmd_dst[OFF_WIDTH-1:0] - cmd_src[OFF_WIDTH-1:0];"
+        new: "rot_q     <= cmd_src[OFF_WIDTH-1:0] - cmd_dst[OFF_WIDTH-1:0];"
+    expect: model
+  - name: struct, n the larger of left and room
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+        old: ".in0(cmd_left[OFF_WIDTH:0]), .in1(room)"
+        new: ".in0(room), .in1(cmd_left[OFF_WIDTH:0])"
+    expect: model
+  - name: struct, the smaller offset taken (n crosses a beat)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+        old: ".in0(dst_off), .in1(src_off), .sel(src_ge)"
+        new: ".in0(src_off), .in1(dst_off), .sel(src_ge)"
+    expect: model
+  - name: struct, the data not rotated
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+        old: ".shift({rot_q, 3'b000})"
+        new: ".shift({rot_q & '0, 3'b000})"
+    expect: model

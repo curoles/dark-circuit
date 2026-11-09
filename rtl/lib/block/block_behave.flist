@@ -57,6 +57,7 @@
 -F tick_gen/behave/tick_gen.flist
 -F plic/plic.flist
 -F atomic/atomic_unit/behave/atomic_unit.flist
+-F dma/dma_mover/behave/dma_mover.flist
 -F plic/plic_gateway/behave/plic_gateway.flist
 -F plic/plic_target/behave/plic_target.flist
 -F plic/plic_claim/behave/plic_claim.flist

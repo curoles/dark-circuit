@@ -1,0 +1,61 @@
+type: decision
+title: A DMA of sub-blocks, a mover shared by N channels, SiFive's PDMA as the first front end
+date: 2026-11-09
+question: >
+  The library needs a DMA (a second agent on the memory, for Mig3 and the later chips): a
+  realistic, general one with a configured number of channels, with SiFive's register map if
+  that is simple, and built of sub-modules so that other existing DMAs (Synopsys
+  DesignWare's) can be made from the same parts. How is it divided, and what does a
+  transaction do?
+decision: >
+  rtl/lib/block/dma (a platform device without pins). DmaMover, shared: one transaction at a
+  time on the library's memory channel (as AtomicUnit's side): a command gives the
+  transfer's current source, destination and bytes left and an ID; the mover moves
+  n = min(left, BEAT - max(src % BEAT, dst % BEAT)) bytes: reads the source's beat, rotates
+  it so the source's byte lands on the destination's, writes the destination's beat with the
+  n bytes' strobes, and answers done (ID, n) for a clock; any alignment works, aligned
+  transfers move whole beats. DmaChannel, one per channel: the transfer's state (current
+  addresses, bytes left), one command at a time, done or stopped. A RoundRobinArbiter picks
+  the channel whose transaction the mover takes. DmaSifiveRegs: SiFive's PDMA map (FU540-C000
+  manual chapter 12, Linux drivers/dma/sf-pdma) behind RegPortTarget, per channel 0x1000:
+  Control (claim, run, doneIE, errorIE, done, error), Next and Exec registers; two interrupts
+  a channel (done, error). DmaSifive: the top, wiring. Choices where the sources are silent
+  or differ: doneIE and errorIE are bits 14 and 15 (Linux, which runs on FU540 boards; the
+  manual says 26 and 27); run is cleared by the hardware when a transfer without repeat ends
+  (the manual: run "remains set during repeated transactions"; Linux sets it again for every
+  transfer), and software writing run 0 stops the channel after its transaction in flight
+  (Linux's disable); wsize and rsize are WARL and read back the mover's beat (the mover
+  takes any alignment); error is never set while the library's memory channel has no error
+  response (the bit and its interrupt are there for an adapter that brings errors).
+why: >
+  The user: universal and realistic, N channels, SiFive's map, sub-modules for other DMA
+  types. The PDMA is simple (no descriptors, no peripheral handshakes), so it is the first
+  front end; a DesignWare-like DMA is another front end over the same channels and mover,
+  its descriptor lists and handshakes new sub-modules. A shared mover with one transaction in
+  flight is simple and correct; reads issued ahead (a buffer between reads and writes) are a
+  later step for throughput (the user agreed). The rotation and strobes make byte alignment
+  the mover's business, so no front end restricts it. Clearing run at the end keeps the most
+  open: software can read run as busy, and repeat keeps it set as the manual says.
+rejected:
+  - choice: doneIE and errorIE at bits 26 and 27 (the FU540 manual)
+    why_not: Linux's sf-pdma uses 14 and 15 and runs on real FU540 boards (the user chose 14/15).
+  - choice: Transactions of wsize/rsize only, aligned addresses required
+    why_not: The PDMA defines them as WARL; a mover that takes any alignment serves every front end.
+  - choice: A mover per channel
+    why_not: N memory ports to arbitrate instead of one; the channels' state is what differs.
+relies_on:
+  - rtl/lib/block/atomic/design
+  - rtl/lib/block/reg_port_target/design
+evidence: >
+  DmaMover, 2026-11-09: behave and struct versions pass test/block/dma/dma_mover on Verilator
+  5.052 and Icarus 13 (the testbench is the channel and the memory: random transfers of 1 to
+  80 bytes, some overlapping, one transaction a command; the memory ready in 70 % of the
+  clocks, answers 1 to 4 clocks late; done_n against the bytes counted one by one, the memory
+  against a reference that copies each transaction from a snapshot; beats of 32, 64 and 128
+  bits; every case counted: cut by the bytes left, by the source's beat, by the
+  destination's, a whole beat, equal offsets, an overlap); 5 of 5 mutants caught on both
+  simulators (kb test/block/dma/dma_mover/mutants). DmaChannel, the regs and the top: to
+  come.
+code:
+  - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv#bytes_of
+  - rtl/lib/block/dma/dma_mover/struct/dma_mover.sv#u_incr_room

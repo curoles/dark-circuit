@@ -511,6 +511,13 @@ block:
     DelayLineT:
       what: "Delay line of type T: DelayLine with WIDTH = $bits(T); out is in, DEPTH clocks later"
       path: rtl/lib/block/delay_line/delay_line_t.sv
+  dma:
+    DmaMover:
+      what: "DMA mover: moves the bytes of one transaction of a DMA transfer, a read of the source beat and a write of the destination beat on the library's memory channel"
+      versions: [behave, struct]
+      path: rtl/lib/block/dma/dma_mover
+      test: test/block/dma/dma_mover
+      kb: [rtl/lib/block/dma/design]
   fifo:
     FifoT:
       what: "FIFO of type T: Fifo with DATA_WIDTH = $bits(T); entries are values of T (a struct, an enum, a vector typedef)"

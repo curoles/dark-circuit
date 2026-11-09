@@ -56,6 +56,7 @@
 -F tick_gen/struct/tick_gen.flist
 -F plic/plic.flist
 -F atomic/atomic_unit/struct/atomic_unit.flist
+-F dma/dma_mover/struct/dma_mover.flist
 -F plic/plic_gateway/struct/plic_gateway.flist
 -F plic/plic_target/struct/plic_target.flist
 -F plic/plic_claim/struct/plic_claim.flist
