@@ -23,8 +23,8 @@ decision: >
   or differ: doneIE and errorIE are bits 14 and 15 (Linux, which runs on FU540 boards; the
   manual says 26 and 27); run is cleared by the hardware when a transfer without repeat ends
   (the manual: run "remains set during repeated transactions"; Linux sets it again for every
-  transfer), and software writing run 0 stops the channel after its transaction in flight
-  (Linux's disable); wsize and rsize are WARL and read back the mover's beat (the mover
+  transfer), and software writing run 0 stops the channel after its transaction offered or
+  in flight (Linux's disable); wsize and rsize are WARL and read back the mover's beat (the mover
   takes any alignment); error is never set while the library's memory channel has no error
   response (the bit and its interrupt are there for an adapter that brings errors).
 why: >
@@ -54,8 +54,26 @@ evidence: >
   against a reference that copies each transaction from a snapshot; beats of 32, 64 and 128
   bits; every case counted: cut by the bytes left, by the source's beat, by the
   destination's, a whole beat, equal offsets, an overlap); 5 of 5 mutants caught on both
-  simulators (kb test/block/dma/dma_mover/mutants). DmaChannel, the regs and the top: to
+  simulators (kb test/block/dma/dma_mover/mutants). DmaChannel and DmaEngine, 2026-11-09:
+  two details settled in writing them: a stop never withdraws an offer (the library's
+  valid/ready rule), so it ends the transfer after the transaction offered or in flight;
+  and while an offer waits for the mover the arbiter sees only the waiting channel (a flop
+  keeps the grant), so a channel that starts to request cannot change the offer and the
+  round-robin order moves on with the right winner. Every start while idle loads the state
+  (also 0 bytes, as the PDMA's Exec copy). test/block/dma/dma_engine passes with both
+  libraries on Verilator and Icarus (every channel runs random transfers of 0 to 60 bytes in
+  its own part of the memory, one in six stopped at a random clock; the state checked after
+  a start and at the end; the memory against a reference that replays each transfer's
+  transactions up to the bytes moved, which must end at a transaction; every clock, a
+  waiting offer must stay the same; 3 channels with beats of 64 bits, 1 with 32; every case
+  counted: two channels offering, an offer waiting, a stop, 0 bytes, each channel done); 6
+  of 6 mutants caught on both simulators (kb test/block/dma/dma_engine/mutants; the lost
+  stop only by the cover check, no stop ever seen). The first run on Icarus found the
+  behave Decoder giving X with en 0 and an unknown input (the mover's done_id before its
+  first command): it now gives 0, as the struct version's gates do. The regs and the top: to
   come.
 code:
   - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv#bytes_of
   - rtl/lib/block/dma/dma_mover/struct/dma_mover.sv#u_incr_room
+  - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#stopping
+  - rtl/lib/block/dma/dma_engine/dma_engine.sv#u_mux2_arb_req

@@ -512,6 +512,16 @@ block:
       what: "Delay line of type T: DelayLine with WIDTH = $bits(T); out is in, DEPTH clocks later"
       path: rtl/lib/block/delay_line/delay_line_t.sv
   dma:
+    DmaChannel:
+      what: "DMA channel: the state of one transfer, its commands to the DMA mover"
+      versions: [behave, struct]
+      path: rtl/lib/block/dma/dma_channel
+      kb: [rtl/lib/block/dma/design]
+    DmaEngine:
+      what: "DMA engine: N_CHANNELS DMA channels sharing one DMA mover on the library's memory channel, wiring only; the part every DMA front end (a register map) is built on"
+      path: rtl/lib/block/dma/dma_engine
+      test: test/block/dma/dma_engine
+      kb: [rtl/lib/block/dma/design]
     DmaMover:
       what: "DMA mover: moves the bytes of one transaction of a DMA transfer, a read of the source beat and a write of the destination beat on the library's memory channel"
       versions: [behave, struct]

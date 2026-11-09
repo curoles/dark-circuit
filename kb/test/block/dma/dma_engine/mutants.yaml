@@ -1,0 +1,39 @@
+type: mutants
+title: Mutants of the DmaEngine test (DmaChannel behave and struct, DmaEngine)
+date: 2026-11-09
+tests: [block_dma_engine_behave, block_dma_engine_struct]
+mutants:
+  - name: DmaChannel behave, a stop is forgotten unless it comes with a done
+    tests: [block_dma_engine_behave]
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
+        old: "stopping <= 1'b1;"
+        new: "stopping <= 1'b0;"
+  - name: DmaChannel behave, the destination advances one byte too far
+    tests: [block_dma_engine_behave]
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
+        old: "cur_dst <= cur_dst + ADDR_WIDTH'(mv_n);"
+        new: "cur_dst <= cur_dst + ADDR_WIDTH'(mv_n) + 1'b1;"
+  - name: DmaChannel struct, the last bytes never seen (the transfer does not end)
+    tests: [block_dma_engine_struct]
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
+        old: ".in1(left), .in2(n_len), .eq(last)"
+        new: ".in1(left), .in2(~n_len), .eq(last)"
+  - name: DmaChannel struct, a start of 0 bytes taken as a transfer
+    tests: [block_dma_engine_struct]
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
+        old: ".in(start_len), .out(len_zero)"
+        new: ".in(start_len | LEN_WIDTH'(1)), .out(len_zero)"
+  - name: DmaEngine, no lock of the grant while an offer waits
+    edits:
+      - file: rtl/lib/block/dma/dma_engine/dma_engine.sv
+        old: ".in0(req), .in1(grant_q), .sel(lock)"
+        new: ".in0(req), .in1(grant_q), .sel(lock & 1'b0)"
+  - name: DmaEngine, the done to the wrong channel
+    edits:
+      - file: rtl/lib/block/dma/dma_engine/dma_engine.sv
+        old: ".in(done_id), .en(done_valid)"
+        new: ".in(done_id ^ ID_WIDTH'(1)), .en(done_valid)"
