@@ -41,7 +41,8 @@ endmacro()
 # The sampler of dc_testfloat_cases.
 set(DC_TESTFLOAT_SAMPLE ${CMAKE_CURRENT_LIST_DIR}/testfloat_sample.awk)
 
-# dc_testfloat_cases(<prefix> FUNCTION <function> [EVERY <k>] [SPECIAL <n>] [FOR <target>])
+# dc_testfloat_cases(<prefix> FUNCTION <function> [EVERY <k>] [SPECIAL <n>] [EXACT]
+#                    [FOR <target>])
 #
 # At build time, write the case files <prefix>.rne, .rtz, .rdn, .rup and .rmm: TestFloat's
 # level-1 cases of <function> (i32_to_f32, f32_add, f32_mulAdd, ...) in each rounding mode,
@@ -53,9 +54,11 @@ set(DC_TESTFLOAT_SAMPLE ${CMAKE_CURRENT_LIST_DIR}/testfloat_sample.awk)
 # with n or more special operands (zero, infinity, NaN: rare there, such as infinity times
 # zero plus a NaN). A line per case: the operands, the result and the flags, in hex. FOR:
 # <target> (a test's simulation) depends on the files, so building only that target
-# (tools/mutate.py) writes them too.
+# (tools/mutate.py) writes them too. EXACT: a conversion to an integer that is not exact
+# flags inexact (testfloat_gen -exact; RISC-V's FCVT does, testfloat_gen does not by
+# default).
 function(dc_testfloat_cases PREFIX)
-    cmake_parse_arguments(C "" "FUNCTION;EVERY;SPECIAL;FOR" "" ${ARGN})
+    cmake_parse_arguments(C "EXACT" "FUNCTION;EVERY;SPECIAL;FOR" "" ${ARGN})
     if(NOT C_FUNCTION)
         message(FATAL_ERROR "dc_testfloat_cases(${PREFIX}): FUNCTION is required")
     endif()
@@ -65,8 +68,15 @@ function(dc_testfloat_cases PREFIX)
     if(NOT C_SPECIAL)
         set(C_SPECIAL 0)
     endif()
-    # $1 testfloat_gen, $2 its mode, $3 the function, $4 k, $5 n, $6 the sampler, $7 the file.
-    set(script "\"$1\" -r$2 -tininessafter $3 | awk -v k=$4 -v n=$5 -f \"$6\" > \"$7\"")
+    if(C_EXACT)
+        set(exact -exact)
+    else()
+        set(exact -notexact)
+    endif()
+    # $1 testfloat_gen, $2 its mode, $3 the function, $4 k, $5 n, $6 the sampler, $7 the file,
+    # $8 -exact or -notexact.
+    set(script
+        "\"$1\" $8 -r$2 -tininessafter $3 | awk -v k=$4 -v n=$5 -f \"$6\" > \"$7\"")
     set(files)
     foreach(pair rne:near_even rtz:minMag rdn:min rup:max rmm:near_maxMag)
         string(REPLACE ":" ";" pair ${pair})
@@ -75,7 +85,7 @@ function(dc_testfloat_cases PREFIX)
         set(file ${PREFIX}.${suffix})
         add_custom_command(OUTPUT ${file}
             COMMAND sh -c "${script}" sh ${TESTFLOAT_GEN} ${mode} ${C_FUNCTION} ${C_EVERY}
-                    ${C_SPECIAL} ${DC_TESTFLOAT_SAMPLE} ${file}
+                    ${C_SPECIAL} ${DC_TESTFLOAT_SAMPLE} ${file} ${exact}
             DEPENDS testfloat_gen ${DC_TESTFLOAT_SAMPLE}
             COMMENT "TestFloat: ${C_FUNCTION}, round ${mode}"
             VERBATIM)

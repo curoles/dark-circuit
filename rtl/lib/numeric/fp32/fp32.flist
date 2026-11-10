@@ -4,3 +4,8 @@ unpack/hybrid/fp32_unpack.sv
 round/hybrid/fp32_round.sv
 from_int/hybrid/fp32_from_int.sv
 fma/hybrid/fp32_fma.sv
+compare/hybrid/fp32_compare.sv
+min_max/hybrid/fp32_min_max.sv
+class/hybrid/fp32_class.sv
+sign_inject/hybrid/fp32_sign_inject.sv
+to_int/hybrid/fp32_to_int.sv

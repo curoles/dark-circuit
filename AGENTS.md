@@ -233,7 +233,11 @@ the chunk that establishes it:
   fp32 operation hands its exact value (a normalized significand with guard and sticky
   bits, a signed biased exponent of any range) to `Fp32Round`; add, subtract and multiply
   are special cases of `Fp32Fma`; rounding modes and exception flags are `FpPkg`'s,
-  RISC-V's encodings (`numeric/fp32/fma/hybrid`).
+  RISC-V's encodings (`numeric/fp32/fma/hybrid`). A rule that differs between ISAs or
+  standards (what a NaN does to a minimum, the integer of an invalid conversion) is a
+  parameter named for it with an enum value per ISA or standard, never a fixed choice
+  (`numeric/fp32/min_max/hybrid`, `numeric/fp32/to_int/hybrid`; kb
+  `rtl/lib/numeric/fp32/simple_ops`).
 - Behave versions: combinational logic with bit or field selects as `assign` or an
   `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a
   `case` on a whole signal (`block/alu2/behave`). Parameter limits `` `DC_STATIC_ASSERT ``,

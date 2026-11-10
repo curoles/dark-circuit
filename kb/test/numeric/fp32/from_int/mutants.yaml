@@ -5,19 +5,19 @@ tests: [numeric_fp32_from_int]
 mutants:
   - name: RNE breaks a tie away from zero, not to even
     edits:
-      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+      - file: rtl/lib/numeric/fp/fp_pkg.sv
         old: "RM_RNE:  return guard && (sticky || lsb);"
         new: "RM_RNE:  return guard && (sticky || lsb || 1'b1);"
     expect: caught
   - name: RDN rounds a positive value up
     edits:
-      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+      - file: rtl/lib/numeric/fp/fp_pkg.sv
         old: "RM_RDN:  return s && (guard || sticky);"
         new: "RM_RDN:  return !s && (guard || sticky);"
     expect: caught
   - name: RUP forgets the sticky bit
     edits:
-      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+      - file: rtl/lib/numeric/fp/fp_pkg.sv
         old: "RM_RUP:  return !s && (guard || sticky);"
         new: "RM_RUP:  return !s && guard;"
     expect: caught

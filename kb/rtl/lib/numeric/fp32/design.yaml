@@ -76,7 +76,7 @@ evidence: >
   of the same design 3816 um2, 5.3 ns; the hybrid with behave sub-blocks 4189 um2, 4.9 ns:
   the struct Incr and BarrelShifter cost the rest, a look for the FMA.
 code:
-  - rtl/lib/numeric/fp/fp_pkg.sv
-  - rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv#round_up
+  - rtl/lib/numeric/fp/fp_pkg.sv#round_up
+  - rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
   - rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
   - cmake/testfloat.cmake#dc_testfloat_cases

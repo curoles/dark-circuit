@@ -1,0 +1,41 @@
+type: mutants
+title: Mutants of Fp32Compare, Fp32MinMax, Fp32Class, Fp32SignInject (TestFloat's compares)
+date: 2026-11-09
+tests: [numeric_fp32_compare]
+mutants:
+  - name: two negatives compare as their magnitudes, not the other way round
+    edits:
+      - file: rtl/lib/numeric/fp32/compare/hybrid/fp32_compare.sv
+        old: "(a.sign && b.sign && mag_ge && !mag_eq));"
+        new: "(a.sign && b.sign && !mag_ge));"
+    expect: caught
+  - name: -0 and +0 are not equal
+    edits:
+      - file: rtl/lib/numeric/fp32/compare/hybrid/fp32_compare.sv
+        old: "assign eq = !unordered && (both_zero || (a.sign == b.sign && mag_eq));"
+        new: "assign eq = !unordered && ((both_zero && 1'b0) || (a.sign == b.sign && mag_eq));"
+    expect: caught
+  - name: the minimum of -0 and +0 is +0
+    edits:
+      - file: rtl/lib/numeric/fp32/min_max/hybrid/fp32_min_max.sv
+        old: "max ? a.sign && b.sign : a.sign || b.sign"
+        new: "max ? a.sign && b.sign : a.sign && b.sign"
+    expect: caught
+  - name: MINMAX_NUMBER gives the default NaN for one NaN operand
+    edits:
+      - file: rtl/lib/numeric/fp32/min_max/hybrid/fp32_min_max.sv
+        old: "assign nan_res = ua.nan && ub.nan;"
+        new: "assign nan_res = ua.nan || ub.nan;"
+    expect: caught
+  - name: a subnormal is classed as normal
+    edits:
+      - file: rtl/lib/numeric/fp32/class/hybrid/fp32_class.sv
+        old: "assign normal = !u.zero && !u.subnormal && !u.inf && !u.nan;"
+        new: "assign normal = !u.zero && !u.inf && !u.nan;"
+    expect: caught
+  - name: SGNJ_NEG copies b's sign
+    edits:
+      - file: rtl/lib/numeric/fp32/sign_inject/hybrid/fp32_sign_inject.sv
+        old: "op == SGNJ_NEG  ? !b.sign"
+        new: "op == SGNJ_NEG  ? b.sign"
+    expect: caught

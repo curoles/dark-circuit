@@ -1,0 +1,57 @@
+type: decision
+title: The simple fp32 operations; rules that differ between ISAs are parameters
+date: 2026-11-09
+question: >
+  After the FMA, Mig3's floating point needs compare (FEQ, FLT, FLE), minimum and maximum
+  (FMIN, FMAX), class (FCLASS), sign injection (FSGNJ*) and the conversion to an integer
+  (FCVT.W.S, FCVT.WU.S). Some of their behaviour is RISC-V's, not IEEE 754's: what a NaN
+  does to a minimum, the integer an invalid conversion gives. Where do such rules go in a
+  library block, and how are operations TestFloat does not have tested?
+decision: >
+  A rule that differs between ISAs or standards is a parameter of the block, named for the
+  rule, an enum value per ISA or standard (the user: rules are parameters, or the block's
+  name says RISC-V): Fp32MinMax #(NAN_RULE) with MINMAX_NUMBER (IEEE 754-2019
+  minimumNumber/maximumNumber; RISC-V FMIN.S, FMAX.S) and MINMAX_NAN (IEEE 754-2019
+  minimum/maximum; Zfa's FMINM.S, FMAXM.S, ML frameworks' minimum); Fp32ToInt #(INVALID)
+  with TOINT_RISCV (a NaN or too large: the largest integer, too small: the smallest) and
+  TOINT_ARM (the same, a NaN 0). Encodings stay RISC-V's in FpPkg as for rounding modes and
+  flags: the fields of class_t are in FCLASS's bit order; sign injection's three operations
+  are FSGNJ's (sgnj_op_e). Fp32Compare gives the IEEE predicates and both NV conditions
+  (snan for a quiet compare, unordered for a signalling one): the caller picks. round_up
+  moves into FpPkg, shared by Fp32Round and Fp32ToInt. Fp32ToInt places the significand at
+  the top of a 58-bit field (32 integer bits, guard, sticky) and shifts right by 158 - exp;
+  the top 1 stays in the field up to a shift of 57, so no jam is needed (a lost bit only
+  happens when the top 1 already sits among the sticky bits). Tests: TestFloat's six compare
+  functions; f32_to_i32 and f32_to_ui32 with -exact (testfloat_gen's default does not flag
+  inexact for them; RISC-V does: dc_testfloat_cases EXACT); minimum, maximum, class and
+  sign injection, which TestFloat has not, against small models in the testbench that take
+  TestFloat's a < b and NV and the values as reals ($bitstoshortreal); TOINT_ARM against
+  TestFloat's RISC-V results with a NaN's integer 0.
+why: >
+  A library for several cores (Mig4/5/6, the AI chip) must not bake one ISA's choice into a
+  block; a parameter costs nothing in hardware and says which rule a design has. An ISA's
+  encodings (field order, enum values) are wiring, not behaviour: they stay RISC-V's, as the
+  library's other encodings are a standard's (AXI's atop). Models for what TestFloat lacks
+  compute differently from the RTL (TestFloat's ordering, reals) and are a few lines each.
+rejected:
+  - choice: The RISC-V rules fixed in the blocks
+    why_not: The user asked for parameters or RISC-V in the name; other ISAs differ.
+  - choice: x86's invalid integer (0x80000000) as a third INVALID value
+    why_not: No design needs it yet; it comes with one.
+  - choice: A jamming shift for the conversion (as Fp32Round's)
+    why_not: The top 1 stays in the field; the shifted-out bits never decide sticky.
+relies_on:
+  - rtl/lib/numeric/fp32/design
+evidence: >
+  2026-11-09, Verilator: numeric_fp32_compare passes (the six compare functions, 2466 cases
+  each: about one in 20 of 46464 and all with two special operands; on each f32_lt_quiet
+  pair the minimum and maximum by both rules, the class of both operands and the three sign
+  injections; 0.1 s); numeric_fp32_to_int passes (f32_to_i32 and f32_to_ui32, all 600 cases
+  of each in the five modes, both INVALID rules; 0.1 s); the other numeric tests still pass
+  with round_up in FpPkg. Verilator has no $bitstoshortreal and a real NaN's r != r is 0
+  there: the models convert an fp32 to a real themselves and see NaNs in the bits. Mutants
+  (kb test/numeric/fp32/compare/mutants, test/numeric/fp32/to_int/mutants): ten, caught.
+code:
+  - rtl/lib/numeric/fp32/min_max/hybrid/fp32_min_max.sv#g_number
+  - rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv#g_arm
+  - rtl/lib/numeric/fp/fp_pkg.sv#minmax_nan_e

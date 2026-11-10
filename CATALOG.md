@@ -85,14 +85,25 @@ numeric:
   fp:
     FpPkg:
       kind: package
-      what: "Fp package: what every floating-point format of the library shares, the rounding modes, the exception flags and the operations of the fused multiply-add"
+      what: "Fp package: what every floating-point format of the library shares, the rounding modes and the decision to round up, the exception flags, the classes, the operations of the fused multiply-add and of sign injection, and the rules that differ between ISAs as parameters of the blocks (a NaN in a minimum, an invalid conversion to an integer)"
       path: rtl/lib/numeric/fp/fp_pkg.sv
-      kb: [rtl/lib/numeric/fp32/design]
+      kb: [rtl/lib/numeric/fp32/design, rtl/lib/numeric/fp32/simple_ops]
   fp32:
     Fp32Pkg:
       kind: package
       what: "Fp32 package: the IEEE-754 single precision format"
       path: rtl/lib/numeric/fp32/fp32_pkg.sv
+    class:
+      Fp32Class:
+        what: "Fp32 class: which of IEEE 754's ten classes x is (RISC-V FCLASS.S), one flag set"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/class/hybrid/fp32_class.sv
+    compare:
+      Fp32Compare:
+        what: "Fp32 compare: a == b, a < b, a <= b as IEEE 754 defines them (RISC-V FEQ.S, FLT.S, FLE.S)"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/compare/hybrid/fp32_compare.sv
+        test: test/numeric/fp32/compare
     fma:
       Fp32Fma:
         what: "Fp32 fused multiply-add: a * b + c with one rounding, and its special cases add, subtract and multiply (RISC-V FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S, FADD.S, FSUB.S, FMUL.S)"
@@ -107,6 +118,12 @@ numeric:
         path: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
         test: test/numeric/fp32/from_int
         kb: [rtl/lib/numeric/fp32/design]
+    min_max:
+      Fp32MinMax:
+        what: "Fp32 minimum or maximum of a and b, its NaN rule a parameter (RISC-V FMIN.S, FMAX.S; FMINM.S, FMAXM.S of Zfa)"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/min_max/hybrid/fp32_min_max.sv
+        kb: [rtl/lib/numeric/fp32/simple_ops]
     mul_teaching:
       Fp32CombMultiplier:
         what: "Fp32 combinational multiplier, a teaching version: the core of a * b in IEEE-754 single precision without rounding or special cases (for real use, Fp32Fma)"
@@ -124,6 +141,18 @@ numeric:
         versions: [hybrid]
         path: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
         kb: [rtl/lib/numeric/fp32/design]
+    sign_inject:
+      Fp32SignInject:
+        what: "Fp32 sign injection: a's magnitude with a sign from b (RISC-V FSGNJ.S, FSGNJN.S, FSGNJX.S; with b = a they are a move, a negation and an absolute value)"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/sign_inject/hybrid/fp32_sign_inject.sv
+    to_int:
+      Fp32ToInt:
+        what: "Fp32 to integer: an fp32 to a 32-bit signed or unsigned integer by a rounding mode (RISC-V FCVT.W.S, FCVT.WU.S), the result of an invalid conversion a parameter"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        test: test/numeric/fp32/to_int
+        kb: [rtl/lib/numeric/fp32/simple_ops]
     unpack:
       Fp32Unpack:
         what: "Fp32 unpack: an fp32 taken apart into sign, exponent and significand, with its class"

@@ -1,0 +1,31 @@
+type: mutants
+title: Mutants of Fp32ToInt (TestFloat's f32_to_i32, f32_to_ui32)
+date: 2026-11-09
+tests: [numeric_fp32_to_int]
+mutants:
+  - name: -2^31 is out of range for a signed result
+    edits:
+      - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        old: "(!mag[31] || (u.sign && ~|mag[30:0]))"
+        new: "(!mag[31] || (u.sign && ~|mag[30:0] && 1'b0))"
+    expect: caught
+  - name: a negative value that rounds to 0 is invalid unsigned
+    edits:
+      - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        old: "!mag[32] && (!u.sign || ~|mag[31:0]);"
+        new: "!mag[32] && (!u.sign || (~|mag[31:0] && 1'b0));"
+    expect: caught
+  - name: a value below 2^-27 is not inexact
+    edits:
+      - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        old: "assign sticky   = |field[W-34:0] || (tiny && !u.zero);"
+        new: "assign sticky   = |field[W-34:0] || (tiny && !u.zero && 1'b0);"
+    expect: caught
+  - name: TOINT_ARM gives RISC-V's integer for a NaN
+    edits:
+      - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        old: "assign inv_value = u.nan ? '0 : !u.sign ? {!is_signed, 31'h7fff_ffff}"
+        new: >-
+          assign inv_value = u.nan ? {!is_signed, 31'h7fff_ffff} :
+          !u.sign ? {!is_signed, 31'h7fff_ffff}
+    expect: caught

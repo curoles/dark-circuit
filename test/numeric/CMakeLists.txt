@@ -12,3 +12,5 @@ set(FP32_FLISTS ${DARK_CIRCUIT_RTL_LIB}/gate/generic/gate_generic.flist
 add_subdirectory(fp32/mul_teaching)
 add_subdirectory(fp32/from_int)
 add_subdirectory(fp32/fma)
+add_subdirectory(fp32/compare)
+add_subdirectory(fp32/to_int)

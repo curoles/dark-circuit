@@ -23,8 +23,8 @@
  *  - Underflow: tiny after rounding (RISC-V's choice of IEEE 754's two) and inexact. Tiny
  *    after rounding: below 2^-126 once rounded to 24 bits with an unbounded exponent, so
  *    exp < 0, or exp = 0 and sig does not round up to 2.0 (then the value is 2^-126).
- * NV and DZ are 0: the operation decides them. rm encodings other than FpPkg's five do not
- * come (a core traps them); they round as RTZ.
+ * The increment is FpPkg::round_up. NV and DZ are 0: the operation decides them. rm
+ * encodings other than FpPkg's five do not come (a core traps them); they round as RTZ.
  * Hybrid (AGENTS.md): the shifts, the subtraction, the increment, the compare and the wide
  * selects are library blocks, parts and gates; the narrow glue is operators.
  *
@@ -62,20 +62,6 @@ module Fp32Round import Fp32Pkg::*, FpPkg::*; #(
 
     // A guard bit and a sticky bit at least; room for every exponent above and below.
     `DC_STATIC_ASSERT(a_widths, SIG_WIDTH >= KEPT + 2 && EXP_WIDTH > FP32_EXP_WIDTH)
-
-    // @kb: rtl/lib/numeric/fp32/design
-    // Round up (increment the kept bits): the mode, the sign, the last kept bit, guard and
-    // sticky.
-    function automatic logic round_up(input rm_e m, input logic s, input logic lsb,
-                                      input logic guard, input logic sticky);
-        case (m)
-            RM_RNE:  return guard && (sticky || lsb);
-            RM_RDN:  return s && (guard || sticky);
-            RM_RUP:  return !s && (guard || sticky);
-            RM_RMM:  return guard;
-            default: return 1'b0;                   // RTZ
-        endcase
-    endfunction
 
     logic                 zero;         // sig = 0
     logic                 below;        // exp < 1: below the normal range
