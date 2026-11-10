@@ -119,11 +119,11 @@ numeric:
         kb: [rtl/lib/numeric/fp32/div_sqrt]
     fma:
       Fp32Fma:
-        what: "Fp32 fused multiply-add: a * b + c with one rounding, and its special cases add, subtract and multiply (RISC-V FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S, FADD.S, FSUB.S, FMUL.S)"
+        what: "Fp32 fused multiply-add: a * b + c with one rounding, and its special cases add, subtract and multiply (RISC-V FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S, FADD.S, FSUB.S, FMUL.S), with 0 to 3 pipeline stages"
         versions: [hybrid]
         path: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
         test: test/numeric/fp32/fma
-        kb: [rtl/lib/numeric/fp32/fma]
+        kb: [rtl/lib/numeric/fp32/fma, rtl/lib/numeric/fp32/fma_stages]
     from_int:
       Fp32FromInt:
         what: "Fp32 from integer: a 32-bit signed or unsigned integer to the nearest fp32 by a rounding mode (RISC-V FCVT.S.W, FCVT.S.WU)"

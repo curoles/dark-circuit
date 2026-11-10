@@ -42,7 +42,7 @@ endmacro()
 set(DC_TESTFLOAT_SAMPLE ${CMAKE_CURRENT_LIST_DIR}/testfloat_sample.awk)
 
 # dc_testfloat_cases(<prefix> FUNCTION <function> [EVERY <k>] [SPECIAL <n>] [EXACT]
-#                    [FOR <target>])
+#                    [FOR <target>...])
 #
 # At build time, write the case files <prefix>.rne, .rtz, .rdn, .rup and .rmm: TestFloat's
 # level-1 cases of <function> (i32_to_f32, f32_add, f32_mulAdd, ...) in each rounding mode,
@@ -53,12 +53,12 @@ set(DC_TESTFLOAT_SAMPLE ${CMAKE_CURRENT_LIST_DIR}/testfloat_sample.awk)
 # testfloat_gen's regular order and miss whole kinds of operands), and with SPECIAL every case
 # with n or more special operands (zero, infinity, NaN: rare there, such as infinity times
 # zero plus a NaN). A line per case: the operands, the result and the flags, in hex. FOR:
-# <target> (a test's simulation) depends on the files, so building only that target
+# each <target> (a test's simulation) depends on the files, so building only that target
 # (tools/mutate.py) writes them too. EXACT: a conversion to an integer that is not exact
 # flags inexact (testfloat_gen -exact; RISC-V's FCVT does, testfloat_gen does not by
 # default).
 function(dc_testfloat_cases PREFIX)
-    cmake_parse_arguments(C "EXACT" "FUNCTION;EVERY;SPECIAL;FOR" "" ${ARGN})
+    cmake_parse_arguments(C "EXACT" "FUNCTION;EVERY;SPECIAL" "FOR" ${ARGN})
     if(NOT C_FUNCTION)
         message(FATAL_ERROR "dc_testfloat_cases(${PREFIX}): FUNCTION is required")
     endif()
@@ -94,7 +94,7 @@ function(dc_testfloat_cases PREFIX)
     # The target's name from the whole prefix: two tests may use one function.
     string(MAKE_C_IDENTIFIER "${PREFIX}" name)
     add_custom_target(testfloat_cases_${name} ALL DEPENDS ${files})
-    if(C_FOR)
-        add_dependencies(${C_FOR} testfloat_cases_${name})
-    endif()
+    foreach(target IN LISTS C_FOR)
+        add_dependencies(${target} testfloat_cases_${name})
+    endforeach()
 endfunction()

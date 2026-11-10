@@ -1,0 +1,58 @@
+type: decision
+title: Fp32Fma has 0 to 3 pipeline stages at fixed stage boundaries; Mig3 holds EX for them
+date: 2026-11-10
+question: >
+  Fp32Fma's combinational path is 16.5 ns on sky130 against Mig3's 5.5 ns clock. Hold EX for
+  three clocks around the combinational unit (a), pipeline the unit and issue an FMA every
+  clock in Mig3 (b), or pipeline the library unit and let Mig3 hold EX for its stages (c)?
+  And how is one code base kept for every stage count?
+decision: >
+  (c), the user's choice. Fp32Fma #(STAGES) puts registers at fixed stage boundaries: after
+  the Wallace tree, after the adder and the negation, after normalizing; STAGES 1 uses the
+  middle one, 2 the outer two, 3 all (a table in the header; 0 is the combinational unit as
+  before). Each boundary is a DelayLine (DEPTH 1, or 0: a wire) carrying a packed struct,
+  stage_boundary_tree_t, _adder_t, _norm_t, of everything that crosses it (the data, the
+  signs, the exponent, rm, the special case decided from the operands); the logic after a
+  boundary reads only that struct, so the arithmetic is written once and the only
+  STAGES-dependent lines are the three DEPTH constants and the valid bit's DelayLine
+  (in_valid to out_valid, STAGES clocks). A new operation may enter every clock; there is no
+  stall input (a core that holds an operation holds its inputs). Mig3 will hold EX for
+  STAGES clocks (no scoreboard, no second write port); a core with a scoreboard (Mig4, Mig5)
+  issues an FMA every clock into the same block. The test streams an operation every clock,
+  the five mode files interleaved so that operands, forms and modes change from one
+  operation to the next, for STAGES 0 to 3.
+why: >
+  (a) leaves a 16.5 ns multicycle path that our flow can not be told about (every Mig3
+  report would show it) and a unit Mig4/5 can not issue into every clock; (b) brings a
+  scoreboard on the x registers (Zfinx shares them), a second write port and late results to
+  Mig3 for little gain on its workload. (c) gives honest timing now and the structure later
+  cores and the AI datapaths (pipelined dot products) need; the cuts are chosen by hand
+  because Yosys does not retime (FPnew relies on a commercial tool's retiming). A stage that
+  reads a later operation's value instead of its boundary's is invisible with one operation
+  in flight: only streaming with changing operations shows it.
+rejected:
+  - choice: (a) a 3-cycle hold around the combinational unit
+    why_not: A false 16.5 ns longest path in every report; a blocking unit for later cores.
+  - choice: (b) overlapped FMAs in Mig3
+    why_not: Scoreboard, second write port, hazards and draining for Mig3's little FP; a later
+      core's step.
+  - choice: The stage count as an `if (STAGES == k)` in the logic
+    why_not: Every piece would need variants; a DelayLine per boundary keeps one datapath.
+relies_on:
+  - rtl/lib/numeric/fp32/fma
+  - rtl/design/mig3/fp
+evidence: >
+  numeric_fp32_fma (STAGES 0, all sampled cases) and numeric_fp32_fma_stages1..3 (streamed,
+  +limit=6000) pass against TestFloat, 0.5 to 1.7 s each. The FMA mutants record runs on
+  numeric_fp32_fma and numeric_fp32_fma_stages3: all 10 caught, among them three that only
+  streaming shows (the adder stage reading the entering operation's rm or addend sign, the
+  result's select reading the special case before the last boundary). sky130 (Yosys + ABC),
+  area and longest path by STAGES: 0: 46,846 um2, 15.9 ns; 1: 46,452 um2, 8.5 ns; 2: 46,652
+  um2, 6.8 ns; 3: 47,382 um2, 5.1 ns (op to the addend's carry-save adder), under Mig3's
+  5.5 ns. With the addend as the WallaceTree's 25th row, STAGES 3 was 6.4 ns (op through the
+  alignment into the tree's first layer and six more): the addend now joins the tree's two
+  rows in one CarrySaveAdder after the tree, aligned while the tree reduces the product.
+code:
+  - rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv#BOUNDARY_TREE
+  - rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv#u_stage_boundary_tree
+  - test/numeric/fp32/fma/tb_fp32_fma.sv#check_out

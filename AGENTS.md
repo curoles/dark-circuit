@@ -238,6 +238,13 @@ the chunk that establishes it:
   parameter named for it with an enum value per ISA or standard, never a fixed choice
   (`numeric/fp32/min_max/hybrid`, `numeric/fp32/to_int/hybrid`; kb
   `rtl/lib/numeric/fp32/simple_ops`).
+- Pipeline stages of a datapath: a parameter STAGES picks registers at fixed stage
+  boundaries (a table in the header); each boundary is a `DelayLine` (DEPTH 1, or 0: a
+  wire) carrying a packed struct `stage_boundary_<where>_t` of everything that crosses it,
+  the logic after it reads only that struct; a valid bit rides a `DelayLine` of DEPTH
+  STAGES; the test streams an operation every clock with operands, operations and modes
+  changing, for every STAGES (`numeric/fp32/fma/hybrid`, kb
+  `rtl/lib/numeric/fp32/fma_stages`).
 - Behave versions: combinational logic with bit or field selects as `assign` or an
   `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a
   `case` on a whole signal (`block/alu2/behave`). Parameter limits `` `DC_STATIC_ASSERT ``,
