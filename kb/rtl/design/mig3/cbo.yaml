@@ -56,7 +56,11 @@ evidence: >
   (the regenerated RiscvInstrPkg only adds encodings). One-off mutants, caught: the D-cache
   given no inval or flush (the retire check: a load after the CBO got the old word), cbo.inval
   decoded as a clean (the decode test and the retire check), a CBO writing bytes
-  (CacheControl's a_cbo_store), a CBO trapping as misaligned (cbo_dma: a trap).
+  (CacheControl's a_cbo_store), a CBO trapping as misaligned (cbo_dma: a trap). sky130
+  (Yosys, design_mig3.synth_sky130, against a30017d^ with the caches' cmo tied off): 335 054
+  um2 against 334 762 (+0.09 %); ABC's longest path 5.66 ns against 5.51, the same path (from
+  id_ex rs1 bit 3) through the same 26 cells, only sized differently (two nor4_2 now nor4_1,
+  a buf_6 now buf_2): ABC's sizing, no CBO logic on it.
 code:
   - rtl/design/mig3/mig3_decode.sv#cmo_of
   - rtl/design/mig3/mig3_lsu.sv#cbo

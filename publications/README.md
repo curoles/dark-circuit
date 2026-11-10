@@ -5,6 +5,7 @@ was measured. Each links to the code and to the knowledge-base records (`kb/`) b
 
 | Date | Title | In short |
 |---|---|---|
+| 2026-11 | [The DMA wrote it, the cache kept the old copy: cbo.inval on my RISC-V core](2026-11-dma-and-cbo.md) | A stale line caught in a trace, then dropped by Zicbom: a CBO is a store of no bytes with its operation, carried down to where a lower cache will act on it; the testbench allows the old value or the new one until the CBO retires. |
 | 2026-11 | [Atomics next to the memory: my core sends AMOADD as a load](2026-11-atomics-next-to-memory.md) | The read-modify-write of RISC-V's AMOs done in front of the memory, where every agent's accesses meet: the core sends a load with AXI5's operation code, the caches step aside, and the core gets simpler (0.4 % area, the clock unchanged). |
 | 2026-11 | [The register port: a device is its registers, one clock per access](2026-11-register-port.md) | A twenty-line block turns a bus handshake into one-clock accesses: a read's side effect happens once by construction, the answer is a flop, ready comes from flops; the PLIC, the timer and the UART are wiring behind it. |
 | 2026-11 | [Replay instead of refuse: getting 0.5 ns back](2026-11-replay-instead-of-refuse.md) | A cache that takes a request in its refill clock: the obvious guard cost 8 % of the clock, replaying the conflicting request costs nothing and keeps the 18-20 % fewer cycles. |
