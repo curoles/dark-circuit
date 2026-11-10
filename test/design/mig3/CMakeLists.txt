@@ -47,22 +47,28 @@ if(DARK_CIRCUIT_RISCV)
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig3_mem.hex)
 
     # Decode: unit test of Mig3Decode with cases encoded by the assembler (A for the LR/SC
-    # cases); the Zbb cases only when the compiler knows Zbb (DARK_CIRCUIT_RISCV_ZBB,
-    # cmake/riscv.cmake).
-    # +zbb: the testbench then wants a case of KIND_BITMANIP too.
-    if(DARK_CIRCUIT_RISCV_ZBB)
-        dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH rv32ima_zbb FLAGS -DHAVE_ZBB
-                             LINK_FLAGS -T ${SW}/mig3.ld)
-        set(decode_zbb +zbb)
-    else()
-        dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH rv32ima
-                             LINK_FLAGS -T ${SW}/mig3.ld)
-        set(decode_zbb)
+    # cases); the Zicbom cases only when the compiler knows Zicbom, the Zbb cases only when
+    # it knows Zbb (DARK_CIRCUIT_RISCV_ZICBOM, DARK_CIRCUIT_RISCV_ZBB, cmake/riscv.cmake).
+    # +zicbom, +zbb: the testbench then wants a case of KIND_CBO, of KIND_BITMANIP too.
+    set(decode_arch rv32ima)
+    set(decode_flags)
+    set(decode_args)
+    if(DARK_CIRCUIT_RISCV_ZICBOM)
+        string(APPEND decode_arch _zicbom)
+        list(APPEND decode_flags -DHAVE_ZICBOM)
+        list(APPEND decode_args +zicbom)
     endif()
+    if(DARK_CIRCUIT_RISCV_ZBB)
+        string(APPEND decode_arch _zbb)
+        list(APPEND decode_flags -DHAVE_ZBB)
+        list(APPEND decode_args +zbb)
+    endif()
+    dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH ${decode_arch}
+                         FLAGS ${decode_flags} LINK_FLAGS -T ${SW}/mig3.ld)
     dc_add_mainsim_test(design_mig3_decode TOP TbMig3Decode TB tb/tb_mig3_decode.sv
                         FLISTS ${FLISTS}
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig3_decode.hex
-                             ${decode_zbb})
+                             ${decode_args})
 
     # Programs run on TbMig3, built once; tb/tb_mig3.flist has the modules it instantiates.
     cmake_language(CALL dc_add_${SIM}_build design_mig3_sim TOP TbMig3 TB tb/tb_mig3.sv
@@ -193,6 +199,16 @@ if(DARK_CIRCUIT_RISCV)
                       SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c dma_c.c
                       FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
                       ARGS +expect_exit=0 +expect_trap)
+    # Zicbom with the DMA (cbo_dma.c): the DMA overwrites a buffer the data cache holds,
+    # loads see the old words until cbo.flush or cbo.inval: exit 0. Only when the compiler
+    # knows Zicbom.
+    if(DARK_CIRCUIT_RISCV_ZICBOM)
+        mig3_program_test(cbo_dma
+                          SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c cbo_dma.c
+                          ARCH rv32i_zicbom
+                          FLAGS -O2 -Wall -Wextra -ffreestanding -I${SW} -I${SW}/semihosting
+                          ARGS +expect_exit=0)
+    endif()
 
     # Traps: mtvec, mepc, mstatus through ECALL and MRET, WFI, EBREAK as a breakpoint trap.
     mig3_program_test(trap SOURCES trap.S ARGS +expect_trap +first_ebreak_traps +expect_regs)

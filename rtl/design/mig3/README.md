@@ -109,6 +109,19 @@ as a load's and goes to rd. misa.A is 1. riscv-tests rv32ua pass; the retire che
 computes every AMO's new word and checks the memory's write of it. Why:
 `kb/rtl/design/mig3/amo.yaml`.
 
+### Cache-block operations (Zicbom)
+
+Mig3 runs cbo.clean, cbo.flush and cbo.inval, for buffers the DMA writes. The core sends a
+CBO as a store of no bytes with its operation (cmo, a field next to atop on the library's
+channels): the D-cache drops the line on an inval or flush and passes every CBO on to the
+memory port, where a cache below (Mig4's L2) will act on it; the RAM takes it as a write of
+nothing. The block is a line of the D-cache, MIG3_CBO_BLOCK_SIZE (8 bytes); the helpers are
+in `sw/riscv/drivers/cbo.h`. cbo_dma.c shows a stale line: the DMA overwrites a buffer the
+D-cache holds, loads see the old words until cbo.flush or cbo.inval, then the new ones;
+cbo.clean drops nothing (the D-cache writes through). The retire check lets a word the DMA
+wrote load old or new until a CBO drops its block. Why: `kb/rtl/design/mig3/cbo.yaml`,
+`kb/rtl/lib/block/cache/cbo.yaml`.
+
 ### Interrupts
 
 Mig3 takes the machine external interrupt: one input, meip, the level an interrupt

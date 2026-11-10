@@ -16,7 +16,10 @@
  * Mig3Atomic) does not do the store: no request, no write in mem; a misaligned SC still
  * traps. An AMO is a word load with its atop (dec.atomic.atop) and its operand rs2 in
  * wdata (AMOAND: ~rs2, a clear); mem has its read and its write, mem.wdata 0 (the new
- * word is made in front of the memory, kb rtl/design/mig3/amo).
+ * word is made in front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom)
+ * is a store of no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache
+ * block, so it is never misaligned; mem has its address and no masks (kb
+ * rtl/design/mig3/cbo).
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig3Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -60,6 +63,7 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     logic  write;       // a store that writes: not cancelled
     logic  amo;         // an AMO: a load with an atop
     logic  clear;       // AMOAND: the operand is ~rs2
+    logic  cbo;         // a CBO: a store of no bytes, never misaligned
     logic  unaligned;   // offset is not aligned to the size of funct3
     word_t wr_data;
     strb_t strb;        // bytes of the access: size of funct3 at offset
@@ -74,6 +78,8 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     assign write = store && !cancel;
     assign amo   = load && AtomicPkg::is_atomic(dec.atomic.atop);
     assign clear = dec.atomic.atop == AtomicPkg::ATOP_LD_CLR;
+    // @kb: rtl/design/mig3/cbo
+    assign cbo   = store && dec.mem.cmo != CachePkg::CMO_NONE;
 
     always_comb
         case (dec.funct3)
@@ -82,15 +88,19 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
             default:     unaligned = 1'b0;      // bytes
         endcase
 
-    assign misaligned = (load || store) && unaligned;
+    assign misaligned = (load || store) && unaligned && !cbo;
 
-    // Bytes of the access; loads and stores have the same funct3 sizes (B, H, W).
+    // Bytes of the access; loads and stores have the same funct3 sizes (B, H, W); a CBO
+    // writes none.
     always_comb
-        case (dec.funct3)
-            F3_B, F3_BU: strb = strb_b << offset;
-            F3_H, F3_HU: strb = strb_h << offset;
-            default:     strb = '1;
-        endcase
+        if (cbo)
+            strb = '0;
+        else
+            case (dec.funct3)
+                F3_B, F3_BU: strb = strb_b << offset;
+                F3_H, F3_HU: strb = strb_h << offset;
+                default:     strb = '1;
+            endcase
 
     always_comb
         case (dec.funct3)
@@ -110,16 +120,17 @@ module Mig3Lsu import Mig3Pkg::*, RiscvPkg::*; (
     assign dmem_req.valid = (load || write) && !misaligned;
     assign dmem_req.we    = write;
     assign dmem_req.addr   = addr[WIDTH-1:DADDR_START];
-    assign dmem_req.offset = offset;
+    assign dmem_req.offset = cbo ? '0 : offset;
     assign dmem_req.size   = size;
     assign dmem_req.wdata = wr_data ^ {WIDTH{clear}};
     assign dmem_req.wstrb = strb;
     assign dmem_req.atop  = dec.atomic.atop;
+    assign dmem_req.cmo   = dec.mem.cmo;
 
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
     assign mem.rmask = (load && !misaligned) ? strb : '0;
     assign mem.wmask = ((write || amo) && !misaligned) ? strb : '0;
-    assign mem.wdata = (write && !misaligned) ? wr_data : '0;
+    assign mem.wdata = (write && !misaligned && !cbo) ? wr_data : '0;
 
 endmodule

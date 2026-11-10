@@ -4,7 +4,7 @@
 # - rtl/lib/riscv/riscv_csr_pkg.sv: CSR addresses, package RiscvCsrPkg.
 #
 # Usage: tools/riscv_opcodes.sh [extension ...]
-#        default: rv_i rv32_i rv_zicsr rv_system rv_m rv_a rv_zbb rv32_zbb
+#        default: rv_i rv32_i rv_zicsr rv_system rv_m rv_a rv_zbb rv32_zbb rv_zicbo
 #
 # Clones riscv-opcodes at COMMIT into a temporary directory, runs its generator
 # for SystemVerilog and splits its output into the two packages. Encodings are of the
@@ -20,7 +20,7 @@ OUT=$ROOT/rtl/lib/riscv/riscv_instr_pkg.sv
 OUT_CSR=$ROOT/rtl/lib/riscv/riscv_csr_pkg.sv
 
 if [ $# -gt 0 ]; then EXTENSIONS=("$@")
-else EXTENSIONS=(rv_i rv32_i rv_zicsr rv_system rv_m rv_a rv_zbb rv32_zbb); fi
+else EXTENSIONS=(rv_i rv32_i rv_zicsr rv_system rv_m rv_a rv_zbb rv32_zbb rv_zicbo); fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

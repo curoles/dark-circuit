@@ -12,8 +12,9 @@
  * shifts, imm when the kind has an immediate (the CSR address for CSR instructions).
  * LR.W and SC.W: a load and a store with imm 0 and their atomic controls, rd_src LOAD and
  * ATOMIC. An AMO: a load of rs1 to rd (imm 0) that reads rs2, its atop by its encoding.
- * At the end every kind must have had a case; KIND_BITMANIP only with +zbb (its
- * cases need a compiler that knows Zbb).
+ * A CBO: a store of rs1 (imm 0) that reads no rs2, its cmo by its encoding.
+ * At the end every kind must have had a case; KIND_BITMANIP only with +zbb, KIND_CBO only
+ * with +zicbom (their cases need a compiler that knows Zbb, Zicbom).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -68,7 +69,7 @@ module TbMig3Decode;
     function automatic logic has_funct3(input kind_e kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC, KIND_AMO:
+            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC, KIND_AMO, KIND_CBO:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -78,7 +79,7 @@ module TbMig3Decode;
     function automatic logic has_imm(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE,
-            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC, KIND_AMO:
+            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC, KIND_AMO, KIND_CBO:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -107,7 +108,7 @@ module TbMig3Decode;
     function automatic logic uses_alu(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_LR, KIND_SC, KIND_AMO:   // the address rs1 + 0
+            KIND_LR, KIND_SC, KIND_AMO, KIND_CBO:   // the address rs1 + 0
                 return 1'b1;
             default:
                 return 1'b0;
@@ -196,9 +197,18 @@ module TbMig3Decode;
         endcase
     endfunction
 
-    function automatic mem_ctrl_t mem_of(input kind_e kind);
+    // The operation of a CBO by its encoding.
+    function automatic CachePkg::cmo_t cmo_model(input insn_t w);
+        if (w ==? CBO_CLEAN) return CachePkg::CMO_CLEAN;
+        if (w ==? CBO_FLUSH) return CachePkg::CMO_FLUSH;
+        if (w ==? CBO_INVAL) return CachePkg::CMO_INVAL;
+        return CachePkg::CMO_NONE;
+    endfunction
+
+    function automatic mem_ctrl_t mem_of(input kind_e kind, input insn_t w);
         return '{read: kind == KIND_LOAD || kind == KIND_LR || kind == KIND_AMO,
-                 write: kind == KIND_STORE || kind == KIND_SC};
+                 write: kind == KIND_STORE || kind == KIND_SC || kind == KIND_CBO,
+                 cmo: kind == KIND_CBO ? cmo_model(w) : CachePkg::CMO_NONE};
     endfunction
 
     // The operation of an AMO by its encoding (AMOAND: a clear of ~rs2).
@@ -265,7 +275,7 @@ module TbMig3Decode;
             #1;
             check(c, insn, "kind",   32'(dec.kind),   e[0]);
             check(c, insn, "br",     32'(dec.br),     32'(br_of(exp_kind, e[4][4:0], e[5][4:0])));
-            check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind)));
+            check(c, insn, "mem",    32'(dec.mem),    32'(mem_of(exp_kind, insn)));
             check(c, insn, "atomic", 32'(dec.atomic), 32'(atomic_of(exp_kind, insn)));
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
@@ -294,9 +304,10 @@ module TbMig3Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        last_kind = KIND_SC;
+        last_kind = KIND_CBO;
         for (k = 0; k <= last_kind; k = k + 1)
-            if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")))
+            if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")) &&
+                !(k == int'(KIND_CBO) && !$test$plusargs("zicbom")))
                 $fatal(1, "Mig3Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
         $finish;

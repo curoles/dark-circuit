@@ -51,3 +51,8 @@
 #define MIG3_DMA_SOURCE 4
 #define MIG3_DMA_DONE_SOURCE(c)   (MIG3_DMA_SOURCE + 2 * (c))
 #define MIG3_DMA_ERROR_SOURCE(c)  (MIG3_DMA_SOURCE + 2 * (c) + 1)
+
+/* Cache-block operations (Zicbom: cbo.clean, cbo.flush, cbo.inval; sw/riscv/drivers/cbo.h)
+ * act on the block of MIG3_CBO_BLOCK_SIZE bytes that holds the address: a line of the data
+ * cache. */
+#define MIG3_CBO_BLOCK_SIZE 8u

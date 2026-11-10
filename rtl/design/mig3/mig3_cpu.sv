@@ -29,6 +29,10 @@
  * Atomics (AMOs) are done in front of the memory, where every access to it meets
  * (AtomicUnit, kb rtl/lib/block/atomic/design): other requests pass, an AMO's word is
  * read, its new value written, and the old line answered. The devices take no AMOs.
+ * A CBO (Zicbom) comes as a write of no bytes with its cmo: ReqMux carries the field to
+ * AtomicUnit's input, where it ends (the RAM holds no lines; a cache there, Mig4's L2,
+ * would act on it); a device takes it as a write of no bytes (its registers are written
+ * by their strobes), so a CBO in the I/O region changes nothing (kb rtl/design/mig3/cbo).
  * The debug port of the core is a port of Mig3Cpu: the testbench (or a semihosting
  * service) reads and writes registers while halted and resumes the core.
  *
@@ -73,10 +77,11 @@ module Mig3Cpu import Mig3Pkg::*; #(
     localparam DMA_N            = CFG.dma.channels;
     localparam DMA_ADDR_WIDTH   = DmaSifivePkg::CHAN_BITS + ((DMA_N > 1) ? $clog2(DMA_N) : 0);
     localparam DMA_SRC_LAST     = CFG.dma.source + 2 * DMA_N - 1;   // its last PLIC source
-    // A memory request's fields but we, for ReqMux: address, size, atop, data, strobes.
-    localparam FIELDS = WIDTH + $bits(size_t) + $bits(AtomicPkg::atop_t) + $bits(line_t) +
-                        $bits(line_strb_t);
+    // A memory request's fields but we, for ReqMux: address, size, atop, cmo, data, strobes.
+    localparam FIELDS = WIDTH + $bits(size_t) + $bits(AtomicPkg::atop_t) +
+                        $bits(CachePkg::cmo_t) + $bits(line_t) + $bits(line_strb_t);
     localparam AtomicPkg::atop_t NO_ATOP = AtomicPkg::ATOP_NONE;
+    localparam CachePkg::cmo_t   NO_CMO  = CachePkg::CMO_NONE;
 
     `DC_STATIC_ASSERT(a_plic_in_io, CFG.plic.offset % (1 << PLIC_ADDR_WIDTH) == 0 &&
                       CFG.plic.offset + (1 << PLIC_ADDR_WIDTH) <= (1 << CFG.io_addr_width))
@@ -112,6 +117,10 @@ module Mig3Cpu import Mig3Pkg::*; #(
     word_t    au_addr;
     size_t    au_size;
     AtomicPkg::atop_t au_atop;
+    // A CBO's operation: it ends here (the RAM holds no lines).
+    /* verilator lint_off UNUSEDSIGNAL */
+    CachePkg::cmo_t au_cmo;
+    /* verilator lint_on UNUSEDSIGNAL */
     line_t    au_wdata;
     line_strb_t au_wstrb;
     wire      au_rsp_valid;
@@ -195,14 +204,15 @@ module Mig3Cpu import Mig3Pkg::*; #(
             .clk, .rst_n,
             .req_valid({dma_mem_valid, mem_valid}), .req_ready({dma_mem_ready, mem_ready}),
             .req_we({dma_mem_we, mem_req.we}),
-            .req_fields({{dma_mem_addr, dma_mem_size, NO_ATOP, dma_mem_wdata, dma_mem_wstrb},
-                         {mem_req.addr, mem_req.size, mem_req.atop, mem_req.wdata,
-                          mem_req.wstrb}}),
+            .req_fields({{dma_mem_addr, dma_mem_size, NO_ATOP, NO_CMO, dma_mem_wdata,
+                          dma_mem_wstrb},
+                         {mem_req.addr, mem_req.size, mem_req.atop, mem_req.cmo,
+                          mem_req.wdata, mem_req.wstrb}}),
             .rsp_valid({dma_mem_rsp_valid, mem_rsp_valid}), .rsp_data(mem_rsp_data),
             .tgt_req_valid(au_valid), .tgt_req_ready(au_ready), .tgt_req_we(au_we),
             .tgt_req_fields(au_fields), .tgt_rsp_valid(au_rsp_valid),
             .tgt_rsp_data(au_rsp_data));
-    assign {au_addr, au_size, au_atop, au_wdata, au_wstrb} = au_fields;
+    assign {au_addr, au_size, au_atop, au_cmo, au_wdata, au_wstrb} = au_fields;
 
     // Atomics in front of the memory: the other requests pass as they come.
     // @kb: rtl/lib/block/atomic/design

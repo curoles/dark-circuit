@@ -45,6 +45,7 @@
     .equ K_LR,      18
     .equ K_SC,      19
     .equ K_AMO,     20
+    .equ K_CBO,     21
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -143,6 +144,11 @@
     .macro AMO_ op, rd, rs2, rs1, ord=              /* amoadd.w ... amomaxu.w: imm 0 */
     \op\ord x\rd, x\rs2, (x\rs1)
     EXPECT K_AMO, 1, 1, 1, \rd, \rs1, \rs2, 2, 0, 0
+    .endm
+
+    .macro CBO_ op, rs1                             /* cbo.clean cbo.flush cbo.inval: imm 0 */
+    \op (x\rs1)
+    EXPECT K_CBO, 0, 1, 0, 0, \rs1, 0, 2, 0, 0
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -299,6 +305,14 @@ cases:
     AMO_   amominu.w, 15, 16, 17
     AMO_   amomaxu.w, 18, 19, 0
 
+#ifdef HAVE_ZICBOM
+    /*     op         rs1   Zicbom, only when the compiler knows it */
+    CBO_   cbo.clean, 1
+    CBO_   cbo.flush, 31
+    CBO_   cbo.inval, 0
+    CBO_   cbo.inval, 17
+#endif
+
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
     ILLEGAL 0xffffffff      /* all ones: defined to be illegal */
     ILLEGAL 0xfe000033      /* OP with funct7 = 0x7f: neither OP nor M */
@@ -309,4 +323,7 @@ cases:
     ILLEGAL 0x0000302f      /* amoadd.d: RV64 */
     ILLEGAL 0x1010202f      /* like lr.w, but rs2 field 1 */
     ILLEGAL 0x1000302f      /* lr.d: RV64 */
+    ILLEGAL 0x0040200f      /* cbo.zero: Zicboz */
+    ILLEGAL 0x0030200f      /* like cbo.clean, but imm 3 */
+    ILLEGAL 0x0010208f      /* like cbo.clean, but rd field 1 */
 cases_end:

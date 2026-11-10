@@ -19,6 +19,13 @@
  *   AtomicUnit after it retires (ram_write) must be its new word, computed here from
  *   the old word and rs2 (amo_new); it is not one of the stores below (the memory port
  *   sees the AMO as a read),
+ * - CBO (Zicbom): mem_addr its word, no masks (it writes no byte); the memory port's write
+ *   of no bytes it makes is no store's,
+ * - a word the DMA wrote (its writes at ReqMux, which the core's data cache does not see):
+ *   a load of it may get the word before the DMA's first write to it (the data cache may
+ *   still hold it) or the memory's, until a cbo.inval or cbo.flush of its block retires;
+ *   after that, loads get the memory's (kb rtl/design/mig3/cbo). A store of the core to
+ *   such a word before that CBO is not modeled,
  * - store: it is the next write the memory takes, in program order: mem_addr, mem_wmask and
  *   the bytes of mem_wdata under it (the D-cache writes through: the memory takes the store
  *   in the cycle it retires or later, uncached in EX, before it retires; a store still on
@@ -90,6 +97,10 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     store_t ram_taken;
     /* verilator lint_on UNUSEDSIGNAL */
+    // @kb: rtl/design/mig3/cbo
+    // Words the DMA wrote, by byte address: the word before its first write, which the data
+    // cache may hold until a CBO that drops their block (inval, flush) retires.
+    word_t  dma_old [word_t];
 
     assign retire_pc = retire.pc_rdata;
 
@@ -118,7 +129,8 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
         MEM_LOAD,
         MEM_STORE,
         MEM_SC,     // a store when it succeeds
-        MEM_AMO     // a read and a write of its word
+        MEM_AMO,    // a read and a write of its word
+        MEM_CBO     // its word, no bytes
     } mem_kind_e;
 
     // Kind of memory access of insn.
@@ -139,14 +151,16 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             SC_W:                 return MEM_SC;
             AMOADD_W, AMOSWAP_W, AMOXOR_W, AMOOR_W, AMOAND_W, AMOMIN_W, AMOMAX_W,
             AMOMINU_W, AMOMAXU_W: return MEM_AMO;
+            CBO_CLEAN, CBO_FLUSH, CBO_INVAL: return MEM_CBO;
             default:              return MEM_NONE;
         endcase
     endfunction
 
     // Byte address of the load or store insn when rs1 is base: base + S or I immediate;
-    // LR, SC and the AMOs have none.
+    // LR, SC, the AMOs and the CBOs have none.
     function automatic word_t mem_byte_addr(input insn_t insn, input word_t base);
-        if (insn ==? LR_W || insn ==? SC_W || mem_kind(insn) == MEM_AMO)
+        if (insn ==? LR_W || insn ==? SC_W || mem_kind(insn) == MEM_AMO ||
+            mem_kind(insn) == MEM_CBO)
             return base;
         return base + (mem_kind(insn) == MEM_STORE ? imm_s_of(insn) : imm_i_of(insn));
     endfunction
@@ -185,6 +199,17 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
         return 1'b1;
     endfunction
 
+    // Bytes of data under mask are those of the word at a before the DMA wrote it.
+    function automatic logic dma_old_has(input word_t a, input strb_t mask,
+                                         input word_t data);
+        if (!dma_old.exists(a))
+            return 1'b0;
+        for (int b = 0; b < STRB_WIDTH; b++)
+            if (mask[b] && dma_old[a][8*b +: 8] !== data[8*b +: 8])
+                return 1'b0;
+        return 1'b1;
+    endfunction
+
     // A write of a line: the word its strobes are in (a store or an AMO writes one word).
     // The offset of addr is not used.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -205,11 +230,12 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
     endfunction
 
     // The write the memory port of Mig3Cpu takes at this edge: 1 and the write in w, or 0.
+    // A write of no bytes is a CBO's: 0.
     function automatic logic dmem_write(output store_t w);
         w = word_write(TbMig3.u_mig3_cpu.mem_req.addr, TbMig3.u_mig3_cpu.mem_req.wdata,
                        TbMig3.u_mig3_cpu.mem_req.wstrb);
         return TbMig3.u_mig3_cpu.mem_req.valid && TbMig3.u_mig3_cpu.mem_req.we &&
-               TbMig3.u_mig3_cpu.mem_rsp.ready;
+               TbMig3.u_mig3_cpu.mem_rsp.ready && TbMig3.u_mig3_cpu.mem_req.wstrb != '0;
     endfunction
 
     // The write the RAM of Mig3Cpu takes at this edge, behind AtomicUnit (the stores, and
@@ -220,6 +246,21 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
         return TbMig3.u_mig3_cpu.ram_valid && TbMig3.u_mig3_cpu.ram_we &&
                TbMig3.u_mig3_cpu.ram_ready;
     endfunction
+
+    // The write of the DMA that ReqMux takes at this edge: the word before it of every word
+    // it writes, unless the DMA wrote that word before.
+    task automatic dma_write;
+        word_t a;
+        if (TbMig3.u_mig3_cpu.dma_mem_valid && TbMig3.u_mig3_cpu.dma_mem_ready &&
+            TbMig3.u_mig3_cpu.dma_mem_we)
+            for (int k = 0; k < LINE_WORDS; k++) begin
+                a = {TbMig3.u_mig3_cpu.dma_mem_addr[WIDTH-1:LINE_START], {LINE_START{1'b0}}} +
+                    word_t'(STRB_WIDTH * k);
+                if (TbMig3.u_mig3_cpu.dma_mem_wstrb[STRB_WIDTH*k +: STRB_WIDTH] != '0 &&
+                    !dma_old.exists(a))
+                    dma_old[a] = mem_word(1'b0, a);
+            end
+    endtask
 
     // The new word of the AMO insn: its operation on the old word and rs2 (b).
     function automatic word_t amo_new(input insn_t insn, input word_t old, input word_t b);
@@ -293,6 +334,21 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
                    access_addr, access_mask);
     endtask
 
+    // CBO in retire that did not trap: its word, no masks; an inval or flush ends the old
+    // words of its block (the data cache dropped the line: later loads read the memory).
+    task automatic check_cbo;
+        word_t block;     // the block's byte address: a line of the data cache
+        if (retire.mem_addr !== {access_addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} ||
+            retire.mem_rmask != 0 || retire.mem_wmask != 0)
+            $fatal(1, "Mig3: CBO at pc %h accesses mem[%h] r %b w %b, expected address %h, no mask",
+                   retire_pc, retire.mem_addr, retire.mem_rmask, retire.mem_wmask, access_addr);
+        if (retire.insn ==? CBO_INVAL || retire.insn ==? CBO_FLUSH) begin
+            block = {access_addr[WIDTH-1:LINE_START], {LINE_START{1'b0}}};
+            for (int k = 0; k < LINE_WORDS; k++)
+                dma_old.delete(block + word_t'(STRB_WIDTH * k));
+        end
+    endtask
+
     // SC in retire that did not trap: it succeeds when the shadow reservation holds its
     // word; then rd gets 0 and it is a store of its word, else rd gets 1 and it accesses
     // nothing.
@@ -350,13 +406,16 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             check_read(retire.rs2_addr, retire.rs2_rdata);
             if (mem_kind(retire.insn) == MEM_SC && !retire.trap)
                 check_sc();
+            else if (mem_kind(retire.insn) == MEM_CBO && !retire.trap)
+                check_cbo();
             else if (mem_kind(retire.insn) != MEM_NONE && !retire.trap)
                 check_access();
             else if (retire.mem_rmask != 0 || retire.mem_wmask != 0)
                 $fatal(1, "Mig3: pc %h is not a load or store (or trapped), but has a memory access",
                        retire_pc);
             if (retire.mem_rmask != 0 && !in_io(retire.mem_addr) &&
-                !dmem_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata))
+                !dmem_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata) &&
+                !dma_old_has(retire.mem_addr, retire.mem_rmask, retire.mem_rdata))
                 $fatal(1, "Mig3: load at pc %h from %h mask %b got %h, dmem has %h",
                        retire_pc, retire.mem_addr, retire.mem_rmask, retire.mem_rdata,
                        mem_word(1'b0, retire.mem_addr));
@@ -412,6 +471,8 @@ module TbMig3RetireCheck import Mig3Pkg::*, RiscvPkg::*; (
             $fdisplay(trace_fd, "%8d resume", cycle);
         if (rst_n && dmem_write(dmem_taken))
             dmem_writes.push_back(dmem_taken);
+        if (rst_n)
+            dma_write();
         if (rst_n && amo_pending && ram_write(ram_taken)) begin
             if (ram_taken.addr !== amo_expect.addr || ram_taken.mask !== amo_expect.mask ||
                 ram_taken.data !== amo_expect.data)

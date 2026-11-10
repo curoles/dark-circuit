@@ -1,0 +1,65 @@
+type: decision
+title: Mig3 runs Zicbom as stores of no bytes with a cmo; the retire check knows stale DMA words
+date: 2026-11-09
+question: >
+  Mig3's DMA writes memory, not the data cache, so a buffer the program loaded before is
+  stale there. How does Mig3 run cbo.clean, cbo.flush and cbo.inval (Zicbom) on the
+  library's cmo field (kb rtl/lib/block/cache/cbo), how big is a block, what happens to a
+  CBO in the I/O region and below the caches, and how does the retire check, which checks
+  every load against the memory, accept a stale load?
+decision: >
+  Decode: KIND_CBO from the encodings (RiscvInstrPkg now has rv_zicbo: tools/riscv_opcodes.sh),
+  a store of rs1 (imm 0: the MISC-MEM opcode gets the zero immediate, FENCE uses none) that
+  reads no rs2, its operation in dec.mem.cmo. Mig3Lsu sends it as a store of no bytes (wstrb
+  0) with its cmo, to its word (offset 0): a CBO names a block, so it is never misaligned
+  (its funct3 is a word's). dmem_req_t and mem_req_t get cmo; the D-cache drops the line on
+  an inval or flush and sends every CBO on; ReqMux carries the field to AtomicUnit's input,
+  where it ends: the RAM holds no lines (a cache there, Mig4's L2, takes it). A CBO in the
+  I/O region reaches a device as a write of no bytes, and every device of the library writes
+  its registers by their strobes: nothing changes. The block is a line of the data cache:
+  MIG3_CBO_BLOCK_SIZE in the config header, sw/riscv/drivers/cbo.h the helpers (one CBO, a
+  range). Retire: a CBO has mem_addr and no masks. The retire check keeps, for every word
+  the DMA wrote (its writes at ReqMux), the word before the DMA's first write; a load of it
+  may get that old word or the memory's until a cbo.inval or cbo.flush of its block retires
+  (a clean keeps it); the memory port's write of no bytes is no store. The decode test and
+  the CBO test run when the compiler knows Zicbom (DARK_CIRCUIT_RISCV_ZICBOM, probed).
+why: >
+  The store path already does all a CBO needs (the lookup, the memory request, EX waiting
+  until the D-cache takes it, the order with later loads: the D-cache takes no request while
+  an inval or flush waits for memory), so the core adds a mux on the strobes and on the
+  offset and one term in misaligned. The cmo field carried to the end of Mig3's memory side
+  is the scale-to-Mig4 rule: the L2 acts on a field that already arrives. The retire check's
+  model (the user chose old or new until the CBO, over no check of such words and over a
+  switch per test) still catches a wrong word, and checks every load after the CBO against
+  the memory: exactly the contract software relies on.
+rejected:
+  - choice: A load of a word the DMA wrote not checked until the CBO
+    why_not: A word neither old nor new would pass (the user chose old or new).
+  - choice: A plusarg that turns the load check off for the CBO test
+    why_not: The test would check only itself (the user chose old or new).
+  - choice: The cmo field stops at Mig3Cpu's memory port, not through ReqMux
+    why_not: The library decision carries it through ReqMux, where Mig4's L2 will sit.
+  - choice: A CBO in the I/O region dropped in the core (or a fault)
+    why_not: Needs the region's compare in the core; a write of no bytes already changes no
+      register of a device of the library.
+relies_on:
+  - rtl/lib/block/cache/cbo
+  - rtl/design/mig3/dma
+  - rtl/design/mig3/io_region
+evidence: >
+  2026-11-09, Verilator, gcc 12.2 (it takes _zicbom in -march, assembly and inline asm):
+  cbo_dma.c passes: all 16 words of the buffer stale after the DMA, the same 16 after
+  cbo.clean, all new after cbo.flush over one half and cbo.inval over the other by the last
+  byte of each block. The decode test passes with 4 CBO cases and 3 illegal neighbours
+  (cbo.zero, imm 3, rd 1); every kind now must have a case (KIND_AMO was left out of the
+  check before). The Mig3 suite passes (132 tests, sv2v among them), Mig2's decode test too
+  (the regenerated RiscvInstrPkg only adds encodings). One-off mutants, caught: the D-cache
+  given no inval or flush (the retire check: a load after the CBO got the old word), cbo.inval
+  decoded as a clean (the decode test and the retire check), a CBO writing bytes
+  (CacheControl's a_cbo_store), a CBO trapping as misaligned (cbo_dma: a trap).
+code:
+  - rtl/design/mig3/mig3_decode.sv#cmo_of
+  - rtl/design/mig3/mig3_lsu.sv#cbo
+  - test/design/mig3/tb/tb_mig3_retire_check.sv#dma_old
+  - sw/riscv/drivers/cbo.h#cbo_inval_range
+  - test/design/mig3/cbo_dma.c#main

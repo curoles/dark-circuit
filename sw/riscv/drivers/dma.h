@@ -29,7 +29,7 @@
  *    Mig3 keeps both orders anyway (one path, in order); a core with a write buffer or out of
  *    order execution needs them.
  *  - Caches: the DMA writes memory, not the caches. A destination the program has loaded
- *    before may be in the data cache, stale: invalidate it (Zicbom cbo.inval) before reading
+ *    before may be in the data cache, stale: invalidate it (Zicbom cbo.inval, cbo.h) before reading
  *    it, or read only buffers not loaded before. Mig3's data cache writes through, so a
  *    source written by the program is in memory (no clean needed).
  *  - The interrupt (PLIC): done is a level; a handler clears it with dma_clear (the write,

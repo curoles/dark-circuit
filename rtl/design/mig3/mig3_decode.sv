@@ -9,7 +9,9 @@
  * RiscvPkg (imm_*_of), sign-extended to 32 bits. LR.W and SC.W (Zalrsc) are a load and
  * a store whose address is rs1 (imm 0), with dec.atomic for Mig3Atomic; an AMO (Zaamo)
  * is a load of rs1 to rd with its operation in dec.atomic.atop, done in front of the
- * memory (kb rtl/design/mig3/amo).
+ * memory (kb rtl/design/mig3/amo); a CBO (Zicbom: cbo.clean, cbo.flush, cbo.inval) a store
+ * of rs1 (imm 0) that writes no byte, its operation in dec.mem.cmo (kb
+ * rtl/design/mig3/cbo).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -47,6 +49,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             SC_W:                                                   kind = KIND_SC;
             AMOADD_W, AMOSWAP_W, AMOXOR_W, AMOOR_W, AMOAND_W:       kind = KIND_AMO;
             AMOMIN_W, AMOMAX_W, AMOMINU_W, AMOMAXU_W:               kind = KIND_AMO;
+            CBO_CLEAN, CBO_FLUSH, CBO_INVAL:                        kind = KIND_CBO;
             MRET:                                                   kind = KIND_MRET;
             WFI:                                                    kind = KIND_WFI;
             default:                                                kind = KIND_ILLEGAL;
@@ -77,7 +80,9 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             SW[6:0]:              imm = imm_s_of(insn);     // stores
             CSRRW[6:0]:           imm = imm_csr;            // SYSTEM: the CSR address
             LR_W[6:0]:            imm = '0;                 // AMO: the address is rs1
-            default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM, FENCE
+            CBO_INVAL[6:0]:       imm = '0;                 // MISC-MEM: a CBO's address
+                                                            // is rs1 (FENCE: no imm)
+            default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM
         endcase
 
     // Controls of an M instruction from its funct3.
@@ -137,6 +142,18 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             AMOMAXU_W: return AtomicPkg::ATOP_LD_UMAX;
             AMOSWAP_W: return AtomicPkg::ATOP_SWAP;
             default:   return AtomicPkg::ATOP_NONE;
+        endcase
+    endfunction
+
+    // The operation of a CBO on the cache block of rs1 (CachePkg), by the encodings:
+    // Mig3Lsu sends it as a store of no bytes.
+    // @kb: rtl/design/mig3/cbo
+    function automatic CachePkg::cmo_t cmo_of(insn_t w);
+        casez (w)
+            CBO_CLEAN: return CachePkg::CMO_CLEAN;
+            CBO_FLUSH: return CachePkg::CMO_FLUSH;
+            CBO_INVAL: return CachePkg::CMO_INVAL;
+            default:   return CachePkg::CMO_NONE;
         endcase
     endfunction
 
@@ -228,6 +245,9 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
                 dec.rd_we = 1'b1;  dec.rd_src = RD_LOAD;
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.mem.read = 1'b1;
                 dec.atomic.atop = atop_of(insn);
+            end
+            KIND_CBO: begin
+                dec.uses_rs1 = 1'b1;  dec.mem.write = 1'b1;  dec.mem.cmo = cmo_of(insn);
             end
             KIND_OP_IMM: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;

@@ -126,7 +126,9 @@ package Mig3Pkg;
     // word at addr. offset and size are the access's own bytes (an uncached one goes out
     // exactly). An AMO is a read with an atop (AtomicPkg): wdata and wstrb are its
     // operand, the answer is the old word; it is done in front of the memory (Mig3Cpu,
-    // kb rtl/lib/block/atomic/design).
+    // kb rtl/lib/block/atomic/design). A CBO (Zicbom) is a write without strobes with its
+    // cmo (CachePkg): the D-cache drops the line on an inval or flush and sends it on to
+    // memory (kb rtl/lib/block/cache/cbo).
     typedef struct packed {
         logic         valid;
         logic         we;
@@ -136,6 +138,7 @@ package Mig3Pkg;
         word_t        wdata;
         strb_t        wstrb;
         AtomicPkg::atop_t atop; // ATOP_NONE, or the AMO's operation
+        CachePkg::cmo_t   cmo;  // CMO_NONE, or the CBO's operation (a write of no bytes)
     } dmem_req_t;
 
     typedef struct packed {
@@ -146,7 +149,7 @@ package Mig3Pkg;
 
     // Memory, behind the caches: the same for a line; a write writes the bytes of wdata
     // with wstrb=1 (a store's word, or an uncached store's); an AMO comes as asked, its
-    // operand in every word of wdata.
+    // operand in every word of wdata; a CBO as a write of its line without strobes.
     typedef struct packed {
         logic       valid;
         logic       we;
@@ -155,6 +158,7 @@ package Mig3Pkg;
         line_t      wdata;
         line_strb_t wstrb;
         AtomicPkg::atop_t atop; // ATOP_NONE, or an AMO's operation
+        CachePkg::cmo_t   cmo;  // CMO_NONE, or a CBO's operation
     } mem_req_t;
 
     typedef struct packed {
@@ -170,7 +174,8 @@ package Mig3Pkg;
     // RVFI fields that are constant for Mig3 are not here: intr=0, mode=3 (M), ixl=1.
     // An AMO reads and writes its word (mem_rmask, mem_wmask; mem_rdata the old word),
     // but its mem_wdata is 0, unlike RVFI: the new word is made in front of the memory
-    // (AtomicUnit, kb rtl/design/mig3/amo), the testbench computes it.
+    // (AtomicUnit, kb rtl/design/mig3/amo), the testbench computes it. A CBO has
+    // mem_addr (its word) and no masks: it writes no byte.
     // bubble is not RVFI: with valid=0 it tells why nothing retires in this cycle.
     typedef struct packed {
         logic        valid;      // an instruction retires: it completes, or traps
@@ -321,7 +326,8 @@ package Mig3Pkg;
         KIND_BITMANIP,  // Zbb in ComputeCoreBitmanip: SEXT.B/H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP
         KIND_LR,        // LR.W (Zalrsc): a load that reserves its word (Mig3Atomic)
         KIND_SC,        // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
-        KIND_AMO        // AMO*.W (Zaamo): a load with an atop, done in front of memory
+        KIND_AMO,       // AMO*.W (Zaamo): a load with an atop, done in front of memory
+        KIND_CBO        // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
     } kind_e;
 
     // Source of the value written to rd.
@@ -359,7 +365,8 @@ package Mig3Pkg;
 
     typedef struct packed {
         logic   read;       // LOAD, LR.W, AMO*.W
-        logic   write;      // STORE, SC.W
+        logic   write;      // STORE, SC.W, CBO.*
+        CachePkg::cmo_t cmo;    // CBO.*: its operation (Mig3Lsu), else CMO_NONE
     } mem_ctrl_t;
 
     typedef struct packed {

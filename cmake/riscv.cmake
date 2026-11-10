@@ -43,7 +43,7 @@ endfunction()
 # Since GCC 12 (ISA spec 20191213) the base ISA leaves out the CSR instructions and FENCE.I:
 # they are the extensions Zicsr and Zifencei, which older compilers do not know by name; so
 # every -march gets DC_RISCV_ARCH_SUFFIX. DARK_CIRCUIT_RISCV_ZBB: the compiler knows Zbb
-# (tests of Zbb need it).
+# (tests of Zbb need it); DARK_CIRCUIT_RISCV_ZICBOM: it knows Zicbom (tests of the CBOs).
 if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(base_has_csr rv32i "csrr a0, mscratch")
     if(base_has_csr)
@@ -52,11 +52,14 @@ if(DARK_CIRCUIT_RISCV)
         set(DC_RISCV_ARCH_SUFFIX _zicsr_zifencei)
     endif()
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZBB rv32i${DC_RISCV_ARCH_SUFFIX}_zbb "clz a0, a1")
+    dc_riscv_probe(DARK_CIRCUIT_RISCV_ZICBOM rv32i${DC_RISCV_ARCH_SUFFIX}_zicbom
+                   "cbo.inval (a0)")
     execute_process(COMMAND ${RISCV_GCC_BIN} -dumpfullversion
                     OUTPUT_VARIABLE DC_RISCV_GCC_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE
                     ERROR_QUIET)
     message(STATUS "RISC-V: gcc ${DC_RISCV_GCC_VERSION}, -march suffix "
-                   "'${DC_RISCV_ARCH_SUFFIX}', Zbb ${DARK_CIRCUIT_RISCV_ZBB}")
+                   "'${DC_RISCV_ARCH_SUFFIX}', Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
+                   "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}")
 endif()
 
 # dc_riscv_cycle_ceiling(<out-var> <test> <version> <cycles> [<version> <cycles>]...)

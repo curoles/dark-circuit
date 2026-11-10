@@ -12,7 +12,9 @@
  * request, kept when the cache takes it); a store writes its word into every word of the
  * line, with its strobes only in its own. A hit answers in the clock after the request, as a
  * memory of latency 1; a miss asks memory for the line and answers when it comes; a store
- * goes to memory in any case. Their memory sides share one memory through
+ * goes to memory in any case; so does a CBO (Zicbom: a store of no bytes with its cmo), and
+ * an inval or flush drops the line it hits (kb rtl/lib/block/cache/cbo). Their memory sides
+ * share one memory through
  * InsnDataCacheArbiter (u_arbiter): when both ask, the instruction cache first while prio
  * says so (Mig3Core: while ID has no instruction, every stage starves), else the data cache
  * (a load that waits stalls every stage); each side's request goes through the arbiter's
@@ -86,10 +88,6 @@ module Mig3Caches import Mig3Pkg::*; #(
     line_strb_t       d_mem_wstrb;
     AtomicPkg::atop_t d_mem_atop;
     CachePkg::cmo_t   d_mem_cmo;
-    // The memory port's CBOs: none yet (Mig3's memory port gets the field with Zicbom).
-    /* verilator lint_off UNUSEDSIGNAL */
-    CachePkg::cmo_t   mem_cmo;
-    /* verilator lint_on UNUSEDSIGNAL */
     logic             d_mem_rsp_valid;
     line_t            d_mem_rsp_data;
     // The caches' CPU sides, lines.
@@ -119,7 +117,7 @@ module Mig3Caches import Mig3Pkg::*; #(
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
         .req_nocache(d_io), .req_atop(dcache_req.atop),
-        .req_cmo(CachePkg::CMO_NONE),
+        .req_cmo(dcache_req.cmo),
         .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
@@ -175,7 +173,7 @@ module Mig3Caches import Mig3Pkg::*; #(
         .mem_req_valid(mem_req.valid), .mem_req_ready(mem_rsp.ready), .mem_req_we(mem_req.we),
         .mem_req_addr(mem_req.addr), .mem_req_wdata(mem_req.wdata),
         .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_req.size),
-        .mem_req_atop(mem_req.atop), .mem_req_cmo(mem_cmo),
+        .mem_req_atop(mem_req.atop), .mem_req_cmo(mem_req.cmo),
         .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 
