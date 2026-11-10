@@ -17,8 +17,9 @@ decision: >
   flops), because a request taken then would read the line still valid. A clean does
   nothing in a write-through cache (nothing is dirty) but goes down. The read-only caches
   tie req_cmo to CMO_NONE. First step (this record): the field through CacheControl and the
-  read-write caches; the instruction/data arbiter carries it next, then Mig3 decodes the
-  CBOs.
+  read-write caches; second step: InsnDataCacheArbiter carries the data cache's cmo with its
+  request (its flow-through buffer, a Mux2 with CMO_NONE for the instruction cache's), as it
+  carries atop; then Mig3 decodes the CBOs and its memory port gets the field.
 why: >
   The user chose (b) over stopping the CBO at the data cache: the field travels like atop,
   so Mig4's L2 only has to act on a field that already arrives (the scale-to-Mig4/5/6 rule);

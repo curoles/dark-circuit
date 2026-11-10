@@ -138,3 +138,17 @@ mutants:
         new: ".in0(d_atop), .in1(AtomicPkg::ATOP_NONE), .sel(side),"
     tests: [block_insn_data_cache_arbiter_struct]
     expect: caught
+  - name: the arbiter sends the data cache's cmo with an instruction read
+    edits:
+      - file: rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv
+        old: "assign mem_req_cmo   = (side == SIDE_D) ? d_cmo  : CMO_NONE;"
+        new: "assign mem_req_cmo   = d_cmo;"
+    tests: [block_insn_data_cache_arbiter_behave]
+    expect: caught
+  - name: the cmo mux of the arbiter the wrong way round (struct)
+    edits:
+      - file: rtl/lib/block/cache/insn_data_cache_arbiter/struct/insn_data_cache_arbiter.sv
+        old: ".in0(CachePkg::CMO_NONE), .in1(d_cmo), .sel(side),"
+        new: ".in0(d_cmo), .in1(CachePkg::CMO_NONE), .sel(side),"
+    tests: [block_insn_data_cache_arbiter_struct]
+    expect: caught

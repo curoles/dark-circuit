@@ -62,6 +62,7 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     input  wire [ADDR_WIDTH-1:0] dcache_req_addr,
     input  wire [2:0]            dcache_req_size,   // 1 << size bytes (AXI AxSIZE)
     input  atop_t                dcache_req_atop,   // ATOP_NONE, or an atomic (a read)
+    input  cmo_t                 dcache_req_cmo,    // CMO_NONE, or a CBO (a write)
     input  wire [DATA_WIDTH-1:0] dcache_req_wdata,
     input  wire [STRB_WIDTH-1:0] dcache_req_wstrb,
     output wire                  dcache_rsp_valid,
@@ -74,6 +75,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     output wire [ADDR_WIDTH-1:0] mem_req_addr,
     output wire [2:0]            mem_req_size,      // 1 << size bytes (AXI AxSIZE)
     output atop_t                mem_req_atop,      // the data cache's; ATOP_NONE for the
+    output cmo_t                 mem_req_cmo,       // the data cache's; CMO_NONE for the
+                                                    // instruction cache's
                                                     // instruction cache
     output wire [DATA_WIDTH-1:0] mem_req_wdata,     // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb,     // write: the bytes to write
@@ -107,8 +110,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     // Each side's request goes through a flow-through buffer: the cache's ready comes from a
     // flop (its buffer is empty), never from memory's ready or the other cache's valid.
     localparam I_REQ_WIDTH = ADDR_WIDTH + 3;    // {addr, size}
-    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + 3 + $bits(atop_t) + DATA_WIDTH + STRB_WIDTH;
-                                                // {we, addr, size, atop, wdata, wstrb}
+    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + 3 + $bits(atop_t) + $bits(cmo_t) + DATA_WIDTH +
+                             STRB_WIDTH;        // {we, addr, size, atop, cmo, wdata, wstrb}
     typedef logic [I_REQ_WIDTH-1:0] i_req_t;
     typedef logic [D_REQ_WIDTH-1:0] d_req_t;
 
@@ -122,6 +125,7 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     wire [ADDR_WIDTH-1:0] d_addr;
     wire [2:0]            d_size;
     atop_t                d_atop;
+    cmo_t                 d_cmo;
     wire [DATA_WIDTH-1:0] d_wdata;
     wire [STRB_WIDTH-1:0] d_wstrb;
 
@@ -134,10 +138,10 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     FlowThroughBufferT #(.T(d_req_t)) u_dcache_flow(
         .clk, .rst_n,
         .in_valid(dcache_req_valid), .in_ready(dcache_req_ready),
-        .in_data({dcache_req_we, dcache_req_addr, dcache_req_size, dcache_req_atop,
+        .in_data({dcache_req_we, dcache_req_addr, dcache_req_size, dcache_req_atop, dcache_req_cmo,
                   dcache_req_wdata, dcache_req_wstrb}),
         .out_valid(d_valid), .out_ready(d_ready),
-        .out_data({d_we, d_addr, d_size, d_atop, d_wdata, d_wstrb}));
+        .out_data({d_we, d_addr, d_size, d_atop, d_cmo, d_wdata, d_wstrb}));
 
     // @kb: rtl/lib/block/cache/insn_data_cache_arbiter/design
     // The side that gets memory when both want it: prio, else POLICY. The only place that
@@ -170,6 +174,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     assign mem_req_size  = (side == SIDE_D) ? d_size : i_size;
     // @kb: rtl/lib/block/cache/atomic
     assign mem_req_atop  = (side == SIDE_D) ? d_atop : ATOP_NONE;
+    // @kb: rtl/lib/block/cache/cbo
+    assign mem_req_cmo   = (side == SIDE_D) ? d_cmo  : CMO_NONE;
     assign mem_req_wdata = d_wdata;             // a write, an atomic: the data cache's
     assign mem_req_wstrb = d_wstrb;
 
@@ -204,7 +210,7 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     // its operand).
     `DC_ASSERT_NEXT(a_mem_req_held, mem_req_valid && !mem_req_ready,
                     mem_req_valid && $stable(mem_req_we) && $stable(mem_req_addr) &&
-                    $stable(mem_req_atop) &&
+                    $stable(mem_req_atop) && $stable(mem_req_cmo) &&
                     ((!mem_req_we && !is_atomic(mem_req_atop)) ||
                      ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
 

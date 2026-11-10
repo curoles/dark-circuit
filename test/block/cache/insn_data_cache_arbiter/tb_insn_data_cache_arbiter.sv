@@ -6,7 +6,8 @@
  * it is theirs (the oldest read they wait for) and its line is the line of its address. The
  * size of a request (here the low 3 bits of its address) must come to memory with it, and
  * the atop of a data read (here bits 8..3 of its address; a write's and an instruction
- * read's ATOP_NONE).
+ * read's ATOP_NONE), and the cmo of a data write (here bits 4..3 of its address; a read's
+ * and an instruction read's CMO_NONE).
  * Memory takes requests when ready (random) and answers reads in order, 1 to 6 clocks after
  * taking them; prio is random. The model has the arbiter's two flow-through buffers: a
  * cache's request is taken when its buffer is empty and goes on from there (in the same
@@ -64,6 +65,7 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
     logic [DW-1:0] d_wdata;
     logic [SW-1:0] d_wstrb;
     atop_t         d_atop;     // a read's atop: its address's bits 8..3 here
+    cmo_t          d_cmo;      // a write's cmo: its address's bits 4..3 here
     wire           d_rsp_valid;
     wire  [DW-1:0] d_rsp_data;
     // Memory
@@ -73,6 +75,7 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
     wire  [AW-1:0] m_addr;
     wire  [2:0]    m_size;     // a request's size: its address's low bits here
     atop_t         m_atop;
+    cmo_t          m_cmo;
     wire  [DW-1:0] m_wdata;
     wire  [SW-1:0] m_wstrb;
     logic          m_rsp_valid;
@@ -87,13 +90,16 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         .dcache_req_valid(d_valid), .dcache_req_ready(d_ready), .dcache_req_we(d_we),
         .dcache_req_addr(d_addr), .dcache_req_wdata(d_wdata), .dcache_req_wstrb(d_wstrb),
         .dcache_req_size(d_addr[2:0]), .dcache_req_atop(d_atop),
+        .dcache_req_cmo(d_cmo),
         .dcache_rsp_valid(d_rsp_valid), .dcache_rsp_data(d_rsp_data),
         .mem_req_valid(m_valid), .mem_req_ready(m_ready), .mem_req_we(m_we),
         .mem_req_addr(m_addr), .mem_req_wdata(m_wdata), .mem_req_wstrb(m_wstrb),
-        .mem_req_size(m_size), .mem_req_atop(m_atop), .mem_rsp_valid(m_rsp_valid),
+        .mem_req_size(m_size), .mem_req_atop(m_atop), .mem_req_cmo(m_cmo),
+        .mem_rsp_valid(m_rsp_valid),
         .mem_rsp_data(m_rsp_data));
 
     assign d_atop = d_we ? ATOP_NONE : d_addr[8:3];
+    assign d_cmo  = d_we ? d_addr[4:3] : CMO_NONE;
 
     // Model queues: reads a cache waits for (addresses), reads in memory (address, side,
     // the clock its answer may come).
@@ -187,6 +193,9 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         if (m_valid && m_atop !== ((side == SIDE_D && !m_we) ? m_addr[8:3] : ATOP_NONE))
             $fatal(1, "InsnDataCacheArbiter %0d: mem_req_atop %h of side %b, %h",
                    POLICY, m_atop, side, m_addr);
+        if (m_valid && m_cmo !== ((side == SIDE_D && m_we) ? m_addr[4:3] : CMO_NONE))
+            $fatal(1, "InsnDataCacheArbiter %0d: mem_req_cmo %b of side %b, %h",
+                   POLICY, m_cmo, side, m_addr);
         if (held && (m_valid !== 1'b1 || m_we !== h_we || m_addr !== h_addr ||
                      (h_we && (m_wdata !== h_wdata || m_wstrb !== h_wstrb))))
             $fatal(1, "Arbiter %0d: the request held changed: valid=%b we=%b %h, was we=%b %h",
