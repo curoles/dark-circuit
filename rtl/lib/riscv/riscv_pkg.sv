@@ -110,6 +110,10 @@ package RiscvPkg;
     localparam int         MSTATUS_MPP  = 11;
     localparam logic [1:0] PRIV_M       = 2'd3;
 
+    // fcsr (F, Zfinx): frm in bits 7:5 (from FCSR_FRM), fflags (NV DZ OF UF NX) in 4:0,
+    // the other bits read 0.
+    localparam int         FCSR_FRM     = 5;
+
     /* verilator lint_on UNUSEDPARAM */
 
     typedef struct packed {     // R-type: OP

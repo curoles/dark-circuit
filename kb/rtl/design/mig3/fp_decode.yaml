@@ -14,7 +14,11 @@ decision: >
   FPU_DIV_SQRT, FPU_CMP, FPU_MIN_MAX, FPU_SGNJ, FPU_CLASS, FPU_TO_INT, FPU_FROM_INT) with its
   operation in FpPkg's enums, uses_rm and the raw rm field. A reserved rm field (101, 110;
   RiscvPkg rm_reserved) makes the instruction illegal at decode; FRM_DYN is resolved against
-  frm in EX, where frm lives (the CSR step). Until the FPU step Mig3Control traps every KIND_FP
+  frm in EX, where frm lives (the CSR step). The CSR step: fcsr {frm, fflags} in Mig3Csr,
+  frm and fflags alone as views of its fields, frm any value (the FPU checks it at use),
+  fflags accrued from an input when an F instruction completes (tied to 0 until the
+  FPU), misa.F and mstatus.FS 0 (Zfinx has no FP registers to save: fcsr always
+  accessible). Until the FPU step Mig3Control traps every KIND_FP
   as an illegal instruction, so decode stays classification only and the core stays correct.
 why: >
   Decode classifies once and the parts read controls (AGENTS.md: compute once, carry
@@ -39,7 +43,10 @@ evidence: >
   fadd.s traps as an illegal instruction with its word as mtval. The Mig2 and Mig3 suites
   pass (243 tests). One-off mutants, caught: a reserved rm legal, FSQRT.S reading rs2,
   FNMSUB.S decoded as FNMADD.S (the decode test), an F instruction not trapping
-  (illegal_fp).
+  (illegal_fp). The CSR step: fcsr.S passes (fscsr of all ones reads 0xff; frm and fflags
+  written alone and read through fcsr; the swaps return the old field; set and clear on a
+  field touch only its bits) with the Mig3 suite (134 tests); mutants caught: fcsr
+  writing fflags only, fcsr reading its fields swapped, a write of fflags clearing frm.
 code:
   - rtl/design/mig3/mig3_decode.sv#fp_of
   - rtl/design/mig3/mig3_pkg.sv#fp_ctrl_t

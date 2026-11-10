@@ -163,6 +163,11 @@ if(DARK_CIRCUIT_RISCV)
     # uncached (+uncached): the caches would add the cycles of their misses.
     # @kb: rtl/design/mig2/caches_in_core
     mig3_program_test(csr SOURCES csr.S ARGS +expect_regs +uncached)
+    # The floating-point CSRs of Zfinx (fcsr, frm, fflags): their names need an assembler
+    # that knows Zfinx.
+    if(DARK_CIRCUIT_RISCV_ZFINX)
+        mig3_program_test(fcsr SOURCES fcsr.S ARCH rv32i_zfinx ARGS +expect_regs)
+    endif()
 
     # M extension: results used right away, division and branches, cycle cost, minstret.
     mig3_program_test(muldiv SOURCES muldiv.S ARCH rv32im ARGS +expect_regs +uncached)

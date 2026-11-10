@@ -23,6 +23,11 @@
  * - mie: MEIE (bit 11), read and write, other bits 0; mip: MEIP (bit 11) is meip, the
  *   machine external interrupt, read-only (the interrupt controller clears it), other
  *   bits 0.
+ * - fcsr (Zfinx: F on the x registers): frm in bits 7:5 and fflags in 4:0, the other bits
+ *   0; frm and fflags alone are views of the same flops. frm takes any value (an F
+ *   instruction that rounds by an invalid frm is illegal: the FPU's part); an F
+ *   instruction that completes ORs its flags (fp_flags) into fflags. misa.F and
+ *   mstatus.FS stay 0 (Zfinx: no FP registers to save), so fcsr is always accessible.
  *
  * Interrupts. csr.irq = MEIP && MEIE && MIE: an interrupt is pending and enabled; from
  * flops and meip only, so Mig3Control takes it on the instruction after a CSR write or
@@ -36,7 +41,8 @@
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. From Mig3Control: done (the
  * instruction completes) and trap (it faults). To Mig3Control: illegal, and csr (mtvec
- * and mepc: where traps and MRET go). rdata is rd's value (rd_src RD_CSR).
+ * and mepc: where traps and MRET go). rdata is rd's value (rd_src RD_CSR). From the FPU:
+ * fp_flags; to it: frm.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -46,7 +52,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     input  wire      rst_n,      // synchronous reset, active low
     input  wire      valid,      // instruction in EX is valid
     input  wire      done,       // instruction in EX completes: CSR write, minstret
-    // Only sys, funct3, rs1 and imm are used.
+    // Only sys, fp.en, funct3, rs1 and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t dec,        // the instruction taken apart
     /* verilator lint_on UNUSEDSIGNAL */
@@ -56,7 +62,9 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     input  trap_t    trap,       // the instruction in EX traps
     output word_t    rdata,      // old value of the CSR
     output wire      illegal,    // CSR does not exist, or write to a read-only CSR
-    output csr_t     csr         // mtvec and mepc, for traps and MRET
+    output csr_t     csr,        // mtvec and mepc, for traps and MRET
+    input  FpPkg::flags_t fp_flags,    // the flags of the F instruction in EX (Zfinx)
+    output funct3_t  frm         // rounding mode for FRM_DYN (any value: the FPU checks)
 );
     // misa: XLEN 32, extensions I, M and A (LR/SC and the AMOs).
     localparam word_t MISA = {MISA_MXL_32, {(WIDTH-2){1'b0}}} | (word_t'(1) << MISA_EXT_I) |
@@ -75,6 +83,8 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     iaddr_t mepc;
     word_t  mcause;
     word_t  mtval;
+    funct3_t       frm_q;     // fcsr.frm
+    FpPkg::flags_t fflags;    // fcsr.fflags
     word_t  mstatus;
 
     logic  imm_form;    // CSRRWI, CSRRSI, CSRRCI
@@ -117,6 +127,9 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             CSR_MISA:                               old = MISA;
             CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID,
             CSR_MHARTID:                            old = '0;
+            CSR_FFLAGS:                             old = word_t'(fflags);
+            CSR_FRM:                                old = word_t'(frm_q);
+            CSR_FCSR:                               old = word_t'({frm_q, fflags});
             default: begin                          old = '0; exists = 1'b0; end
         endcase
     end
@@ -207,6 +220,24 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
         if (!rst_n)                       mtvec <= '0;
         else if (we && addr == CSR_MTVEC) mtvec <= new_iaddr;
 
+    // @kb: rtl/design/mig3/fp_decode
+    // fcsr: frm and fflags, also written alone (frm, fflags); an F instruction that completes
+    // ORs its flags into fflags (it is no CSR instruction: the two never meet).
+    always_ff @(posedge clk)
+        if (!rst_n) begin
+            frm_q  <= '0;
+            fflags <= '0;
+        end else if (we && addr == CSR_FCSR) begin
+            frm_q  <= new_value[FCSR_FRM +: $bits(funct3_t)];
+            fflags <= new_value[FCSR_FRM-1:0];
+        end else if (we && addr == CSR_FRM)
+            frm_q  <= new_value[$bits(funct3_t)-1:0];
+        else if (we && addr == CSR_FFLAGS)
+            fflags <= new_value[FCSR_FRM-1:0];
+        else if (done && dec.fp.en)
+            fflags <= fflags | fp_flags;
+
+    assign frm       = frm_q;
     assign csr.mtvec = mtvec;
     assign csr.mepc  = mepc;
     assign csr.irq     = meip && mie_meie && mstatus_mie;

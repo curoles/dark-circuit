@@ -266,10 +266,15 @@ module Mig3Core import Mig3Pkg::*; #(
 
     assign ex_load_offset = ex_alu_result[DADDR_START-1:0];
 
+    // frm for the FPU (Zfinx): none yet, its flags 0 (kb rtl/design/mig3/fp_decode).
+    /* verilator lint_off UNUSEDSIGNAL */
+    RiscvPkg::funct3_t ex_frm;
+    /* verilator lint_on UNUSEDSIGNAL */
+
     Mig3Csr u_mig3_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
-        .illegal(ex_csr_illegal), .csr);
+        .illegal(ex_csr_illegal), .csr, .fp_flags('0), .frm(ex_frm));
 
     Mig3MulDiv u_mig3_muldiv(
         .clk, .rst_n, .valid(ex_fetch.valid && !ex_irq), .hold(mem_wait), .dec(ex_dec),
