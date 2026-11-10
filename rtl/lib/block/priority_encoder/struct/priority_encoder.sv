@@ -2,32 +2,24 @@
  * out is index of the highest bit set in in, valid is 1 if any bit of in is set;
  * out and valid are 0 when in is 0.
  *
- * How it works, in 2 steps; it is the mirror of the structural Decoder.
+ * A tree of halves, by recursion: each half is a PriorityEncoder of SIZE - 1. The upper half
+ * wins when one of its bits is set (hi_valid): out's top bit is hi_valid, its other bits the
+ * upper half's out or else the lower half's (a Mux2), valid the OR of both valids. A leaf
+ * (SIZE 1, 2 bits) is out = in[1], valid = in[1] | in[0]. Depth: SIZE levels of an Or2 and a
+ * Mux2 (about 10 gate levels for 32 bits), not the WIDTH - 1 Or2 of a chain from the top;
+ * every node is its own instance, so there are no arrays of levels (Verilator saw a false
+ * loop in them, kb rtl/lib/block/priority_encoder/dropped_tree).
  *
- * 1. Keep only the highest set bit, that gives one-hot vector top.
- *    above[k] is "some bit higher than k is set", it is chain of OR gates
- *    from the top: above[WIDTH-1] = 0, above[k] = in[k+1] | above[k+1].
- *    top[k] = in[k] & ~above[k]: bit k is set and no higher bit is set.
- *
- * 2. Turn one-hot top into binary number: out[j] is OR of every top[k]
- *    where bit j of k is 1. Decoder uses bits of constant i to choose wires
- *    for AND, here bits of constant k choose wires for OR.
- *    For 8 to 3 priority encoder:
- *
- *      out[0] = top[1] | top[3] | top[5] | top[7]
- *      out[1] = top[2] | top[3] | top[6] | top[7]
- *      out[2] = top[4] | top[5] | top[6] | top[7]
- *
- *    Half of all k have bit j set; m-th of them is m with bit 1 inserted at
- *    position j: k = ((m >> j) << (j+1)) | (1 << j) | (m & ((1 << j) - 1)).
- *
- * valid = in[0] | above[0], some bit at or above 0 is set.
- *
- * Chain of above is ripple, its depth grows with WIDTH like ripple carry adder.
+ *   in[WIDTH-1:HALF] --> PriorityEncoder SIZE-1 --> hi_out, hi_valid --+--> out[SIZE-1]
+ *                                                        |              |
+ *   in[HALF-1:0] -----> PriorityEncoder SIZE-1 --> lo_out --> Mux2 -----+--> out[SIZE-2:0]
+ *                                                  lo_valid --> Or2 (hi_valid) --> valid
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
+`include "dark_circuit_assert.svh"
+
 module PriorityEncoder #(
     parameter  SIZE  = 3,
     localparam WIDTH = 1 << SIZE
@@ -36,38 +28,29 @@ module PriorityEncoder #(
     output wire [SIZE-1:0]  out,   // index of the highest bit set in in, 0 if none
     output wire             valid  // 1 if any bit of in is set
 );
-    localparam HALF = WIDTH / 2;
+    `DC_STATIC_ASSERT(a_size, SIZE >= 1)
 
-    // above[k]: some bit higher than k is set.
-    // split_var: Verilator treats bits separately, no false loop through above.
-    wire [WIDTH-1:0] above /*verilator split_var*/;
-    // top[0] is not needed: index 0 has no bits set, it is in no OR of out.
-    wire [WIDTH-1:1] above_n, top;
+    // @kb: rtl/lib/block/priority_encoder/tree
+    if (SIZE == 1) begin: g_leaf
+        assign out = in[1];
+        Or2 #(1) u_or2_valid(.in1(in[1]), .in2(in[0]), .out(valid));
+    end else begin: g_node
+        localparam HALF = WIDTH / 2;
 
-    assign above[WIDTH-1] = 1'b0;
+        wire [SIZE-2:0] lo_out;     // index in the lower half
+        wire [SIZE-2:0] hi_out;     // index in the upper half
+        wire            lo_valid;   // a bit of the lower half is set
+        wire            hi_valid;   // a bit of the upper half is set: it wins
 
-    genvar k, j, m;
-    // @kb: rtl/lib/block/priority_encoder/dropped_tree
-    generate
-    for (k = 0; k < WIDTH-1; k = k + 1) begin: g_above
-        Or2 #(1) u_or2(.in1(in[k+1]), .in2(above[k+1]), .out(above[k]));
+        PriorityEncoder #(.SIZE(SIZE - 1)) u_lo(
+            .in(in[HALF-1:0]), .out(lo_out), .valid(lo_valid));
+        PriorityEncoder #(.SIZE(SIZE - 1)) u_hi(
+            .in(in[WIDTH-1:HALF]), .out(hi_out), .valid(hi_valid));
+
+        Mux2 #(SIZE - 1) u_mux2_out(
+            .in0(lo_out), .in1(hi_out), .sel(hi_valid), .out(out[SIZE-2:0]));
+        assign out[SIZE-1] = hi_valid;
+        Or2 #(1) u_or2_valid(.in1(lo_valid), .in2(hi_valid), .out(valid));
     end
-    endgenerate
-
-    Inv  #(WIDTH-1) u_inv (.in(above[WIDTH-1:1]), .out(above_n));
-    And2 #(WIDTH-1) u_and2(.in1(in[WIDTH-1:1]), .in2(above_n), .out(top));
-
-    // out[j] is OR of top[k] for every k with bit j set.
-    generate
-    for (j = 0; j < SIZE; j = j + 1) begin: g_out
-        wire [HALF-1:0] sel;
-        for (m = 0; m < HALF; m = m + 1) begin: g_sel
-            assign sel[m] = top[((m >> j) << (j+1)) | (1 << j) | (m & ((1 << j) - 1))];
-        end
-        OrReduce #(HALF) u_or_reduce(.in(sel), .out(out[j]));
-    end
-    endgenerate
-
-    Or2 #(1) u_or2_valid(.in1(in[0]), .in2(above[0]), .out(valid));
 
 endmodule

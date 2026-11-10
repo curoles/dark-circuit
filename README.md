@@ -18,10 +18,12 @@ rtl/lib/
                  Alu1, AddCmp, Lfsr, StochasticBitstreamGen, CsaMultiplier, Divider, ...
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of blocks, parts and gates
+    <block>/hybrid/  wide datapath of blocks and parts, narrow glue as operators
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
                      not in aggregate flists, not tested yet
   numeric/       number formats, built on blocks: int32/mul Int32Mul, int32/div Int32Div;
-                 <format>/<op>/<kind>/{behave,struct}, aggregate flists like block/
+                 fp/ FpPkg, fp32/ Fp32Round, Fp32FromInt (hybrid, checked by TestFloat);
+                 <format>/<op>/<kind>/{behave,struct,hybrid}, aggregate flists like block/
   io/            device controllers with pins: uart/ (UartTx, UartRx, the devices on them);
                  aggregate flists io_behave.flist, io_struct.flist like block/
   bus/           standard on-chip buses, the only place for one: axi/ AxiPkg and adapters

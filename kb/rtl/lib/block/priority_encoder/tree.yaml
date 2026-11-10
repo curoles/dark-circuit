@@ -1,0 +1,41 @@
+type: decision
+title: PriorityEncoder's struct version is a tree of halves, by recursion
+date: 2026-11-09
+question: >
+  The struct PriorityEncoder found the highest set bit with a chain of Or2 from the top
+  (WIDTH - 1 gates deep); a tree was tried and dropped in October (kb
+  rtl/lib/block/priority_encoder/dropped_tree: no gain in Mig2's longest path). The hybrid
+  Fp32FromInt (kb rtl/lib/numeric/fp32/design) puts the encoder in the middle of its longest
+  path, and the FMA's leading-zero count will be 48 bits or more. Chain or tree?
+decision: >
+  A tree of halves, by recursion as ArgMaxTree (kb rtl/lib/block/arg_max_tree/design): a
+  node is two PriorityEncoders of SIZE - 1; the upper half wins when one of its bits is set
+  (hi_valid), out = {hi_valid, hi_valid ? hi_out : lo_out} (a Mux2), valid = lo_valid |
+  hi_valid; a leaf (SIZE 1) is out = in[1], valid = in[1] | in[0]. SIZE levels of an Or2 and
+  a Mux2. Every node is its own instance: no arrays of levels, so no false loop in
+  Verilator (the October attempt's problem) and no split_var. The behave version is
+  unchanged.
+why: >
+  Structure written is structure synthesized: ABC does not turn a 31-deep chain into a
+  tree, and the hybrid family (AGENTS.md) relies on the blocks' structure. The dropped
+  record asked to take it up again when timing shows the chain; it showed in Fp32FromInt.
+  Recursion is the library's way to a tree without arrays of levels.
+rejected:
+  - choice: Keep the chain
+    why_not: It was the longest path of Fp32FromInt (6.6 ns against 5.0 ns with a tree-like
+      encoder), and wider encoders come with the FMA.
+  - choice: The tree as arrays of levels (October's attempt)
+    why_not: Verilator's false loop (UNOPTFLAT) through the arrays; recursion has none.
+relies_on:
+  - rtl/lib/block/priority_encoder/dropped_tree
+  - rtl/lib/block/arg_max_tree/design
+evidence: >
+  2026-11-09: the encoder's exhaustive test passes, with every block and numeric test that
+  builds struct versions on it (divider, caches, arbiters, NoC allocators, bitmanip: 147
+  tests on Verilator and on Icarus; no UNOPTFLAT). sky130 (Yosys): the hybrid Fp32FromInt
+  6.6 ns with the chain, 5.3 ns with the tree (4700 -> 4661 um2), its longest path no longer
+  through the encoder; Mig3Core 335 054 -> 336 091 um2 (+0.3 %), longest path 5.66 -> 5.5 ns,
+  through the forwarding loop as before (the estimate moves about 0.2 ns for reasons that
+  are not the change, see the dropped record).
+code:
+  - rtl/lib/block/priority_encoder/struct/priority_encoder.sv#g_node

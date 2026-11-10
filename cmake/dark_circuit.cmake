@@ -198,6 +198,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/qemu.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/config.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/doxygen.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/fetch.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/testfloat.cmake)
 
 # Main simulator runs tests that need only one simulator, like tests of parts.
 # Cache variable DARK_CIRCUIT_MAIN_SIMULATOR selects it:

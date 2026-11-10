@@ -3,7 +3,7 @@
 
 An entry is a module (or package, interface, macro file) with the first sentence of the
 comment above it (the file's header comment for the first module of a file), its versions
-(the behave/struct/comb/pipe directories, gate/generic and gate/cell), its path, its test
+(the behave/struct/hybrid/comb/pipe directories, gate/generic and gate/cell), its path, its test
 directory when there is one and the kb records whose code anchors point into it. Entries sit
 in the tree of rtl/lib's directories; a block's own directory (block/fifo for Fifo) is not
 a level of its own.
@@ -19,7 +19,7 @@ import sys
 import yaml
 
 LIB = "rtl/lib"
-VERSION_DIRS = {"behave", "struct", "comb", "pipe"}
+VERSION_DIRS = {"behave", "struct", "hybrid", "comb", "pipe"}
 # Directories right under these that are versions of the same modules (the same names).
 GROUP_VERSION_DIRS = {"gate": {"generic", "cell"}, "cell": {"builtin", "cmos", "generic", "tsmc"}}
 # Top-level directories that come last, in this order; the others alphabetically before them.
@@ -31,7 +31,7 @@ COMMENT = re.compile(r"/\*(.*?)\*/", re.S)
 # Which version a header describes: the entry's versions say it.
 SUFFIXES = [", behavioral", "; behavioral", ", made of blocks and gates",
             "; made of blocks and gates", ", made of gates", "; made of gates",
-            ", made of blocks", "; made of blocks"]
+            ", made of blocks", "; made of blocks", ", hybrid", "; hybrid"]
 
 
 def summary(comment):

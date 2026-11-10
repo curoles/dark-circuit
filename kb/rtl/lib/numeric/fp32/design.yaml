@@ -1,0 +1,80 @@
+type: decision
+title: IEEE-correct fp32 blocks, one rounder, RISC-V's encodings, checked against TestFloat
+date: 2026-11-09
+question: >
+  The library's fp32 multipliers truncate and know no subnormals, infinities, NaNs or flags.
+  Mig3 gets floating point (kb rtl/design/mig3/fp). How are IEEE-correct blocks built and
+  checked, which encodings do rounding modes and flags use, and how long may their tests
+  take?
+decision: >
+  FpPkg holds what every format shares: the rounding modes (rm_e) and the exception flags
+  (flags_t) in RISC-V's encodings (frm, fflags), which are also SoftFloat's flag bits; the
+  package knows nothing about RISC-V. One rounder per format, Fp32Round: an operation hands
+  it the exact value (or enough of it: a guard bit and a sticky bit below the 24 kept) as a
+  normalized significand and a signed biased exponent of any range; it makes the subnormal
+  (shift to exponent 1, jam), rounds by the mode with the carry into the exponent, gives
+  infinity or the largest finite number on overflow, and flags underflow when tiny after
+  rounding (RISC-V's choice) and inexact. Every operation reuses it; the first is
+  Fp32FromInt (FCVT.S.W, FCVT.S.WU; PriorityEncoder finds the top 1). The reference is
+  Berkeley TestFloat: SoftFloat 3 with its RISC-V specialization (canonical NaN 0x7fc00000)
+  and testfloat_gen, fetched at configure time and built by their own Makefiles
+  (cmake/testfloat.cmake); dc_testfloat_cases writes level-1 cases per rounding mode at
+  build time, every k-th kept; a pure-SV testbench reads them and compares the result and
+  all five flags. Tests stay about a second (the user: not a production chip, no
+  exhaustive runs). One version per FP block, in a new family `hybrid/` (AGENTS.md): every
+  wide arithmetic, shift, count, compare and wide select is a library block, part or gate
+  (BrentKungAdder, BarrelShifter, Incr, PriorityEncoder, CmpGe, Mux2/Mux4), the narrow
+  glue (bitwise logic, reductions, wiring, the rounding decision, flags) is operators; no
+  behave twin, TestFloat is the model. The rounder's word is {exponent field, fraction}
+  with the exponent field 0 below the normal range, so the increment's carry makes the
+  next binade and the smallest normal with no exp - 1; Incr makes word + 1 while the
+  increment is decided, a Mux2 picks. Numeric tests run on the main simulator only
+  (Verilator; the user: Icarus wastes time on FP blocks). With AI in mind (the user): no
+  slow path ever, subnormals at full speed in the datapath (Intel's cost is microcode
+  assists, AMD and Arm have none); a flush option (DAZ/FTZ) and RNE-only, no-flags
+  variants come as parameters with the first AI block that needs them, not for Mig3
+  (RISC-V F has no flush mode); FP8 keeps its subnormals (a large share of its range).
+why: >
+  TestFloat is the standard: its cases put zeros, subnormals, infinities, NaNs and the
+  rounding boundaries everywhere, which hand-written cases miss and a model of our own
+  could get wrong the same way as the design (the user chose it over an SV model). Its
+  level-1 set is large for some functions (46464 cases for f32_add, over 6 million for
+  f32_mulAdd) and testfloat_gen makes no fewer, so the build samples it. One rounder
+  keeps the subtle part (subnormals, tininess, overflow by mode) in one place, checked by
+  every operation that uses it. RISC-V's encodings make the core's wiring plain, as atop is
+  AXI's (kb rtl/lib/block/atomic/design). Hybrid (the user: "we care about controlled
+  synthesis"): Yosys and ABC have no timing-driven datapath synthesis like DesignWare, so
+  the wide structure is ours, as ASIC teams instantiate DesignWare components (DW01_add,
+  DW_lzd, DW01_ash) with RTL glue; FPnew and HardFloat write `*` and `+` and rely on the
+  commercial tool. A struct version's glue in gates would make an FMA long and hard to
+  read for little control; the user sees hybrid as a family for AI and crypto datapaths
+  too.
+rejected:
+  - choice: Behave and struct versions of each FP block (the library's rule)
+    why_not: Twice the work per block; the glue in gates buys little; the user chose hybrid.
+  - choice: Behave now, struct later
+    why_not: The FMA's structure is its design; it would be designed twice.
+  - choice: An SV model of IEEE 754 in each testbench
+    why_not: It can share the design's misunderstandings; the user chose TestFloat.
+  - choice: TestFloat's full level-1 or level-2 sets in the regular tests
+    why_not: Minutes per function; the user wants tests of about a second.
+  - choice: SoftFloat's default (x86) specialization
+    why_not: Its NaN results keep payloads; RISC-V gives the canonical NaN.
+relies_on:
+  - rtl/design/mig3/fp
+evidence: >
+  2026-11-09: Fp32FromInt passes TestFloat's i32_to_f32 and ui32_to_f32 (372 level-1 cases
+  in each of the five modes, every result and flag), well under a second on Verilator; the
+  case files take milliseconds to write. Overflow, underflow and the subnormal path of
+  Fp32Round can not happen in a conversion from int32: the FMA's tests check them. Mutants
+  (kb test/numeric/fp32/from_int/mutants): RNE ties, RDN's sign, RUP's sticky, inexact's
+  sticky, an unsigned operand taken as negative: caught. sky130 (Yosys), Fp32FromInt with
+  Fp32Round: the hybrid 4661 um2, 5.3 ns once PriorityEncoder's struct version became a
+  tree (6.6 ns with its chain, kb rtl/lib/block/priority_encoder/tree); a behavioral copy
+  of the same design 3816 um2, 5.3 ns; the hybrid with behave sub-blocks 4189 um2, 4.9 ns:
+  the struct Incr and BarrelShifter cost the rest, a look for the FMA.
+code:
+  - rtl/lib/numeric/fp/fp_pkg.sv
+  - rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv#round_up
+  - rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
+  - cmake/testfloat.cmake#dc_testfloat_cases

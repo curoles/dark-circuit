@@ -21,6 +21,8 @@ why_dropped: >
   elsewhere, and the estimate moves by about 0.2 ns for reasons that are not the change;
   the 5.2 ns path did not go through the encoder either. The area saved is 0.5 %. Worth
   taking up again for an encoder much wider than 32 bits, or when real timing (placement
-  and wires) shows the chain.
+  and wires) shows the chain. Taken up again 2026-11-09, as recursion (no arrays of
+  levels): the chain was the longest path of Fp32FromInt (kb
+  rtl/lib/block/priority_encoder/tree).
 code:
-  - rtl/lib/block/priority_encoder/struct/priority_encoder.sv#g_above
+  - rtl/lib/block/priority_encoder/struct/priority_encoder.sv

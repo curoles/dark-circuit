@@ -161,7 +161,12 @@ This file has the rules that are not in README.md.
   (`Mig2PipeReg #(.T(id_ex_t))`) instead of a width. Not for blocks that compute on
   bits (adders, shifters). In the library: a typed wrapper <Block>T next to <Block>.
 - Struct versions of blocks use blocks, parts and gates only, never cells and never
-  behavioral operators; behave versions are plain SV.
+  behavioral operators; behave versions are plain SV. Hybrid versions (`hybrid/`) build
+  every wide arithmetic, shift, count, compare and wide select from blocks, parts and
+  gates, and write the narrow glue (bitwise logic, reductions, wiring, control and flags)
+  as operators under the rules for logic above; for datapaths whose structure synthesis
+  must keep (floating point; later AI and crypto), checked against an external reference
+  (kb `rtl/lib/numeric/fp32/design`).
 - Lint: Verilator runs with `-Wall` and warnings are errors. Disable a warning only
   locally with `/* verilator lint_off X */ ... lint_on`, and a comment why.
 - Comments must not start with the word "verilator": Verilator reads them as pragmas.
@@ -224,6 +229,9 @@ the chunk that establishes it:
   the device `RegPortTarget`, its registers `StrbReg` (any width, written byte by byte;
   a counter software sets: `StrbCounter`),
   the register map a block of one select per register (`block/plic/plic_decode`).
+- Floating point: an fp32 operation hands its exact value (a normalized significand with
+  guard and sticky bits, a signed biased exponent of any range) to `Fp32Round`; rounding
+  modes and exception flags are `FpPkg`'s, RISC-V's encodings (`numeric/fp32/from_int/hybrid`).
 - Behave versions: combinational logic with bit or field selects as `assign` or an
   `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a
   `case` on a whole signal (`block/alu2/behave`). Parameter limits `` `DC_STATIC_ASSERT ``,
@@ -433,6 +441,10 @@ document intent and stop the simulation in the cycle a rule breaks.
   `block_behave.flist` and `block_struct.flist`, a test in `test/block/<b>/`,
   the block name in the README layout, `make catalog` (`make kb` fails while
   `CATALOG.md` is stale; its first header sentence is the catalog's description).
+- Hybrid block: `<b>/hybrid/` alone, without behave and struct (they may come later); its
+  test builds it from the struct versions of the blocks it uses and checks it against the
+  external reference: for floating point TestFloat's cases, `dc_testfloat()` and
+  `dc_testfloat_cases()` of `cmake/testfloat.cmake` (`test/numeric/fp32/from_int`).
 - Order for a block: the behave version first, with its test (the test is the spec both
   versions must meet), then the struct version against the same test. Writing the struct
   version is a review of the design: look for simplifications (a cheaper state, a shared

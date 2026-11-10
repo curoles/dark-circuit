@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of Fp32Round and Fp32FromInt (TestFloat's i32_to_f32 and ui32_to_f32)
+date: 2026-11-09
+tests: [numeric_fp32_from_int]
+mutants:
+  - name: RNE breaks a tie away from zero, not to even
+    edits:
+      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+        old: "RM_RNE:  return guard && (sticky || lsb);"
+        new: "RM_RNE:  return guard && (sticky || lsb || 1'b1);"
+    expect: caught
+  - name: RDN rounds a positive value up
+    edits:
+      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+        old: "RM_RDN:  return s && (guard || sticky);"
+        new: "RM_RDN:  return !s && (guard || sticky);"
+    expect: caught
+  - name: RUP forgets the sticky bit
+    edits:
+      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+        old: "RM_RUP:  return !s && (guard || sticky);"
+        new: "RM_RUP:  return !s && guard;"
+    expect: caught
+  - name: inexact forgets the sticky bit
+    edits:
+      - file: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+        old: "assign inexact = guard || sticky;"
+        new: "assign inexact = guard;"
+    expect: caught
+  - name: an unsigned integer with its top bit set taken as negative
+    edits:
+      - file: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
+        old: "assign neg = is_signed && a[31];"
+        new: "assign neg = (is_signed || 1'b1) && a[31];"
+    expect: caught

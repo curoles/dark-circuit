@@ -1,3 +1,6 @@
+-F ../fp/fp.flist
 fp32_pkg.sv
+round/hybrid/fp32_round.sv
+from_int/hybrid/fp32_from_int.sv
 mul/comb/behave/fp32_comb_multiplier.sv
 mul/pipe/behave/fp32_pipelined_multiplier.sv

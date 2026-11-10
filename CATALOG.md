@@ -82,11 +82,24 @@ macro:
     what: "REPEAT: macro that repeats its argument n times, n from 0 to 9"
     path: rtl/lib/macro/repeat_macro.svh
 numeric:
+  fp:
+    FpPkg:
+      kind: package
+      what: "Fp package: what every floating-point format of the library shares, the rounding modes and the exception flags"
+      path: rtl/lib/numeric/fp/fp_pkg.sv
+      kb: [rtl/lib/numeric/fp32/design]
   fp32:
     Fp32Pkg:
       kind: package
       what: "Fp32 package: the IEEE-754 single precision format"
       path: rtl/lib/numeric/fp32/fp32_pkg.sv
+    from_int:
+      Fp32FromInt:
+        what: "Fp32 from integer: a 32-bit signed or unsigned integer to the nearest fp32 by a rounding mode (RISC-V FCVT.S.W, FCVT.S.WU)"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
+        test: test/numeric/fp32/from_int
+        kb: [rtl/lib/numeric/fp32/design]
     mul:
       Fp32CombMultiplier:
         what: "Fp32 combinational multiplier: IEEE-754 single precision a * b"
@@ -98,6 +111,12 @@ numeric:
         versions: [behave]
         path: rtl/lib/numeric/fp32/mul/pipe/behave/fp32_pipelined_multiplier.sv
         test: test/numeric/fp32/mul
+    round:
+      Fp32Round:
+        what: "Fp32 rounding: a wider significand with an exponent of any range to an fp32 and its exception flags"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
+        kb: [rtl/lib/numeric/fp32/design]
   int32:
     div:
       iter:
@@ -315,7 +334,7 @@ block:
     versions: [behave, struct]
     path: rtl/lib/block/priority_encoder
     test: test/block/priority_encoder
-    kb: [rtl/lib/block/priority_encoder/dropped_tree]
+    kb: [rtl/lib/block/priority_encoder/dropped_tree, rtl/lib/block/priority_encoder/tree]
   RegFile:
     what: "Register file with RD_PORTS read ports and WR_PORTS write ports"
     versions: [behave, struct]

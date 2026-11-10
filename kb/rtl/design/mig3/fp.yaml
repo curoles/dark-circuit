@@ -1,0 +1,47 @@
+type: decision
+title: Mig3's floating point is Zfinx, single precision, a fused FMA, rs3 read in a second ID cycle
+date: 2026-11-09
+question: >
+  Mig3 is the core of the floating-point line. Which RISC-V floating point: F with its own
+  register file or Zfinx on the x registers, single or double, all of F's instructions or
+  fewer, and how are they tested with the project's compiler (gcc 12.2)?
+decision: >
+  Zfinx (the user's idea): F's instructions on the x registers, no f registers; FLW, FSW,
+  FMV.X.W and FMV.W.X stay illegal (LW, SW and MV do their work); fcsr (frm, fflags) is
+  kept; misa.F stays 0. Single precision only: no D (Zdinx) in Mig3, an RV32 core. The
+  fused FMA stays (FMADD.S, FMSUB.S, FNMADD.S, FNMSUB.S; FADD and FMUL are its special
+  cases in the FPU, FPnew's way); its third operand rs3 is read in a second ID cycle
+  through the rs2 port (one bubble per FMA, no third read port, no new forwarding or
+  interlock compares). The FPU is its own unit (the integer multiplier is not shared, kb
+  rtl/design/mig3/mul_timing). FP is tested from assembly for now. The library's blocks
+  (kb rtl/lib/numeric/fp32/design) do not depend on any of this.
+why: >
+  No second register file (32 x 32 flops with three read ports would be a big block on
+  sky130; the BTB's flops cost 28 %), no FP load/store path or moves, the x registers'
+  interlock and forwarding serve FP too; one register space to rename in Mig5 and small
+  cores in Mig6, whose heavy FP math lives in vector and matrix units anyway (the
+  scale-to-future-Migs rule). D on RV32 means register pairs and six reads per FMA. FMA is
+  in F (Zfinx without it is not Zfinx), fused can not be faked by two roundings, and the
+  AI line's dot products are multiply-accumulates with one rounding. The addend is needed
+  after the product, so a second ID cycle costs little. gcc 12.2 accepts
+  -march=..._zfinx but emits SoftFloat calls (__mulsf3, __addsf3, ...): only binutils knows
+  Zfinx (fadd.s a0,a1,a2 assembles), and the user chose assembly tests over a newer gcc.
+rejected:
+  - choice: F with its own register file
+    why_not: Area, a second hazard space, FP loads and stores; the user chose Zfinx.
+  - choice: D (Zdinx) in Mig3
+    why_not: The user left it out of the RV32 core.
+  - choice: FADD and FMUL only, the FMA instructions illegal (no rs3)
+    why_not: Not Zfinx; the user kept the fused FMA.
+  - choice: A third read port on the register file for rs3
+    why_not: A 32:1 mux per bit, 32 more ID/EX bits and rs3 compares on the paths that set
+      the clock; a second ID cycle does it through rs2's port (the user chose it).
+  - choice: A newer gcc for FP in C now
+    why_not: The project stays on gcc 12.2; the user chose assembly tests for now.
+relies_on:
+  - rtl/design/mig3/mul_timing
+evidence: >
+  2026-11-09: gcc 12.2.0 compiles a*b+c, a/b, a double product and a conversion with
+  -march=rv32im_zfinx_zdinx -mabi=ilp32 into calls of __mulsf3, __addsf3, __divsf3,
+  __muldf3 and __fixsfsi; binutils assembles fadd.s a0,a1,a2, fmadd.s a0,a1,a2,a3 and
+  fmul.d a0,a2,a4 (a pair) with zfinx; -mabi=ilp32f is refused without F.
