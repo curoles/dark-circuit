@@ -11,7 +11,10 @@
  * is a load of rs1 to rd with its operation in dec.atomic.atop, done in front of the
  * memory (kb rtl/design/mig3/amo); a CBO (Zicbom: cbo.clean, cbo.flush, cbo.inval) a store
  * of rs1 (imm 0) that writes no byte, its operation in dec.mem.cmo (kb
- * rtl/design/mig3/cbo).
+ * rtl/design/mig3/cbo); an F instruction (Zfinx: on the x registers) its FPU unit and
+ * operation in dec.fp, rs3 for the R4 forms, rd_src RD_FP; FLW, FSW, FMV.X.W and FMV.W.X
+ * are not in Zfinx, and a reserved rm field (101, 110) is illegal (kb
+ * rtl/design/mig3/fp_decode).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -23,41 +26,55 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
     import RiscvInstrPkg::*;
     import Alu2Pkg::*;
 
-    kind_e kind;    // instruction group, from the exact encodings: decides the controls
+    kind_e kind_enc;    // instruction group, from the exact encodings
+    kind_e kind;        // the same, an F instruction with a reserved rm illegal: decides
+                        // the controls
 
     always_comb
         casez (insn)
-            LUI:                                                    kind = KIND_LUI;
-            AUIPC:                                                  kind = KIND_AUIPC;
-            JAL:                                                    kind = KIND_JAL;
-            JALR:                                                   kind = KIND_JALR;
-            BEQ, BNE, BLT, BGE, BLTU, BGEU:                         kind = KIND_BRANCH;
-            LB, LH, LW, LBU, LHU:                                   kind = KIND_LOAD;
-            SB, SH, SW:                                             kind = KIND_STORE;
-            ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI:   kind = KIND_OP_IMM;
-            RORI_RV32:                                              kind = KIND_OP_IMM;  // Zbb
-            ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind = KIND_OP;
-            ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR:        kind = KIND_OP;  // Zbb
-            FENCE:                                                  kind = KIND_FENCE;
-            ECALL:                                                  kind = KIND_ECALL;
-            EBREAK:                                                 kind = KIND_EBREAK;
-            CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind = KIND_CSR;
-            MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU:         kind = KIND_MULDIV;
-            SEXT_B, SEXT_H, ZEXT_H_RV32, ORC_B, REV8_RV32:          kind = KIND_BITMANIP;
-            CLZ, CTZ, CPOP:                                         kind = KIND_BITMANIP;
-            LR_W:                                                   kind = KIND_LR;
-            SC_W:                                                   kind = KIND_SC;
-            AMOADD_W, AMOSWAP_W, AMOXOR_W, AMOOR_W, AMOAND_W:       kind = KIND_AMO;
-            AMOMIN_W, AMOMAX_W, AMOMINU_W, AMOMAXU_W:               kind = KIND_AMO;
-            CBO_CLEAN, CBO_FLUSH, CBO_INVAL:                        kind = KIND_CBO;
-            MRET:                                                   kind = KIND_MRET;
-            WFI:                                                    kind = KIND_WFI;
-            default:                                                kind = KIND_ILLEGAL;
+            LUI:                                                    kind_enc = KIND_LUI;
+            AUIPC:                                                  kind_enc = KIND_AUIPC;
+            JAL:                                                    kind_enc = KIND_JAL;
+            JALR:                                                   kind_enc = KIND_JALR;
+            BEQ, BNE, BLT, BGE, BLTU, BGEU:                         kind_enc = KIND_BRANCH;
+            LB, LH, LW, LBU, LHU:                                   kind_enc = KIND_LOAD;
+            SB, SH, SW:                                             kind_enc = KIND_STORE;
+            ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI:   kind_enc = KIND_OP_IMM;
+            RORI_RV32:                                              kind_enc = KIND_OP_IMM;  // Zbb
+            ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind_enc = KIND_OP;
+            ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR:        kind_enc = KIND_OP;  // Zbb
+            FENCE:                                                  kind_enc = KIND_FENCE;
+            ECALL:                                                  kind_enc = KIND_ECALL;
+            EBREAK:                                                 kind_enc = KIND_EBREAK;
+            CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI:             kind_enc = KIND_CSR;
+            MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU:         kind_enc = KIND_MULDIV;
+            SEXT_B, SEXT_H, ZEXT_H_RV32, ORC_B, REV8_RV32:          kind_enc = KIND_BITMANIP;
+            CLZ, CTZ, CPOP:                                         kind_enc = KIND_BITMANIP;
+            LR_W:                                                   kind_enc = KIND_LR;
+            SC_W:                                                   kind_enc = KIND_SC;
+            AMOADD_W, AMOSWAP_W, AMOXOR_W, AMOOR_W, AMOAND_W:       kind_enc = KIND_AMO;
+            AMOMIN_W, AMOMAX_W, AMOMINU_W, AMOMAXU_W:               kind_enc = KIND_AMO;
+            CBO_CLEAN, CBO_FLUSH, CBO_INVAL:                        kind_enc = KIND_CBO;
+            FMADD_S, FMSUB_S, FNMSUB_S, FNMADD_S:                   kind_enc = KIND_FP;
+            FADD_S, FSUB_S, FMUL_S, FDIV_S, FSQRT_S:                kind_enc = KIND_FP;
+            FSGNJ_S, FSGNJN_S, FSGNJX_S, FMIN_S, FMAX_S:            kind_enc = KIND_FP;
+            FEQ_S, FLT_S, FLE_S, FCLASS_S:                          kind_enc = KIND_FP;
+            FCVT_W_S, FCVT_WU_S, FCVT_S_W, FCVT_S_WU:               kind_enc = KIND_FP;
+            MRET:                                                   kind_enc = KIND_MRET;
+            WFI:                                                    kind_enc = KIND_WFI;
+            default:                                                kind_enc = KIND_ILLEGAL;
         endcase
 
     // The instruction seen in every format.
     insn_fmt_t f;
     assign f.word = insn;
+
+    // An F instruction (Zfinx): its unit and operation, by the encodings; the rm field of
+    // one that rounds may be reserved (RiscvPkg), then it is illegal.
+    fp_ctrl_t fp;
+    assign fp   = fp_of(insn);
+    assign kind = (kind_enc == KIND_FP && fp.uses_rm && rm_reserved(f.r.funct3))
+                  ? KIND_ILLEGAL : kind_enc;
 
     // CSR instructions: the CSR address, not sign-extended (0xc00 is not negative);
     // register forms read rs1, the I forms use the rs1 field as immediate.
@@ -157,6 +174,53 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         endcase
     endfunction
 
+    // @kb: rtl/design/mig3/fp_decode
+    // An F instruction's FPU unit and operation, by the encodings (Zfinx); 0 for others.
+    function automatic fp_ctrl_t fp_of(insn_t w);
+        fp_ctrl_t c;
+        c         = '0;
+        c.en      = 1'b1;
+        c.uses_rm = 1'b1;
+        c.rm      = w[14:12];
+        casez (w)
+            FMADD_S:   begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_MADD;  end
+            FMSUB_S:   begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_MSUB;  end
+            FNMSUB_S:  begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_NMSUB; end
+            FNMADD_S:  begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_NMADD; end
+            FADD_S:    begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_ADD;   end
+            FSUB_S:    begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_SUB;   end
+            FMUL_S:    begin c.unit = FPU_FMA;  c.fma_op = FpPkg::FMA_MUL;   end
+            FDIV_S:    c.unit = FPU_DIV_SQRT;
+            FSQRT_S:   begin c.unit = FPU_DIV_SQRT;  c.sqrt = 1'b1; end
+            FCVT_W_S:  c.unit = FPU_TO_INT;
+            FCVT_WU_S: begin c.unit = FPU_TO_INT;  c.is_unsigned = 1'b1; end
+            FCVT_S_W:  c.unit = FPU_FROM_INT;
+            FCVT_S_WU: begin c.unit = FPU_FROM_INT;  c.is_unsigned = 1'b1; end
+            // No rm field: funct3 selects the operation.
+            FSGNJ_S:   begin c.unit = FPU_SGNJ;  c.sgnj = FpPkg::SGNJ_COPY;  c.uses_rm = 1'b0; end
+            FSGNJN_S:  begin c.unit = FPU_SGNJ;  c.sgnj = FpPkg::SGNJ_NEG;   c.uses_rm = 1'b0; end
+            FSGNJX_S:  begin c.unit = FPU_SGNJ;  c.sgnj = FpPkg::SGNJ_XOR;   c.uses_rm = 1'b0; end
+            FMIN_S:    begin c.unit = FPU_MIN_MAX;  c.uses_rm = 1'b0; end
+            FMAX_S:    begin c.unit = FPU_MIN_MAX;  c.max = 1'b1;  c.uses_rm = 1'b0; end
+            FEQ_S:     begin c.unit = FPU_CMP;  c.cmp = FP_CMP_EQ;  c.uses_rm = 1'b0; end
+            FLT_S:     begin c.unit = FPU_CMP;  c.cmp = FP_CMP_LT;  c.uses_rm = 1'b0; end
+            FLE_S:     begin c.unit = FPU_CMP;  c.cmp = FP_CMP_LE;  c.uses_rm = 1'b0; end
+            FCLASS_S:  begin c.unit = FPU_CLASS;  c.uses_rm = 1'b0; end
+            default:   c = '0;
+        endcase
+        return c;
+    endfunction
+
+    // Registers an F instruction reads besides rs1: {rs2, rs3}; R4 reads both, a
+    // conversion, FSQRT.S and FCLASS.S neither.
+    function automatic logic [1:0] fp_regs_of(insn_t w);
+        casez (w)
+            FMADD_S, FMSUB_S, FNMSUB_S, FNMADD_S:                    return 2'b11;
+            FSQRT_S, FCLASS_S, FCVT_W_S, FCVT_WU_S, FCVT_S_W, FCVT_S_WU: return 2'b00;
+            default:                                                 return 2'b10;
+        endcase
+    endfunction
+
     // Zbb with one operand, in ComputeCoreBitmanip: its operation, by the encodings.
     function automatic ComputeCoreBitmanipPkg::bm_op_e bitmanip_of(insn_t w);
         casez (w)
@@ -185,6 +249,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.rd     = f.r.rd;
         dec.rs1    = f.r.rs1;
         dec.rs2    = f.r.rs2;
+        dec.rs3    = f.r4.rs3;
         dec.funct3 = f.r.funct3;
         dec.alt    = alt_of(insn);     // insn[30]: SUB, SRA, SRAI
 
@@ -195,6 +260,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.rd_src   = RD_ALU;
         dec.uses_rs1 = 1'b0;
         dec.uses_rs2 = 1'b0;
+        dec.uses_rs3 = 1'b0;
         dec.imm      = imm;              // by opcode (shifts: imm[4:0] is shamt)
         dec.alu      = '{a: A_RS1, b_imm: 1'b1, alu2: ctrl_of(alu_op_of(insn))};
         dec.br       = '0;
@@ -202,6 +268,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.atomic   = '0;
         dec.sys      = '0;
         dec.muldiv   = '0;
+        dec.fp       = '0;
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
@@ -248,6 +315,11 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             end
             KIND_CBO: begin
                 dec.uses_rs1 = 1'b1;  dec.mem.write = 1'b1;  dec.mem.cmo = cmo_of(insn);
+            end
+            KIND_FP: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_FP;  dec.uses_rs1 = 1'b1;
+                {dec.uses_rs2, dec.uses_rs3} = fp_regs_of(insn);
+                dec.fp = fp;
             end
             KIND_OP_IMM: begin
                 dec.rd_we = 1'b1;  dec.uses_rs1 = 1'b1;

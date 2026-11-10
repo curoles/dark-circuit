@@ -5,7 +5,8 @@
  * - CASE_ZERO:  the all-zeros word, illegal in RISC-V,
  * - CASE_ONES:  the all-ones word, illegal in RISC-V,
  * - CASE_CSR_UNKNOWN:  csrr of a CSR that Mig3 does not have (custom 0x7c0),
- * - CASE_CSR_READONLY: csrw of cycle, a read-only CSR.
+ * - CASE_CSR_READONLY: csrw of cycle, a read-only CSR,
+ * - CASE_FP: fadd.s (Zfinx, as a word): illegal until Mig3 has its FPU.
  * Illegal instructions have the instruction word as mtval; x13 loads it from memory.
  * The instruction at `fault` traps: it writes nothing (x1 keeps 7, memory unchanged
  * with +expect_mem_unchanged). The handler copies mcause to x10, mepc to x11, and
@@ -41,8 +42,10 @@ fault:
     csrr  x1, 0x7c0
 #elif defined(CASE_CSR_READONLY)
     csrw  cycle, x1
+#elif defined(CASE_FP)
+    .word 0x00c5f553             # fadd.s a0, a1, a2 (rm dyn)
 #else
-#error "define CASE_ECALL, CASE_ZERO, CASE_ONES, CASE_CSR_UNKNOWN or CASE_CSR_READONLY"
+#error "define CASE_ECALL, CASE_ZERO, CASE_ONES, CASE_CSR_UNKNOWN, CASE_CSR_READONLY or CASE_FP"
 #endif
     ebreak                          # not reached: the instruction before traps
 

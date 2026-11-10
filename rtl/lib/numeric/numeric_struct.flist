@@ -1,2 +1,3 @@
+-F fp/fp.flist
 -F int32/mul/comb/struct/int32_mul.flist
 -F int32/div/iter/struct/int32_div.flist

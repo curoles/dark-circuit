@@ -66,6 +66,10 @@ package RiscvPkg;
     localparam funct3_t F3_REM     = 3'b110;
     localparam funct3_t F3_REMU    = 3'b111;
 
+    // F (and Zfinx): the rm field, in funct3's place, is a rounding mode (FpPkg::rm_e's
+    // values) or FRM_DYN, the mode of frm; 101 and 110 are reserved (rm_reserved).
+    localparam funct3_t FRM_DYN    = 3'b111;
+
     typedef logic [4:0] excp_code_t;     // Exception Code of mcause: why a trap was taken
 
     // Exception codes of mcause (interrupt bit 0), privileged spec; names as in riscv-opcodes.
@@ -151,6 +155,16 @@ package RiscvPkg;
         logic [6:0]  opcode;
     } insn_u_t;
 
+    typedef struct packed {     // R4-type: FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S
+        logic [4:0] rs3;
+        logic [1:0] fmt;        // 00: single precision
+        logic [4:0] rs2;
+        logic [4:0] rs1;
+        funct3_t    rm;         // rounding mode
+        logic [4:0] rd;
+        logic [6:0] opcode;
+    } insn_r4_t;
+
     typedef struct packed {     // J-type: JAL
         logic       imm_20;
         logic [9:0] imm_10_1;
@@ -171,7 +185,13 @@ package RiscvPkg;
         insn_b_t     b;
         insn_u_t     u;
         insn_j_t     j;
+        insn_r4_t    r4;
     } insn_fmt_t;
+
+    // The rm field of an F instruction is reserved (101, 110): an illegal instruction.
+    function automatic logic rm_reserved(funct3_t rm);
+        return rm == 3'b101 || rm == 3'b110;
+    endfunction
 
     // Immediates of the instruction formats, sign-extended to 32 bits; insn is the
     // instruction word. Every immediate is a 32-bit value sign-extended to XLEN, also in

@@ -47,9 +47,9 @@ if(DARK_CIRCUIT_RISCV)
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig3_mem.hex)
 
     # Decode: unit test of Mig3Decode with cases encoded by the assembler (A for the LR/SC
-    # cases); the Zicbom cases only when the compiler knows Zicbom, the Zbb cases only when
-    # it knows Zbb (DARK_CIRCUIT_RISCV_ZICBOM, DARK_CIRCUIT_RISCV_ZBB, cmake/riscv.cmake).
-    # +zicbom, +zbb: the testbench then wants a case of KIND_CBO, of KIND_BITMANIP too.
+    # cases); the Zicbom, Zfinx and Zbb cases only when the compiler knows the extension
+    # (DARK_CIRCUIT_RISCV_ZICBOM, _ZFINX, _ZBB, cmake/riscv.cmake). +zicbom, +zfinx, +zbb:
+    # the testbench then wants a case of KIND_CBO, KIND_FP, KIND_BITMANIP too.
     set(decode_arch rv32ima)
     set(decode_flags)
     set(decode_args)
@@ -57,6 +57,11 @@ if(DARK_CIRCUIT_RISCV)
         string(APPEND decode_arch _zicbom)
         list(APPEND decode_flags -DHAVE_ZICBOM)
         list(APPEND decode_args +zicbom)
+    endif()
+    if(DARK_CIRCUIT_RISCV_ZFINX)
+        string(APPEND decode_arch _zfinx)
+        list(APPEND decode_flags -DHAVE_ZFINX)
+        list(APPEND decode_args +zfinx)
     endif()
     if(DARK_CIRCUIT_RISCV_ZBB)
         string(APPEND decode_arch _zbb)
@@ -134,7 +139,7 @@ if(DARK_CIRCUIT_RISCV)
     # Faults trap: a handler checks mcause, mepc and mtval; rd and memory are not
     # written. One build of the program per case (-DCASE_<case>):
     # misaligned jump target, load, store and AMO address (rv32ia: the AMO); ECALL,
-    # illegal words, CSR
+    # illegal words, an F instruction (until the FPU), CSR
     # instructions on a missing CSR or writing a read-only one.
     set(FAULT_ARGS +expect_trap +expect_regs +expect_mem_unchanged)
     foreach(case IN ITEMS jalr lw sh amo)
@@ -142,7 +147,7 @@ if(DARK_CIRCUIT_RISCV)
         mig3_program_test(misaligned_${case} SOURCES misaligned.S ARCH rv32ia
                           FLAGS -DCASE_${case_macro} ARGS ${FAULT_ARGS})
     endforeach()
-    foreach(case IN ITEMS ecall zero ones csr_unknown csr_readonly)
+    foreach(case IN ITEMS ecall zero ones csr_unknown csr_readonly fp)
         string(TOUPPER ${case} case_macro)
         mig3_program_test(illegal_${case} SOURCES illegal.S FLAGS -DCASE_${case_macro}
                           ARGS ${FAULT_ARGS})

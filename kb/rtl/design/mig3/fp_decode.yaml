@@ -1,0 +1,46 @@
+type: decision
+title: Mig3 decodes Zfinx into KIND_FP with the FPU unit and operation; F traps until the FPU
+date: 2026-11-10
+question: >
+  Mig3's floating point is Zfinx (kb rtl/design/mig3/fp). Its first step is decode: what does
+  Mig3Decode give the parts for an F instruction, what is illegal, where is the rounding mode
+  checked, and what does the core do with an F instruction before it has an FPU?
+decision: >
+  riscv-opcodes' rv_f joins the generator (RiscvInstrPkg: FADD_S, FMADD_S, ..., and FLW, FSW,
+  FMV_X_W, FMV_W_X, which Mig3Decode does not match: not in Zfinx, illegal). Every other F
+  instruction is KIND_FP: rd written (rd_src RD_FP), rs1 read, rs2 by the form, rs3 for the R4
+  forms (decoded_t rs3, uses_rs3; RiscvPkg insn_r4_t), and dec.fp (fp_ctrl_t): the FPU's unit,
+  one per library block (FPU_FMA for FMADD.S ... FNMADD.S, FADD.S, FSUB.S, FMUL.S;
+  FPU_DIV_SQRT, FPU_CMP, FPU_MIN_MAX, FPU_SGNJ, FPU_CLASS, FPU_TO_INT, FPU_FROM_INT) with its
+  operation in FpPkg's enums, uses_rm and the raw rm field. A reserved rm field (101, 110;
+  RiscvPkg rm_reserved) makes the instruction illegal at decode; FRM_DYN is resolved against
+  frm in EX, where frm lives (the CSR step). Until the FPU step Mig3Control traps every KIND_FP
+  as an illegal instruction, so decode stays classification only and the core stays correct.
+why: >
+  Decode classifies once and the parts read controls (AGENTS.md: compute once, carry
+  forward): the FPU will pick its block by unit and pass the operation enums to it unchanged,
+  the library blocks' own encodings. A static rm can be checked from the instruction alone; a
+  dynamic one only with frm. Trapping in control rather than marking illegal in decode keeps
+  the decode test's model of the controls the one the FPU will need.
+rejected:
+  - choice: KIND_FP marked illegal in decode until the FPU
+    why_not: The decode test would check a temporary illegal flag instead of the real
+      controls; one line in control is the temporary part.
+  - choice: One kind per unit (KIND_FMA, KIND_FCMP, ...)
+    why_not: The parts see one FPU; unit inside fp_ctrl_t keeps kind_e for the core's parts.
+relies_on:
+  - rtl/design/mig3/fp
+  - rtl/lib/numeric/fp32/simple_ops
+evidence: >
+  2026-11-10, Verilator: the decode test passes with the 22 Zfinx instructions (assembled with
+  -march ..._zfinx; registers, rounding modes rne to rmm and dyn; their controls against a
+  model by opcode, funct5 and funct3, rs3 from the case file) and 8 illegal neighbours (flw,
+  fsw, fmv.x.w, fmv.w.x, rm 101 and 110, fsqrt.s with an rs2 field, fadd.d). illegal_fp: an
+  fadd.s traps as an illegal instruction with its word as mtval. The Mig2 and Mig3 suites
+  pass (243 tests). One-off mutants, caught: a reserved rm legal, FSQRT.S reading rs2,
+  FNMSUB.S decoded as FNMADD.S (the decode test), an F instruction not trapping
+  (illegal_fp).
+code:
+  - rtl/design/mig3/mig3_decode.sv#fp_of
+  - rtl/design/mig3/mig3_pkg.sv#fp_ctrl_t
+  - rtl/design/mig3/mig3_control.sv#ex_dec.fp.en

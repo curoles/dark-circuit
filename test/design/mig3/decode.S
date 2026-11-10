@@ -46,6 +46,7 @@
     .equ K_SC,      19
     .equ K_AMO,     20
     .equ K_CBO,     21
+    .equ K_FP,      22
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -149,6 +150,33 @@
     .macro CBO_ op, rs1                             /* cbo.clean cbo.flush cbo.inval: imm 0 */
     \op (x\rs1)
     EXPECT K_CBO, 0, 1, 0, 0, \rs1, 0, 2, 0, 0
+    .endm
+
+/* F on the x registers (Zfinx). funct3 is the rm field (rmv: the value of the name rm)
+   or the operation; the imm column holds rs3 of the R4 forms (they have no immediate). */
+    .macro FMA4 op, rd, rs1, rs2, rs3, rm, rmv      /* fmadd.s fmsub.s fnmsub.s fnmadd.s */
+    \op x\rd, x\rs1, x\rs2, x\rs3, \rm
+    EXPECT K_FP, 1, 1, 1, \rd, \rs1, \rs2, \rmv, 0, \rs3
+    .endm
+
+    .macro FP2RM op, rd, rs1, rs2, rm, rmv          /* fadd.s fsub.s fmul.s fdiv.s */
+    \op x\rd, x\rs1, x\rs2, \rm
+    EXPECT K_FP, 1, 1, 1, \rd, \rs1, \rs2, \rmv, 0, 0
+    .endm
+
+    .macro FP2 op, f3, rd, rs1, rs2                 /* fsgnj* fmin fmax feq flt fle */
+    \op x\rd, x\rs1, x\rs2
+    EXPECT K_FP, 1, 1, 1, \rd, \rs1, \rs2, \f3, 0, 0
+    .endm
+
+    .macro FP1RM op, rd, rs1, rm, rmv               /* fsqrt.s fcvt.* */
+    \op x\rd, x\rs1, \rm
+    EXPECT K_FP, 1, 1, 0, \rd, \rs1, 0, \rmv, 0, 0
+    .endm
+
+    .macro FP1 op, f3, rd, rs1                      /* fclass.s */
+    \op x\rd, x\rs1
+    EXPECT K_FP, 1, 1, 0, \rd, \rs1, 0, \f3, 0, 0
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -313,6 +341,33 @@ cases:
     CBO_   cbo.inval, 17
 #endif
 
+#ifdef HAVE_ZFINX
+    /*     F on the x registers (Zfinx), only when the compiler knows it; rm names: rne 0,
+           rtz 1, rdn 2, rup 3, rmm 4, dyn 7 (frm) */
+    FMA4   fmadd.s,   1,  2,  3,  4,  rne, 0
+    FMA4   fmsub.s,   31, 30, 29, 28, rtz, 1
+    FMA4   fnmsub.s,  0,  31, 0,  31, rdn, 2
+    FMA4   fnmadd.s,  5,  6,  7,  8,  dyn, 7
+    FP2RM  fadd.s,    9,  10, 11, rup, 3
+    FP2RM  fsub.s,    12, 13, 14, rmm, 4
+    FP2RM  fmul.s,    15, 16, 17, dyn, 7
+    FP2RM  fdiv.s,    18, 19, 20, rne, 0
+    FP1RM  fsqrt.s,   21, 22, rtz, 1
+    FP2    fsgnj.s,   0,  1,  2,  3
+    FP2    fsgnjn.s,  1,  4,  5,  6
+    FP2    fsgnjx.s,  2,  7,  8,  9
+    FP2    fmin.s,    0,  10, 11, 12
+    FP2    fmax.s,    1,  13, 14, 15
+    FP2    feq.s,     2,  16, 17, 18
+    FP2    flt.s,     1,  19, 20, 21
+    FP2    fle.s,     0,  22, 23, 24
+    FP1    fclass.s,  1,  25, 26
+    FP1RM  fcvt.w.s,  27, 28, rtz, 1
+    FP1RM  fcvt.wu.s, 29, 30, dyn, 7
+    FP1RM  fcvt.s.w,  31, 1,  rne, 0
+    FP1RM  fcvt.s.wu, 2,  3,  rdn, 2
+#endif
+
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
     ILLEGAL 0xffffffff      /* all ones: defined to be illegal */
     ILLEGAL 0xfe000033      /* OP with funct7 = 0x7f: neither OP nor M */
@@ -326,4 +381,12 @@ cases:
     ILLEGAL 0x0040200f      /* cbo.zero: Zicboz */
     ILLEGAL 0x0030200f      /* like cbo.clean, but imm 3 */
     ILLEGAL 0x0010208f      /* like cbo.clean, but rd field 1 */
+    ILLEGAL 0x00002007      /* flw: F, not Zfinx */
+    ILLEGAL 0x00002027      /* fsw: F, not Zfinx */
+    ILLEGAL 0xe0000053      /* fmv.x.w: F, not Zfinx */
+    ILLEGAL 0xf0000053      /* fmv.w.x: F, not Zfinx */
+    ILLEGAL 0x00005053      /* like fadd.s, but rm 101 (reserved) */
+    ILLEGAL 0x00006043      /* like fmadd.s, but rm 110 (reserved) */
+    ILLEGAL 0x58100053      /* like fsqrt.s, but rs2 field 1 */
+    ILLEGAL 0x02000053      /* fadd.d: D, not in Mig3 */
 cases_end:

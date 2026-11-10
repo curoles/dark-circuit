@@ -12,9 +12,13 @@
  * shifts, imm when the kind has an immediate (the CSR address for CSR instructions).
  * LR.W and SC.W: a load and a store with imm 0 and their atomic controls, rd_src LOAD and
  * ATOMIC. An AMO: a load of rs1 to rd (imm 0) that reads rs2, its atop by its encoding.
- * A CBO: a store of rs1 (imm 0) that reads no rs2, its cmo by its encoding.
+ * A CBO: a store of rs1 (imm 0) that reads no rs2, its cmo by its encoding. An F
+ * instruction (Zfinx): rd_src FP, the rm field in funct3, its FPU controls against a
+ * model by opcode, funct5 and funct3 (fp_model), uses_rs3 for the R4 forms and rs3 (the
+ * case's imm column).
  * At the end every kind must have had a case; KIND_BITMANIP only with +zbb, KIND_CBO only
- * with +zicbom (their cases need a compiler that knows Zbb, Zicbom).
+ * with +zicbom, KIND_FP only with +zfinx (their cases need a compiler that knows Zbb,
+ * Zicbom, Zfinx).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -69,7 +73,8 @@ module TbMig3Decode;
     function automatic logic has_funct3(input kind_e kind);
         case (kind)
             KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC, KIND_AMO, KIND_CBO:
+            KIND_FENCE, KIND_CSR, KIND_MULDIV, KIND_LR, KIND_SC, KIND_AMO, KIND_CBO,
+            KIND_FP:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -97,6 +102,7 @@ module TbMig3Decode;
             KIND_JAL, KIND_JALR: return RD_LINK;
             KIND_LOAD, KIND_LR, KIND_AMO: return RD_LOAD;
             KIND_SC:             return RD_ATOMIC;
+            KIND_FP:             return RD_FP;
             KIND_CSR:            return RD_CSR;
             KIND_MULDIV:         return RD_MULDIV;
             KIND_BITMANIP:       return RD_BITMANIP;
@@ -250,6 +256,55 @@ module TbMig3Decode;
                  div_signed: w ==? RiscvInstrPkg::DIV || w ==? RiscvInstrPkg::REM};
     endfunction
 
+    // An F instruction's FPU controls (Zfinx), by its opcode, funct5 (bits 31..27) and funct3
+    // as the encodings have them; 0 for other kinds.
+    // Only the opcode, funct5, funct3 and bit 20 (the .WU forms) of w are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic fp_ctrl_t fp_model(input kind_e kind, input insn_t w);
+        fp_ctrl_t fc;
+        fc = '0;
+        if (kind != KIND_FP)
+            return fc;
+        fc.en      = 1'b1;
+        fc.rm      = w[14:12];
+        fc.uses_rm = 1'b1;
+        if (w[6:0] != FADD_S[6:0]) begin          // R4: the opcode is the operation
+            fc.unit   = FPU_FMA;
+            fc.fma_op = w[6:0] == FMADD_S[6:0] ? FpPkg::FMA_MADD :
+                       w[6:0] == FMSUB_S[6:0] ? FpPkg::FMA_MSUB :
+                       w[6:0] == FNMSUB_S[6:0] ? FpPkg::FMA_NMSUB : FpPkg::FMA_NMADD;
+            return fc;
+        end
+        case (w[31:27])
+            FADD_S[31:27]:   begin fc.unit = FPU_FMA;  fc.fma_op = FpPkg::FMA_ADD; end
+            FSUB_S[31:27]:   begin fc.unit = FPU_FMA;  fc.fma_op = FpPkg::FMA_SUB; end
+            FMUL_S[31:27]:   begin fc.unit = FPU_FMA;  fc.fma_op = FpPkg::FMA_MUL; end
+            FDIV_S[31:27]:   fc.unit = FPU_DIV_SQRT;
+            FSQRT_S[31:27]:  begin fc.unit = FPU_DIV_SQRT;  fc.sqrt = 1'b1; end
+            FCVT_W_S[31:27]: begin fc.unit = FPU_TO_INT;  fc.is_unsigned = w[20]; end
+            FCVT_S_W[31:27]: begin fc.unit = FPU_FROM_INT;  fc.is_unsigned = w[20]; end
+            FSGNJ_S[31:27]: begin
+                fc.unit    = FPU_SGNJ;
+                fc.uses_rm = 1'b0;
+                fc.sgnj    = w[13] ? FpPkg::SGNJ_XOR : w[12] ? FpPkg::SGNJ_NEG
+                                                     : FpPkg::SGNJ_COPY;
+            end
+            FMIN_S[31:27]: begin
+                fc.unit    = FPU_MIN_MAX;
+                fc.max     = w[12];
+                fc.uses_rm = 1'b0;
+            end
+            FEQ_S[31:27]: begin
+                fc.unit    = FPU_CMP;
+                fc.uses_rm = 1'b0;
+                fc.cmp     = w[13] ? FP_CMP_EQ : w[12] ? FP_CMP_LT : FP_CMP_LE;
+            end
+            default:         begin fc.unit = FPU_CLASS;  fc.uses_rm = 1'b0; end  // FCLASS.S
+        endcase
+        return fc;
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
     // Compare one field of case cn with instruction w.
     task automatic check(input integer cn, input insn_t w, input string field, input word_t got,
                          input word_t exp);
@@ -280,6 +335,11 @@ module TbMig3Decode;
             check(c, insn, "sys",    32'(dec.sys),    32'(sys_of(exp_kind)));
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
             check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));
+            check(c, insn, "fp",     32'(dec.fp),     32'(fp_model(exp_kind, insn)));
+            check(c, insn, "uses_rs3", 32'(dec.uses_rs3),
+                  32'(exp_kind == KIND_FP && insn[6:0] != FADD_S[6:0]));
+            if (dec.uses_rs3)
+                check(c, insn, "rs3", 32'(dec.rs3), e[9]);
             if (uses_alu(exp_kind))
                 check(c, insn, "alu", 32'(dec.alu), 32'(alu_of(exp_kind, insn)));
             if (exp_kind != KIND_ILLEGAL) begin
@@ -304,10 +364,11 @@ module TbMig3Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        last_kind = KIND_CBO;
+        last_kind = KIND_FP;
         for (k = 0; k <= last_kind; k = k + 1)
             if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")) &&
-                !(k == int'(KIND_CBO) && !$test$plusargs("zicbom")))
+                !(k == int'(KIND_CBO) && !$test$plusargs("zicbom")) &&
+                !(k == int'(KIND_FP) && !$test$plusargs("zfinx")))
                 $fatal(1, "Mig3Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
         $finish;

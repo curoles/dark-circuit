@@ -191,7 +191,9 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
         ex_tval  = '0;
         if (ex_irq)
             ex_cause = IRQ_MACHINE_EXTERNAL;
-        else if (ex_dec.sys.illegal || ex_csr_illegal) begin
+        // An F instruction (Zfinx) is illegal until Mig3 has its FPU (kb
+        // rtl/design/mig3/fp_decode).
+        else if (ex_dec.sys.illegal || ex_csr_illegal || ex_dec.fp.en) begin
             ex_cause = CAUSE_ILLEGAL_INSTRUCTION;
             ex_tval  = ex_insn;
         end else if (ex_dec.sys.ecall)

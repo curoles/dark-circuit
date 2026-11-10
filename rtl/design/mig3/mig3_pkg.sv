@@ -327,7 +327,8 @@ package Mig3Pkg;
         KIND_LR,        // LR.W (Zalrsc): a load that reserves its word (Mig3Atomic)
         KIND_SC,        // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
         KIND_AMO,       // AMO*.W (Zaamo): a load with an atop, done in front of memory
-        KIND_CBO        // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
+        KIND_CBO,       // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
+        KIND_FP         // F on the x registers (Zfinx): the FPU, dec.fp
     } kind_e;
 
     // Source of the value written to rd.
@@ -338,7 +339,8 @@ package Mig3Pkg;
         RD_CSR,         // old value of the CSR: CSR instructions
         RD_MULDIV,      // product or quotient/remainder: M instructions
         RD_BITMANIP,    // ComputeCoreBitmanip result: Zbb with one operand
-        RD_ATOMIC       // Mig3Atomic: SC's 0 (stored) or 1 (failed)
+        RD_ATOMIC,      // Mig3Atomic: SC's 0 (stored) or 1 (failed)
+        RD_FP           // the FPU: an F instruction's result (Zfinx)
     } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
@@ -394,22 +396,59 @@ package Mig3Pkg;
         logic   div_signed; // DIV, REM
     } muldiv_ctrl_t;
 
+    // @kb: rtl/design/mig3/fp_decode
+    // F instructions on the x registers (Zfinx, kb rtl/design/mig3/fp): the FPU's unit (a
+    // library block, rtl/lib/numeric/fp32) and its operation; FLW, FSW, FMV.X.W and
+    // FMV.W.X are not in Zfinx (illegal).
+    typedef enum logic [2:0] {
+        FPU_FMA,        // FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S, FADD.S, FSUB.S, FMUL.S
+        FPU_DIV_SQRT,   // FDIV.S, FSQRT.S (Fp32DivSqrt)
+        FPU_CMP,        // FEQ.S, FLT.S, FLE.S (Fp32Compare)
+        FPU_MIN_MAX,    // FMIN.S, FMAX.S (Fp32MinMax)
+        FPU_SGNJ,       // FSGNJ.S, FSGNJN.S, FSGNJX.S (Fp32SignInject)
+        FPU_CLASS,      // FCLASS.S (Fp32Class)
+        FPU_TO_INT,     // FCVT.W.S, FCVT.WU.S (Fp32ToInt)
+        FPU_FROM_INT    // FCVT.S.W, FCVT.S.WU (Fp32FromInt)
+    } fp_unit_e;
+
+    typedef enum logic [1:0] {
+        FP_CMP_EQ,      // FEQ.S (a quiet compare)
+        FP_CMP_LT,      // FLT.S (signalling)
+        FP_CMP_LE       // FLE.S (signalling)
+    } fp_cmp_e;
+
+    typedef struct packed {
+        logic              en;          // an F instruction (Zfinx)
+        fp_unit_e          unit;
+        FpPkg::fma_op_e    fma_op;      // FPU_FMA: the operation
+        logic              sqrt;        // FPU_DIV_SQRT: FSQRT.S, else FDIV.S
+        fp_cmp_e           cmp;         // FPU_CMP: the predicate
+        logic              max;         // FPU_MIN_MAX: FMAX.S, else FMIN.S
+        FpPkg::sgnj_op_e   sgnj;        // FPU_SGNJ: the operation
+        logic              is_unsigned; // FPU_TO_INT, FPU_FROM_INT: the .WU form
+        logic              uses_rm;     // the instruction has an rm field: it rounds
+        RiscvPkg::funct3_t rm;          // that field; RiscvPkg::FRM_DYN: frm's mode (EX)
+    } fp_ctrl_t;
+
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
         kind_e             kind;     // for testbenches and traces; parts read the controls
         reg_id_t           rd;
         reg_id_t           rs1;
         reg_id_t           rs2;
+        reg_id_t           rs3;      // R4 (FMADD.S ...): the third operand
         logic              rd_we;    // writes rd (writes to x0 are dropped by the register file)
         rd_src_e           rd_src;   // value written to rd
         logic              uses_rs1; // reads rs1, for the interlock (Mig3Control)
         logic              uses_rs2;
+        logic              uses_rs3; // R4: reads rs3 (Zfinx)
         alu_ctrl_t         alu;      // Mig3Alu
         br_ctrl_t          br;       // Mig3Branch
         mem_ctrl_t         mem;      // Mig3Lsu
         atomic_ctrl_t      atomic;   // Mig3Atomic
         sys_ctrl_t         sys;      // Mig3Control, Mig3Csr
         muldiv_ctrl_t      muldiv;   // Mig3MulDiv
+        fp_ctrl_t          fp;       // the FPU (Zfinx)
         ComputeCoreBitmanipPkg::bm_op_e bitmanip;   // ComputeCoreBitmanip: the operation
         RiscvPkg::funct3_t funct3;   // operation within a part: ALU op, branch compare,
                                      // load/store size
