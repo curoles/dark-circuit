@@ -22,9 +22,9 @@ rtl/lib/
     jtag_core_dbg/   JTAG TAP and core debug port copied from old2020;
                      not in aggregate flists, not tested yet
   numeric/       number formats, built on blocks: int32/mul Int32Mul, int32/div Int32Div;
-                 fp/ FpPkg, fp32/ Fp32Fma, Fp32Round, Fp32FromInt, Fp32ToInt, Fp32Compare,
-                 Fp32MinMax, Fp32Class, Fp32SignInject, Fp32Unpack (hybrid, checked by
-                 TestFloat), fp32/mul_teaching (a multiplier to learn from);
+                 fp/ FpPkg, fp32/ Fp32Fma, Fp32DivSqrt, Fp32Round, Fp32FromInt, Fp32ToInt,
+                 Fp32Compare, Fp32MinMax, Fp32Class, Fp32SignInject, Fp32Unpack (hybrid,
+                 checked by TestFloat), fp32/mul_teaching (a multiplier to learn from);
                  <format>/<op>/<kind>/{behave,struct,hybrid}, aggregate flists like block/
   io/            device controllers with pins: uart/ (UartTx, UartRx, the devices on them);
                  aggregate flists io_behave.flist, io_struct.flist like block/

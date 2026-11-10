@@ -9,3 +9,4 @@ min_max/hybrid/fp32_min_max.sv
 class/hybrid/fp32_class.sv
 sign_inject/hybrid/fp32_sign_inject.sv
 to_int/hybrid/fp32_to_int.sv
+div_sqrt/hybrid/fp32_div_sqrt.sv

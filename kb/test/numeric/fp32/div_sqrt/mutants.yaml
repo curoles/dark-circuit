@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of Fp32DivSqrt (TestFloat's f32_div, f32_sqrt)
+date: 2026-11-09
+tests: [numeric_fp32_div_sqrt]
+mutants:
+  - name: a's significand below b's is not doubled (the exponent still lowered)
+    edits:
+      - file: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        old: ".in0({sig_a, 1'b0}), .in1({1'b0, sig_a}), .sel(a_ge_b), .out(r_div));"
+        new: ".in0({1'b0, sig_a}), .in1({1'b0, sig_a}), .sel(a_ge_b), .out(r_div));"
+    expect: caught
+  - name: the remainder does not make sticky
+    edits:
+      - file: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        old: ".sign(res_sign), .exp(res_exp), .sig({q, |r}), .rm(op_rm), .result(rounded),"
+        new: ".sign(res_sign), .exp(res_exp), .sig({q, |r && 1'b0}), .rm(op_rm), .result(rounded),"
+    expect: caught
+  - name: an odd exponent does not double the radicand
+    edits:
+      - file: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        old: ".in1({sig_a, {(XW - P){1'b0}}}), .sel(odd),"
+        new: ".in1({1'b0, sig_a, {(XW - P - 1){1'b0}}}), .sel(odd),"
+    expect: caught
+  - name: x / 0 does not flag DZ
+    edits:
+      - file: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        old: "assign flags.dz = spec_inf && spec_dz;"
+        new: "assign flags.dz = spec_inf && spec_dz && 1'b0;"
+    expect: caught
+  - name: the root of -0 is +0
+    edits:
+      - file: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        old: "sign_now = ua.sign && ua.zero;"
+        new: "sign_now = ua.sign && ua.zero && 1'b0;"
+    expect: caught

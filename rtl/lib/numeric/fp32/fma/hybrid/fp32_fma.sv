@@ -9,8 +9,10 @@
  * rounding mode). The exact value goes to Fp32Round, so every result is rounded once.
  *  - Unpack (Fp32Unpack): signs, exponents (1 for a subnormal), significands of 24 bits,
  *    classes. A subnormal significand is not normalized: the sum is normalized later.
- *  - The field: 76 bits. Bit 75 is the sign of a difference, bit 0 a sticky bit (the jam);
- *    the product, 48 bits, sits at bits 48..1, the addend first at bits 74..51 (its top bit
+ *  - The field: 77 bits. Bit 76 is the sign of a difference, bit 0 a sticky bit (the jam),
+ *    bit 1 always 0 (so that the jam stays below the guard bit when the product is only 24
+ *    bits long: a normal times a subnormal); the product, 48 bits, sits at bits 49..2, the
+ *    addend first at bits 75..52 (its top bit
  *    26 above the product's) and shifted right by sh = 27 + e_p - e_c, e_p = e_a + e_b - 127
  *    the product's exponent. sh <= 0 (or a zero product) leaves it on top (clamp): the
  *    product is then at least 2 bits below it, which rounds the same as its true place, and
@@ -22,8 +24,8 @@
  *    in 1 for a subtraction) adds the two rows left. A negative difference is negated
  *    (Incr of the inverse) and takes the addend's sign.
  *  - The top 1 of the magnitude (PriorityEncoder, 128 inputs) gives the exponent,
- *    e_base - 47 + its index (e_base: e_p, or e_c - 27 with the clamp, where the addend's
- *    top bit 74 has exponent e_c), and the left shift (BarrelShifter) that puts it on top; the top
+ *    e_base - 48 + its index (e_base: e_p, or e_c - 27 with the clamp, where the addend's
+ *    top bit 75 has exponent e_c), and the left shift (BarrelShifter) that puts it on top; the top
  *    25 bits and the OR of the rest go to Fp32Round (26 bits) with that exponent, which
  *    makes subnormals, rounds and flags overflow, underflow and inexact.
  *  - An exact zero: the sign of both operands when they agree (two zeros of one sign), else
@@ -40,8 +42,8 @@
  *   e_a + e_b - 127 = e_p (BrentKungAdder x 2); sh = e_p - e_c + 27 (CarrySaveAdder + BK)
  *   addend --> BarrelShifter >> sh (+ mask, jam) --> row 24 (inverted for a difference)
  *   sig_a & sig_b[j] << j + 1 --> rows 0..23 --> WallaceTree --> KoggeStoneAdder --> sum
- *   sum < 0: Incr(~sum) --> magnitude --> PriorityEncoder --> index t --> e_base - 47 + t
- *                                     --> BarrelShifter << 74 - t --> 25 bits + sticky
+ *   sum < 0: Incr(~sum) --> magnitude --> PriorityEncoder --> index t --> e_base - 48 + t
+ *                                     --> BarrelShifter << 75 - t --> 25 bits + sticky
  *   --> Fp32Round --> Mux4 (rounded, infinity, default NaN) --> result, flags
  *
  * @author    Igor Lesik
@@ -57,8 +59,8 @@ module Fp32Fma import Fp32Pkg::*, FpPkg::*; (
     output flags_t  flags       // NV, OF, UF, NX; DZ 0
 );
     localparam int P   = FP32_MANT_WIDTH + 1;   // 24: bits of a significand
-    localparam int F   = 3 * P + 4;             // 76: the field
-    localparam int FA  = F - 1;                 // 75: the field below its sign bit
+    localparam int F   = 3 * P + 5;             // 77: the field
+    localparam int FA  = F - 1;                 // 76: the field below its sign bit
     localparam int EW  = 10;                    // exponents, signed
     localparam int SHW = 7;                     // shifts of the field: 0..127
     localparam int RS  = P + 2;                 // 26: bits to Fp32Round
@@ -116,7 +118,7 @@ module Fp32Fma import Fp32Pkg::*, FpPkg::*; (
     logic           clamp;      // sh <= 0 or a zero product: the addend stays on top
     logic [SHW-1:0] sh_eff;     // 0 with the clamp, 127 for 128 or more
     logic [EW-1:0]  e_c27;      // e_c - 27
-    logic [EW-1:0]  e_base;     // the exponent the field counts from (of its bit 47)
+    logic [EW-1:0]  e_base;     // the exponent the field counts from (of its bit 48)
     // Carries out, and the top bit of the shifted carries: not used (the sums are taken mod
     // 2^EW, signed).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -146,7 +148,7 @@ module Fp32Fma import Fp32Pkg::*, FpPkg::*; (
     Mux2 #(.WIDTH(EW)) u_mux2_e_base(.in0(e_p), .in1(e_c27), .sel(clamp), .out(e_base));
 
     // The addend in the field, aligned; the bits shifted out jammed into bit 0.
-    logic [FA-1:0]  c_top;      // the addend on top: bits 74..51
+    logic [FA-1:0]  c_top;      // the addend on top: bits 75..52
     logic [FA-1:0]  c_shifted;
     logic [FA-1:0]  c_keep;     // ones << sh: the bits that stay in the field
     logic           c_lost;     // a 1 shifted out
@@ -179,7 +181,7 @@ module Fp32Fma import Fp32Pkg::*, FpPkg::*; (
     for (genvar j = 0; j < P; j++) begin: g_pp
         logic [P-1:0] pp;           // sig_a & sig_b[j]
         assign pp      = ua.sig & {P{ub.sig[j]}};
-        assign rows[j] = F'(pp) << (j + 1);
+        assign rows[j] = F'(pp) << (j + 2);
     end
     assign rows[P] = {1'b0, c_al} ^ {F{sub}};
 
@@ -192,12 +194,12 @@ module Fp32Fma import Fp32Pkg::*, FpPkg::*; (
     Incr #(.WIDTH(F)) u_incr_neg(.in(~s), .out(s_neg), .co(s_neg_co));
     Mux2 #(.WIDTH(F)) u_mux2_mag(.in0(s), .in1(s_neg), .sel(neg), .out(mag));
 
-    // Normalize: the top 1 of the magnitude to bit 74.
+    // Normalize: the top 1 of the magnitude to bit 75.
     logic [SHW-1:0] t;          // index of the top 1
     logic           nonzero;    // the sum is not exactly 0
-    logic [SHW-1:0] shn;        // 74 - t = ~t + 75, mod 128
+    logic [SHW-1:0] shn;        // 75 - t = ~t + 76, mod 128
     logic [FA-1:0]  norm;
-    logic [EW-1:0]  e_r_ps;     // e_base - 47 + t as partial sum and shifted carries
+    logic [EW-1:0]  e_r_ps;     // e_base - 48 + t as partial sum and shifted carries
     logic [EW-1:0]  e_r;        // the exponent of the top 1, signed
     logic [RS-1:0]  sig_r;      // the top 25 bits and the sticky OR of the rest
     // Carries out, the top bit of the shifted carries and the magnitude's sign bit (0): not
@@ -220,7 +222,7 @@ module Fp32Fma import Fp32Pkg::*, FpPkg::*; (
     assign sig_r = {norm[FA-1 -: RS-1], |norm[FA-RS:0]};
 
     CarrySaveAdder #(.WIDTH(EW)) u_csa_e_r(
-        .in1(e_base), .in2(EW'(t)), .in3(-EW'(47)), .ps(e_r_ps), .sc(e_r_sc));
+        .in1(e_base), .in2(EW'(t)), .in3(-EW'(48)), .ps(e_r_ps), .sc(e_r_sc));
     BrentKungAdder #(.WIDTH(EW)) u_adder_e_r(
         .in1(e_r_ps), .in2({e_r_sc[EW-2:0], 1'b0}), .ci(1'b0), .co(e_r_co), .sum(e_r));
 

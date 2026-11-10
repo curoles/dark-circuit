@@ -11,13 +11,14 @@ decision: >
   a zero of the product's sign so that a zero product keeps its sign in every rounding mode
   (an addend of -0 would give -0 for +0 rounding down). The datapath is the classic single
   path: operands unpacked (Fp32Unpack; a subnormal significand goes in unnormalized); a
-  76-bit field with the product at bits 48..1, the addend first 26 bits above it and
+  77-bit field with the product at bits 49..2 (bit 1 always 0, bit 0 the jam), the addend
+  first 26 bits above it and
   shifted right by 27 + e_p - e_c (clamped to 0, and to 0 for a zero product; bits shifted
   out jammed into bit 0); the 24 partial products and the aligned addend (inverted for an
   effective subtraction) are the 25 rows of one WallaceTree, one KoggeStoneAdder (carry in
   for the subtraction) adds the two rows left; a negative difference is negated (Incr) and
   takes the addend's sign; PriorityEncoder (128 inputs) finds the top 1, BarrelShifter
-  normalizes, 25 bits and a sticky go to Fp32Round with exponent e_p - 47 + t. An exact zero
+  normalizes, 25 bits and a sticky go to Fp32Round with exponent e_p - 48 + t. An exact zero
   has the operands' sign when they agree, else +0 (-0 rounding down). Special cases give the
   default NaN (no payload) or an infinity; NV for a signalling NaN, infinity times zero (also
   with a quiet NaN addend: RISC-V) and opposite infinities. Combinational: where a core
@@ -54,7 +55,11 @@ evidence: >
   test/numeric/fp32/fma/mutants). sky130 (Yosys, combinational): 46 894 um2 (14 % of
   Mig3Core), 8 868 cells, longest path 16.4 ns, from op through the operand muxes and the
   whole datapath: about three of Mig3's 5.5 ns clocks, so Mig3 registers it (its multi-cycle
-  result is the integration's question).
+  result is the integration's question). 2026-11-10: with the sampler's fix (its low bits
+  aliased, kb rtl/lib/numeric/fp32/div_sqrt) TestFloat found a third slip: a normal times
+  the smallest subnormal gives a product only 24 bits long, and the jam right below it
+  became the guard bit after normalizing (a case of RMM rounded up); the field got bit 1, a
+  zero between the product and the jam (77 bits), and passes.
 code:
   - rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv#u_wallace_tree
   - rtl/lib/numeric/fp32/unpack/hybrid/fp32_unpack.sv

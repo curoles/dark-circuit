@@ -1,0 +1,52 @@
+type: decision
+title: Fp32DivSqrt divides and takes square roots one bit a clock, one subtractor for both
+date: 2026-11-09
+question: >
+  The last operations of RV32 Zfinx are FDIV.S and FSQRT.S. How fast, from which blocks, and
+  how does a core wait for them?
+decision: >
+  One iterative unit, Fp32DivSqrt: radix-2 digit recurrence, one result bit per clock, 25
+  clocks for either (24 kept bits and a guard bit; the remainder gives sticky), the handshake
+  of the library's Divider (start while not busy, busy, done in the last clock, the result
+  held until the next start). At start the operands are unpacked and a subnormal significand
+  normalized (PriorityEncoder, BarrelShifter); a divide doubles a's significand when it is
+  below b's, so the quotient is in [1, 2) and its first bit 1; a square root makes the
+  exponent even (an odd one doubles the significand) and reads the radicand two bits a step.
+  The step's compare is one 28-bit BrentKungAdder for both: R - d, or {R, two radicand bits}
+  - {root, 01}. Special cases are decided at start and the steps run anyway (one latency).
+  The 25 bits and the sticky bit go to Fp32Round. Not the library's Divider itself: its
+  integer division would take 50 clocks here, half of them making the quotient's leading
+  zeros.
+why: >
+  Division and square roots are rare next to FMA in the code Mig3 runs (and in AI, where
+  reciprocals and roots are approximated); 25 clocks cost little area and keep one
+  subtractor. The same recurrence for both is the classic shared divide/sqrt (as in FPnew's
+  iterative unit); SRT radix-4 halves the clocks with a quotient-digit table and redundant
+  remainders, worth it when a core's division is hot. Divider's handshake lets a core hold
+  the instruction in EX as for integer division.
+rejected:
+  - choice: SRT radix-4 (two bits a clock)
+    why_not: About twice the logic for a rare operation; a later step if a design needs it.
+  - choice: The library's Divider on the significands
+    why_not: 50 clocks, half of them on leading zeros; a fraction recurrence starts at the
+      first quotient bit.
+  - choice: Newton-Raphson on the FMA
+    why_not: Shares the FMA but needs a table, several FMA passes and a correction step for
+      IEEE rounding; the FMA is busy in a core.
+relies_on:
+  - rtl/lib/numeric/fp32/design
+  - rtl/lib/block/divider/early_start
+evidence: >
+  2026-11-10, Verilator: Fp32DivSqrt passes TestFloat in the five modes, per mode 2438 cases
+  of f32_div (about one in 20 and all with two special operands) and all 600 of f32_sqrt,
+  every result and flag, done in the 25th clock every time; 0.3 s. Its mutants all caught
+  (kb test/numeric/fp32/div_sqrt/mutants) once the sampler was fixed: x / 0 without DZ
+  survived first, because testfloat_sample.awk picked by r % k, and the low bits of its
+  16-bit generator repeat with short periods: none of the 329 finite x / 0 cases of the
+  level-1 set was picked (22 now). The pick now uses the high bits (r < 65536 / k); with
+  the new picks TestFloat found a slip in Fp32Fma (kb rtl/lib/numeric/fp32/fma), and all
+  27 mutants of the fp32 blocks are caught. sky130 (Yosys): 16 087 um2, 2 916 cells,
+  longest path 5.4 ns, from b at start through the normalizing and the exponent sums: within
+  Mig3's 5.5 ns clock.
+code:
+  - rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv#u_adder_step

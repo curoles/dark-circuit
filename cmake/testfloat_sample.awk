@@ -4,7 +4,9 @@
 # operands, the result, the flags (NF - 2 operands). The generator is a 16-bit linear
 # congruential one, exact in any awk's arithmetic, so every machine writes the same files; a
 # stride (every k-th line) aliases with testfloat_gen's regular order and misses whole kinds
-# of operands.
+# of operands. The pick uses the generator's high bits (r < 65536 / k): its low bits repeat
+# with short periods (bit j every 2^(j+1) lines), and r % k with an even k aliased as a
+# stride does (no finite x / 0 among f32_div's picks: kb rtl/lib/numeric/fp32/div_sqrt).
 #
 # @author    Igor Lesik
 # @copyright 2026 Igor Lesik, MIT License
@@ -23,6 +25,6 @@ BEGIN { r = 1 }
     s = 0
     for (i = 1; i <= NF - 2; i++)
         s += special($i)
-    if (r % k == 0 || (n > 0 && s >= n))
+    if (r < 65536 / k || (n > 0 && s >= n))
         print
 }

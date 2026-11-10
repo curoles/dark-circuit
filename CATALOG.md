@@ -104,6 +104,19 @@ numeric:
         versions: [hybrid]
         path: rtl/lib/numeric/fp32/compare/hybrid/fp32_compare.sv
         test: test/numeric/fp32/compare
+    div_sqrt:
+      Fp32DivSqrt:
+        what: "Fp32 divide and square root: a / b or sqrt(a), one result bit per clock (radix-2 digit recurrence, 25 clocks), rounded once (RISC-V FDIV.S, FSQRT.S)"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        test: test/numeric/fp32/div_sqrt
+        kb: [rtl/lib/numeric/fp32/div_sqrt]
+      Fp32DivSqrtNormalize:
+        what: "The normalizing of Fp32DivSqrt: a significand's top 1 to bit 23, the exponent lowered by the shift (a subnormal's, 1, becomes 1 - the shift); a normal one passes as it is"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/div_sqrt/hybrid/fp32_div_sqrt.sv
+        test: test/numeric/fp32/div_sqrt
+        kb: [rtl/lib/numeric/fp32/div_sqrt]
     fma:
       Fp32Fma:
         what: "Fp32 fused multiply-add: a * b + c with one rounding, and its special cases add, subtract and multiply (RISC-V FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S, FADD.S, FSUB.S, FMUL.S)"
