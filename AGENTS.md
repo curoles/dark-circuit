@@ -229,9 +229,11 @@ the chunk that establishes it:
   the device `RegPortTarget`, its registers `StrbReg` (any width, written byte by byte;
   a counter software sets: `StrbCounter`),
   the register map a block of one select per register (`block/plic/plic_decode`).
-- Floating point: an fp32 operation hands its exact value (a normalized significand with
-  guard and sticky bits, a signed biased exponent of any range) to `Fp32Round`; rounding
-  modes and exception flags are `FpPkg`'s, RISC-V's encodings (`numeric/fp32/from_int/hybrid`).
+- Floating point: operands come apart in `Fp32Unpack` (class, exponent, significand); an
+  fp32 operation hands its exact value (a normalized significand with guard and sticky
+  bits, a signed biased exponent of any range) to `Fp32Round`; add, subtract and multiply
+  are special cases of `Fp32Fma`; rounding modes and exception flags are `FpPkg`'s,
+  RISC-V's encodings (`numeric/fp32/fma/hybrid`).
 - Behave versions: combinational logic with bit or field selects as `assign` or an
   `automatic` function with a local variable and `return`, not `always_comb` (Icarus); a
   `case` on a whole signal (`block/alu2/behave`). Parameter limits `` `DC_STATIC_ASSERT ``,

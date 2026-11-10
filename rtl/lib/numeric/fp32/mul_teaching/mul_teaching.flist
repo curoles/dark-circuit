@@ -1,0 +1,3 @@
+../fp32_pkg.sv
+comb/behave/fp32_comb_multiplier.sv
+pipe/behave/fp32_pipelined_multiplier.sv

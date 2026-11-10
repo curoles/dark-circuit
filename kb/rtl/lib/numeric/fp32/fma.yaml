@@ -1,0 +1,60 @@
+type: decision
+title: Fp32Fma is a single-path fused multiply-add, the addend a row of the product's Wallace tree
+date: 2026-11-09
+question: >
+  Mig3's floating point needs FMADD, FMSUB, FNMSUB, FNMADD with one rounding, and FADD,
+  FSUB, FMUL (kb rtl/design/mig3/fp). How is the fused multiply-add built from the
+  library's blocks, and do add, subtract and multiply get units of their own?
+decision: >
+  One unit, Fp32Fma, for all seven (FpPkg::fma_op_e; a, b, c are rs1, rs2, rs3): ADD and SUB
+  are a * 1.0 +/- b (two Mux2 on the operands), MUL is a * b with no addend, which counts as
+  a zero of the product's sign so that a zero product keeps its sign in every rounding mode
+  (an addend of -0 would give -0 for +0 rounding down). The datapath is the classic single
+  path: operands unpacked (Fp32Unpack; a subnormal significand goes in unnormalized); a
+  76-bit field with the product at bits 48..1, the addend first 26 bits above it and
+  shifted right by 27 + e_p - e_c (clamped to 0, and to 0 for a zero product; bits shifted
+  out jammed into bit 0); the 24 partial products and the aligned addend (inverted for an
+  effective subtraction) are the 25 rows of one WallaceTree, one KoggeStoneAdder (carry in
+  for the subtraction) adds the two rows left; a negative difference is negated (Incr) and
+  takes the addend's sign; PriorityEncoder (128 inputs) finds the top 1, BarrelShifter
+  normalizes, 25 bits and a sticky go to Fp32Round with exponent e_p - 47 + t. An exact zero
+  has the operands' sign when they agree, else +0 (-0 rounding down). Special cases give the
+  default NaN (no payload) or an infinity; NV for a signalling NaN, infinity times zero (also
+  with a quiet NaN addend: RISC-V) and opposite infinities. Combinational: where a core
+  registers it is the core's choice.
+why: >
+  The addend in the tree saves the product's own carry-propagate adder: one adder for the
+  whole sum, as in published FMAs since the IBM RS/6000. Bits 48 and up hold the addend 2
+  bits above the product at least, enough to round as at its true place when it dominates
+  (the product only feeds guard and sticky). One unit keeps one rounder and one set of
+  special cases; FPnew and HardFloat do add and multiply in their FMA too. The four fused
+  forms differ in two sign bits.
+rejected:
+  - choice: Separate add and multiply units beside the FMA
+    why_not: Three datapaths and three sets of special cases for one rounding; the FMA does
+      them as special cases.
+  - choice: The product's adder, then a second adder for the addend
+    why_not: Two carry-propagate adders in a row where the tree takes the addend as a row.
+  - choice: MUL as a * b + (-0)
+    why_not: +0 + -0 is -0 rounding down; MUL needs the product's own zero sign.
+relies_on:
+  - rtl/lib/numeric/fp32/design
+  - rtl/lib/block/priority_encoder/tree
+evidence: >
+  2026-11-09, Verilator: Fp32Fma passes TestFloat in the five modes, per mode 2713 cases of
+  f32_mulAdd (each as MADD, MSUB, NMSUB, NMADD) and 2466 each of f32_add, f32_sub, f32_mul
+  (ADD, SUB and MUL get a signalling NaN as the unused c), every result and flag; 0.5 s.
+  TestFloat found two slips of the first draft: the field still counted from the product's
+  exponent when the addend stayed on top (now e_base, the addend's less 27), and MUL's
+  missing addend (and a zero addend) clamped the field to the addend's exponent (the clamp
+  now needs a nonzero addend). Every k-th case (a stride) let three mutants survive (an exact
+  zero rounding down, MUL's zero sign, infinity times zero with a quiet NaN addend): the
+  stride aliased with testfloat_gen's order. Pseudo-random sampling and all cases with
+  special operands (dc_testfloat_cases SPECIAL) catch all seven mutants (kb
+  test/numeric/fp32/fma/mutants). sky130 (Yosys, combinational): 46 894 um2 (14 % of
+  Mig3Core), 8 868 cells, longest path 16.4 ns, from op through the operand muxes and the
+  whole datapath: about three of Mig3's 5.5 ns clocks, so Mig3 registers it (its multi-cycle
+  result is the integration's question).
+code:
+  - rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv#u_wallace_tree
+  - rtl/lib/numeric/fp32/unpack/hybrid/fp32_unpack.sv

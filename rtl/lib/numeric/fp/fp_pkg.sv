@@ -1,5 +1,5 @@
-/* Fp package: what every floating-point format of the library shares, the rounding modes and
- * the exception flags.
+/* Fp package: what every floating-point format of the library shares, the rounding modes,
+ * the exception flags and the operations of the fused multiply-add.
  *
  * Their encodings are RISC-V's (frm and fflags of fcsr), so a core wires them as they are;
  * the package itself knows nothing about RISC-V. The flags are also SoftFloat's bits
@@ -27,5 +27,17 @@ package FpPkg;
         logic uf;   // underflow: tiny after rounding and inexact
         logic nx;   // inexact
     } flags_t;
+
+    // Operation of a fused multiply-add unit (Fp32Fma): a, b and c are a core's rs1, rs2
+    // and rs3.
+    typedef enum logic [2:0] {
+        FMA_MADD,   // a * b + c
+        FMA_MSUB,   // a * b - c
+        FMA_NMSUB,  // -(a * b) + c
+        FMA_NMADD,  // -(a * b) - c
+        FMA_ADD,    // a + b
+        FMA_SUB,    // a - b
+        FMA_MUL     // a * b
+    } fma_op_e;
 
 endpackage

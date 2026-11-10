@@ -85,7 +85,7 @@ numeric:
   fp:
     FpPkg:
       kind: package
-      what: "Fp package: what every floating-point format of the library shares, the rounding modes and the exception flags"
+      what: "Fp package: what every floating-point format of the library shares, the rounding modes, the exception flags and the operations of the fused multiply-add"
       path: rtl/lib/numeric/fp/fp_pkg.sv
       kb: [rtl/lib/numeric/fp32/design]
   fp32:
@@ -93,6 +93,13 @@ numeric:
       kind: package
       what: "Fp32 package: the IEEE-754 single precision format"
       path: rtl/lib/numeric/fp32/fp32_pkg.sv
+    fma:
+      Fp32Fma:
+        what: "Fp32 fused multiply-add: a * b + c with one rounding, and its special cases add, subtract and multiply (RISC-V FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S, FADD.S, FSUB.S, FMUL.S)"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        test: test/numeric/fp32/fma
+        kb: [rtl/lib/numeric/fp32/fma]
     from_int:
       Fp32FromInt:
         what: "Fp32 from integer: a 32-bit signed or unsigned integer to the nearest fp32 by a rounding mode (RISC-V FCVT.S.W, FCVT.S.WU)"
@@ -100,23 +107,29 @@ numeric:
         path: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
         test: test/numeric/fp32/from_int
         kb: [rtl/lib/numeric/fp32/design]
-    mul:
+    mul_teaching:
       Fp32CombMultiplier:
-        what: "Fp32 combinational multiplier: IEEE-754 single precision a * b"
+        what: "Fp32 combinational multiplier, a teaching version: the core of a * b in IEEE-754 single precision without rounding or special cases (for real use, Fp32Fma)"
         versions: [behave]
-        path: rtl/lib/numeric/fp32/mul/comb/behave/fp32_comb_multiplier.sv
-        test: test/numeric/fp32/mul
+        path: rtl/lib/numeric/fp32/mul_teaching/comb/behave/fp32_comb_multiplier.sv
+        test: test/numeric/fp32/mul_teaching
       Fp32PipelinedMultiplier:
-        what: "Fp32 pipelined multiplier: IEEE-754 single precision a * b in three stages"
+        what: "Fp32 pipelined multiplier, a teaching version: Fp32CombMultiplier's a * b in three register stages (for real use, Fp32Fma)"
         versions: [behave]
-        path: rtl/lib/numeric/fp32/mul/pipe/behave/fp32_pipelined_multiplier.sv
-        test: test/numeric/fp32/mul
+        path: rtl/lib/numeric/fp32/mul_teaching/pipe/behave/fp32_pipelined_multiplier.sv
+        test: test/numeric/fp32/mul_teaching
     round:
       Fp32Round:
         what: "Fp32 rounding: a wider significand with an exponent of any range to an fp32 and its exception flags"
         versions: [hybrid]
         path: rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv
         kb: [rtl/lib/numeric/fp32/design]
+    unpack:
+      Fp32Unpack:
+        what: "Fp32 unpack: an fp32 taken apart into sign, exponent and significand, with its class"
+        versions: [hybrid]
+        path: rtl/lib/numeric/fp32/unpack/hybrid/fp32_unpack.sv
+        kb: [rtl/lib/numeric/fp32/fma]
   int32:
     div:
       iter:

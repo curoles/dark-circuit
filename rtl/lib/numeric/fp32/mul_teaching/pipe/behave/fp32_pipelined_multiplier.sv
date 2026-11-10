@@ -1,4 +1,5 @@
-/* Fp32 pipelined multiplier: IEEE-754 single precision a * b in three stages, behavioral.
+/* Fp32 pipelined multiplier, a teaching version: Fp32CombMultiplier's a * b in three
+ * register stages (for real use, Fp32Fma), behavioral.
  *
  * The arithmetic of Fp32CombMultiplier in three register stages: mantissa product and
  * exponents, then the normalized result, then the output; result is the product of a

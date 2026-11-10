@@ -19,7 +19,9 @@ decision: >
   Berkeley TestFloat: SoftFloat 3 with its RISC-V specialization (canonical NaN 0x7fc00000)
   and testfloat_gen, fetched at configure time and built by their own Makefiles
   (cmake/testfloat.cmake); dc_testfloat_cases writes level-1 cases per rounding mode at
-  build time, every k-th kept; a pure-SV testbench reads them and compares the result and
+  build time, one in k picked pseudo-randomly and, as asked, every case with special
+  operands (a stride missed whole kinds: kb rtl/lib/numeric/fp32/fma); a pure-SV
+  testbench reads them and compares the result and
   all five flags. Tests stay about a second (the user: not a production chip, no
   exhaustive runs). One version per FP block, in a new family `hybrid/` (AGENTS.md): every
   wide arithmetic, shift, count, compare and wide select is a library block, part or gate

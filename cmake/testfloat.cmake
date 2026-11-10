@@ -38,25 +38,35 @@ macro(dc_testfloat)
     endif()
 endmacro()
 
-# dc_testfloat_cases(<prefix> FUNCTION <function> [EVERY <k>])
+# The sampler of dc_testfloat_cases.
+set(DC_TESTFLOAT_SAMPLE ${CMAKE_CURRENT_LIST_DIR}/testfloat_sample.awk)
+
+# dc_testfloat_cases(<prefix> FUNCTION <function> [EVERY <k>] [SPECIAL <n>] [FOR <target>])
 #
 # At build time, write the case files <prefix>.rne, .rtz, .rdn, .rup and .rmm: TestFloat's
 # level-1 cases of <function> (i32_to_f32, f32_add, f32_mulAdd, ...) in each rounding mode,
-# tininess after rounding (RISC-V), every k-th of them (default 1: all). Level 1 is
-# testfloat_gen's smallest set: 372 cases for i32_to_f32, 46464 for f32_add, over 6 million
-# for f32_mulAdd; EVERY keeps a test at about a second, and the special operands that
-# testfloat_gen spreads through its cases still come. A line per case: the operands, the
-# result and the flags, in hex.
+# tininess after rounding (RISC-V). Level 1 is testfloat_gen's smallest set: 372 cases for
+# i32_to_f32, 46464 for f32_add, over 6 million for f32_mulAdd, so a test keeps about one in
+# k of them (EVERY, default 1: all), picked by a fixed pseudo-random generator
+# (testfloat_sample.awk: the same files on every machine; every k-th line would alias with
+# testfloat_gen's regular order and miss whole kinds of operands), and with SPECIAL every case
+# with n or more special operands (zero, infinity, NaN: rare there, such as infinity times
+# zero plus a NaN). A line per case: the operands, the result and the flags, in hex. FOR:
+# <target> (a test's simulation) depends on the files, so building only that target
+# (tools/mutate.py) writes them too.
 function(dc_testfloat_cases PREFIX)
-    cmake_parse_arguments(C "" "FUNCTION;EVERY" "" ${ARGN})
+    cmake_parse_arguments(C "" "FUNCTION;EVERY;SPECIAL;FOR" "" ${ARGN})
     if(NOT C_FUNCTION)
         message(FATAL_ERROR "dc_testfloat_cases(${PREFIX}): FUNCTION is required")
     endif()
     if(NOT C_EVERY)
         set(C_EVERY 1)
     endif()
-    # $1 testfloat_gen, $2 its mode, $3 the function, $4 k, $5 the file.
-    set(script "\"$1\" -r$2 -tininessafter $3 | awk -v k=$4 '(NR - 1) % k == 0' > \"$5\"")
+    if(NOT C_SPECIAL)
+        set(C_SPECIAL 0)
+    endif()
+    # $1 testfloat_gen, $2 its mode, $3 the function, $4 k, $5 n, $6 the sampler, $7 the file.
+    set(script "\"$1\" -r$2 -tininessafter $3 | awk -v k=$4 -v n=$5 -f \"$6\" > \"$7\"")
     set(files)
     foreach(pair rne:near_even rtz:minMag rdn:min rup:max rmm:near_maxMag)
         string(REPLACE ":" ";" pair ${pair})
@@ -64,12 +74,17 @@ function(dc_testfloat_cases PREFIX)
         list(GET pair 1 mode)
         set(file ${PREFIX}.${suffix})
         add_custom_command(OUTPUT ${file}
-            COMMAND sh -c "${script}" sh ${TESTFLOAT_GEN} ${mode} ${C_FUNCTION} ${C_EVERY} ${file}
-            DEPENDS testfloat_gen
+            COMMAND sh -c "${script}" sh ${TESTFLOAT_GEN} ${mode} ${C_FUNCTION} ${C_EVERY}
+                    ${C_SPECIAL} ${DC_TESTFLOAT_SAMPLE} ${file}
+            DEPENDS testfloat_gen ${DC_TESTFLOAT_SAMPLE}
             COMMENT "TestFloat: ${C_FUNCTION}, round ${mode}"
             VERBATIM)
         list(APPEND files ${file})
     endforeach()
-    get_filename_component(name ${PREFIX} NAME)
+    # The target's name from the whole prefix: two tests may use one function.
+    string(MAKE_C_IDENTIFIER "${PREFIX}" name)
     add_custom_target(testfloat_cases_${name} ALL DEPENDS ${files})
+    if(C_FOR)
+        add_dependencies(${C_FOR} testfloat_cases_${name})
+    endif()
 endfunction()

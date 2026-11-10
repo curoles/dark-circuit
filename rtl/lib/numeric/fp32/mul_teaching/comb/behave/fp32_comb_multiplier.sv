@@ -1,4 +1,5 @@
-/* Fp32 combinational multiplier: IEEE-754 single precision a * b, behavioral.
+/* Fp32 combinational multiplier, a teaching version: the core of a * b in IEEE-754 single
+ * precision without rounding or special cases (for real use, Fp32Fma), behavioral.
  *
  * Multiplies the 24-bit mantissas (hidden 1 added), adds the exponents minus the bias
  * 127 and normalizes by one bit; the mantissa is truncated, not rounded. An input with

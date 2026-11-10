@@ -1,0 +1,49 @@
+type: mutants
+title: Mutants of Fp32Fma (TestFloat's f32_mulAdd, f32_add, f32_sub, f32_mul)
+date: 2026-11-09
+tests: [numeric_fp32_fma]
+mutants:
+  - name: an exact zero of opposite signs is +0 also rounding down
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign zero_sign = (sign_p == sign_c) ? sign_p : rm == RM_RDN;"
+        new: "assign zero_sign = (sign_p == sign_c) ? sign_p : 1'b0;"
+    expect: caught
+  - name: the addend's bits shifted out are lost (no jam)
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign c_al   = {c_shifted[FA-1:1], c_shifted[0] || c_lost};"
+        new: "assign c_al   = {c_shifted[FA-1:1], c_shifted[0] || (c_lost && 1'b0)};"
+    expect: caught
+  - name: a negative difference keeps the product's sign
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign sign_r    = neg ? sign_c : sign_p;"
+        new: "assign sign_r    = neg ? sign_p : sign_p;"
+    expect: caught
+  - name: a zero product does not leave the addend on top (0 * big + c)
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign clamp  = p_zero || (sh[EW-1] && !c_zero);"
+        new: "assign clamp  = (p_zero && 1'b0) || (sh[EW-1] && !c_zero);"
+    expect: caught
+  - name: a zero addend still moves the field to its exponent
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign clamp  = p_zero || (sh[EW-1] && !c_zero);"
+        new: "assign clamp  = p_zero || (sh[EW-1] && (!c_zero || 1'b1));"
+    expect: caught
+  - name: MUL's missing addend is a +0, not a zero of the product's sign
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign sign_c   = mul_only ? sign_p : uc.sign ^ neg_add;"
+        new: "assign sign_c   = mul_only ? 1'b0 : uc.sign ^ neg_add;"
+    expect: caught
+  - name: infinity times zero is not invalid when the addend is a quiet NaN
+    edits:
+      - file: rtl/lib/numeric/fp32/fma/hybrid/fp32_fma.sv
+        old: "assign invalid        = ua.snan || ub.snan || c_snan || inf_times_zero || inf_cancel;"
+        new: >-
+          assign invalid        = ua.snan || ub.snan || c_snan || (inf_times_zero && !c_nan) ||
+          inf_cancel;
+    expect: caught
