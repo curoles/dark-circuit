@@ -187,13 +187,36 @@ function(dc_riscv_probe OUT MARCH INSN)
     endif()
 endfunction()
 
+# dc_riscv_probe_zfinx_c(<out-var> <march>)
+#
+# <out-var> is TRUE when the compiler makes Zfinx instructions from C float code with
+# -march=<march> (clang does; gcc 12.2 assembles Zfinx but calls libgcc's soft-float
+# functions for C floats).
+function(dc_riscv_probe_zfinx_c OUT MARCH)
+    set(dir ${CMAKE_BINARY_DIR}/CMakeFiles/dc_riscv_probe)
+    file(MAKE_DIRECTORY ${dir})
+    file(WRITE ${dir}/probe.c "float probe(float a, float b) { return a + b; }\n")
+    dc_riscv_target(target ${MARCH})
+    execute_process(COMMAND ${RISCV_CC_BIN} ${target} -march=${MARCH} -mabi=ilp32 -O2
+                            -S -o ${dir}/probe.s ${dir}/probe.c
+                    RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
+    set(${OUT} FALSE PARENT_SCOPE)
+    if(result EQUAL 0)
+        file(READ ${dir}/probe.s code)
+        if(code MATCHES "fadd\\.s")
+            set(${OUT} TRUE PARENT_SCOPE)
+        endif()
+    endif()
+endfunction()
+
 # What the compiler needs and knows, probed (not its version: any toolchain may be used).
 # Since the ISA spec 20191213 the base ISA leaves out the CSR instructions and FENCE.I:
 # they are the extensions Zicsr and Zifencei, which older compilers do not know by name;
 # when the compiler wants them named, every -march gets DC_RISCV_ARCH_SUFFIX.
 # DARK_CIRCUIT_RISCV_ZBB: the compiler knows Zbb (tests of Zbb need it);
 # DARK_CIRCUIT_RISCV_ZICBOM: it knows Zicbom (tests of the CBOs); DARK_CIRCUIT_RISCV_ZFINX:
-# its assembler knows Zfinx (F on the x registers). DC_RISCV_CC_VERSION: the compiler and
+# its assembler knows Zfinx (F on the x registers); DARK_CIRCUIT_RISCV_ZFINX_C: it makes
+# Zfinx code from C (tests in C of the FPU need it). DC_RISCV_CC_VERSION: the compiler and
 # its version, gcc-12.2.0 or clang-23.1.6 (dc_riscv_cycle_ceiling).
 if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(base_has_csr rv32i "csrr a0, mscratch")
@@ -207,6 +230,7 @@ if(DARK_CIRCUIT_RISCV)
                    "cbo.inval (a0)")
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZFINX rv32i${DC_RISCV_ARCH_SUFFIX}_zfinx
                    "fadd.s a0, a1, a2")
+    dc_riscv_probe_zfinx_c(DARK_CIRCUIT_RISCV_ZFINX_C rv32im${DC_RISCV_ARCH_SUFFIX}_zfinx)
     if(DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
         execute_process(COMMAND ${RISCV_CC_BIN} -dumpversion OUTPUT_VARIABLE dc_version
                         OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
@@ -220,7 +244,8 @@ if(DARK_CIRCUIT_RISCV)
     message(STATUS "RISCV: ${DC_RISCV_TOOLCHAIN}, ${DC_RISCV_CC_VERSION} (${RISCV_CC_BIN}; "
                    "${RISCV_OBJCOPY_BIN}, ${RISCV_OBJDUMP_BIN}, ${RISCV_NM_BIN}), -march suffix "
                    "'${DC_RISCV_ARCH_SUFFIX}', Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
-                   "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}, Zfinx ${DARK_CIRCUIT_RISCV_ZFINX}")
+                   "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}, Zfinx ${DARK_CIRCUIT_RISCV_ZFINX}, "
+                   "Zfinx from C ${DARK_CIRCUIT_RISCV_ZFINX_C}")
 endif()
 
 # dc_riscv_cycle_ceiling(<out-var> <test> <compiler-version> <cycles> [...]...)
@@ -268,6 +293,7 @@ endfunction()
 
 # dc_add_riscv_program(<name> SOURCES <file>...
 #                      [ARCH <march>] [ABI <mabi>]
+#                      [ALT_ARCH <march> ALT_SOURCES <file>...]
 #                      [LINK_FLAGS <flag>...] [FLAGS <flag>...])
 #
 # Build bare-metal program <name>.elf from SOURCES in the current build directory,
@@ -276,6 +302,8 @@ endfunction()
 # type and name of every symbol, for testbenches that need an address).
 #   ARCH       -march, default rv32i (with DC_RISCV_ARCH_SUFFIX, see dc_riscv_march)
 #   ABI        -mabi, default ilp32
+#   ALT_ARCH   -march of ALT_SOURCES (with the same ABI), for example a soft-float copy of
+#              code beside one built for the FPU
 #   LINK_FLAGS link options, default -Wl,-Ttext=0 (code at address 0);
 #              for example -T <linker script> to place code and data
 #   FLAGS      more compiler options, for example -I<dir> or -D<macro>
@@ -288,12 +316,16 @@ function(dc_add_riscv_program NAME)
     if(NOT DARK_CIRCUIT_RISCV)
         return()
     endif()
-    cmake_parse_arguments(P "" "ARCH;ABI" "SOURCES;LINK_FLAGS;FLAGS" ${ARGN})
+    cmake_parse_arguments(P "" "ARCH;ABI;ALT_ARCH" "SOURCES;ALT_SOURCES;LINK_FLAGS;FLAGS"
+                          ${ARGN})
     if(NOT P_SOURCES)
         message(FATAL_ERROR "RISC-V program ${NAME}: SOURCES are required")
     endif()
     if(P_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "RISC-V program ${NAME}: unknown arguments: ${P_UNPARSED_ARGUMENTS}")
+    endif()
+    if(P_ALT_SOURCES AND NOT P_ALT_ARCH)
+        message(FATAL_ERROR "RISC-V program ${NAME}: ALT_SOURCES need ALT_ARCH")
     endif()
     if(NOT P_ARCH)
         set(P_ARCH rv32i)
@@ -309,28 +341,41 @@ function(dc_add_riscv_program NAME)
     dc_riscv_march(march ${P_ARCH})
     dc_riscv_target(target ${march})
     set(arch ${target} -march=${march} -mabi=${P_ABI})
+    set(alt_arch)
+    if(P_ALT_ARCH)
+        dc_riscv_march(alt_march ${P_ALT_ARCH})
+        dc_riscv_target(alt_target ${alt_march})
+        set(alt_arch ${alt_target} -march=${alt_march} -mabi=${P_ABI})
+    endif()
 
     # The command lines are a dependency too: the Makefile generator does not compare the
     # commands of custom commands. file(CONFIGURE) writes the file only when its content
     # changes, so it is newer than the objects only after a change of the options.
     file(MAKE_DIRECTORY ${base}.objs)
     set(options ${base}.objs/options.txt)
-    file(CONFIGURE OUTPUT ${options}
-         CONTENT "${RISCV_CC_BIN} ${arch} ${P_FLAGS}\n${DC_RISCV_LINK_TOOL} ${P_LINK_FLAGS}\n"
-         @ONLY)
+    set(content "${RISCV_CC_BIN} ${arch} ${P_FLAGS}\n${alt_arch}\n")
+    string(APPEND content "${DC_RISCV_LINK_TOOL} ${P_LINK_FLAGS}\n")
+    file(CONFIGURE OUTPUT ${options} CONTENT "${content}" @ONLY)
 
-    # Compile every source with its dependency file; object names start with
-    # the source number, so sources with the same name in different directories
-    # do not collide.
+    # Compile every source with its dependency file (ALT_SOURCES with ALT_ARCH); object
+    # names start with the source number, so sources with the same name in different
+    # directories do not collide.
     set(objs)
     set(n 0)
-    foreach(source IN LISTS P_SOURCES)
+    list(LENGTH P_SOURCES main_count)
+    foreach(source IN LISTS P_SOURCES P_ALT_SOURCES)
+        if(n LESS main_count)
+            set(source_arch ${arch})
+        else()
+            set(source_arch ${alt_arch})
+        endif()
         get_filename_component(source ${source} ABSOLUTE)
         get_filename_component(source_name ${source} NAME)
         set(obj ${base}.objs/${n}_${source_name}.o)
         add_custom_command(
             OUTPUT ${obj}
-            COMMAND ${RISCV_CC_BIN} ${arch} ${P_FLAGS} -MD -MF ${obj}.d -c -o ${obj} ${source}
+            COMMAND ${RISCV_CC_BIN} ${source_arch} ${P_FLAGS} -MD -MF ${obj}.d -c -o ${obj}
+                    ${source}
             DEPENDS ${source} ${options}
             DEPFILE ${obj}.d
             COMMENT "RISC-V: compiling ${source_name} of ${NAME}"

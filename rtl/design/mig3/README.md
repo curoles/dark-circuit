@@ -164,7 +164,9 @@ the cycles it holds EX are fpu bubbles. fcsr, frm and fflags are Mig3Csr's; roun
 frm (rm DYN) when frm is not a mode traps as illegal. The fused forms (FMADD.S ...) read
 rs3 in their first EX cycle through ID's rs2 port, lent to them (the instruction in ID
 waits behind the FMA then anyway): 6 cycles in EX. gcc 12.2 does not emit Zfinx code:
-fp.S and fp_fma.S are assembly. Why: `kb/rtl/design/mig3/fpu.yaml`,
+fp.S and fp_fma.S are assembly. With clang, fp_diff.c runs one C kernel as Zfinx code and
+as soft-float code on SoftFloat (sw/riscv/softfloat) side by side: every result and its
+flags must agree (`kb/test/design/mig3/fp_diff.yaml`). Why: `kb/rtl/design/mig3/fpu.yaml`,
 `kb/rtl/design/mig3/rs3_read.yaml`.
 
 ## CoreMark

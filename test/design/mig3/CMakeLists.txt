@@ -97,13 +97,18 @@ if(DARK_CIRCUIT_RISCV)
     # LABELS are added to the tests;
     # with OUTPUT the output (semihosting console) must match <regex>.
     function(mig3_program_test NAME)
-        cmake_parse_arguments(P "" "OUTPUT;ARCH" "SOURCES;FLAGS;ARGS;LABELS" ${ARGN})
+        cmake_parse_arguments(P "" "OUTPUT;ARCH;ALT_ARCH" "SOURCES;ALT_SOURCES;FLAGS;ARGS;LABELS"
+                              ${ARGN})
         if(NOT P_ARCH)
             set(P_ARCH rv32i)
         endif()
         set(prog design_mig3_${NAME})
+        set(alt)
+        if(P_ALT_SOURCES)
+            set(alt ALT_ARCH ${P_ALT_ARCH} ALT_SOURCES ${P_ALT_SOURCES})
+        endif()
         dc_add_riscv_program(${prog} SOURCES ${P_SOURCES} ARCH ${P_ARCH} FLAGS ${P_FLAGS}
-                             LINK_FLAGS -T ${SW}/mig3.ld)
+                             ${alt} LINK_FLAGS -T ${SW}/mig3.ld)
         set(logs)
         if(DARK_CIRCUIT_MIG3_TRACE)
             list(APPEND logs +trace=${CMAKE_CURRENT_BINARY_DIR}/${prog}.${SIM}.trace)
@@ -176,6 +181,27 @@ if(DARK_CIRCUIT_RISCV)
         mig3_program_test(fcsr SOURCES fcsr.S ARCH rv32i_zfinx ARGS +expect_regs)
         mig3_program_test(fp SOURCES fp.S ARCH rv32i_zfinx ARGS +expect_regs)
         mig3_program_test(fp_fma SOURCES fp_fma.S ARCH rv32i_zfinx ARGS +expect_regs)
+    endif()
+    # The FPU against SoftFloat (fp_diff.c): one C kernel compiled as Zfinx code and as
+    # soft-float code on SoftFloat (sw/riscv/softfloat), every result and the flags
+    # compared, exit 0 when all agree. Needs a compiler that makes Zfinx code from C
+    # (DARK_CIRCUIT_RISCV_ZFINX_C: clang) and SoftFloat's sources.
+    if(DARK_CIRCUIT_RISCV_ZFINX_C)
+        dc_softfloat()
+    endif()
+    if(DARK_CIRCUIT_RISCV_ZFINX_C AND DARK_CIRCUIT_SOFTFLOAT)
+        dc_softfloat_rv32(sf_sources sf_flags)
+        list(POP_FRONT sf_sources sf_runtime)
+        mig3_program_test(fp_diff
+                          SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                                  fp_diff.c fp_diff_hw.c ${sf_sources}
+                          ALT_ARCH rv32im ALT_SOURCES fp_diff_sw.c ${sf_runtime}
+                          ARCH rv32im_zfinx
+                          FLAGS -O2 -ffreestanding -ffp-model=strict
+                                -fno-math-errno -I${SW} ${sf_flags}
+                          ARGS +max_cycles=4000000)
+    else()
+        message(STATUS "Mig3: no Zfinx code from C or no SoftFloat: fp_diff not run")
     endif()
 
     # M extension: results used right away, division and branches, cycle cost, minstret.

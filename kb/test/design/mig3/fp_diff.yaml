@@ -1,0 +1,67 @@
+type: decision
+title: Mig3's FPU is checked against SoftFloat by one C kernel compiled as Zfinx and as soft-float
+date: 2026-11-10
+question: >
+  Mig3's FP tests are assembly written by hand (fp.S, fp_fma.S) and the library's blocks are
+  checked against TestFloat; nothing runs compiler-made FP code on the core, with its own
+  order, register allocation and dependences. With clang making Zfinx code from C, how is
+  the FPU checked from C, against what, within the test-time budget?
+decision: >
+  fp_diff: one kernel (fp_diff_kernel.h, 24 operations: arithmetic, the four fused forms,
+  sqrt, conversions both ways, compares, minimumNumber/maximumNumber, sign injection, a
+  dependent chain, a fused form with rd = rs3) compiled twice into one program, as Zfinx
+  code (fp_diff_hw.c: the FPU) and as rv32im soft-float code (fp_diff_sw.c: library calls
+  into SoftFloat with its RISC-V specialization); dc_add_riscv_program's ALT_ARCH and
+  ALT_SOURCES build the second copy in the same program (the ilp32 ABI is the same: floats in
+  integer registers). The soft-float runtime is a library part, sw/riscv/softfloat
+  (soft_float.c: libgcc's __addsf3 ... __floatunsisf, fmaf, sqrtf, fminimum_numf and
+  fmaximum_numf on SoftFloat; platform.h for RV32; cmake/testfloat.cmake dc_softfloat_rv32
+  lists SoftFloat's single-precision sources), for any core without an FPU. Every result and
+  the flags each one raised must agree, in all five rounding modes, 8 cases a mode from a
+  xorshift (specials, near 1.0, any bits, near the operand before). The test needs a
+  compiler that makes Zfinx code from C (riscv.cmake probes it: DARK_CIRCUIT_RISCV_ZFINX_C,
+  clang yes, gcc 12.2 no) and SoftFloat's sources (dc_softfloat).
+why: >
+  SoftFloat is TestFloat's reference already (kb rtl/lib/numeric/fp32/design), so the soft
+  copy is the same model, now inside the program: no expected values to write, any operand
+  works. The flags are taken after each operation (fflags read and cleared by csrrw; on the
+  soft side by a call, soft_float_take_flags), not per case: per case a FEQ.S raising NV
+  where FLT.S should hides behind the other (that mutant survived). Compiled with
+  -ffp-model=strict (operations round by frm, none folded, contraction off) and an empty asm
+  after each flag read that "changes" the operands: strict mode pins most operations, but
+  minimumNumber has no strict form in LLVM and FMIN.S and FMAX.S were computed together
+  (their NV landed on FMIN.S). 8 cases a mode keep the test near 3 s: SoftFloat's code does
+  not fit the 1 KiB I-cache (a quarter of the cycles are I-cache misses).
+rejected:
+  - choice: Two separate programs, soft-float and Zfinx, whose outputs a script compares
+    why_not: >
+      Two runs and a comparison outside the core; one program with both copies compares on
+      the core and needs only the exit status.
+  - choice: Flags compared once per case
+    why_not: >
+      Tried first: the swapped NV of FEQ.S and FLT.S survived (both ran on the same NaN).
+  - choice: 32 cases a mode
+    why_not: >
+      Ran (160 cases, all agree), 805 k cycles, 8.9 s; 8 a mode catch the same mutants.
+relies_on:
+  - rtl/design/mig3/fpu
+  - rtl/design/mig3/rs3_read
+  - rtl/lib/numeric/fp32/design
+  - cmake/riscv_toolchain
+code:
+  - test/design/mig3/fp_diff.c
+  - test/design/mig3/fp_diff_kernel.h
+  - sw/riscv/softfloat/soft_float.c
+  - cmake/testfloat.cmake#dc_softfloat_rv32
+evidence: >
+  2026-11-10, Verilator, clang-23.1.6: fp_diff passes, all agree (40 cases, 24 results and
+  their flags each; 234 k cycles, about 3 s), with the Mig3 suite (134 tests); 160 cases (32
+  a mode) agreed too. With gcc 12.2 the test is not added (no Zfinx code from C) and the
+  Mig3 suite passes (136). One-off mutants of Mig3, caught by fp_diff, none by fp.S's
+  values: FEQ.S signalling and FLT.S, FLE.S quiet; FMIN.S, FMAX.S with IEEE
+  minimum/maximum's NaN rule; FCVT.W.S with Arm's NaN integer; rm DYN rounding to nearest;
+  forwarding from EX left on while an R4 reads rs3 (with the result put back into the
+  addend: fmadd.s a6, a0, a1, a6). On the way: clang at -O2 made semihosting's string loop
+  a strlen call (no C library: -ffreestanding); per-case flags hid the NV mutant; the soft
+  side's inline flag read moved across the operations (now a call); FMIN.S and FMAX.S were
+  computed together (now the empty asm).

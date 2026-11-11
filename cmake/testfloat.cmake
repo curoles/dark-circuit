@@ -7,15 +7,49 @@
 # then TestFloat's case generator testfloat_gen on it. A test reads case files that
 # testfloat_gen writes at build time (dc_testfloat_cases). Why: kb rtl/lib/numeric/fp32/design.
 
+# dc_softfloat()
+#
+# Fetch SoftFloat (once): its sources, for TestFloat and for the soft-float runtime of
+# RISC-V programs (dc_softfloat_rv32). A macro: it sets DARK_CIRCUIT_SOFTFLOAT and
+# SOFTFLOAT_DIR where it is called.
+macro(dc_softfloat)
+    dc_fetch_source(SOFTFLOAT
+        GIT_REPOSITORY https://github.com/ucb-bar/berkeley-softfloat-3.git
+        GIT_TAG        07ebd29db0cfb55723a79fbbffe99103ef38e305)
+endmacro()
+
+# dc_softfloat_rv32(<sources-var> <flags-var>)
+#
+# The sources of the soft-float runtime of RISC-V programs: sw/riscv/softfloat/soft_float.c
+# and the single-precision part of SoftFloat with its RISC-V specialization, and the
+# compiler flags they need (sw/riscv/softfloat/platform.h, SoftFloat's headers); after
+# dc_softfloat().
+function(dc_softfloat_rv32 SOURCES FLAGS)
+    set(s ${SOFTFLOAT_DIR}/source)
+    set(files softfloat_state.c RISCV/softfloat_raiseFlags.c RISCV/s_propagateNaNF32UI.c
+              s_countLeadingZeros8.c s_countLeadingZeros32.c s_countLeadingZeros64.c
+              s_shiftRightJam32.c s_shiftRightJam64.c s_shortShiftRightJam64.c
+              s_normSubnormalF32Sig.c s_roundPackToF32.c s_normRoundPackToF32.c
+              s_addMagsF32.c s_subMagsF32.c s_mulAddF32.c s_approxRecip_1Ks.c
+              s_approxRecip32_1.c s_approxRecipSqrt_1Ks.c s_approxRecipSqrt32_1.c
+              s_roundToI32.c s_roundToUI32.c f32_add.c f32_sub.c f32_mul.c f32_div.c
+              f32_sqrt.c f32_mulAdd.c f32_eq.c f32_le.c f32_lt.c f32_lt_quiet.c
+              f32_isSignalingNaN.c f32_to_i32_r_minMag.c f32_to_ui32_r_minMag.c
+              i32_to_f32.c ui32_to_f32.c)
+    list(TRANSFORM files PREPEND ${s}/)
+    set(${SOURCES} ${PROJECT_SOURCE_DIR}/sw/riscv/softfloat/soft_float.c ${files}
+        PARENT_SCOPE)
+    set(${FLAGS} -I${PROJECT_SOURCE_DIR}/sw/riscv/softfloat -I${s}/include -I${s}/RISCV
+        PARENT_SCOPE)
+endfunction()
+
 # dc_testfloat()
 #
 # Fetch SoftFloat and TestFloat and add target testfloat_gen (once); for the tests that use
 # them, so other build trees do not fetch. A macro: it sets DARK_CIRCUIT_TESTFLOAT (both
 # fetched, make found) and TESTFLOAT_GEN (the program) where it is called.
 macro(dc_testfloat)
-    dc_fetch_source(SOFTFLOAT
-        GIT_REPOSITORY https://github.com/ucb-bar/berkeley-softfloat-3.git
-        GIT_TAG        07ebd29db0cfb55723a79fbbffe99103ef38e305)
+    dc_softfloat()
     dc_fetch_source(TESTFLOAT
         GIT_REPOSITORY https://github.com/ucb-bar/berkeley-testfloat-3.git
         GIT_TAG        a9c849f1b0eb0264b626d9686ffae167d996e3be)
