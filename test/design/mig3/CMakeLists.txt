@@ -143,8 +143,7 @@ if(DARK_CIRCUIT_RISCV)
     # written. One build of the program per case (-DCASE_<case>):
     # misaligned jump target, load, store and AMO address (rv32ia: the AMO); ECALL,
     # illegal words, CSR instructions on a missing CSR or writing a read-only one; F
-    # instructions (assembled with Zfinx) that round by an frm that is not a mode, and a
-    # fused form (FMADD.S) until ID reads rs3.
+    # instructions (assembled with Zfinx) that round by an frm that is not a mode.
     set(FAULT_ARGS +expect_trap +expect_regs +expect_mem_unchanged)
     foreach(case IN ITEMS jalr lw sh amo)
         string(TOUPPER ${case} case_macro)
@@ -157,11 +156,8 @@ if(DARK_CIRCUIT_RISCV)
                           ARGS ${FAULT_ARGS})
     endforeach()
     if(DARK_CIRCUIT_RISCV_ZFINX)
-        foreach(case IN ITEMS fp_frm fp_r4)
-            string(TOUPPER ${case} case_macro)
-            mig3_program_test(illegal_${case} SOURCES illegal.S ARCH rv32i_zfinx
-                              FLAGS -DCASE_${case_macro} ARGS ${FAULT_ARGS})
-        endforeach()
+        mig3_program_test(illegal_fp_frm SOURCES illegal.S ARCH rv32i_zfinx
+                          FLAGS -DCASE_FP_FRM ARGS ${FAULT_ARGS})
     endif()
 
     # Debug port and resume: the testbench changes a0 at two EBREAKs and resumes.
@@ -179,6 +175,7 @@ if(DARK_CIRCUIT_RISCV)
     if(DARK_CIRCUIT_RISCV_ZFINX)
         mig3_program_test(fcsr SOURCES fcsr.S ARCH rv32i_zfinx ARGS +expect_regs)
         mig3_program_test(fp SOURCES fp.S ARCH rv32i_zfinx ARGS +expect_regs)
+        mig3_program_test(fp_fma SOURCES fp_fma.S ARCH rv32i_zfinx ARGS +expect_regs)
     endif()
 
     # M extension: results used right away, division and branches, cycle cost, minstret.

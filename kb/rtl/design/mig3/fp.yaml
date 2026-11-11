@@ -1,5 +1,5 @@
 type: decision
-title: Mig3's floating point is Zfinx, single precision, a fused FMA, rs3 read in a second ID cycle
+title: Mig3's floating point is Zfinx, single precision, a fused FMA, rs3 read through rs2's port
 date: 2026-11-09
 question: >
   Mig3 is the core of the floating-point line. Which RISC-V floating point: F with its own
@@ -12,7 +12,9 @@ decision: >
   fused FMA stays (FMADD.S, FMSUB.S, FNMADD.S, FNMSUB.S; FADD and FMUL are its special
   cases in the FPU, FPnew's way); its third operand rs3 is read in a second ID cycle
   through the rs2 port (one bubble per FMA, no third read port, no new forwarding or
-  interlock compares). The FPU is its own unit (the integer multiplier is not shared, kb
+  interlock compares); changed in the FPU step to the R4's first EX cycle, still through
+  the rs2 port, which ID lends it (kb rtl/design/mig3/rs3_read). The FPU is its own unit
+  (the integer multiplier is not shared, kb
   rtl/design/mig3/mul_timing). FP is tested from assembly for now. The library's blocks
   (kb rtl/lib/numeric/fp32/design) do not depend on any of this.
 why: >

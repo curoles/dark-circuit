@@ -30,6 +30,18 @@ mutants:
   - name: an unsigned integer with its top bit set taken as negative
     edits:
       - file: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
-        old: "assign neg = is_signed && a[31];"
-        new: "assign neg = (is_signed || 1'b1) && a[31];"
+        old: "assign neg  = is_signed && a[31];"
+        new: "assign neg  = (is_signed || 1'b1) && a[31];"
+    expect: caught
+  - name: a negative power of two keeps the exponent of ones (no carry into it)
+    edits:
+      - file: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
+        old: ".ci(carry)"
+        new: ".ci(1'b0)"
+    expect: caught
+  - name: a negative power of two takes the significand below the carry
+    edits:
+      - file: rtl/lib/numeric/fp32/from_int/hybrid/fp32_from_int.sv
+        old: ".sel(carry), .out(sig)"
+        new: ".sel(1'b0), .out(sig)"
     expect: caught

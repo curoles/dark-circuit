@@ -74,7 +74,15 @@ evidence: >
   Fp32Round: the hybrid 4661 um2, 5.3 ns once PriorityEncoder's struct version became a
   tree (6.6 ns with its chain, kb rtl/lib/block/priority_encoder/tree); a behavioral copy
   of the same design 3816 um2, 5.3 ns; the hybrid with behave sub-blocks 4189 um2, 4.9 ns:
-  the struct Incr and BarrelShifter cost the rest, a look for the FMA.
+  the struct Incr and BarrelShifter cost the rest, a look for the FMA. 2026-11-10, in Mig3's
+  FPU it set Mig3's longest path (5.7 ns, from the ID/EX register into the FPU's result
+  register): the top 1 is now searched in ones (a, or ~a for a negative a) while the
+  increment makes the magnitude, and a carry up to a power of two is taken after the
+  shift (bit 32). Mig3 then 5.5 ns, no FPU unit on its longest path; Fp32FromInt alone
+  5.2 ns, 5518 um2 (5.3 ns, 4661
+  um2 before: alone the search was not the whole story, in Mig3 it was). The from_int
+  mutants with two new ones (that carry into the exponent and into the significand)
+  caught.
 code:
   - rtl/lib/numeric/fp/fp_pkg.sv#round_up
   - rtl/lib/numeric/fp32/round/hybrid/fp32_round.sv

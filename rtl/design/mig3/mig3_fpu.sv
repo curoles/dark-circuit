@@ -1,10 +1,10 @@
 /* Mig3 floating-point unit (Zfinx: F on the x registers), EX.
  *
  * The library's fp32 blocks (rtl/lib/numeric/fp32), one per kind of F instruction
- * (dec.fp.unit, Mig3Pkg fp_unit_e): Fp32Fma (FADD.S, FSUB.S, FMUL.S; the four fused
- * forms when rs3 is read), Fp32DivSqrt, Fp32Compare, Fp32MinMax, Fp32SignInject, Fp32Class,
- * Fp32ToInt, Fp32FromInt, with RISC-V's rules where ISAs differ (minimumNumber/
- * maximumNumber, the invalid conversion's integer).
+ * (dec.fp.unit, Mig3Pkg fp_unit_e): Fp32Fma (FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S with
+ * rs3 the addend; FADD.S, FSUB.S, FMUL.S), Fp32DivSqrt, Fp32Compare, Fp32MinMax,
+ * Fp32SignInject, Fp32Class, Fp32ToInt, Fp32FromInt, with RISC-V's rules where ISAs
+ * differ (minimumNumber/maximumNumber, the invalid conversion's integer).
  *
  * Every result comes from a register: the unit's result and flags are taken into it, and
  * the instruction completes in the cycle after, from there. So no fp32 block is on the
@@ -13,7 +13,9 @@
  *  - Fp32Compare, Fp32MinMax, Fp32SignInject, Fp32Class, Fp32ToInt, Fp32FromInt are
  *    combinational: taken in the first cycle, 2 cycles in EX;
  *  - Fp32Fma with FMA_STAGES pipeline stages: the operation enters in the first cycle, its
- *    result comes FMA_STAGES cycles later and is taken then: 2 + FMA_STAGES cycles;
+ *    result comes FMA_STAGES cycles later and is taken then: 2 + FMA_STAGES cycles; an
+ *    R4 instruction (FMADD.S ...) first takes rs3 (rs3_read: Mig3Core lends it ID's rs2
+ *    port, rs3_data) into a register and enters the cycle after: 3 + FMA_STAGES;
  *  - Fp32DivSqrt starts in the first cycle and runs its 25 clocks (Divider handshake): its
  *    result is taken in the cycle after done, 27 cycles.
  * valid is the instruction's cycles in EX that act (not behind a load in MEM/WB, no
@@ -24,11 +26,10 @@
  * The rounding mode: the instruction's rm field, or frm for FRM_DYN (Mig3Csr); illegal=1
  * when the instruction rounds and frm's mode is not one (101, 110, 111): it traps (the rm
  * field's reserved values are illegal at decode already, kb rtl/design/mig3/fp_decode).
- * For now also illegal: the fused forms (FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S), which read
- * rs3: ID does not read it yet.
  * flags (NV DZ OF UF NX, fflags' order) go with the result; Mig3Csr ORs them into fflags
  * when the instruction completes.
  *
+ *   rs3_data --> rs3_q (an R4's first cycle) -+
  *   rs1_data, rs2_data, dec.fp, rm --> Fp32Fma (FMA_STAGES) ------+
  *                                  --> Fp32DivSqrt (25 clocks) ---+--> unit's result, flags
  *                                  --> compare, min/max, sgnj,  --+       |  taken
@@ -55,8 +56,10 @@ module Mig3Fpu import Mig3Pkg::*, Fp32Pkg::*, FpPkg::*; (
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t             rs1_data,
     input  word_t             rs2_data,
+    input  word_t             rs3_data, // R4: rs3 through ID's rs2 port, while rs3_read
     input  RiscvPkg::funct3_t frm,      // fcsr.frm, the mode of FRM_DYN
     output wire               illegal,  // the F instruction can not be done (not valid-gated)
+    output wire               rs3_read, // an R4 wants rs3 now, from flops (not valid-gated)
     output wire               stall,    // the result of the instruction in EX is not there yet
     output word_t             result,
     output flags_t            flags
@@ -72,8 +75,8 @@ module Mig3Fpu import Mig3Pkg::*, Fp32Pkg::*, FpPkg::*; (
 
     assign rm_field = dec.fp.rm == RiscvPkg::FRM_DYN ? frm : dec.fp.rm;
     assign rm       = rm_e'(rm_field);
-    assign illegal  = dec.fp.en && (dec.uses_rs3 || (dec.fp.uses_rm &&
-                      (RiscvPkg::rm_reserved(rm_field) || rm_field == RiscvPkg::FRM_DYN)));
+    assign illegal  = dec.fp.en && dec.fp.uses_rm &&
+                      (RiscvPkg::rm_reserved(rm_field) || rm_field == RiscvPkg::FRM_DYN);
 
     // The instruction in EX, by unit.
     logic   fp;             // an F instruction that acts and can be done
@@ -93,11 +96,28 @@ module Mig3Fpu import Mig3Pkg::*, Fp32Pkg::*, FpPkg::*; (
     fp32_t  fma_result;
     flags_t fma_flags;
 
-    assign fma_start = fma && !fma_busy && !ready;
+    // rs3 of an R4 instruction: taken in its first acting cycle (Mig3Core lends ID's rs2
+    // port while rs3_read), kept until it leaves; the operation enters the cycle after.
+    // @kb: rtl/design/mig3/rs3_read
+    logic   rs3_take;
+    logic   rs3_got;        // rs3_q holds rs3 of the R4 in EX
+    word_t  rs3_q;
 
-    // rs3: none yet (the fused forms are illegal); ADD, SUB and MUL do not use c.
+    assign rs3_read = dec.fp.en && dec.uses_rs3 && !rs3_got;
+    assign rs3_take = fp && dec.uses_rs3 && !rs3_got;
+
+    always_ff @(posedge clk)
+        if (!rst_n) rs3_got <= 1'b0;
+        else        rs3_got <= (rs3_take || rs3_got) && !(ready && !hold);
+
+    always_ff @(posedge clk)
+        if (rs3_take) rs3_q <= rs3_data;
+
+    assign fma_start = fma && !fma_busy && !ready && (!dec.uses_rs3 || rs3_got);
+
+    // ADD, SUB and MUL do not use c.
     Fp32Fma #(.STAGES(FMA_STAGES)) u_fma(
-        .clk, .rst_n, .in_valid(fma_start), .a(rs1_data), .b(rs2_data), .c('0),
+        .clk, .rst_n, .in_valid(fma_start), .a(rs1_data), .b(rs2_data), .c(rs3_q),
         .op(dec.fp.fma_op), .rm, .out_valid(fma_out_valid), .result(fma_result),
         .flags(fma_flags));
 
@@ -221,6 +241,8 @@ module Mig3Fpu import Mig3Pkg::*, Fp32Pkg::*, FpPkg::*; (
     // instruction from EX before its result (an interrupt comes before it starts).
     `DC_ASSERT(a_fma_busy_has_fma, !fma_busy || (dec.fp.en && dec.fp.unit == FPU_FMA))
     `DC_ASSERT(a_ds_busy_has_ds, !ds_busy || (dec.fp.en && dec.fp.unit == FPU_DIV_SQRT))
+    // rs3 is taken before the operation enters, and the operation only with it.
+    `DC_ASSERT(a_fma_has_rs3, !fma_start || !dec.uses_rs3 || rs3_got)
     // The instruction and its registers do not change while it waits for its result.
     `DC_ASSERT_NEXT(a_inputs_held, stall,
                     $stable(rs1_data) && $stable(rs2_data) && $stable(dec.fp))

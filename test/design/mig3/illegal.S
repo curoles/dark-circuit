@@ -6,8 +6,7 @@
  * - CASE_ONES:  the all-ones word, illegal in RISC-V,
  * - CASE_CSR_UNKNOWN:  csrr of a CSR that Mig3 does not have (custom 0x7c0),
  * - CASE_CSR_READONLY: csrw of cycle, a read-only CSR,
- * - CASE_FP_FRM: fadd.s by frm (rm DYN) while frm is 5, not a rounding mode (Zfinx),
- * - CASE_FP_R4:  fmadd.s (Zfinx): illegal until ID reads rs3.
+ * - CASE_FP_FRM: fadd.s by frm (rm DYN) while frm is 5, not a rounding mode (Zfinx).
  * Illegal instructions have the instruction word as mtval; x13 loads it from memory.
  * The instruction at `fault` traps: it writes nothing (x1 keeps 7, memory unchanged
  * with +expect_mem_unchanged). The handler copies mcause to x10, mepc to x11, and
@@ -48,8 +47,6 @@ fault:
     csrw  cycle, x1
 #elif defined(CASE_FP_FRM)
     fadd.s a0, a1, a2, dyn
-#elif defined(CASE_FP_R4)
-    fmadd.s a0, a1, a2, a3
 #else
 #error "define one of the CASE_ macros of the header"
 #endif

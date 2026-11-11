@@ -161,9 +161,11 @@ divider and square root, and the one-cycle compare, min/max, sign injection, cla
 conversions. Every result goes through a register of the FPU before it is forwarded, so
 an F instruction stays 2 cycles in EX (FADD.S, FSUB.S, FMUL.S 5, FDIV.S, FSQRT.S 27);
 the cycles it holds EX are fpu bubbles. fcsr, frm and fflags are Mig3Csr's; rounding by
-frm (rm DYN) when frm is not a mode traps as illegal. The fused forms (FMADD.S ...) trap
-until ID reads rs3 (the next step). gcc 12.2 does not emit Zfinx code: fp.S is assembly.
-Why: `kb/rtl/design/mig3/fpu.yaml`.
+frm (rm DYN) when frm is not a mode traps as illegal. The fused forms (FMADD.S ...) read
+rs3 in their first EX cycle through ID's rs2 port, lent to them (the instruction in ID
+waits behind the FMA then anyway): 6 cycles in EX. gcc 12.2 does not emit Zfinx code:
+fp.S and fp_fma.S are assembly. Why: `kb/rtl/design/mig3/fpu.yaml`,
+`kb/rtl/design/mig3/rs3_read.yaml`.
 
 ## CoreMark
 

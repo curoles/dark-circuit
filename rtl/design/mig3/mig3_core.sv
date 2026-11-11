@@ -39,7 +39,9 @@
  * (ReturnAddressStack) predicts it. Results are forwarded to ID (Mig3Forward); an
  * instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
- * A division stays 34 cycles in EX, an F instruction 2 to 27 (Mig3Fpu).
+ * A division stays 34 cycles in EX, an F instruction 2 to 27 (Mig3Fpu); an R4 one
+ * (FMADD.S ...) reads rs3 in its first cycle in EX through ID's rs2 port, lent to it:
+ * the instruction in ID waits behind it then anyway.
  * Every slot without an instruction carries its reason (bubble_e); retire reports it
  * (retire.bubble), so each cycle retires an instruction or a bubble.
  *
@@ -104,6 +106,8 @@ module Mig3Core import Mig3Pkg::*; #(
     word_t        id_rf_rs2_data;
     word_t        id_rs1_data;
     word_t        id_rs2_data;
+    reg_id_t      id_rf_rs2;        // the register rs2's port reads: rs3 for EX's R4
+    reg_id_t      id_fwd_ex_rd;     // ex_rd for forwarding: none while the port is lent
     id_ex_t       id_ex_d;
     id_ex_t       id_ex_q;
 
@@ -127,6 +131,8 @@ module Mig3Core import Mig3Pkg::*; #(
     FpPkg::flags_t ex_fpu_flags;    // its flags, for fflags
     logic         ex_fpu_stall;
     logic         ex_fpu_illegal;   // the F instruction can not be done: it traps
+    logic         ex_fpu_rs3_read;  // the R4 in EX wants rs3 (not valid-gated)
+    logic         ex_rs3_read;      // ... and is there: ID's rs2 port is lent to it
     RiscvPkg::funct3_t ex_frm;      // fcsr.frm: the FPU's mode for FRM_DYN
     logic         ex_lsu_valid;     // the load or store in EX may send its request
     logic         ex_dmem_wait;     // the D-cache does not take the request of EX
@@ -202,16 +208,26 @@ module Mig3Core import Mig3Pkg::*; #(
                                .push_addr(ras_ctrl.push_addr), .pop(ras_ctrl.pop),
                                .top_addr(id_ras_top));
 
+    // rs3 of the R4 instruction in EX, through ID's rs2 port in its first cycle there: ID
+    // waits behind it (Mig3Fpu stalls EX) or is flushed by its trap, so ID's own rs2
+    // read means nothing then. Forwarding from EX is off meanwhile (EX holds the R4
+    // itself); rs3's newest writer is in MEM/WB. The select comes from flops.
+    // @kb: rtl/design/mig3/rs3_read
+    assign ex_rs3_read  = ex_fetch.valid && ex_fpu_rs3_read;
+    assign id_rf_rs2    = ex_rs3_read ? ex_dec.rs3 : id_dec.rs2;
+    assign id_fwd_ex_rd = ex_rs3_read ? '0 : ex_rd;
+
     Mig3Regs u_mig3_regs(
         .clk, .halt,
-        .rs1(id_dec.rs1), .rs2(id_dec.rs2), .rs1_data(id_rf_rs1_data), .rs2_data(id_rf_rs2_data),
+        .rs1(id_dec.rs1), .rs2(id_rf_rs2), .rs1_data(id_rf_rs1_data), .rs2_data(id_rf_rs2_data),
         .rd_we(mem_rd_write), .rd(mem_rd), .rd_data(mem_rd_data),
         .dbg_reg_id(dbg_req.reg_id), .dbg_reg_wr(dbg_req.reg_wr),
         .dbg_reg_wdata(dbg_req.reg_wdata), .dbg_reg_rdata);
 
     Mig3Forward u_mig3_forward(
-        .rs1(id_dec.rs1), .rs2(id_dec.rs2), .rf_rs1_data(id_rf_rs1_data),
-        .rf_rs2_data(id_rf_rs2_data), .ex_rd, .ex_rd_data, .mem_rd, .mem_rd_data,
+        .rs1(id_dec.rs1), .rs2(id_rf_rs2), .rf_rs1_data(id_rf_rs1_data),
+        .rf_rs2_data(id_rf_rs2_data), .ex_rd(id_fwd_ex_rd), .ex_rd_data, .mem_rd,
+        .mem_rd_data,
         .rs1_data(id_rs1_data), .rs2_data(id_rs2_data));
 
     assign id_ex_d = '{valid:      id_fetch.valid,
@@ -291,9 +307,13 @@ module Mig3Core import Mig3Pkg::*; #(
     // @kb: rtl/design/mig3/fpu
     Mig3Fpu u_mig3_fpu(
         .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
-        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .frm(ex_frm),
-        .illegal(ex_fpu_illegal), .stall(ex_fpu_stall), .result(ex_fpu_result),
+        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
+        .rs3_data(id_rs2_data), .frm(ex_frm), .illegal(ex_fpu_illegal),
+        .rs3_read(ex_fpu_rs3_read), .stall(ex_fpu_stall), .result(ex_fpu_result),
         .flags(ex_fpu_flags));
+
+    // ID's instruction does not move while its rs2 port is lent to EX's R4.
+    `DC_ASSERT(a_rs3_port_lent, !ex_rs3_read || pipe_ctrl.ex_stall || pipe_ctrl.ex_flush)
 
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
