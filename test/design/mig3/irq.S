@@ -23,7 +23,8 @@
  *     (a5 = 1).
  * 10. On a division right behind a load that waits in MEM/WB for its word (a D-cache
  *     miss): source 1 is masked by the PLIC's threshold until the device's line is
- *     pending, MIE is set, and the store that drops the threshold comes right before the
+ *     pending (read back: a store to the PLIC is posted), MIE is set, and the store
+ *     that drops the threshold comes right before the
  *     load, so meip rises while the load waits and the division in EX has not acted
  *     yet: the interrupt is taken on the division, which must not have started; it
  *     runs once after MRET (s11 = 14, s4 = the loaded word 0x66).
@@ -143,6 +144,7 @@ c9: addi  a5, a5, 1
     li    t0, MIG3_PLIC_THRESHOLD
     li    t1, 1
     sw    t1, 0(t0)                 # threshold 1: source 1 (priority 1) masked
+    lw    t1, 0(t0)                 # read back: the write is done before MIE is set
     csrsi mstatus, 8                # MIE = 1, meip 0
 1:  li    t1, MIG3_PLIC_PENDING
     lw    t1, 0(t1)

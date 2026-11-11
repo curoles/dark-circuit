@@ -202,7 +202,9 @@ if(DARK_CIRCUIT_RISCV)
     dc_riscv_tests()
     if(DARK_CIRCUIT_RISCV_TESTS)
         set(RISCV_TESTS ${RISCV_TESTS_DIR})
-        set(RISCV_TESTS_FLAGS -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
+        # riscv_tests_compat.h: what clang's assembler takes differently.
+        set(RISCV_TESTS_FLAGS -include ${SW}/riscv_tests_compat.h
+                              -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
         set(RISCV_TESTS_ARGS +riscv_test +no_debugger)
 
         # rv32ui: one test per instruction. Not run: fence_i (writes code into memory; Mig2
@@ -229,7 +231,7 @@ if(DARK_CIRCUIT_RISCV)
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
         # calls, to measure cycles (their own results are not printed; the exit status is
         # their own check). DIR is the directory of the benchmark, REPEAT the runs of its
-        # main (BENCH_REPEAT), CEILINGS its ceiling of pipeline cycles per gcc version
+        # main (BENCH_REPEAT), CEILINGS its ceiling of pipeline cycles per compiler version
         # (Mig2 README, dc_riscv_cycle_ceiling): the pipeline cycles + 1 %, rounded up to 1000
         # (+max_cycles is twice that, a guard against a hang). Lower it when a
         # change makes the benchmark faster; add the version of a new compiler. They run
@@ -258,20 +260,20 @@ if(DARK_CIRCUIT_RISCV)
             # Dhrystone: one run is 500 loops; 6 runs, about 5 s on Verilator.
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
             mig2_bench_test(dhrystone DIR ${DHRY} REPEAT 6
-                            CEILINGS 12.2.0 1943000
+                            CEILINGS gcc-12.2.0 1943000
                             SOURCES ${DHRY}/dhrystone.c ${DHRY}/dhrystone_main.c
                             FLAGS -Wno-implicit-int -Wno-implicit-function-declaration)
 
             # qsort: quicksort of 2048 random numbers, data-dependent branches. One run: the
             # sort is in place, a second run would sort sorted numbers.
             set(QSORT ${RISCV_TESTS}/benchmarks/qsort)
-            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS 12.2.0 162000
+            mig2_bench_test(qsort DIR ${QSORT} REPEAT 1 CEILINGS gcc-12.2.0 162000
                             SOURCES ${QSORT}/qsort_main.c)
 
             # towers: Towers of Hanoi with 7 discs, recursive: calls and returns. Every run
             # sets up the towers again.
             set(TOWERS ${RISCV_TESTS}/benchmarks/towers)
-            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS 12.2.0 233000
+            mig2_bench_test(towers DIR ${TOWERS} REPEAT 50 CEILINGS gcc-12.2.0 233000
                             SOURCES ${TOWERS}/towers_main.c)
         endif()
 
@@ -284,8 +286,16 @@ if(DARK_CIRCUIT_RISCV)
 
         # rv32uzbb: Zbb, the groups done so far; only when the compiler knows Zbb.
         if(DARK_CIRCUIT_RISCV_ZBB)
-            foreach(test IN ITEMS andn orn xnor min minu max maxu rol ror rori
-                                  sext_b sext_h zext_h orc_b rev8 clz ctz cpop)
+            set(zbb_tests andn orn xnor min minu max maxu rol ror rori sext_b sext_h zext_h
+                          orc_b rev8 clz ctz cpop)
+            # sext_b, sext_h and zext_h share rv64uzbb's source, whose 64-bit constants
+            # GNU as cuts to 32 bits and clang's assembler rejects: not run under clang.
+            if(DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
+                list(REMOVE_ITEM zbb_tests sext_b sext_h zext_h)
+                message(STATUS "Mig2: rv32uzbb sext_b, sext_h, zext_h not run under clang "
+                               "(64-bit constants in rv32 tests)")
+            endif()
+            foreach(test IN LISTS zbb_tests)
                 mig2_program_test(rv32uzbb_${test} SOURCES ${RISCV_TESTS}/isa/rv32uzbb/${test}.S
                                   ARCH rv32i_zbb FLAGS ${RISCV_TESTS_FLAGS}
                                   ARGS ${RISCV_TESTS_ARGS} LABELS riscv-tests rv32uzbb)

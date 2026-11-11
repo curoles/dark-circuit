@@ -1,0 +1,55 @@
+type: decision
+title: RISC-V programs build with LLVM or GNU, whichever is installed, LLVM when both are
+date: 2026-11-10
+question: >
+  gcc 12.2 assembles Zfinx but compiles C floats to SoftFloat calls, and the AI line will
+  want newer extensions (BF16, vectors) and custom instructions. Install a newer gcc, switch
+  to LLVM (clang-23 was installed), or support both, and how do the toolchains' differences
+  stay small?
+decision: >
+  Both, probed (the user: be friendly to whoever builds the project). cmake/riscv.cmake
+  finds an LLVM toolchain (the newest clang-<n>, or clang, with ld.lld, llvm-objdump,
+  llvm-nm of the same suffix) and a GNU one (gcc, objcopy, objdump, nm of one prefix:
+  riscv64-unknown-elf-, riscv32-unknown-elf-, riscv-none-elf-); DARK_CIRCUIT_RISCV_TOOLCHAIN
+  AUTO takes LLVM when found (the user's choice), else GNU, or forces one. The hex files
+  come from GNU objcopy -O verilog either way: with LLVM the host's, which reads any
+  little-endian ELF (LLVM's objcopy has no such format; the user chose objcopy over a tool
+  of our own). Programs link with -nostdlib -nostartfiles already, so nothing comes from a
+  toolchain's C library. The differences live in riscv.cmake only: clang's --target, lld's
+  --image-base=0 (code at address 0 without a script), the compiler and version that key
+  the cycle ceilings (gcc-12.2.0, clang-23.1.6). Sources the two assemble differently test
+  __clang__ (the user: an ifdef on the compiler).
+why: >
+  Anyone with either toolchain can run the suite; LLVM gives Zfinx code from C, newer
+  extensions and, for the AI ISA, the easier compiler to teach custom instructions. What
+  clang's assembler takes differently is little and named: label differences need no
+  relaxation (our trap.S: .option norelax); riscv-test-env declares mtvec_handler .weak and
+  the rv32mi tests define it .global, which clang rejects (sw/riscv/riscv_tests_compat.h
+  turns .global into .weak under clang); rv32uzbb sext_b, sext_h and zext_h share rv64's
+  source with 64-bit constants, which GNU as cuts to 32 bits and clang rejects (not run
+  under clang). Both riscv-tests problems are still upstream (riscv-tests 2026-10-19,
+  riscv-test-env 2026-01-09).
+rejected:
+  - choice: A RISC-V gcc 16 (the user installed the host's gcc-16 first, an x86 compiler)
+    why_not: >
+      No RISC-V gcc 16 package for Ubuntu 22.04; a build from source is hours on the laptop,
+      and LLVM gives the same codegen gains plus custom instructions.
+  - choice: LLVM only
+    why_not: >
+      The user: probe what is installed and work with both, friendly to other people.
+  - choice: tools/elf2hex.py instead of GNU objcopy
+    why_not: >
+      Written and dropped (the user): the host's GNU objcopy gives byte-identical hex files.
+relies_on:
+  - test/design/mig2/benchmarks
+code:
+  - cmake/riscv.cmake#dc_riscv_find_llvm
+  - sw/riscv/riscv_tests_compat.h
+evidence: >
+  2026-11-10, Verilator, the design tests of Mig1, Mig2 and Mig3 with riscv-tests: LLVM
+  (clang-23.1.6, ld.lld, llvm-objdump, llvm-nm 23, /usr/bin/objcopy 2.38) 330 pass, every
+  program built (rv32uzbb sext_b, sext_h, zext_h of Mig2 and Mig3 not run); GNU (gcc 12.2.0)
+  336 pass. The first clang run found 48 programs that did not build (the three kinds above)
+  and one failing test: irq.S case 10 raced a posted store to the PLIC's threshold against
+  setting MIE (it now reads the threshold back), seen only with clang's code layout. The
+  benchmarks (DARK_CIRCUIT_BENCHMARKS) have no clang ceilings yet: a guard only.

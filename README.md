@@ -152,8 +152,10 @@ on the main simulator, so both versions must behave the same.
 - CMake 3.20 or newer
 - Icarus Verilog (`iverilog`, `vvp`) to run simulation tests
 - Verilator 5.0 or newer to run simulation tests with Verilator
-- RISC-V GNU toolchain (optional) to build RISC-V programs for tests,
-  on Ubuntu: `sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf`
+- A RISC-V toolchain (optional) to build RISC-V programs for tests: LLVM (clang, lld,
+  llvm-objdump, llvm-nm; on Ubuntu from apt.llvm.org, e.g. `clang-23 lld-23 llvm-23`) with
+  the host's GNU objcopy, or the RISC-V GNU toolchain (on Ubuntu:
+  `sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf`)
 - QEMU (optional) to run RISC-V programs on `qemu-system-riscv32`,
   on Ubuntu: `sudo apt install qemu-system-misc`
 - Python 3 with `python3-yaml` and `python3-jinja2` (optional) for `make config`
@@ -257,14 +259,18 @@ make test_parts CMAKE_ARGS="-D DARK_CIRCUIT_MAIN_SIMULATOR=icarus"
 
 ## RISC-V programs
 
-Tests that run RISC-V programs build them with the RISC-V GNU toolchain
-into Verilog hex files for `SimRAM` and `SimROM` `load()`. Cmake variables:
+Tests that run RISC-V programs build them with LLVM or the RISC-V GNU toolchain, whichever
+is installed (both: LLVM), into Verilog hex files for `SimRAM` and `SimROM` `load()`
+(`cmake/riscv.cmake`). Cmake variables:
 
 - `DARK_CIRCUIT_USE_RISCV`: `AUTO`, `ON` or `OFF` like for simulators;
   without the toolchain these tests are disabled
-- `DARK_CIRCUIT_RISCV_PREFIX`: prefix of the toolchain programs,
-  default `riscv64-unknown-elf-`; other toolchains use for example
-  `riscv32-unknown-elf-` or `riscv-none-elf-`
+- `DARK_CIRCUIT_RISCV_TOOLCHAIN`: `AUTO` (LLVM when found, else GNU), `LLVM` or `GNU`
+- `DARK_CIRCUIT_RISCV_LLVM_SUFFIX`: suffix of the LLVM programs, e.g. `-23` for
+  `clang-23`; empty (default): the newest `clang-<n>` found, else `clang`
+- `DARK_CIRCUIT_RISCV_PREFIX`: prefix of the GNU programs, e.g. `riscv64-unknown-elf-`,
+  `riscv-none-elf-` or a path; empty (default): the first of `riscv64-unknown-elf-`,
+  `riscv32-unknown-elf-`, `riscv-none-elf-` found
 - `DARK_CIRCUIT_USE_QEMU`: `AUTO`, `ON` or `OFF`; with QEMU, programs also run on
   `qemu-system-riscv32` with semihosting as a reference, tests have suffix and label `.qemu`
 - `DARK_CIRCUIT_USE_RISCV_TESTS`: `AUTO`, `ON` or `OFF`; riscv-tests are fetched when cmake
@@ -273,7 +279,7 @@ into Verilog hex files for `SimRAM` and `SimROM` `load()`. Cmake variables:
   Without network: `-D FETCHCONTENT_SOURCE_DIR_RISCV_TESTS=<riscv-tests checkout>`
 
 ```sh
-make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
+make test CMAKE_ARGS="-D DARK_CIRCUIT_RISCV_TOOLCHAIN=GNU -D DARK_CIRCUIT_RISCV_PREFIX=riscv-none-elf-"
 ```
 
 Every program `<name>` gives `<name>.elf`, `<name>.hex`, `<name>.dis` (disassembly)

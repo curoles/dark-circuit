@@ -1,0 +1,59 @@
+type: decision
+title: An R4 instruction reads rs3 in its first EX cycle, through ID's rs2 port lent to it
+date: 2026-11-10
+question: >
+  The fused forms (FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S) read three registers; the register
+  file has two read ports, and rs3 comes through rs2's port in an extra cycle (kb
+  rtl/design/mig3/fp). In which cycle, and how do forwarding, the interlock and the
+  clock see it?
+decision: >
+  The user's choice (B): the R4 instruction leaves ID like any other, with rs1 and rs2. In
+  its first cycle in EX, Mig3Fpu asks for rs3 (rs3_read, from the ID/EX register and a flop
+  of its own); Mig3Core then gives ID's rs2 port to it (the index ex_dec.rs3) and turns
+  forwarding from EX off (EX holds the R4 itself; rs3's newest writer is in MEM/WB, whose
+  forwarding stays). Mig3Fpu keeps the value (rs3_q) in that cycle when the instruction
+  acts (a load in MEM/WB has its word then) and the FMA's operation enters the cycle after:
+  6 cycles in EX for an R4, against 5 for FADD.S, and no bubble in ID. The instruction in
+  ID can not move meanwhile: Mig3Fpu stalls EX, or the R4 traps (an interrupt in that
+  cycle, an frm that is not a mode) and ID is flushed (Mig3Core a_rs3_port_lent).
+why: >
+  The port's select comes from flops, known at the start of the cycle: ID's path from its
+  word through the register file to the forwarding, Mig3's longest, gets one early-select
+  gate on the index instead of a decode of the word plus that gate. ID's rs2 read in that
+  cycle is wasted anyway, since the instruction behind an FMA waits several cycles. No
+  rs3 interlock (a load right before is in MEM/WB when rs3 is read, and the FPU starts only
+  once its word is there), no ID/EX field, no bubble reason of its own; the cost is the
+  same one cycle per R4 as an extra ID cycle. A core that issues every clock (Mig4, Mig5)
+  needs a third read port or a read stage of its own instead: both ways are Mig3-sized.
+rejected:
+  - choice: (A) An extra first cycle in ID that reads rs3 through rs2's port
+    why_not: >
+      Drafted and tested: the port's select waited for "is the instruction in ID an R4",
+      decoded from ID's word in the same cycle; sky130 5.5 to 5.9 ns by ABC's run (6.0 with
+      the select from the decode's kind), ID's path the longest. It also needed an rs3
+      interlock, an rs3 bubble, a 32-bit register in ID and an ID/EX field.
+  - choice: (A') The same, with "is R4" decoded in IF2 into a flop beside ID's word
+    why_not: >
+      A 9-bit compare on IF2's late I-cache answer, which kb rtl/design/mig3/fetch_stage
+      keeps short.
+  - choice: A third read port for rs3
+    why_not: >
+      A 32:1 mux per bit and rs3 compares in the forwarding (kb rtl/design/mig3/fp).
+relies_on:
+  - rtl/design/mig3/fp
+  - rtl/design/mig3/fpu
+  - rtl/design/mig3/fetch_stage
+code:
+  - rtl/design/mig3/mig3_core.sv#id_rf_rs2
+  - rtl/design/mig3/mig3_fpu.sv#rs3_q
+  - test/design/mig3/fp_fma.S
+evidence: >
+  2026-11-10, Verilator: fp_fma.S passes (each fused form giving 2^-24 where two roundings
+  give 0; rs3 the result right before, loaded right before by a D-cache hit and by a miss,
+  equal to rs1 and rs2, the R4 result right before, equal to rd; fflags 0) with the Mig3
+  suite (149 tests with the numeric ones). One-off mutants, caught by fp_fma: forwarding
+  from EX left on while the R4 reads rs3, the port not lent, rs3 taken while the R4 waits
+  behind a load in MEM/WB, rs3_got not cleared for the next R4. sky130 (Yosys + ABC):
+  Mig3Core 5.5 ns, 413 427 um2; the longest path is the new read, from the ID/EX register's
+  rs3 field through the register file and the forwarding into Mig3Fpu's rs3_q, as long as
+  Mig3's own forwarding path (5.5 ns before); with (A) 5.5 to 5.9 ns.

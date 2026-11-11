@@ -1,26 +1,173 @@
 # @brief RISC-V programs for tests.
 #
-# Programs are built with the RISC-V GNU toolchain (gcc, objcopy, objdump, nm)
-# into Verilog hex files that SimRAM and SimROM load().
-# Use of the toolchain is controlled by cache variable DARK_CIRCUIT_USE_RISCV
-# (AUTO, ON or OFF), names of its programs start with DARK_CIRCUIT_RISCV_PREFIX.
+# Programs are built with an LLVM toolchain (clang, its assembler, lld, llvm-objdump,
+# llvm-nm) or a GNU one (gcc, its as and ld, objdump, nm), whichever is installed (both:
+# LLVM), into Verilog hex files that SimRAM and SimROM load(), written by GNU objcopy
+# -O verilog: the GNU toolchain's, or with LLVM the host's (it reads any little-endian ELF;
+# LLVM's objcopy has no such format). Cache variables:
+#   DARK_CIRCUIT_USE_RISCV          AUTO, ON or OFF, as for simulators
+#   DARK_CIRCUIT_RISCV_TOOLCHAIN    AUTO (LLVM when found, else GNU), LLVM or GNU
+#   DARK_CIRCUIT_RISCV_LLVM_SUFFIX  suffix of the LLVM programs (clang-23: -23); empty: the
+#                                   newest clang-<n> found, else clang
+#   DARK_CIRCUIT_RISCV_PREFIX       prefix of the GNU programs (riscv64-unknown-elf-, a path
+#                                   too); empty: the first found of riscv64-unknown-elf-,
+#                                   riscv32-unknown-elf-, riscv-none-elf- (xPack)
+# What differs between the two toolchains is here only: clang's --target, lld's
+# --image-base, the version that keys cycle ceilings (gcc-12.2.0, clang-23.1.6). Sources
+# that the two assemble differently test __clang__ (clang defines it; GNU's gcc does not).
 
-set(DARK_CIRCUIT_RISCV_PREFIX riscv64-unknown-elf- CACHE STRING
-    "RISC-V GNU toolchain prefix: riscv64-unknown-elf- (Ubuntu), riscv32-unknown-elf-, riscv-none-elf- (xPack), ...")
+set(DARK_CIRCUIT_USE_RISCV AUTO CACHE STRING "Use RISCV: AUTO (if found), ON (required) or OFF")
+set_property(CACHE DARK_CIRCUIT_USE_RISCV PROPERTY STRINGS AUTO ON OFF)
+set(DARK_CIRCUIT_RISCV_TOOLCHAIN AUTO CACHE STRING
+    "RISC-V toolchain: AUTO (LLVM when found, else GNU), LLVM or GNU")
+set_property(CACHE DARK_CIRCUIT_RISCV_TOOLCHAIN PROPERTY STRINGS AUTO LLVM GNU)
+set(DARK_CIRCUIT_RISCV_LLVM_SUFFIX "" CACHE STRING
+    "Suffix of the LLVM programs (clang-23: -23); empty: the newest found")
+set(DARK_CIRCUIT_RISCV_PREFIX "" CACHE STRING
+    "Prefix of the GNU programs (riscv64-unknown-elf-, riscv-none-elf-, a path); empty: probe")
 
-# Programs found with another prefix are forgotten when the prefix changes.
-if(NOT DARK_CIRCUIT_RISCV_PREFIX STREQUAL "${DC_RISCV_PREFIX_FOUND}")
-    unset(RISCV_GCC_BIN CACHE)
-    unset(RISCV_OBJCOPY_BIN CACHE)
-    unset(RISCV_OBJDUMP_BIN CACHE)
-    unset(RISCV_NM_BIN CACHE)
-    set(DC_RISCV_PREFIX_FOUND ${DARK_CIRCUIT_RISCV_PREFIX} CACHE INTERNAL "Prefix of found RISC-V programs")
+# Programs found with other settings are forgotten when the settings change.
+set(dc_search "${DARK_CIRCUIT_RISCV_LLVM_SUFFIX}|${DARK_CIRCUIT_RISCV_PREFIX}")
+if(NOT dc_search STREQUAL "${DC_RISCV_SEARCH}")
+    foreach(var IN ITEMS RISCV_CLANG RISCV_LLD RISCV_LLVM_OBJDUMP RISCV_LLVM_NM RISCV_HOST_OBJCOPY
+                         RISCV_GNU_GCC RISCV_GNU_OBJCOPY RISCV_GNU_OBJDUMP RISCV_GNU_NM)
+        unset(${var}_BIN CACHE)
+    endforeach()
+    set(DC_RISCV_SEARCH "${dc_search}" CACHE INTERNAL "Settings of the found RISC-V programs")
 endif()
+unset(dc_search)
 
-dc_use_tool(RISCV RISCV_GCC=${DARK_CIRCUIT_RISCV_PREFIX}gcc
-                  RISCV_OBJCOPY=${DARK_CIRCUIT_RISCV_PREFIX}objcopy
-                  RISCV_OBJDUMP=${DARK_CIRCUIT_RISCV_PREFIX}objdump
-                  RISCV_NM=${DARK_CIRCUIT_RISCV_PREFIX}nm)
+# @kb: cmake/riscv_toolchain
+# dc_riscv_find_llvm(<out-var>)
+#
+# <out-var> is TRUE when clang and the LLVM programs with its suffix and a host objcopy are
+# found (RISCV_CLANG_BIN, RISCV_LLD_BIN, RISCV_LLVM_OBJDUMP_BIN, RISCV_LLVM_NM_BIN,
+# RISCV_HOST_OBJCOPY_BIN).
+function(dc_riscv_find_llvm OUT)
+    if(DARK_CIRCUIT_RISCV_LLVM_SUFFIX)
+        set(names clang${DARK_CIRCUIT_RISCV_LLVM_SUFFIX})
+    else()
+        set(names)
+        foreach(version RANGE 17 40)
+            list(PREPEND names clang-${version})
+        endforeach()
+        list(APPEND names clang)
+    endif()
+    find_program(RISCV_CLANG_BIN NAMES ${names})
+    if(NOT RISCV_CLANG_BIN)
+        set(${OUT} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    get_filename_component(name ${RISCV_CLANG_BIN} NAME)
+    string(REGEX REPLACE "^clang" "" suffix "${name}")
+    find_program(RISCV_LLD_BIN ld.lld${suffix})
+    find_program(RISCV_LLVM_OBJDUMP_BIN llvm-objdump${suffix})
+    find_program(RISCV_LLVM_NM_BIN llvm-nm${suffix})
+    find_program(RISCV_HOST_OBJCOPY_BIN objcopy)
+    if(RISCV_LLD_BIN AND RISCV_LLVM_OBJDUMP_BIN AND RISCV_LLVM_NM_BIN AND RISCV_HOST_OBJCOPY_BIN)
+        set(${OUT} TRUE PARENT_SCOPE)
+    else()
+        message(STATUS "RISCV: ${name} found, but not all of ld.lld${suffix}, "
+                       "llvm-objdump${suffix}, llvm-nm${suffix}, objcopy")
+        set(${OUT} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+# dc_riscv_find_gnu(<out-var>)
+#
+# <out-var> is TRUE when gcc, objcopy, objdump and nm with one prefix are found
+# (RISCV_GNU_GCC_BIN, RISCV_GNU_OBJCOPY_BIN, RISCV_GNU_OBJDUMP_BIN, RISCV_GNU_NM_BIN).
+function(dc_riscv_find_gnu OUT)
+    if(DARK_CIRCUIT_RISCV_PREFIX)
+        set(names ${DARK_CIRCUIT_RISCV_PREFIX}gcc)
+    else()
+        set(names riscv64-unknown-elf-gcc riscv32-unknown-elf-gcc riscv-none-elf-gcc)
+    endif()
+    find_program(RISCV_GNU_GCC_BIN NAMES ${names})
+    if(NOT RISCV_GNU_GCC_BIN)
+        set(${OUT} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    string(REGEX REPLACE "gcc$" "" prefix "${RISCV_GNU_GCC_BIN}")
+    find_program(RISCV_GNU_OBJCOPY_BIN ${prefix}objcopy)
+    find_program(RISCV_GNU_OBJDUMP_BIN ${prefix}objdump)
+    find_program(RISCV_GNU_NM_BIN ${prefix}nm)
+    if(RISCV_GNU_OBJCOPY_BIN AND RISCV_GNU_OBJDUMP_BIN AND RISCV_GNU_NM_BIN)
+        set(${OUT} TRUE PARENT_SCOPE)
+    else()
+        message(STATUS "RISCV: ${RISCV_GNU_GCC_BIN} found, but not all of its objcopy, "
+                       "objdump, nm")
+        set(${OUT} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+# The toolchain: DC_RISCV_TOOLCHAIN (LLVM or GNU), RISCV_CC_BIN (clang or gcc),
+# RISCV_OBJCOPY_BIN, RISCV_OBJDUMP_BIN, RISCV_NM_BIN, DC_RISCV_LINK_TOOL (LLVM: lld, its
+# image base 0 so that code may start at address 0).
+string(TOUPPER "${DARK_CIRCUIT_USE_RISCV}" dc_mode)
+string(TOUPPER "${DARK_CIRCUIT_RISCV_TOOLCHAIN}" dc_want)
+if(NOT dc_mode MATCHES "^(AUTO|ON|OFF)$")
+    message(FATAL_ERROR "DARK_CIRCUIT_USE_RISCV=${DARK_CIRCUIT_USE_RISCV}, "
+                        "expected AUTO, ON or OFF")
+endif()
+if(NOT dc_want MATCHES "^(AUTO|LLVM|GNU)$")
+    message(FATAL_ERROR "DARK_CIRCUIT_RISCV_TOOLCHAIN=${DARK_CIRCUIT_RISCV_TOOLCHAIN}, "
+                        "expected AUTO, LLVM or GNU")
+endif()
+set(DARK_CIRCUIT_RISCV FALSE)
+set(DC_RISCV_TOOLCHAIN "")
+if(dc_mode STREQUAL "OFF")
+    message(STATUS "RISCV: disabled by DARK_CIRCUIT_USE_RISCV=OFF")
+else()
+    set(dc_llvm FALSE)
+    set(dc_gnu FALSE)
+    if(dc_want MATCHES "^(AUTO|LLVM)$")
+        dc_riscv_find_llvm(dc_llvm)
+    endif()
+    if(dc_want STREQUAL "GNU" OR (dc_want STREQUAL "AUTO" AND NOT dc_llvm))
+        dc_riscv_find_gnu(dc_gnu)
+    endif()
+    if(dc_llvm)
+        set(DARK_CIRCUIT_RISCV TRUE)
+        set(DC_RISCV_TOOLCHAIN LLVM)
+        set(RISCV_CC_BIN ${RISCV_CLANG_BIN})
+        set(RISCV_OBJCOPY_BIN ${RISCV_HOST_OBJCOPY_BIN})
+        set(RISCV_OBJDUMP_BIN ${RISCV_LLVM_OBJDUMP_BIN})
+        set(RISCV_NM_BIN ${RISCV_LLVM_NM_BIN})
+        set(DC_RISCV_LINK_TOOL --ld-path=${RISCV_LLD_BIN} -Wl,--image-base=0)
+    elseif(dc_gnu)
+        set(DARK_CIRCUIT_RISCV TRUE)
+        set(DC_RISCV_TOOLCHAIN GNU)
+        set(RISCV_CC_BIN ${RISCV_GNU_GCC_BIN})
+        set(RISCV_OBJCOPY_BIN ${RISCV_GNU_OBJCOPY_BIN})
+        set(RISCV_OBJDUMP_BIN ${RISCV_GNU_OBJDUMP_BIN})
+        set(RISCV_NM_BIN ${RISCV_GNU_NM_BIN})
+        set(DC_RISCV_LINK_TOOL "")
+    elseif(dc_mode STREQUAL "ON")
+        message(FATAL_ERROR "RISCV: required by DARK_CIRCUIT_USE_RISCV=ON, but no "
+                            "${dc_want} toolchain found")
+    else()
+        message(STATUS "RISCV: no ${dc_want} toolchain found, RISCV tests are disabled")
+    endif()
+    unset(dc_llvm)
+    unset(dc_gnu)
+endif()
+unset(dc_mode)
+unset(dc_want)
+
+# dc_riscv_target(<out-var> <march>)
+#
+# The compiler's target options for <march>: with LLVM --target=riscv64-unknown-elf for
+# rv64..., else --target=riscv32-unknown-elf; with GNU none (gcc has one target).
+function(dc_riscv_target OUT MARCH)
+    if(NOT DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
+        set(${OUT} "" PARENT_SCOPE)
+    elseif(MARCH MATCHES "^rv64")
+        set(${OUT} --target=riscv64-unknown-elf PARENT_SCOPE)
+    else()
+        set(${OUT} --target=riscv32-unknown-elf PARENT_SCOPE)
+    endif()
+endfunction()
 
 # dc_riscv_probe(<out-var> <march> <instruction>)
 #
@@ -29,8 +176,9 @@ function(dc_riscv_probe OUT MARCH INSN)
     set(dir ${CMAKE_BINARY_DIR}/CMakeFiles/dc_riscv_probe)
     file(MAKE_DIRECTORY ${dir})
     file(WRITE ${dir}/probe.S "    ${INSN}\n")
-    execute_process(COMMAND ${RISCV_GCC_BIN} -march=${MARCH} -mabi=ilp32 -c -o ${dir}/probe.o
-                            ${dir}/probe.S
+    dc_riscv_target(target ${MARCH})
+    execute_process(COMMAND ${RISCV_CC_BIN} ${target} -march=${MARCH} -mabi=ilp32
+                            -c -o ${dir}/probe.o ${dir}/probe.S
                     RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
     if(result EQUAL 0)
         set(${OUT} TRUE PARENT_SCOPE)
@@ -40,11 +188,13 @@ function(dc_riscv_probe OUT MARCH INSN)
 endfunction()
 
 # What the compiler needs and knows, probed (not its version: any toolchain may be used).
-# Since GCC 12 (ISA spec 20191213) the base ISA leaves out the CSR instructions and FENCE.I:
-# they are the extensions Zicsr and Zifencei, which older compilers do not know by name; so
-# every -march gets DC_RISCV_ARCH_SUFFIX. DARK_CIRCUIT_RISCV_ZBB: the compiler knows Zbb
-# (tests of Zbb need it); DARK_CIRCUIT_RISCV_ZICBOM: it knows Zicbom (tests of the CBOs);
-# DARK_CIRCUIT_RISCV_ZFINX: its assembler knows Zfinx (F on the x registers).
+# Since the ISA spec 20191213 the base ISA leaves out the CSR instructions and FENCE.I:
+# they are the extensions Zicsr and Zifencei, which older compilers do not know by name;
+# when the compiler wants them named, every -march gets DC_RISCV_ARCH_SUFFIX.
+# DARK_CIRCUIT_RISCV_ZBB: the compiler knows Zbb (tests of Zbb need it);
+# DARK_CIRCUIT_RISCV_ZICBOM: it knows Zicbom (tests of the CBOs); DARK_CIRCUIT_RISCV_ZFINX:
+# its assembler knows Zfinx (F on the x registers). DC_RISCV_CC_VERSION: the compiler and
+# its version, gcc-12.2.0 or clang-23.1.6 (dc_riscv_cycle_ceiling).
 if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(base_has_csr rv32i "csrr a0, mscratch")
     if(base_has_csr)
@@ -57,27 +207,36 @@ if(DARK_CIRCUIT_RISCV)
                    "cbo.inval (a0)")
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZFINX rv32i${DC_RISCV_ARCH_SUFFIX}_zfinx
                    "fadd.s a0, a1, a2")
-    execute_process(COMMAND ${RISCV_GCC_BIN} -dumpfullversion
-                    OUTPUT_VARIABLE DC_RISCV_GCC_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE
-                    ERROR_QUIET)
-    message(STATUS "RISC-V: gcc ${DC_RISCV_GCC_VERSION}, -march suffix "
+    if(DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
+        execute_process(COMMAND ${RISCV_CC_BIN} -dumpversion OUTPUT_VARIABLE dc_version
+                        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        set(DC_RISCV_CC_VERSION clang-${dc_version})
+    else()
+        execute_process(COMMAND ${RISCV_CC_BIN} -dumpfullversion OUTPUT_VARIABLE dc_version
+                        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        set(DC_RISCV_CC_VERSION gcc-${dc_version})
+    endif()
+    unset(dc_version)
+    message(STATUS "RISCV: ${DC_RISCV_TOOLCHAIN}, ${DC_RISCV_CC_VERSION} (${RISCV_CC_BIN}; "
+                   "${RISCV_OBJCOPY_BIN}, ${RISCV_OBJDUMP_BIN}, ${RISCV_NM_BIN}), -march suffix "
                    "'${DC_RISCV_ARCH_SUFFIX}', Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
                    "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}, Zfinx ${DARK_CIRCUIT_RISCV_ZFINX}")
 endif()
 
-# dc_riscv_cycle_ceiling(<out-var> <test> <version> <cycles> [<version> <cycles>]...)
+# dc_riscv_cycle_ceiling(<out-var> <test> <compiler-version> <cycles> [...]...)
 #
 # Cycle ceiling of a test of compiled C code, for the compiler in use: the <cycles> listed
-# with its version (gcc -dumpfullversion). The cycles of C code change with the compiler
-# (Dhrystone: gcc 12.2.0 4 % more than gcc 10.2.0, towers 12 % fewer), so a ceiling belongs
-# to one compiler version. For a version not listed, <out-var> is a guard against a hang
-# only, twice the largest ceiling, and a message says so: add the version and its cycles.
+# with its DC_RISCV_CC_VERSION (gcc-12.2.0, clang-23.1.6). The cycles of C code change with
+# the compiler (Dhrystone: gcc 12.2.0 4 % more than gcc 10.2.0, towers 12 % fewer), so a
+# ceiling belongs to one compiler version. For a version not listed, <out-var> is a guard
+# against a hang only, twice the largest ceiling, and a message says so: add the version and
+# its cycles.
 function(dc_riscv_cycle_ceiling OUT TEST)
     set(pairs ${ARGN})
     set(largest 0)
     while(pairs)
         list(POP_FRONT pairs version cycles)
-        if(version STREQUAL DC_RISCV_GCC_VERSION)
+        if(version STREQUAL DC_RISCV_CC_VERSION)
             set(${OUT} ${cycles} PARENT_SCOPE)
             return()
         endif()
@@ -86,7 +245,7 @@ function(dc_riscv_cycle_ceiling OUT TEST)
         endif()
     endwhile()
     math(EXPR guard "2 * ${largest}")
-    message(STATUS "RISC-V: ${TEST}: no cycle ceiling for gcc ${DC_RISCV_GCC_VERSION}, "
+    message(STATUS "RISCV: ${TEST}: no cycle ceiling for ${DC_RISCV_CC_VERSION}, "
                    "only a guard of ${guard} cycles")
     set(${OUT} ${guard} PARENT_SCOPE)
 endfunction()
@@ -119,11 +278,11 @@ endfunction()
 #   ABI        -mabi, default ilp32
 #   LINK_FLAGS link options, default -Wl,-Ttext=0 (code at address 0);
 #              for example -T <linker script> to place code and data
-#   FLAGS      more gcc options, for example -I<dir> or -D<macro>
-# Every source is compiled into <name>.objs/<n>_<source>.o with a dependency file
-# (gcc -MD), so the program is rebuilt when a source or a header it includes changes;
-# a linker script given as -T <file> in LINK_FLAGS is a dependency of the link, and so are
-# the options: a change of ARCH, ABI, LINK_FLAGS, FLAGS or of the toolchain rebuilds it.
+#   FLAGS      more compiler options, for example -I<dir> or -D<macro>
+# Every source is compiled into <name>.objs/<n>_<source>.o with a dependency file (-MD),
+# so the program is rebuilt when a source or a header it includes changes; a linker script
+# given as -T <file> in LINK_FLAGS is a dependency of the link, and so are the options: a
+# change of ARCH, ABI, LINK_FLAGS, FLAGS or of the toolchain rebuilds it.
 # Does nothing if the RISC-V toolchain is not used.
 function(dc_add_riscv_program NAME)
     if(NOT DARK_CIRCUIT_RISCV)
@@ -148,7 +307,8 @@ function(dc_add_riscv_program NAME)
 
     set(base ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
     dc_riscv_march(march ${P_ARCH})
-    set(arch -march=${march} -mabi=${P_ABI})
+    dc_riscv_target(target ${march})
+    set(arch ${target} -march=${march} -mabi=${P_ABI})
 
     # The command lines are a dependency too: the Makefile generator does not compare the
     # commands of custom commands. file(CONFIGURE) writes the file only when its content
@@ -156,7 +316,8 @@ function(dc_add_riscv_program NAME)
     file(MAKE_DIRECTORY ${base}.objs)
     set(options ${base}.objs/options.txt)
     file(CONFIGURE OUTPUT ${options}
-         CONTENT "${RISCV_GCC_BIN} ${arch} ${P_FLAGS}\n${P_LINK_FLAGS}\n" @ONLY)
+         CONTENT "${RISCV_CC_BIN} ${arch} ${P_FLAGS}\n${DC_RISCV_LINK_TOOL} ${P_LINK_FLAGS}\n"
+         @ONLY)
 
     # Compile every source with its dependency file; object names start with
     # the source number, so sources with the same name in different directories
@@ -169,7 +330,7 @@ function(dc_add_riscv_program NAME)
         set(obj ${base}.objs/${n}_${source_name}.o)
         add_custom_command(
             OUTPUT ${obj}
-            COMMAND ${RISCV_GCC_BIN} ${arch} ${P_FLAGS} -MD -MF ${obj}.d -c -o ${obj} ${source}
+            COMMAND ${RISCV_CC_BIN} ${arch} ${P_FLAGS} -MD -MF ${obj}.d -c -o ${obj} ${source}
             DEPENDS ${source} ${options}
             DEPFILE ${obj}.d
             COMMENT "RISC-V: compiling ${source_name} of ${NAME}"
@@ -197,7 +358,8 @@ function(dc_add_riscv_program NAME)
 
     add_custom_command(
         OUTPUT ${base}.elf ${base}.hex ${base}.dis ${base}.sym
-        COMMAND ${RISCV_GCC_BIN} ${arch} -nostdlib -nostartfiles ${P_LINK_FLAGS} -o ${base}.elf ${objs}
+        COMMAND ${RISCV_CC_BIN} ${arch} ${DC_RISCV_LINK_TOOL} -nostdlib -nostartfiles
+                ${P_LINK_FLAGS} -o ${base}.elf ${objs}
         COMMAND ${RISCV_OBJCOPY_BIN} -O verilog ${base}.elf ${base}.hex
         COMMAND ${RISCV_OBJDUMP_BIN} -d ${base}.elf > ${base}.dis
         COMMAND ${RISCV_NM_BIN} ${base}.elf > ${base}.sym

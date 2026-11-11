@@ -164,7 +164,9 @@ if(DARK_CIRCUIT_RISCV)
     dc_riscv_tests()
     if(DARK_CIRCUIT_RISCV_TESTS)
         set(RISCV_TESTS ${RISCV_TESTS_DIR})
-        set(RISCV_TESTS_FLAGS -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
+        # riscv_tests_compat.h: what clang's assembler takes differently.
+        set(RISCV_TESTS_FLAGS -include ${SW}/riscv_tests_compat.h
+                              -I${RISCV_TESTS}/env/p -I${RISCV_TESTS}/isa/macros/scalar)
         set(RISCV_TESTS_ARGS +riscv_test +no_debugger)
 
         # rv32ui: one test per instruction. Not run: fence_i (writes code into memory; Mig1
@@ -191,13 +193,13 @@ if(DARK_CIRCUIT_RISCV)
         # riscv-tests/benchmarks, unchanged, with sw/riscv/bench: real code with branches and
         # calls, to measure cycles (its own results are not printed). One run of bench_main
         # is 500 Dhrystone loops; BENCH_REPEAT runs, about 5 s on Verilator. +max_cycles is a
-        # cycle ceiling per gcc version (Mig1 README, dc_riscv_cycle_ceiling): the cycles + 1 %,
-        # rounded up to 1000. Lower it when a change makes the benchmark faster; add the
-        # version of a new compiler.
+        # cycle ceiling per compiler version (Mig1 README, dc_riscv_cycle_ceiling): the
+        # cycles + 1 %, rounded up to 1000. Lower it when a change makes the benchmark faster;
+        # add the version of a new compiler.
         if(DARK_CIRCUIT_BENCHMARKS)
             set(DHRY ${RISCV_TESTS}/benchmarks/dhrystone)
             dc_riscv_cycle_ceiling(dhry_cycles design_mig1_dhrystone
-                                   10.2.0 2156000 12.2.0 2238000)
+                                   gcc-10.2.0 2156000 gcc-12.2.0 2238000)
             mig1_program_test(dhrystone
                               SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
                                       ${SW}/bench/bench.c ${DHRY}/dhrystone.c

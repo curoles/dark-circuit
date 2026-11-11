@@ -16,6 +16,10 @@
     .word \r, \value
     .endm
 
+    # No linker relaxation: the counts below subtract labels, which the assembler then
+    # knows (clang's assembler needs it; GNU as resolves them anyway).
+    .option norelax
+
     .section .text.start, "ax"
     .globl _start
 _start:
