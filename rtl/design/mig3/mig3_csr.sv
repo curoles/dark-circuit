@@ -28,6 +28,9 @@
  *   instruction that rounds by an invalid frm is illegal: the FPU's part); an F
  *   instruction that completes ORs its flags (fp_flags) into fflags. misa.F and
  *   mstatus.FS stay 0 (Zfinx: no FP registers to save), so fcsr is always accessible.
+ * - vxsat (P, packed SIMD): the saturation flag in bit 0, the other bits 0; set when an
+ *   instruction that saturated completes (vxsat_set), written by CSR instructions.
+ *   mstatus.VS is not implemented (P does not require it): vxsat is always accessible.
  *
  * Interrupts. csr.irq = MEIP && MEIE && MIE: an interrupt is pending and enabled; from
  * flops and meip only, so Mig3Control takes it on the instruction after a CSR write or
@@ -42,7 +45,7 @@
  * Mig3Core instantiates it in EX, for the instruction in EX. From Mig3Control: done (the
  * instruction completes) and trap (it faults). To Mig3Control: illegal, and csr (mtvec
  * and mepc: where traps and MRET go). rdata is rd's value (rd_src RD_CSR). From the FPU:
- * fp_flags; to it: frm.
+ * fp_flags; to it: frm. From the packed unit (P): vxsat_set.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -64,7 +67,8 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     output wire      illegal,    // CSR does not exist, or write to a read-only CSR
     output csr_t     csr,        // mtvec and mepc, for traps and MRET
     input  FpPkg::flags_t fp_flags,    // the flags of the F instruction in EX (Zfinx)
-    output funct3_t  frm         // rounding mode for FRM_DYN (any value: the FPU checks)
+    output funct3_t  frm,        // rounding mode for FRM_DYN (any value: the FPU checks)
+    input  wire      vxsat_set   // the instruction in EX saturated (P): sets vxsat
 );
     // misa: XLEN 32, extensions I, M and A (LR/SC and the AMOs).
     localparam word_t MISA = {MISA_MXL_32, {(WIDTH-2){1'b0}}} | (word_t'(1) << MISA_EXT_I) |
@@ -85,6 +89,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
     word_t  mtval;
     funct3_t       frm_q;     // fcsr.frm
     FpPkg::flags_t fflags;    // fcsr.fflags
+    logic          vxsat;     // P's saturation flag
     word_t  mstatus;
 
     logic  imm_form;    // CSRRWI, CSRRSI, CSRRCI
@@ -130,6 +135,7 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             CSR_FFLAGS:                             old = word_t'(fflags);
             CSR_FRM:                                old = word_t'(frm_q);
             CSR_FCSR:                               old = word_t'({frm_q, fflags});
+            CSR_VXSAT:                              old = word_t'(vxsat);
             default: begin                          old = '0; exists = 1'b0; end
         endcase
     end
@@ -236,6 +242,14 @@ module Mig3Csr import Mig3Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             fflags <= new_value[FCSR_FRM-1:0];
         else if (done && dec.fp.en)
             fflags <= fflags | fp_flags;
+
+    // @kb: rtl/design/mig3/p_profile
+    // vxsat: bit 0; an instruction that saturated sets it when it completes (a P
+    // instruction, no CSR instruction: the two never meet).
+    always_ff @(posedge clk)
+        if (!rst_n)                        vxsat <= 1'b0;
+        else if (we && addr == CSR_VXSAT)  vxsat <= new_value[0];
+        else if (done && vxsat_set)        vxsat <= 1'b1;
 
     assign frm       = frm_q;
     assign csr.mtvec = mtvec;

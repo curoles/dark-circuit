@@ -57,6 +57,8 @@ evidence: >
   Mig3 suites and riscv-tests rv32uzba pass with clang-23 (247) and gcc 12.2 (252). sky130:
   the repository 5.5 ns (the rs3 read), 1a 6.0 ns (ID: the instruction word into a mux), 1a
   without Alu2's shift 5.9 ns (into the FPU's result register): no Zba logic on the longest
-  path, and ABC's spread on Mig3 near +-0.4 ns.
+  path, and ABC's spread on Mig3 near +-0.4 ns. 1b (2026-11-11): vxsat in Mig3Csr (bit 0,
+  CSR reads and writes, vxsat_set when an instruction completes, tied 0 until the packed
+  unit); vxsat.S passes with the Mig3 suite (138 tests, clang-23).
 code:
   - rtl/design/mig3/p_profile.md

@@ -291,7 +291,8 @@ module Mig3Core import Mig3Pkg::*; #(
     Mig3Csr u_mig3_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
-        .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm));
+        .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm),
+        .vxsat_set(1'b0));  // the packed unit (P): none yet, kb rtl/design/mig3/p_profile
 
     // A division starts in the first cycle the instruction acts, when Control takes
     // interrupts, as the FPU's operations (not behind a load in MEM/WB: an interrupt

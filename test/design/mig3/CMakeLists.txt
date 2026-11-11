@@ -179,6 +179,8 @@ if(DARK_CIRCUIT_RISCV)
     # uncached (+uncached): the caches would add the cycles of their misses.
     # @kb: rtl/design/mig2/caches_in_core
     mig3_program_test(csr SOURCES csr.S ARGS +expect_regs +uncached)
+    # vxsat, the saturation flag of the P extension (packed SIMD).
+    mig3_program_test(vxsat SOURCES vxsat.S ARGS +expect_regs)
     # The floating-point CSRs of Zfinx (fcsr, frm, fflags), and F instructions on the x
     # registers (Mig3Fpu): their names need an assembler that knows Zfinx.
     if(DARK_CIRCUIT_RISCV_ZFINX)
