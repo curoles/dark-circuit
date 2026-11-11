@@ -1,0 +1,24 @@
+type: measurement
+title: ABC's longest path on Mig3 moves by up to about 0.5 ns between near-identical designs
+date: 2026-11-11
+what: >
+  How much the sky130 longest path of Mig3Core (Yosys, ABC: strash, &nf, buffer, upsize,
+  dnsize, stime) changes between versions that differ in logic far from that path, and
+  whether a delay target (abc -D) steadies it.
+result: >
+  Four near-identical Mig3Cores (2026-11-11): before Zba 5.5 ns (the rs3 read); before Zba
+  with only Alu2's new shift (never selected: it folds away) 5.6 ns (the rs3 read); Zba
+  without Alu2's shift 5.9 ns (into the FPU's result register, a path Zba does not touch);
+  Zba 6.0 ns (ID: the instruction word into the decode's kind). About 0.5 ns. Not all of it
+  noise: the two with Zba's decode were the slow ones, and taking the interlock's reads
+  from the opcode brought Zba to 5.6 ns (kb rtl/design/mig3/interlock_by_opcode). With a
+  delay target of 5500 ps (&nf -D, upsize -D, dnsize -D, checked in yosys.log) the three
+  measured were identical to the last um2: &nf already maps for the best delay, and a target
+  below what is reached changes nothing. ABC is deterministic: the same design gives the
+  same result, so repeating a run measures nothing. The rule kept (the user: no best of
+  several runs in the scripts): compare which path is the longest, not only its length;
+  when it moves into code the chunk touched, find out why.
+how: >
+  make mig3_synth (design_mig3.synth_sky130) on the four versions, longest path and its
+  ends from report.txt; the target by abc -D 5500 and {D} in &nf, upsize, dnsize of
+  cmake/yosys_tech_sky130.ys.in (scratch only, not kept).

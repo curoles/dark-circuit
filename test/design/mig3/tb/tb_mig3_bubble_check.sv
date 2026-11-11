@@ -11,7 +11,8 @@
  * the BTB tag covers the word address of imem (Mig3ConfigPkg: then no two pcs share an
  * entry), else it comes first after the instruction (the first 2); a load-use bubble
  * follows a load,
- * and the next instruction reads its rd; division bubbles come right before a division,
+ * and the next instruction may read its rd (its rs1 or rs2 field, by the opcode: the
+ * interlock's rule); division bubbles come right before a division,
  * fpu bubbles right before an F instruction (Zfinx);
  * fill bubbles only before the first instruction after reset or resume; imem bubbles
  * (IF2 waits for imem) at any time; dmem bubbles come right before a load or store; wfi
@@ -126,6 +127,22 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
         endcase
     endfunction
 
+    // The instruction may read register r by the interlock's rule: its rs1 or rs2 field, by
+    // the opcode (Mig3Decode hz_rs1, hz_rs2; kb rtl/design/mig3/interlock_by_opcode).
+    function automatic logic may_read(input insn_t insn, input reg_id_t r);
+        insn_fmt_t f;
+        logic      hz1;
+        logic      hz2;
+        f.word = insn;
+        case (f.r.opcode)
+            LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0],
+            FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
+            default:                                             {hz1, hz2} = 2'b10;
+        endcase
+        return (hz1 && f.r.rs1 == r) || (hz2 && f.r.rs2 == r);
+    endfunction
+
     // A bubble retires in this cycle: its reason must fit the instructions around it.
     task automatic check_bubble(input bubble_e b);
         case (b)
@@ -236,8 +253,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             if (retire.bubble != BUBBLE_NONE)
                 $fatal(1, "Mig3: pc %h retires with bubble reason %s",
                        retire.pc_rdata, bubble_name(retire.bubble));
-            if (use_rd != 0 && retire.rs1_addr != use_rd && retire.rs2_addr != use_rd)
-                $fatal(1, "Mig3: pc %h after a load-use bubble does not read x%0d",
+            if (use_rd != 0 && !may_read(retire.insn, use_rd))
+                $fatal(1, "Mig3: pc %h after a load-use bubble can not read x%0d",
                        retire.pc_rdata, use_rd);
             if (wfi_pending && !is_wfi(retire.insn))
                 $fatal(1, "Mig3: pc %h after wfi bubbles is not a WFI", retire.pc_rdata);

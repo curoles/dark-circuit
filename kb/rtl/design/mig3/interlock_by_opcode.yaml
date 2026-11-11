@@ -1,0 +1,49 @@
+type: decision
+title: The load-use interlock takes the registers an instruction may read from its opcode alone
+date: 2026-11-11
+question: >
+  Zba's three encodings moved Mig3's longest path into ID: from the instruction word through
+  the decode's kind (the match of all encodings) to uses_rs1, uses_rs2, the load-use compare
+  and the stall. The P extension will add dozens of encodings to the same match. How does
+  the interlock stay off it?
+decision: >
+  Mig3Decode gives hz_rs1 and hz_rs2, the registers an instruction may read, from the opcode
+  alone (RiscvInstrPkg's opcodes): LUI, AUIPC, JAL nothing; branches, stores, OP (with M,
+  Zba, Zbb), AMO and F (OP-FP, the four R4 opcodes) rs1 and rs2; every other opcode rs1.
+  Mig3Control's load-use check uses them. They may claim a read that does not happen (an
+  immediate in an rs field, FCVT.S.WU's fixed rs2 field, an illegal instruction): at most a
+  needless bubble. They never miss a read: Mig3Control's a_hz_covers_uses checks it in
+  every simulation. uses_rs1 and uses_rs2 stay exact for the retire trace. The decode test
+  checks the rule; the bubble check takes the same rule for "the instruction after a
+  load-use bubble reads the loaded register".
+why: >
+  The same cut as the immediate (kb rtl/design/mig2/imm_by_opcode): what ID's timing needs
+  comes from the opcode's 7 bits, which do not grow with extensions, not from the full
+  match, which does. A needless bubble is rare (an immediate CSR instruction whose
+  immediate equals the loaded register) and costs one cycle; correctness never depends on
+  it. If even opcodes are not enough later, predecode in IF2 is the next step (it puts
+  logic on IF2's late I-cache answer, kb rtl/design/mig3/fetch_stage).
+rejected:
+  - choice: Keep uses_rs1, uses_rs2 from the full decode
+    why_not: >
+      1a (Zba) measured 6.0 ns with the path from ID's instruction word; every new
+      extension makes that match deeper.
+  - choice: Predecode in IF2 now
+    why_not: >
+      Logic on IF2's late path; the opcode alone already took the path off the top.
+  - choice: A bubble check that still requires an exact read after a load-use bubble
+    why_not: >
+      It would report an error for the needless bubble the rule allows (an immediate CSR
+      instruction after a load to the register its immediate names).
+relies_on:
+  - rtl/design/mig2/imm_by_opcode
+  - rtl/design/mig3/p_profile
+code:
+  - rtl/design/mig3/mig3_decode.sv#hz1
+  - rtl/design/mig3/mig3_control.sv#a_hz_covers_uses
+evidence: >
+  2026-11-11, Verilator, clang-23: the Mig3 suite passes (137 tests), the decode test checking
+  hz_rs1, hz_rs2 on every case, a_hz_covers_uses never failing. sky130 (Yosys, ABC): Mig3Core
+  with Zba 6.0 ns from ID's instruction word, with the interlock by opcode 5.6 ns (the rs3
+  read, as before Zba: 5.5 to 5.6), 413 011 um2. The near-identical versions in kb
+  cmake/abc_spread show how far one number can be trusted.

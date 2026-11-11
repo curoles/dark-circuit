@@ -103,6 +103,23 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM
         endcase
 
+    // @kb: rtl/design/mig3/interlock_by_opcode
+    // The registers the interlock checks (hz_rs1, hz_rs2), by the opcode alone, not by kind,
+    // the match of all encodings, which grows with every extension: the load-use check is
+    // on ID's path. They may claim a read that does not happen (an immediate in an rs
+    // field: CSRRWI, FCVT.S.WU's rs2 field; an illegal instruction), never miss one: LUI,
+    // AUIPC, JAL read nothing; branches, stores, OP (also M, Zba, Zbb), AMO and F (OP-FP,
+    // the R4 forms) rs1 and rs2; all others rs1. Opcodes from the encodings.
+    logic hz1;          // may read rs1
+    logic hz2;          // may read rs2
+    always_comb
+        case (f.r.opcode)
+            LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0],
+            FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
+            default:                                             {hz1, hz2} = 2'b10;
+        endcase
+
     // Controls of an M instruction from its funct3.
     function automatic muldiv_ctrl_t muldiv_of(funct3_t f3);
         muldiv_ctrl_t m;
@@ -255,6 +272,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.rs1    = f.r.rs1;
         dec.rs2    = f.r.rs2;
         dec.rs3    = f.r4.rs3;
+        dec.hz_rs1 = hz1;
+        dec.hz_rs2 = hz2;
         dec.funct3 = f.r.funct3;
         dec.alt    = alt_of(insn);     // insn[30]: SUB, SRA, SRAI
 

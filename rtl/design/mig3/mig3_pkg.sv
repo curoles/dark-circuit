@@ -440,8 +440,10 @@ package Mig3Pkg;
         reg_id_t           rs3;      // R4 (FMADD.S ...): the third operand
         logic              rd_we;    // writes rd (writes to x0 are dropped by the register file)
         rd_src_e           rd_src;   // value written to rd
-        logic              uses_rs1; // reads rs1, for the interlock (Mig3Control)
+        logic              uses_rs1; // reads rs1, exactly (the retire trace)
         logic              uses_rs2;
+        logic              hz_rs1;   // may read rs1, by the opcode alone: the interlock
+        logic              hz_rs2;   // (Mig3Control); never 0 when uses_rs* is 1
         logic              uses_rs3; // R4: reads rs3 (Zfinx)
         alu_ctrl_t         alu;      // Mig3Alu
         br_ctrl_t          br;       // Mig3Branch

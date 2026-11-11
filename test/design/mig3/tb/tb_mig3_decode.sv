@@ -148,6 +148,20 @@ module TbMig3Decode;
         return Alu2Pkg::ALU2_ADD;
     endfunction
 
+    // The interlock's reads by the opcode (Mig3Decode hz_rs1, hz_rs2): {rs1, rs2}. The rule
+    // as written down; that it covers every real read, Mig3Control's a_hz_covers_uses checks.
+    function automatic logic [1:0] hz_model(input logic [6:0] opcode);
+        logic hz1;
+        logic hz2;
+        case (opcode)
+            LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0],
+            FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
+            default:                                             {hz1, hz2} = 2'b10;
+        endcase
+        return {hz1, hz2};
+    endfunction
+
     // ALU controls expected: the operands of the kind, the controls of the operation.
     function automatic alu_ctrl_t alu_of(input kind_e kind, input insn_t w);
         alu_ctrl_t ctrl;
@@ -339,6 +353,8 @@ module TbMig3Decode;
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
             check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));
             check(c, insn, "fp",     32'(dec.fp),     32'(fp_model(exp_kind, insn)));
+            check(c, insn, "hz_rs1", 32'(dec.hz_rs1), 32'(hz_model(insn[6:0]) >> 1));
+            check(c, insn, "hz_rs2", 32'(dec.hz_rs2), 32'(hz_model(insn[6:0]) & 2'b01));
             check(c, insn, "uses_rs3", 32'(dec.uses_rs3),
                   32'(exp_kind == KIND_FP && insn[6:0] != FADD_S[6:0]));
             if (dec.uses_rs3)

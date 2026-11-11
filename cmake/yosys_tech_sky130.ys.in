@@ -5,7 +5,10 @@
 # delay) and buffers and sizes gates (buffer, upsize, dnsize) as real flows do. No
 # restructuring (fraig, scorr, dc2, dch, nor synth's own ABC): it optimizes area and
 # turns fast carry logic into chains, measured: a 64-bit Kogge-Stone adder 7.8 ns with
-# restructuring, 1.4 ns without.
+# restructuring, 1.4 ns without. No delay target (abc -D): &nf already maps for the best
+# delay, a target changed nothing. Near-identical designs differ by up to about 0.5 ns:
+# compare which path is the longest, not only its length.
+# @kb: cmake/abc_spread
 log -stdout @SYNTH_NAME@ (@SYNTH_TECH@): mapping flip-flops to sky130 cells
 read_liberty -lib @SYNTH_LIBERTY@
 dfflibmap -liberty @SYNTH_LIBERTY@

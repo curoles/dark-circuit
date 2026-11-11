@@ -37,7 +37,9 @@
  * Interlock: results are forwarded to ID (Mig3Forward), except load data, which comes
  * in MEM/WB, and an SC's result, which goes there (Mig3Atomic): the instruction in ID
  * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
- * bubble meanwhile.
+ * bubble meanwhile. Whether it reads rs1 or rs2 comes from its opcode alone (hz_rs1,
+ * hz_rs2 of Mig3Decode): an immediate in an rs field may cost a needless bubble, a read
+ * is never missed.
  * Interrupts: an interrupt that is pending and enabled (csr.irq) is taken on the
  * instruction in EX in the first cycle it acts, before it sends a request or starts a
  * division: ex_irq=1, the instruction does nothing and traps (mepc = its pc, it runs
@@ -71,7 +73,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     /* verilator lint_off UNUSEDSIGNAL */
     input  fetch_t                     id_fetch,    // instruction in ID: valid and pc
     /* verilator lint_on UNUSEDSIGNAL */
-    // Only uses_rs1, uses_rs2, rs1, rs2, br and imm are used.
+    // Only hz_rs1, hz_rs2, uses_rs1, uses_rs2 (an assertion), rs1, rs2, br and imm are used.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t                   id_dec,      // instruction in ID taken apart
     /* verilator lint_on UNUSEDSIGNAL */
@@ -336,16 +338,17 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
     // load is in EX; an SC's result goes to MEM/WB too (kb rtl/design/mig3/lr_sc). The
     // instruction in ID that reads the rd of either waits one cycle, EX gets a bubble.
-    // uses_rs1/uses_rs2: only real register reads count, not immediate bits in the rs
-    // fields.
+    // hz_rs1/hz_rs2: by the opcode alone, not by kind (the match of all encodings, which
+    // grows with every extension and was ID's longest path).
+    // @kb: rtl/design/mig3/interlock_by_opcode
     logic ex_load;          // the instruction in EX writes a register in MEM/WB: load, SC
     logic id_reads_ex_rd;   // the instruction in ID reads the register EX writes
 
     assign ex_writes      = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
     assign ex_load        = ex_writes &&
                             (ex_dec.rd_src == RD_LOAD || ex_dec.rd_src == RD_ATOMIC);
-    assign id_reads_ex_rd = (id_dec.uses_rs1 && id_dec.rs1 == ex_dec.rd) ||
-                            (id_dec.uses_rs2 && id_dec.rs2 == ex_dec.rd);
+    assign id_reads_ex_rd = (id_dec.hz_rs1 && id_dec.rs1 == ex_dec.rd) ||
+                            (id_dec.hz_rs2 && id_dec.rs2 == ex_dec.rd);
     assign id_load_use    = ex_load && id_reads_ex_rd;
     assign id_hazard   = id_fetch.valid && id_load_use;
 
@@ -373,6 +376,9 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     // Halted: nothing is in EX, so no redirect comes from EX (only resume redirects).
     `DC_ASSERT(a_halted_ex_empty, !(halt && ex_fetch.valid))
     // At most one fault source applies to an instruction (the fault block relies on it).
+    // The interlock's reads cover every real read of the instruction in ID.
+    `DC_ASSERT(a_hz_covers_uses, !id_fetch.valid ||
+               ((!id_dec.uses_rs1 || id_dec.hz_rs1) && (!id_dec.uses_rs2 || id_dec.hz_rs2)))
     `DC_ASSERT(a_one_fault, !ex_fetch.valid ||
                $onehot0({ex_dec.sys.illegal || ex_csr_illegal || ex_fpu_illegal,
                          ex_dec.sys.ecall,
