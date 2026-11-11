@@ -1,0 +1,57 @@
+type: decision
+title: Packed SIMD blocks live in numeric/packed; the add cuts a Kogge-Stone prefix at lane starts
+date: 2026-11-11
+question: >
+  The first packed-SIMD block (P extension, kb rtl/design/mig3/p_profile) adds or subtracts
+  lanes of 8, 16 or 32 bits whose carries must not cross. How is the carry cut, what does
+  the block give its users (saturation, averaging, compares come later), and where do the
+  packed blocks live?
+decision: >
+  The carry cut is a library part, SegmentedKoggeStoneAdder (rtl/lib/part): KoggeStoneAdder
+  with cut[i] marking bits that start a segment; such a bit takes the carry in as bit 0
+  does (Maj3 in its generate, 0 in its propagate to the prefix) and the carry out of every
+  bit within its segment comes out. PackedAdd (rtl/lib/numeric/packed/add/hybrid) cuts at
+  the low bit of every lane (PackedPkg::lane_cuts), subtracts as a + ~b + 1 per lane, and
+  gives raw flags per byte: co[k], ov[k], the carry and the signed overflow at the top bit
+  of byte k; a lane's are those of its top byte, and PackedPkg::lane_broadcast spreads them
+  over the lane for the users that select whole lanes. The packed blocks form a numeric
+  family, rtl/lib/numeric/packed (beside int32 and fp32), sharing PackedPkg (lane_e, the
+  helpers) and packed.flist; the generic piece (the cut adder) is a part (the user agreed:
+  generic in part, the packed family in numeric/packed).
+why: >
+  The cut is the adder's first level changed at a lane's low bit: one select at those bits
+  and in their sums, the same log2(WIDTH) levels, and the lane's carry out is already in the
+  prefix network (G at its top bit). Per-byte flags keep one meaning in every lane mode and
+  for 64-bit words; spreading them is written once, in the helper, and paid only by the
+  users that need it (a plain padd does not). PackedAdd is not a generic adder but lane
+  arithmetic (lane modes, flags for saturation and compares), the first of a family (shifts,
+  the partitioned multiplier, the dot-product tree) that Mig6's vector lanes reuse.
+rejected:
+  - choice: Carry select per byte (each byte added for carry in 0 and 1 by an unchanged
+            KoggeStoneAdder, picked by a prefix over the bytes)
+    why_not: About twice the adder's area, no gain in delay.
+  - choice: Flags per lane, index k for lane k
+    why_not: >
+      Their meaning moves with the lane mode, and the block would gather lane tops into lane
+      order while every user spreads them back: two layers of selects for nothing.
+  - choice: PackedAdd in rtl/lib/block
+    why_not: >
+      It would split the packed family between block and numeric; the generic part of it is
+      the cut adder, which is a part.
+relies_on:
+  - rtl/design/mig3/p_profile
+code:
+  - rtl/lib/part/segmented_kogge_stone_adder.sv
+  - rtl/lib/numeric/packed/add/hybrid/packed_add.sv
+  - rtl/lib/numeric/packed/packed_pkg.sv#lane_broadcast
+evidence: >
+  2026-11-11, Verilator: part_segmented_kogge_stone_adder passes (WIDTH 5 exhaustive: every
+  operand pair, carry in and cut mask; WIDTH 32 the lane cuts and random cuts and operands,
+  against a bit-by-bit model; 0.2 s); numeric_packed_add passes (lanes of 8 bits every pair
+  of bytes in every lane, add and subtract; lanes of 16 and 32 bits edge values and 30 000
+  random words each; sum, co, ov per lane by meaning and per byte by a walk of the bits;
+  lane_broadcast; 0.6 s). Mutants (kb test/numeric/packed/add/mutants): five, caught.
+  sky130 (Yosys, ABC): PackedAdd 32 bits 1.5 ns, 2537 um2; a plain 32-bit KoggeStoneAdder
+  1.3 ns, 1783 um2 (the cut costs 0.2 ns, about a gate, and 42 % area); the segmented adder
+  with every bit cuttable 1.9 ns, 3019 um2 (PackedAdd cuts only at 8, 16, 24: the rest folds
+  away).

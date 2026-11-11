@@ -186,6 +186,19 @@ numeric:
         versions: [behave, struct]
         path: rtl/lib/numeric/int32/mul/comb/behave/int32_mul.sv
         test: test/numeric/int32/mul
+  packed:
+    PackedPkg:
+      kind: package
+      what: "Packed SIMD: the lanes of a word, for the blocks of rtl/lib/numeric/packed"
+      path: rtl/lib/numeric/packed/packed_pkg.sv
+      kb: [rtl/lib/numeric/packed/design]
+    add:
+      PackedAdd:
+        what: "Packed add and subtract: a + b or a - b lane by lane, in lanes of 8, 16 or 32 bits that each wrap alone, with the carry and the signed overflow at the top bit of every byte"
+        versions: [hybrid]
+        path: rtl/lib/numeric/packed/add/hybrid/packed_add.sv
+        test: test/numeric/packed/add
+        kb: [rtl/lib/numeric/packed/design]
 riscv:
   RiscvCsrPkg:
     kind: package
@@ -869,6 +882,11 @@ part:
     what: "Ripple Carry Adder: {co, sum} = in1 + in2 + ci"
     path: rtl/lib/part/ripple_carry_adder.sv
     test: test/part/ripple_carry_adder
+  SegmentedKoggeStoneAdder:
+    what: "Segmented Kogge-Stone adder: sum = in1 + in2 + ci in every segment, the carry chain cut at the bits cut marks, parallel prefix"
+    path: rtl/lib/part/segmented_kogge_stone_adder.sv
+    test: test/part/segmented_kogge_stone_adder
+    kb: [rtl/lib/numeric/packed/design]
   SignalClockSync:
     what: "Signal clock synchronizer: brings in, a signal of clk1's clock domain, into clk2's domain, through a chain of STAGES flip-flops on clk2"
     path: rtl/lib/part/signal_clock_sync.sv

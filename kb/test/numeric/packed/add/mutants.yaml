@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of PackedAdd, PackedPkg's helpers and SegmentedKoggeStoneAdder
+date: 2026-11-11
+tests: [numeric_packed_add]
+mutants:
+  - name: a 16-bit lane's carry crosses into the next lane (no cut at bit 16)
+    edits:
+      - file: rtl/lib/numeric/packed/packed_pkg.sv
+        old: "            c[16] = 1'b1;\n"
+        new: "            c[16] = 1'b0;\n"
+    expect: caught
+  - name: a subtraction without the +1 (one's complement)
+    edits:
+      - file: rtl/lib/numeric/packed/add/hybrid/packed_add.sv
+        old: ".in1(a), .in2(b_in), .ci(sub), .cut(cuts)"
+        new: ".in1(a), .in2(b_in), .ci(sub & 1'b0), .cut(cuts)"
+    expect: caught
+  - name: the overflow from the wrong pair of carries
+    edits:
+      - file: rtl/lib/numeric/packed/add/hybrid/packed_add.sv
+        old: ".in2(carry[8*k+6]), .out(ov[k])"
+        new: ".in2(carry[8*k+5]), .out(ov[k])"
+    expect: caught
+  - name: a segment's low bit generates without the carry in
+    edits:
+      - file: rtl/lib/part/segmented_kogge_stone_adder.sv
+        old: ".in0(g_and[i]), .in1(g_maj[i]), .sel(start[i])"
+        new: ".in0(g_and[i]), .in1(g_and[i] | (g_maj[i] & 1'b0)), .sel(start[i])"
+    expect: caught
+  - name: lane_broadcast spreads a halfword lane's low byte, not its top byte
+    edits:
+      - file: rtl/lib/numeric/packed/packed_pkg.sv
+        old: "LANE_16: return {{2{flags[7]}}, {2{flags[5]}}, {2{flags[3]}}, {2{flags[1]}}};"
+        new: "LANE_16: return {{2{flags[6]}}, {2{flags[4]}}, {2{flags[2]}}, {2{flags[0]}}};"
+    expect: caught
