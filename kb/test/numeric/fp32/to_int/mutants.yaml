@@ -6,14 +6,14 @@ mutants:
   - name: -2^31 is out of range for a signed result
     edits:
       - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
-        old: "(!mag[31] || (u.sign && ~|mag[30:0]))"
-        new: "(!mag[31] || (u.sign && ~|mag[30:0] && 1'b0))"
+        old: "? !int_part[31] || (low_zero && !inc)"
+        new: "? !int_part[31] || (low_zero && !inc && 1'b0)"
     expect: caught
   - name: a negative value that rounds to 0 is invalid unsigned
     edits:
       - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
-        old: "!mag[32] && (!u.sign || ~|mag[31:0]);"
-        new: "!mag[32] && (!u.sign || (~|mag[31:0] && 1'b0));"
+        old: "? !int_part[31] && low_zero && !inc"
+        new: "? !int_part[31] && low_zero && !inc && 1'b0"
     expect: caught
   - name: a value below 2^-27 is not inexact
     edits:
@@ -29,3 +29,19 @@ mutants:
           assign inv_value = u.nan ? {!is_signed, 31'h7fff_ffff} :
           !u.sign ? {!is_signed, 31'h7fff_ffff}
     expect: caught
+  - name: a negative result rounded up in magnitude takes the carry in of the others
+    edits:
+      - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        old: "assign cin = inc ^ neg;"
+        new: "assign cin = inc | neg;"
+    expect: caught
+  - name: 2^31 - 1 rounded up stays in range for a signed result
+    edits:
+      - file: rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv
+        old: ": !int_part[31] && !(low_ones && inc);"
+        new: ": !int_part[31] && !(low_ones && inc && 1'b0);"
+    expect: survives
+    why: >
+      No fp32 has the integer part 2^31 - 1 (or 2^32 - 1): from 2^24 on fp32 values are
+      integers with at most 24 significant bits, so rounding up never crosses those
+      limits. The terms stay: the range check is right for any integer, not by luck.

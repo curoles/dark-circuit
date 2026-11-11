@@ -20,6 +20,8 @@ decision: >
   FPU), misa.F and mstatus.FS 0 (Zfinx has no FP registers to save: fcsr always
   accessible). Until the FPU step Mig3Control traps every KIND_FP
   as an illegal instruction, so decode stays classification only and the core stays correct.
+  The FPU step (kb rtl/design/mig3/fpu) replaced that trap with the FPU's illegal (frm not a
+  mode; the fused forms until ID reads rs3).
 why: >
   Decode classifies once and the parts read controls (AGENTS.md: compute once, carry
   forward): the FPU will pick its block by unit and pass the operation enums to it unchanged,
@@ -50,4 +52,4 @@ evidence: >
 code:
   - rtl/design/mig3/mig3_decode.sv#fp_of
   - rtl/design/mig3/mig3_pkg.sv#fp_ctrl_t
-  - rtl/design/mig3/mig3_control.sv#ex_dec.fp.en
+  - rtl/design/mig3/mig3_control.sv#ex_fpu_illegal

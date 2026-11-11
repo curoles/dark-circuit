@@ -7,7 +7,8 @@
  * Faults: cause, tval:
  * - taken jump or branch to an address not divisible by 4: misaligned fetch, the target;
  * - illegal instruction, CSR instruction on a CSR that does not exist or writing a
- *   read-only CSR: illegal instruction, the instruction;
+ *   read-only CSR, an F instruction the FPU can not do (ex_fpu_illegal: frm not a
+ *   rounding mode): illegal instruction, the instruction;
  * - EBREAK while ebreak_halt=0: breakpoint, its address;
  * - load or store with a misaligned address: misaligned load or store, the address;
  * - ECALL: machine ECALL, 0.
@@ -30,8 +31,9 @@
  * followed but is not taken to the next instruction, a return that ID sent elsewhere to
  * its target; EX updates the BTB with every branch and JAL that completes. An
  * instruction behind a redirect or halt in EX is dropped with ID; a jump or branch to a
- * misaligned target traps in EX. ex_muldiv_stall (division not done) keeps the
- * instruction in EX: ID and IF hold.
+ * misaligned target traps in EX. ex_muldiv_stall (division not done) and ex_fpu_stall
+ * (the result of an F instruction not there yet) keep the instruction in EX: ID and IF
+ * hold.
  * Interlock: results are forwarded to ID (Mig3Forward), except load data, which comes
  * in MEM/WB, and an SC's result, which goes there (Mig3Atomic): the instruction in ID
  * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
@@ -99,6 +101,8 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     input  wire                        ex_lsu_misaligned, // load/store address not aligned: a fault
     input  wire                        ex_csr_illegal,    // CSR instruction can not be done
     input  wire                        ex_muldiv_stall,   // division of the instruction in EX not done
+    input  wire                        ex_fpu_stall,      // F insn in EX waits for its result
+    input  wire                        ex_fpu_illegal,    // F insn in EX can not be done
     input  wire                        ex_dmem_wait,      // dmem does not take the request of EX
     input  wire                        mem_wait,          // the load in MEM/WB waits for its word
     input  csr_t                       csr,         // mtvec, mepc
@@ -121,7 +125,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
 );
     logic       rst;         // reset active
     logic       ex_stall;    // the instruction in EX stays for another cycle
-    logic       ex_hold;     // ... from flops only: a division, a WFI that waits
+    logic       ex_hold;     // ... from flops only: a division, an F instruction, a WFI
     logic       ex_act;      // the instruction in EX acts now: it does not wait behind MEM/WB
     assign rst      = !rst_n;
     // The stalls that come from flops (the divider's state; WFI: ID/EX, mie, meip, a flop
@@ -130,7 +134,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     // @kb: rtl/design/mig2/data_waits
     // @kb: rtl/design/mig3/wfi
     assign ex_wfi_wait = ex_fetch.valid && ex_dec.sys.wfi && !csr.pending;
-    assign ex_hold     = ex_muldiv_stall || ex_wfi_wait;
+    assign ex_hold     = ex_muldiv_stall || ex_fpu_stall || ex_wfi_wait;
     assign ex_stall    = ex_hold || ex_dmem_wait || mem_wait;
     assign ex_act   = ex_fetch.valid && !mem_wait;
 
@@ -191,9 +195,8 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
         ex_tval  = '0;
         if (ex_irq)
             ex_cause = IRQ_MACHINE_EXTERNAL;
-        // An F instruction (Zfinx) is illegal until Mig3 has its FPU (kb
-        // rtl/design/mig3/fp_decode).
-        else if (ex_dec.sys.illegal || ex_csr_illegal || ex_dec.fp.en) begin
+        // An F instruction the FPU can not do: frm not a mode (kb rtl/design/mig3/fpu).
+        else if (ex_dec.sys.illegal || ex_csr_illegal || ex_fpu_illegal) begin
             ex_cause = CAUSE_ILLEGAL_INSTRUCTION;
             ex_tval  = ex_insn;
         end else if (ex_dec.sys.ecall)
@@ -371,7 +374,8 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     `DC_ASSERT(a_halted_ex_empty, !(halt && ex_fetch.valid))
     // At most one fault source applies to an instruction (the fault block relies on it).
     `DC_ASSERT(a_one_fault, !ex_fetch.valid ||
-               $onehot0({ex_dec.sys.illegal || ex_csr_illegal, ex_dec.sys.ecall,
+               $onehot0({ex_dec.sys.illegal || ex_csr_illegal || ex_fpu_illegal,
+                         ex_dec.sys.ecall,
                          ex_dec.sys.ebreak && !ebreak_halt,
                          ex_branch.taken && ex_branch.misaligned, ex_lsu_misaligned}))
     // A stalled instruction stays in EX for the next cycle (EX may also hold a bubble while

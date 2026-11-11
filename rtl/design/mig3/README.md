@@ -151,6 +151,20 @@ runs periodic timer interrupts through a handler; timer_c.c does the same in C w
 drivers `sw/riscv/drivers/timer.h` and `plic.h`, which keep that rule. Why:
 `kb/rtl/design/mig3/timer.yaml`.
 
+### Floating point (Zfinx)
+
+F's instructions run on the x registers (Zfinx: no f registers, no FLW/FSW/FMV), single
+precision only (`kb/rtl/design/mig3/fp.yaml`). Mig3Fpu in EX holds the library's fp32
+blocks (`rtl/lib/numeric/fp32`, one hybrid version each, tested against Berkeley
+TestFloat): the FMA with 3 pipeline stages for FADD.S, FSUB.S and FMUL.S, the iterative
+divider and square root, and the one-cycle compare, min/max, sign injection, class and
+conversions. Every result goes through a register of the FPU before it is forwarded, so
+an F instruction stays 2 cycles in EX (FADD.S, FSUB.S, FMUL.S 5, FDIV.S, FSQRT.S 27);
+the cycles it holds EX are fpu bubbles. fcsr, frm and fflags are Mig3Csr's; rounding by
+frm (rm DYN) when frm is not a mode traps as illegal. The fused forms (FMADD.S ...) trap
+until ID reads rs3 (the next step). gcc 12.2 does not emit Zfinx code: fp.S is assembly.
+Why: `kb/rtl/design/mig3/fpu.yaml`.
+
 ## CoreMark
 
 CoreMark (EEMBC) runs as three benchmark tests: its sources unchanged (fetched at

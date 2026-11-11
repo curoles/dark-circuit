@@ -21,7 +21,10 @@ decision: >
   moves into FpPkg, shared by Fp32Round and Fp32ToInt. Fp32ToInt places the significand at
   the top of a 58-bit field (32 integer bits, guard, sticky) and shifts right by 158 - exp;
   the top 1 stays in the field up to a shift of 57, so no jam is needed (a lost bit only
-  happens when the top 1 already sits among the sticky bits). Tests: TestFloat's six compare
+  happens when the top 1 already sits among the sticky bits). It rounds and negates with one
+  Incr (2026-11-10, Mig3's FPU): a negative signed result is -(int + r) = ~int + (1 - r), so
+  the integer, inverted for it, is incremented once and the carry in picks; the range is
+  told from the integer before rounding and r. Tests: TestFloat's six compare
   functions; f32_to_i32 and f32_to_ui32 with -exact (testfloat_gen's default does not flag
   inexact for them; RISC-V does: dc_testfloat_cases EXACT); minimum, maximum, class and
   sign injection, which TestFloat has not, against small models in the testbench that take
@@ -38,6 +41,10 @@ rejected:
     why_not: The user asked for parameters or RISC-V in the name; other ISAs differ.
   - choice: x86's invalid integer (0x80000000) as a third INVALID value
     why_not: No design needs it yet; it comes with one.
+  - choice: Round with one Incr, then negate with another (the first version)
+    why_not: >
+      Two 32-bit increments in series after the shift, 6.4 ns on sky130; the longest
+      path of Mig3 with the FPU (6.3 ns, against 5.5 before).
   - choice: A jamming shift for the conversion (as Fp32Round's)
     why_not: The top 1 stays in the field; the shifted-out bits never decide sticky.
 relies_on:
@@ -51,6 +58,9 @@ evidence: >
   with round_up in FpPkg. Verilator has no $bitstoshortreal and a real NaN's r != r is 0
   there: the models convert an fp32 to a real themselves and see NaNs in the bits. Mutants
   (kb test/numeric/fp32/compare/mutants, test/numeric/fp32/to_int/mutants): ten, caught.
+  2026-11-10, one increment: numeric_fp32_to_int passes; the to_int mutants: five caught
+  (one new: the carry in), one survives as it must (2^31 - 1 rounded up: no fp32 has that
+  integer part); sky130 alone 4.4 ns, 4886 um2 (6.4 ns, 5264 um2 before).
 code:
   - rtl/lib/numeric/fp32/min_max/hybrid/fp32_min_max.sv#g_number
   - rtl/lib/numeric/fp32/to_int/hybrid/fp32_to_int.sv#g_arm

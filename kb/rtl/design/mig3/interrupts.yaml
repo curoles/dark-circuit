@@ -17,7 +17,9 @@ decision: >
   instruction in EX in the first cycle it acts (ex_irq; ex_acted marks an instruction that
   stays in EX after acting: a division, the D-cache not taking its request): the
   instruction does nothing (no request, no division started, no CSR write, no halt of an
-  EBREAK, no MRET) and traps; mepc is its pc, it runs again after MRET. An interrupt comes
+  EBREAK, no MRET) and traps; mepc is its pc, it runs again after MRET. The parts that start
+  work (Mig3MulDiv's division, Mig3Fpu's operations) start in that same first acting cycle:
+  their valid leaves out the cycles behind a load in MEM/WB. An interrupt comes
   before the instruction's own exception. WFI stays a no-op (the spec allows it). The
   testbench's TbMig3Irq raises meip at random times (+irq_random=<seed>, +irq_max_gap) and
   drops it when the program stores to its word irq_claim, as a handler claims at a PLIC.
@@ -65,7 +67,11 @@ evidence: >
   without the reads of mie and mip 5.2 ns (the netlist of before); the rd mux with the
   product last (late_input_last_mux) 5.4 ns, and 5.3 ns on Mig3 without interrupts. Taking
   the multiplier off that path was measured and not done (kb rtl/design/mig3/mul_timing:
-  without a multiplier 5.4 ns).
+  without a multiplier 5.4 ns). 2026-11-10: Mig3MulDiv started a division while a load in
+  MEM/WB waited, before the instruction's first acting cycle; an interrupt taken in that
+  cycle trapped the division running. irq.S case 10 (a division right behind a load that
+  misses in the D-cache, meip let through by the PLIC's threshold just before) failed on
+  a_busy_has_div; Mig3MulDiv's valid now leaves out mem_wait, as Mig3Fpu's.
 code:
   - rtl/design/mig3/mig3_control.sv#ex_acted
   - rtl/design/mig3/mig3_csr.sv#mie_meie

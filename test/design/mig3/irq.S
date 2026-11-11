@@ -21,7 +21,13 @@
  *  9. The handler does not claim (s10 = 1): MRET leaves MIE 1 and meip is still 1, so the
  *     interrupt is taken again on the same instruction (s9 = s8 = c9), which then runs once
  *     (a5 = 1).
- * 10. On the halting EBREAK: it halts after MRET (s8 = c10, s7 = 10 interrupts, s6 = 0).
+ * 10. On a division right behind a load that waits in MEM/WB for its word (a D-cache
+ *     miss): source 1 is masked by the PLIC's threshold until the device's line is
+ *     pending, MIE is set, and the store that drops the threshold comes right before the
+ *     load, so meip rises while the load waits and the division in EX has not acted
+ *     yet: the interrupt is taken on the division, which must not have started; it
+ *     runs once after MRET (s11 = 14, s4 = the loaded word 0x66).
+ * 11. On the halting EBREAK: it halts after MRET (s8 = c11, s7 = 11 interrupts, s6 = 0).
  */
 #include "mig3_config.h"
     .macro EXPECT_REG r, value
@@ -133,9 +139,26 @@ c9: addi  a5, a5, 1
     sub   t1, s9, s8
     or    s6, s6, t1
 
-    # 10. The halting EBREAK.
+    # 10. A division behind a load that waits for its word.
+    li    t0, MIG3_PLIC_THRESHOLD
+    li    t1, 1
+    sw    t1, 0(t0)                 # threshold 1: source 1 (priority 1) masked
+    csrsi mstatus, 8                # MIE = 1, meip 0
+1:  li    t1, MIG3_PLIC_PENDING
+    lw    t1, 0(t1)
+    andi  t1, t1, 2
+    beqz  t1, 1b                    # the device's line is pending at the PLIC
+    la    t2, far
+    .balign 8                       # the load and the division in one line of the
+    nop                             # I-cache: the division is in EX while the load waits
+    sw    zero, 0(t0)               # threshold 0: meip rises a few clocks later
+    lw    s4, 0(t2)                 # a D-cache miss: waits in MEM/WB for its word
+c10: div   s11, t3, t4
+    CHECK c10
+
+    # 11. The halting EBREAK.
     ARM
-c10:
+c11:
     ebreak
 
     .word (expect_end - expect) / 8
@@ -150,8 +173,10 @@ expect:
     EXPECT_REG 14, 0                # a4
     EXPECT_REG 15, 1                # a5
     EXPECT_REG 22, 0                # s6
-    EXPECT_REG 23, 10               # s7
-    EXPECT_REG 24, c10              # s8
+    EXPECT_REG 20, 0x66             # s4
+    EXPECT_REG 27, 14               # s11
+    EXPECT_REG 23, 11               # s7
+    EXPECT_REG 24, c11              # s8
 expect_end:
 
 handler:
@@ -187,3 +212,6 @@ data:
     .word 0
 irq_claim:
     .word 0
+    .balign 64
+far:                                # a line nothing else touches: a D-cache miss
+    .word 0x66

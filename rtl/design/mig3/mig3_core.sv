@@ -22,8 +22,8 @@
  * - Mig3Forward: results not yet in the register file, for ID;
  * - Mig3Pipe: the ID/EX and EX/MEM registers;
  * - Mig3Alu, Mig3Branch, Mig3Lsu (D-cache requests), Mig3Atomic (the reservation of LR/SC),
- *   Mig3Csr, Mig3MulDiv and the library block ComputeCoreBitmanip (Zbb with one
- *   operand): the parts of EX;
+ *   Mig3Csr, Mig3MulDiv, Mig3Fpu (F on the x registers: Zfinx) and the library block
+ *   ComputeCoreBitmanip (Zbb with one operand): the parts of EX;
  * - Mig3LoadData: the loaded value, in MEM/WB.
  *
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
@@ -39,7 +39,7 @@
  * (ReturnAddressStack) predicts it. Results are forwarded to ID (Mig3Forward); an
  * instruction that reads
  * the rd of a load right before it waits one cycle in ID (load-use).
- * A division stays 34 cycles in EX.
+ * A division stays 34 cycles in EX, an F instruction 2 to 27 (Mig3Fpu).
  * Every slot without an instruction carries its reason (bubble_e); retire reports it
  * (retire.bubble), so each cycle retires an instruction or a bubble.
  *
@@ -123,6 +123,11 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_csr_illegal;
     word_t        ex_muldiv_result; // product, quotient or remainder of an M instruction
     logic         ex_muldiv_stall;
+    word_t        ex_fpu_result;    // result of an F instruction (Zfinx)
+    FpPkg::flags_t ex_fpu_flags;    // its flags, for fflags
+    logic         ex_fpu_stall;
+    logic         ex_fpu_illegal;   // the F instruction can not be done: it traps
+    RiscvPkg::funct3_t ex_frm;      // fcsr.frm: the FPU's mode for FRM_DYN
     logic         ex_lsu_valid;     // the load or store in EX may send its request
     logic         ex_dmem_wait;     // the D-cache does not take the request of EX
     logic         ex_sc_cancel;     // the SC in EX fails: no store (Mig3Atomic)
@@ -178,7 +183,8 @@ module Mig3Core import Mig3Pkg::*; #(
         .id_ras_top, .ex_ras_target(id_ex_q.ras_target),
         .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
         .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
-        .ex_csr_illegal, .ex_muldiv_stall, .ex_dmem_wait, .mem_wait, .csr,
+        .ex_csr_illegal, .ex_muldiv_stall, .ex_fpu_stall, .ex_fpu_illegal, .ex_dmem_wait,
+        .mem_wait, .csr,
         .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
         .ras_ctrl,
@@ -266,20 +272,28 @@ module Mig3Core import Mig3Pkg::*; #(
 
     assign ex_load_offset = ex_alu_result[DADDR_START-1:0];
 
-    // frm for the FPU (Zfinx): none yet, its flags 0 (kb rtl/design/mig3/fp_decode).
-    /* verilator lint_off UNUSEDSIGNAL */
-    RiscvPkg::funct3_t ex_frm;
-    /* verilator lint_on UNUSEDSIGNAL */
-
     Mig3Csr u_mig3_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
-        .illegal(ex_csr_illegal), .csr, .fp_flags('0), .frm(ex_frm));
+        .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm));
 
+    // A division starts in the first cycle the instruction acts, when Control takes
+    // interrupts, as the FPU's operations (not behind a load in MEM/WB: an interrupt
+    // taken after that wait would trap a division running).
+    // @kb: rtl/design/mig3/interrupts
     Mig3MulDiv u_mig3_muldiv(
-        .clk, .rst_n, .valid(ex_fetch.valid && !ex_irq), .hold(mem_wait), .dec(ex_dec),
-        .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .stall(ex_muldiv_stall),
-        .result(ex_muldiv_result));
+        .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
+        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
+        .stall(ex_muldiv_stall), .result(ex_muldiv_result));
+
+    // F on the x registers (Zfinx): a unit starts in the first cycle the instruction acts,
+    // when Control takes interrupts: never one on an operation in flight.
+    // @kb: rtl/design/mig3/fpu
+    Mig3Fpu u_mig3_fpu(
+        .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
+        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .frm(ex_frm),
+        .illegal(ex_fpu_illegal), .stall(ex_fpu_stall), .result(ex_fpu_result),
+        .flags(ex_fpu_flags));
 
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
@@ -293,6 +307,7 @@ module Mig3Core import Mig3Pkg::*; #(
             RD_LINK:     ex_rd_data = ex_link;
             RD_CSR:      ex_rd_data = ex_csr_rdata;
             RD_MULDIV:   ex_rd_data = ex_muldiv_result;
+            RD_FP:       ex_rd_data = ex_fpu_result;
             RD_BITMANIP: ex_rd_data = ex_bitmanip_result;
             default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
         endcase
@@ -325,15 +340,16 @@ module Mig3Core import Mig3Pkg::*; #(
                           mem_wdata: ex_lsu_mem.wdata};
 
     // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
-    // a division, an interrupt (WFI) or the D-cache to take its request (EX/MEM keeps its
-    // load while it waits for its word: no bubble goes in then).
+    // a division, an F instruction's result, an interrupt (WFI) or the D-cache to take its
+    // request (EX/MEM keeps its load while it waits for its word: no bubble goes in then).
     assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
                        !ex_fetch.valid ? ex_fetch.bubble :
                        ex_muldiv_stall ? BUBBLE_DIV :
+                       ex_fpu_stall    ? BUBBLE_FPU :
                        ex_wfi_wait     ? BUBBLE_WFI : BUBBLE_DMEM;
 
     `DC_ASSERT(a_ex_bubble_why, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall ||
-                                ex_wfi_wait || ex_dmem_wait || mem_wait)
+                                ex_fpu_stall || ex_wfi_wait || ex_dmem_wait || mem_wait)
 
     // load: a load that sent its read (a misaligned one traps and reads nothing); MEM/WB
     // waits for its word.

@@ -2,10 +2,12 @@ set(LIB  ${DARK_CIRCUIT_RTL_LIB})
 set(MIG3 ${DARK_CIRCUIT_RTL_DESIGN}/mig3)
 set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
-# Mig3 uses blocks of the library (behave versions are fast to simulate), its devices
-# (io: the UART, which takes a part) and RISC-V formats and encodings.
+# Mig3 uses blocks of the library (behave versions are fast to simulate), the fp32 blocks
+# (one version: hybrid), its devices (io: the UART, which takes a part) and RISC-V formats
+# and encodings.
 set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
            ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
+           ${LIB}/numeric/fp32/fp32.flist
            ${LIB}/io/io_behave.flist ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Files generated from cfg/mig3_config.yaml are up to date.
@@ -15,6 +17,7 @@ dc_add_config_check(design_mig3 CONFIG ${MIG3}/cfg/mig3_config.yaml)
 # (not the fast simulation models). Mig3Cpu is not included: its memories are simulation models.
 set(SYNTH_FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
                  ${LIB}/block/block_struct.flist ${LIB}/numeric/numeric_struct.flist
+                 ${LIB}/numeric/fp32/fp32.flist
                  ${LIB}/io/io_struct.flist ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Mig3Core converts to Verilog-2005 with sv2v and elaborates: the syntax of Mig3 is what
@@ -139,19 +142,27 @@ if(DARK_CIRCUIT_RISCV)
     # Faults trap: a handler checks mcause, mepc and mtval; rd and memory are not
     # written. One build of the program per case (-DCASE_<case>):
     # misaligned jump target, load, store and AMO address (rv32ia: the AMO); ECALL,
-    # illegal words, an F instruction (until the FPU), CSR
-    # instructions on a missing CSR or writing a read-only one.
+    # illegal words, CSR instructions on a missing CSR or writing a read-only one; F
+    # instructions (assembled with Zfinx) that round by an frm that is not a mode, and a
+    # fused form (FMADD.S) until ID reads rs3.
     set(FAULT_ARGS +expect_trap +expect_regs +expect_mem_unchanged)
     foreach(case IN ITEMS jalr lw sh amo)
         string(TOUPPER ${case} case_macro)
         mig3_program_test(misaligned_${case} SOURCES misaligned.S ARCH rv32ia
                           FLAGS -DCASE_${case_macro} ARGS ${FAULT_ARGS})
     endforeach()
-    foreach(case IN ITEMS ecall zero ones csr_unknown csr_readonly fp)
+    foreach(case IN ITEMS ecall zero ones csr_unknown csr_readonly)
         string(TOUPPER ${case} case_macro)
         mig3_program_test(illegal_${case} SOURCES illegal.S FLAGS -DCASE_${case_macro}
                           ARGS ${FAULT_ARGS})
     endforeach()
+    if(DARK_CIRCUIT_RISCV_ZFINX)
+        foreach(case IN ITEMS fp_frm fp_r4)
+            string(TOUPPER ${case} case_macro)
+            mig3_program_test(illegal_${case} SOURCES illegal.S ARCH rv32i_zfinx
+                              FLAGS -DCASE_${case_macro} ARGS ${FAULT_ARGS})
+        endforeach()
+    endif()
 
     # Debug port and resume: the testbench changes a0 at two EBREAKs and resumes.
     mig3_program_test(resume SOURCES resume.S
@@ -163,10 +174,11 @@ if(DARK_CIRCUIT_RISCV)
     # uncached (+uncached): the caches would add the cycles of their misses.
     # @kb: rtl/design/mig2/caches_in_core
     mig3_program_test(csr SOURCES csr.S ARGS +expect_regs +uncached)
-    # The floating-point CSRs of Zfinx (fcsr, frm, fflags): their names need an assembler
-    # that knows Zfinx.
+    # The floating-point CSRs of Zfinx (fcsr, frm, fflags), and F instructions on the x
+    # registers (Mig3Fpu): their names need an assembler that knows Zfinx.
     if(DARK_CIRCUIT_RISCV_ZFINX)
         mig3_program_test(fcsr SOURCES fcsr.S ARCH rv32i_zfinx ARGS +expect_regs)
+        mig3_program_test(fp SOURCES fp.S ARCH rv32i_zfinx ARGS +expect_regs)
     endif()
 
     # M extension: results used right away, division and branches, cycle cost, minstret.

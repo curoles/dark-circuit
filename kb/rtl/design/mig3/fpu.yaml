@@ -1,0 +1,67 @@
+type: decision
+title: Mig3's FPU holds EX until its result register has the result; the fused forms wait for rs3
+date: 2026-11-10
+question: >
+  How do the library's fp32 blocks go into Mig3's EX: which take one cycle, how do the
+  multi-cycle ones (Fp32Fma with STAGES, Fp32DivSqrt) hold EX, where does the rounding mode of
+  FRM_DYN come from and what happens when frm is not a mode, and in what steps?
+decision: >
+  Mig3Fpu in EX, beside Mig3MulDiv and in its pattern: stall holds the instruction in EX
+  until its result is in a result register of the FPU, and the instruction completes in the
+  cycle after, from there. The combinational units (compare, min/max, sign injection, class,
+  the two conversions) take 2 cycles in EX, FADD.S/FSUB.S/FMUL.S 2 + 3 (Fp32Fma with
+  STAGES 3: the operation enters once, the result comes 3 clocks later), FDIV.S/FSQRT.S 27.
+  The unit starts in the first cycle the instruction acts (not behind a load in MEM/WB, no
+  interrupt on it), so an interrupt is taken before an F instruction starts, never on one
+  running. The rounding mode is the rm field, or frm for FRM_DYN; an instruction that rounds
+  by an frm that is not a mode (101, 110, 111) traps as illegal (Mig3Control, from the
+  FPU's illegal). Its flags go to Mig3Csr with the result. A bubble reason of its own,
+  BUBBLE_FPU. In this step the fused forms (FMADD.S, FMSUB.S, FNMSUB.S, FNMADD.S) still trap:
+  ID reads rs3 in a second cycle in the next step (kb rtl/design/mig3/fp).
+why: >
+  Mig3's longest path already is EX to ID's forwarding (about 5.5 ns from the ID/EX
+  register, kb rtl/design/mig3/mul_timing); Fp32FromInt alone is 5.3 ns, Fp32Fma's stages up
+  to 5.1. A result register keeps every fp32 block off that path for one cycle per F
+  instruction, the cost Mig3's little FP can pay; a core that issues FP every clock (Mig4,
+  Mig5) gets its own result timing from the same blocks. One register for all units keeps
+  one completion rule (take, then complete) instead of one per unit. Starting in the cycle
+  the instruction acts is what Control's interrupt rule needs: an operation in flight is
+  never left behind by a trap. Two steps keep each one testable: everything but rs3 first,
+  then ID's second read cycle with its hazards.
+rejected:
+  - choice: Complete in the cycle the unit's result comes (no result register)
+    why_not: >
+      Each fp32 block's last piece (Fp32Round after Fp32Fma's last boundary, Fp32FromInt
+      whole) would join EX's rd mux and the forwarding to ID, the core's longest path.
+  - choice: Fp32Fma with 4 stages or a boundary after rounding instead of the register
+    why_not: >
+      The other units need the register anyway; one register serves all.
+  - choice: Start an F instruction while a load in MEM/WB waits, as Mig3MulDiv starts a
+            division
+    why_not: >
+      Control takes an interrupt in the first cycle the instruction acts, which comes after
+      that wait: the operation would be running when the instruction traps.
+relies_on:
+  - rtl/design/mig3/fp
+  - rtl/design/mig3/fp_decode
+  - rtl/design/mig3/interrupts
+  - rtl/design/mig3/mul_timing
+  - rtl/lib/numeric/fp32/fma_stages
+evidence: >
+  2026-11-10, Verilator: fp.S passes (every unit, results used at once, rm field and DYN,
+  ties of a conversion, flags NX, DZ, NV, OF accrued and read), illegal_fp_frm (frm 5,
+  rounding by it traps with the word as mtval), illegal_fp_r4 (FMADD.S traps), with the
+  Mig3 suite and the numeric tests (149 tests; the bubble check knows fpu bubbles).
+  One-off mutants, caught: the FMA's result taken before out_valid, Control not holding EX
+  for the FPU, the flags not reaching fflags, DYN rounding to nearest, frm 101 a mode, the
+  FPU's bubbles named division bubbles, a fused form legal. sky130 (Yosys + ABC): Mig3Core
+  410 312 um2 against 335 054 (+22 %, the FPU); longest path first 6.3 ns, into the result
+  register through Fp32ToInt (6.4 ns alone: two increments in series), which now rounds and
+  negates in one (4.4 ns alone, kb rtl/lib/numeric/fp32/simple_ops); then 5.6 ns (from the
+  ID/EX register into the result register: the slowest units, Fp32FromInt 5.3 ns alone),
+  within ABC's spread of Mig3's 5.5 to 5.66 ns before.
+code:
+  - rtl/design/mig3/mig3_fpu.sv#FMA_STAGES
+  - rtl/design/mig3/mig3_fpu.sv#result_q
+  - rtl/design/mig3/mig3_core.sv#u_mig3_fpu
+  - test/design/mig3/fp.S

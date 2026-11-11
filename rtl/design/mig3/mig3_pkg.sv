@@ -92,6 +92,7 @@ package Mig3Pkg;
         BUBBLE_XRET,        // MRET: fetch goes to mepc
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
         BUBBLE_DIV,         // EX holds a division
+        BUBBLE_FPU,         // EX holds an F instruction until its result (Mig3Fpu)
         BUBBLE_IMEM,        // ID waits for the instruction from imem
         BUBBLE_DMEM,        // a load or store waits for dmem: to take it, or a load's word
         BUBBLE_WFI          // WFI in EX waits for an interrupt (sleeps)

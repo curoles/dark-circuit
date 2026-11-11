@@ -2,7 +2,7 @@
  *
  * MUL, MULH, MULHSU, MULHU: Int32Mul, combinational, one cycle. DIV, DIVU, REM, REMU:
  * Int32Div with early start, one step per significant bit of the dividend's magnitude (at
- * least 1; 32 for a divisor of 0): in the first cycle of the instruction in EX the division
+ * least 1; 32 for a divisor of 0): in the first cycle the instruction acts (valid) the division
  * starts, and stall=1 keeps the instruction in EX until the result is there (2 + steps
  * cycles in EX: start, the steps, then the result; 34 for a 32-bit dividend, 6 for 9 / 7).
  * The instruction and its registers do not change meanwhile, so rs1_data is still the
@@ -25,7 +25,8 @@
 module Mig3MulDiv import Mig3Pkg::*; (
     input  wire      clk,
     input  wire      rst_n,     // synchronous reset, active low
-    input  wire      valid,     // instruction in EX is valid
+    input  wire      valid,     // instruction in EX acts: not behind a load in MEM/WB, no
+                                // interrupt taken on it
     input  wire      hold,      // EX keeps its instruction for another reason
     // Only muldiv is used.
     /* verilator lint_off UNUSEDSIGNAL */
