@@ -22,7 +22,7 @@ module TbAlu2Check import Alu2Pkg::*; #(
     localparam N_RANDOM = 30;
 `endif
     localparam SW         = $clog2(WIDTH);
-    localparam N_OPS      = ALU2_ROR + 1;
+    localparam N_OPS      = ALU2_SH3ADD + 1;
     localparam EXHAUSTIVE = WIDTH <= 4;
 
     typedef logic [WIDTH-1:0] word_t;
@@ -61,6 +61,9 @@ module TbAlu2Check import Alu2Pkg::*; #(
             ALU2_SRA:  return word_t'($signed(x) >>> sh);
             ALU2_ROL:  return (x << sh) | (x >> (WIDTH - sh));
             ALU2_ROR:  return (x >> sh) | (x << (WIDTH - sh));
+            ALU2_SH1ADD: return (x << 1) + y;
+            ALU2_SH2ADD: return (x << 2) + y;
+            ALU2_SH3ADD: return (x << 3) + y;
             default:   return 'x;   // not an operation: never asked
         endcase
     endfunction

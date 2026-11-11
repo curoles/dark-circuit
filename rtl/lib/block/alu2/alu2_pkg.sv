@@ -8,7 +8,8 @@
  */
 package Alu2Pkg;
 
-    // Operations: out = a op b. Shifts and rotates move a by b mod WIDTH positions.
+    // Operations: out = a op b. Shifts and rotates move a by b mod WIDTH positions;
+    // SH1ADD, SH2ADD, SH3ADD add b to a shifted left by 1, 2, 3 (array indexing).
     typedef enum logic [4:0] {
         ALU2_ADD,
         ALU2_SUB,
@@ -28,7 +29,10 @@ package Alu2Pkg;
         ALU2_SRL,       // shift right, zeros in
         ALU2_SRA,       // shift right, copies of the sign bit in
         ALU2_ROL,       // rotate left
-        ALU2_ROR        // rotate right
+        ALU2_ROR,       // rotate right
+        ALU2_SH1ADD,    // (a << 1) + b
+        ALU2_SH2ADD,    // (a << 2) + b
+        ALU2_SH3ADD     // (a << 3) + b
     } op_e;
 
     // What out is.
@@ -43,6 +47,7 @@ package Alu2Pkg;
     typedef struct packed {
         Alu1Pkg::op_e cmd;          // Alu1: ADD, SUB (also for the compare), AND, OR, XOR
         logic         b_inv;        // Alu1 gets ~b: ANDN, ORN, XNOR
+        logic [1:0]   a_shl;        // Alu1 gets a << a_shl: SH1ADD 1, SH2ADD 2, SH3ADD 3
         logic         cmp_unsigned; // the compare is unsigned: SLTU, MINU, MAXU
         logic         pick_max;     // MIN, MAX: the larger
         logic         shift_left;   // SLL, ROL
@@ -57,6 +62,7 @@ package Alu2Pkg;
         ctrl_t c;
         c.cmd          = Alu1Pkg::OP_ADD;
         c.b_inv        = 1'b0;
+        c.a_shl        = 2'd0;
         c.cmp_unsigned = 1'b0;
         c.pick_max     = 1'b0;
         c.shift_left   = 1'b0;
@@ -87,7 +93,10 @@ package Alu2Pkg;
             ALU2_SRA:  begin c.res = RES_SHIFT; c.shift_arith = 1'b1; end
             ALU2_ROL:  begin c.res = RES_SHIFT; c.shift_left = 1'b1; c.rotate = 1'b1; end
             ALU2_ROR:  begin c.res = RES_SHIFT; c.rotate = 1'b1; end
-            default:   ;    // ALU2_ADD; the codes after ALU2_ROR are no operation
+            ALU2_SH1ADD: c.a_shl = 2'd1;
+            ALU2_SH2ADD: c.a_shl = 2'd2;
+            ALU2_SH3ADD: c.a_shl = 2'd3;
+            default:   ;    // ALU2_ADD; the codes after ALU2_SH3ADD are no operation
         endcase
         return c;
     endfunction

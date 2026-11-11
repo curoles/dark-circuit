@@ -7,7 +7,8 @@ question: >
   funct3 and alt in EX. Mig3 starts as a copy of Mig2. Where do these operations go, and how
   does a CPU tell the block what to do?
 decision: >
-  A library block Alu2 (rtl/lib/block/alu2): out = a op b, 19 operations (Alu2Pkg::op_e),
+  A library block Alu2 (rtl/lib/block/alu2): out = a op b, 22 operations (Alu2Pkg::op_e;
+  2026-11-11 Zba's SH1ADD, SH2ADD, SH3ADD: a_shl shifts Alu1's a by 1 to 3),
   WIDTH a power of 2. It instantiates Alu1 (ADD, SUB, AND, OR, XOR; b inverted for ANDN,
   ORN, XNOR) and BarrelShifter. A CPU names the operation in decode, calls
   Alu2Pkg::ctrl_of(op) there, and carries the controls (ctrl_t) to EX: Alu2 decodes nothing.

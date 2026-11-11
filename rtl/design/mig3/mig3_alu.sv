@@ -4,7 +4,8 @@
  * Operand a is rs1, or pc for AUIPC, or 0 for LUI; operand b is rs2 for OP, else the
  * immediate (dec.alu.a, dec.alu.b_imm). The library block Alu2 computes the operation with
  * the controls decode gave (dec.alu.alu2 = Alu2Pkg::ctrl_of of the operation): the RV32I
- * operations and the Zbb that reuse the ALU (ANDN, ORN, XNOR, MIN, MAX, ROL, ROR, RORI).
+ * operations, the Zbb that reuse the ALU (ANDN, ORN, XNOR, MIN, MAX, ROL, ROR, RORI) and
+ * Zba (SH1ADD, SH2ADD, SH3ADD).
  * LUI is 0 + imm, AUIPC pc + imm, loads and stores rs1 + imm.
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. result is rd's value

@@ -272,6 +272,14 @@ cases:
     MULDIV rem,    6,     12, 13, 14
     MULDIV remu,   7,     15, 16, 17
 
+#ifdef HAVE_ZBA
+    /*     Zba in Mig3Alu (SH1ADD, SH2ADD, SH3ADD), only when the compiler knows Zba:
+           op funct3 alt rd rs1 rs2 */
+    OP     sh1add, 2,     0,  1,  2,  3
+    OP     sh2add, 4,     0,  31, 30, 29
+    OP     sh3add, 6,     0,  5,  0,  31
+#endif
+
 #ifdef HAVE_ZBB
     /*     Zbb in Mig3Alu (ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR, RORI), only when
            the compiler knows Zbb: op funct3 alt rd rs1 rs2; RORI_ rd rs1 shamt */

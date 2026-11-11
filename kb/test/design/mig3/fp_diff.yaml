@@ -57,11 +57,13 @@ evidence: >
   2026-11-10, Verilator, clang-23.1.6: fp_diff passes, all agree (40 cases, 24 results and
   their flags each; 234 k cycles, about 3 s), with the Mig3 suite (134 tests); 160 cases (32
   a mode) agreed too. With gcc 12.2 the test is not added (no Zfinx code from C) and the
-  Mig3 suite passes (136). One-off mutants of Mig3, caught by fp_diff, none by fp.S's
-  values: FEQ.S signalling and FLT.S, FLE.S quiet; FMIN.S, FMAX.S with IEEE
-  minimum/maximum's NaN rule; FCVT.W.S with Arm's NaN integer; rm DYN rounding to nearest;
-  forwarding from EX left on while an R4 reads rs3 (with the result put back into the
-  addend: fmadd.s a6, a0, a1, a6). On the way: clang at -O2 made semihosting's string loop
-  a strlen call (no C library: -ffreestanding); per-case flags hid the NV mutant; the soft
+  Mig3 suite passes (136). One-off mutants of Mig3, all caught by fp_diff; the first three
+  missed by the assembly tests (no NaN operands where it matters): FEQ.S signalling and
+  FLT.S, FLE.S quiet; FMIN.S, FMAX.S with IEEE minimum/maximum's NaN rule; FCVT.W.S with
+  Arm's NaN integer; rm DYN rounding to nearest (fp.S catches it too); forwarding from EX
+  left on while an R4 reads rs3 (fp_fma.S catches it too; fp_diff with the result put back
+  into the addend: fmadd.s a6, a0, a1, a6). On the way: clang at -O2 made semihosting's
+  string loop a strlen call (no C library: -ffreestanding); per-case flags hid the NV mutant;
+  the soft
   side's inline flag read moved across the operations (now a call); FMIN.S and FMAX.S were
   computed together (now the empty asm).

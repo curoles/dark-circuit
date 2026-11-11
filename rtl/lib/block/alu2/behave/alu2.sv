@@ -2,13 +2,15 @@
  * the controls ctrl = Alu2Pkg::ctrl_of(op).
  *
  * Operations (Alu2Pkg::op_e): ADD, SUB, AND, OR, XOR; ANDN, ORN, XNOR (b inverted); SLT,
- * SLTU (a < b: 1 or 0); MIN, MINU, MAX, MAXU; SLL, SRL, SRA; ROL, ROR. Nothing here knows
- * an instruction set: a CPU maps its instructions to operations. The semantics are those
- * RISC-V needs (RV32I/RV64I and Zbb): shifts and rotates move by b mod WIDTH (the low
- * log2(WIDTH) bits of b), SLT and SLTU give 0 or 1 zero-extended.
+ * SLTU (a < b: 1 or 0); MIN, MINU, MAX, MAXU; SLL, SRL, SRA; ROL, ROR; SH1ADD, SH2ADD,
+ * SH3ADD ((a << 1, 2, 3) + b). Nothing here knows an instruction set: a CPU maps its
+ * instructions to operations. The semantics are those RISC-V needs (RV32I/RV64I, Zba and
+ * Zbb): shifts and rotates move by b mod WIDTH (the low log2(WIDTH) bits of b), SLT and
+ * SLTU give 0 or 1 zero-extended.
  *
  * Built of library blocks: Alu1 adds, subtracts and does AND, OR, XOR, with b inverted for
- * ANDN, ORN, XNOR (only Alu1's b: the compare and the shifter use b as it is). The compare
+ * ANDN, ORN, XNOR and a shifted left by 1 to 3 for SH1ADD to SH3ADD (only Alu1's
+ * operands: the compare, MIN, MAX and the shifter use a and b as they are). The compare
  * uses Alu1's SUB: carry out 1 is no borrow, a >= b unsigned; signed: the sign of a when
  * the signs differ. MIN, MAX pick a or b by it. A BarrelShifter shifts and rotates a.
  * WIDTH is a power of 2, 2 or more.
@@ -29,6 +31,7 @@ module Alu2 import Alu2Pkg::*; #(
 );
     `DC_STATIC_ASSERT(a_width_power_of_2, WIDTH >= 2 && (WIDTH & (WIDTH - 1)) == 0)
 
+    logic [WIDTH-1:0] a_alu1;   // a into Alu1: shifted left for SH1ADD, SH2ADD, SH3ADD
     logic [WIDTH-1:0] b_alu1;   // b into Alu1: inverted for ANDN, ORN, XNOR
     logic [WIDTH-1:0] sum;      // Alu1's out
     logic             co;       // Alu1's carry out
@@ -40,9 +43,10 @@ module Alu2 import Alu2Pkg::*; #(
     res_e             res;      // ctrl.res: a signal of its own for the case (Icarus)
 
     // @kb: rtl/lib/block/alu2/design
+    assign a_alu1 = a << ctrl.a_shl;
     assign b_alu1 = ctrl.b_inv ? ~b : b;
 
-    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd(ctrl.cmd), .in1(a), .in2(b_alu1), .co, .out(sum));
+    Alu1 #(.WIDTH(WIDTH)) u_alu1(.cmd(ctrl.cmd), .in1(a_alu1), .in2(b_alu1), .co, .out(sum));
 
     BarrelShifter #(.WIDTH(WIDTH)) u_barrel_shifter(
         .in(a), .shift_in_bit(ctrl.shift_arith && a[WIDTH-1]), .shift(b[SHIFT_WIDTH-1:0]),

@@ -43,6 +43,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             RORI_RV32:                                              kind_enc = KIND_OP_IMM;  // Zbb
             ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind_enc = KIND_OP;
             ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR:        kind_enc = KIND_OP;  // Zbb
+            SH1ADD, SH2ADD, SH3ADD:                                 kind_enc = KIND_OP;  // Zba
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -117,7 +118,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
 
     // @kb: rtl/design/mig2/zbb_reuse
     // The operation of Alu2 (Mig3Alu), by the encodings: OP and OP-IMM, also the Zbb that
-    // reuse the ALU (ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR, RORI); a + b for every
+    // reuse the ALU (ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR, RORI) and Zba (SH1ADD,
+    // SH2ADD, SH3ADD: a shifted into the adder); a + b for every
     // other instruction (LUI, AUIPC, loads, stores, JALR). Its controls (ctrl_of) go to EX
     // in decoded_t: Alu2 decodes nothing.
     function automatic op_e alu_op_of(insn_t w);
@@ -140,6 +142,9 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             MAXU:               return ALU2_MAXU;
             ROL:                return ALU2_ROL;
             ROR, RORI_RV32:     return ALU2_ROR;
+            SH1ADD:             return ALU2_SH1ADD;
+            SH2ADD:             return ALU2_SH2ADD;
+            SH3ADD:             return ALU2_SH3ADD;
             default:            return ALU2_ADD;    // ADD, ADDI and the address sums
         endcase
     endfunction

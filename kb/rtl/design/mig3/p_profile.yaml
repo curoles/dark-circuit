@@ -1,0 +1,62 @@
+type: decision
+title: Mig3 implements a staged subset of the P extension draft v0.6, from riscv-opcodes, clock kept
+date: 2026-11-11
+question: >
+  Packed SIMD for Mig3: which definition of RISC-V's P extension (still a draft), how much of
+  it, in what order and in what chunks, built how, and at what cost to the clock?
+decision: >
+  The profile is rtl/design/mig3/p_profile.md. The spec is P v0.6 (2026-09-29, the
+  Development Milestone, in internal review since 2026-10-23); the encodings are
+  riscv-opcodes' rv_p and rv32_p at the project's pinned commit; clang-23's experimental P
+  0.21 for C. Prerequisites first (Zba, which P requires and Mig3 lacks; the vxsat CSR the
+  saturating instructions set), then four slices: the one-cycle packed ALU, packed shifts,
+  packed multiplies and dot products through a result register (accumulating forms read rd
+  through the read port borrowed in EX). Library blocks before Mig3 (a lane-cut adder, a
+  lane-partitioned multiplier, a dot-product tree), in small chunks (the user: small enough
+  to review, each one timed). No register-pair forms. Every chunk keeps Mig3's longest path
+  at 5.5 ns within ABC's spread, measured, or it is not done.
+why: >
+  The user's goals: Mig3 usable as IP with the standard P (so the draft is followed closely
+  and its encodings come from the machine-readable tables, re-synced by regenerating);
+  numeric and AI library blocks before Mig6 (P's datapath is a vector lane's); light int8 and
+  int16 work beside a future matrix unit. Small chunks keep each review and each timing step
+  visible (the user finds large chunks hard to review). The clock rule answers the user's
+  question whether packed SIMD and a fast Mig3 go together: simple operations fit EX's
+  adder, slow ones take a result register, as the FPU did.
+rejected:
+  - choice: The full P draft
+    why_not: >
+      Several hundred instructions, register pairs on RV32 included: the largest ISA line by
+      far, and the most exposed to changes before ratification.
+  - choice: CORE-V's xcvsimd (frozen, in silicon)
+    why_not: >
+      A vendor extension; the project follows RISC-V standards, and the first goal is the
+      standard P.
+  - choice: Encodings typed from the spec document
+    why_not: >
+      riscv-opcodes is machine-readable and matches v0.6 for every packed instruction; a
+      newer draft is a regeneration, not a hand edit.
+  - choice: One slice of 38 one-cycle instructions
+    why_not: The user wants small chunks, each reviewed and timed.
+relies_on:
+  - rtl/design/mig3/rs3_read
+  - rtl/design/mig3/fpu
+  - rtl/design/mig2/late_input_last_mux
+evidence: >
+  2026-11-11: riscv-p-spec P-ext-proposal.adoc revnumber 0.6 (tags v0.6 2026-09-29,
+  v0.6-internal-review 2026-10-23); riscv-opcodes f24ac23 (also its master then) has
+  extensions/unratified/rv_p, rv32_p, rv64_p (table "v0.20", 2026-03-24). A script compared
+  the fixed bits of every instruction diagram in the v0.6 document with riscv-opcodes: 546
+  instructions in both, 542 the same; rev, sati, srari, usati differ only as RV64 forms
+  against the document's RV32 diagrams (riscv-opcodes has rev.rv32, and no RV32 sati,
+  srari, usati); 60 scalar instructions of v0.6 (aadd, asub, mul.h00, macc.h00, mhacc,
+  mqacc, mseq, mslt, ...) are not in riscv-opcodes yet. Every packed instruction of the
+  profile is in rv_p with the document's encoding. clang-23.1.6 lists p 0.21 among its
+  experimental extensions. 1a (2026-11-11): Zba in Alu2 (ALU2_SH1ADD..SH3ADD, a_shl: a
+  shifted into Alu1; struct a Mux4), Mig3's decode, the Zba probe; Alu2's tests, the Mig2 and
+  Mig3 suites and riscv-tests rv32uzba pass with clang-23 (247) and gcc 12.2 (252). sky130:
+  the repository 5.5 ns (the rs3 read), 1a 6.0 ns (ID: the instruction word into a mux), 1a
+  without Alu2's shift 5.9 ns (into the FPU's result register): no Zba logic on the longest
+  path, and ABC's spread on Mig3 near +-0.4 ns.
+code:
+  - rtl/design/mig3/p_profile.md

@@ -213,7 +213,7 @@ endfunction()
 # Since the ISA spec 20191213 the base ISA leaves out the CSR instructions and FENCE.I:
 # they are the extensions Zicsr and Zifencei, which older compilers do not know by name;
 # when the compiler wants them named, every -march gets DC_RISCV_ARCH_SUFFIX.
-# DARK_CIRCUIT_RISCV_ZBB: the compiler knows Zbb (tests of Zbb need it);
+# DARK_CIRCUIT_RISCV_ZBA, _ZBB: the compiler knows Zba, Zbb (their tests need it);
 # DARK_CIRCUIT_RISCV_ZICBOM: it knows Zicbom (tests of the CBOs); DARK_CIRCUIT_RISCV_ZFINX:
 # its assembler knows Zfinx (F on the x registers); DARK_CIRCUIT_RISCV_ZFINX_C: it makes
 # Zfinx code from C (tests in C of the FPU need it). DC_RISCV_CC_VERSION: the compiler and
@@ -225,6 +225,7 @@ if(DARK_CIRCUIT_RISCV)
     else()
         set(DC_RISCV_ARCH_SUFFIX _zicsr_zifencei)
     endif()
+    dc_riscv_probe(DARK_CIRCUIT_RISCV_ZBA rv32i${DC_RISCV_ARCH_SUFFIX}_zba "sh1add a0, a1, a2")
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZBB rv32i${DC_RISCV_ARCH_SUFFIX}_zbb "clz a0, a1")
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZICBOM rv32i${DC_RISCV_ARCH_SUFFIX}_zicbom
                    "cbo.inval (a0)")
@@ -243,7 +244,8 @@ if(DARK_CIRCUIT_RISCV)
     unset(dc_version)
     message(STATUS "RISCV: ${DC_RISCV_TOOLCHAIN}, ${DC_RISCV_CC_VERSION} (${RISCV_CC_BIN}; "
                    "${RISCV_OBJCOPY_BIN}, ${RISCV_OBJDUMP_BIN}, ${RISCV_NM_BIN}), -march suffix "
-                   "'${DC_RISCV_ARCH_SUFFIX}', Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
+                   "'${DC_RISCV_ARCH_SUFFIX}', Zba ${DARK_CIRCUIT_RISCV_ZBA}, "
+                   "Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
                    "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}, Zfinx ${DARK_CIRCUIT_RISCV_ZFINX}, "
                    "Zfinx from C ${DARK_CIRCUIT_RISCV_ZFINX_C}")
 endif()

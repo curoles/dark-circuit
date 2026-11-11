@@ -141,6 +141,9 @@ module TbMig3Decode;
         if (w ==? MAX)                         return Alu2Pkg::ALU2_MAX;
         if (w ==? MAXU)                        return Alu2Pkg::ALU2_MAXU;
         if (w ==? ROL)                         return Alu2Pkg::ALU2_ROL;
+        if (w ==? SH1ADD)                      return Alu2Pkg::ALU2_SH1ADD;
+        if (w ==? SH2ADD)                      return Alu2Pkg::ALU2_SH2ADD;
+        if (w ==? SH3ADD)                      return Alu2Pkg::ALU2_SH3ADD;
         if (w ==? ROR  || w ==? RORI_RV32)     return Alu2Pkg::ALU2_ROR;
         return Alu2Pkg::ALU2_ADD;
     endfunction
