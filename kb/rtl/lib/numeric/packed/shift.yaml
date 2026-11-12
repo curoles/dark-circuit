@@ -1,0 +1,41 @@
+type: decision
+title: Packed shifts are one word-wide BarrelShifter with a keep mask per lane
+date: 2026-11-11
+question: >
+  The packed shifts (RISC-V P psll, psrl, psra .bs/.hs by rs2[4:0], pslli, psrli, psrai by
+  an immediate; kb rtl/design/mig3/p_profile, chunks 3a and 3b) shift every lane by the same
+  amount, 0 to 31, a lane shifted by its width or more all fill. How is the shift built?
+decision: >
+  PackedShift (rtl/lib/numeric/packed/shift/hybrid): one BarrelShifter of the whole word,
+  logical, left or right by amount; a keep mask per lane width (the bits at offset >=
+  amount for a left shift, at offset + amount < width for a right one, none when amount >=
+  width), selected by lane; the cleared bits take the lane's sign (its top bit spread by
+  PackedPkg::lane_broadcast) for an arithmetic right shift, else 0.
+why: >
+  With one amount for every lane, the bits a word shift moves across a lane boundary land
+  exactly on the bits the shift vacated in the next lane, so masking them is all that lanes
+  need: one shifter, the size of the scalar one, and a mask made from amount, left and lane
+  beside it, not after it. It scales to 64-bit words (Mig4) unchanged. The user chose it
+  among the two (2026-11-11).
+rejected:
+  - choice: A shifter per lane width (four of 8 bits, two of 16, one of 32) and a select
+    why_not: >
+      Seven shifters for one at a time, and a select by lane after them; one level shallower
+      for bytes only.
+  - choice: Sharing Alu2's shifter
+    why_not: >
+      Lane masks and fill on the scalar ALU's path; the timing rule keeps P logic off it.
+relies_on:
+  - rtl/lib/numeric/packed/design
+  - rtl/design/mig3/p_profile
+code:
+  - rtl/lib/numeric/packed/shift/hybrid/packed_shift.sv
+evidence: >
+  2026-11-11, Verilator: numeric_packed_shift passes (lanes of 8 bits every byte in every
+  lane with every amount 0 to 31, left, logical and arithmetic right, arith with left
+  ignored; lanes of 16 and 32 bits edge values with every amount and 30 000 random words
+  each; against P's definition: the zero- or sign-extended lane shifted, its low bits; 0.1
+  s). Mutants (kb test/numeric/packed/shift/mutants): three, caught. sky130 (Yosys, ABC), 32
+  bits: PackedShift 1.5 ns (amount -> result), 4088 um2; the plain BarrelShifter it uses,
+  logical left or right, 1.7 ns, 2328 um2: the masks add area, not delay (the two within
+  ABC's spread).

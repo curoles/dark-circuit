@@ -1,0 +1,23 @@
+type: mutants
+title: Mutants of PackedShift
+date: 2026-11-11
+tests: [numeric_packed_shift]
+mutants:
+  - name: a right shift keeps one bit too many of each lane
+    edits:
+      - file: rtl/lib/numeric/packed/shift/hybrid/packed_shift.sv
+        old: "(j % lb + int'(s) < lb)"
+        new: "(j % lb + int'(s) <= lb)"
+    expect: caught
+  - name: the arithmetic fill not spread over the lane (each byte by its own top bit)
+    edits:
+      - file: rtl/lib/numeric/packed/shift/hybrid/packed_shift.sv
+        old: "assign sign_l = BYTES'(lane_broadcast(8'(sign), lane));"
+        new: "assign sign_l = sign;"
+    expect: caught
+  - name: arith fills a left shift too
+    edits:
+      - file: rtl/lib/numeric/packed/shift/hybrid/packed_shift.sv
+        old: "{8{sign_l[k] && arith && !left}}"
+        new: "{8{sign_l[k] && arith}}"
+    expect: caught

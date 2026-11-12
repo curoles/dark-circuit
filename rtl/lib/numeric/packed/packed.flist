@@ -2,3 +2,4 @@ packed_pkg.sv
 add/hybrid/packed_add.sv
 saturate/hybrid/packed_saturate.sv
 min_max/hybrid/packed_min_max.sv
+shift/hybrid/packed_shift.sv

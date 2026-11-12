@@ -213,6 +213,13 @@ numeric:
         path: rtl/lib/numeric/packed/saturate/hybrid/packed_saturate.sv
         test: test/numeric/packed/saturate
         kb: [rtl/lib/numeric/packed/saturate]
+    shift:
+      PackedShift:
+        what: "Packed shift: every lane of in shifted by the same amount, left or right, logical or arithmetic"
+        versions: [hybrid]
+        path: rtl/lib/numeric/packed/shift/hybrid/packed_shift.sv
+        test: test/numeric/packed/shift
+        kb: [rtl/lib/numeric/packed/shift]
 riscv:
   RiscvCsrPkg:
     kind: package
