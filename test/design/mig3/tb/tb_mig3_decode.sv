@@ -16,7 +16,7 @@
  * instruction (Zfinx): rd_src FP, the rm field in funct3, its FPU controls against a
  * model by opcode, funct5 and funct3 (fp_model), uses_rs3 for the R4 forms and rs3 (the
  * case's imm column). A packed instruction (P): rd_src PACKED, its operation against a
- * model by funct7 (pk_model).
+ * model by opcode, funct7 and funct3 (pk_model); a shift by an immediate reads no rs2.
  * At the end every kind must have had a case; KIND_BITMANIP only with +zbb, KIND_CBO only
  * with +zicbom, KIND_FP only with +zfinx, KIND_PACKED only with +p (their cases need a
  * compiler that knows Zbb, Zicbom, Zfinx, P).
@@ -157,7 +157,7 @@ module TbMig3Decode;
         logic hz2;
         case (opcode)
             LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
-            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0],
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0], PSLL_BS[6:0],
             FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
             default:                                             {hz1, hz2} = 2'b10;
         endcase
@@ -324,21 +324,31 @@ module TbMig3Decode;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 
-    // A packed instruction's operation (P), by funct7 and funct3 as the encodings have
-    // them: .B differs from .H in bit 26; funct3 tells the adds (PSUB from PADD in bit 30,
-    // PSADD in bits 28..27, PSADDU from PSADD in bit 29) from min/max (PMAX from PMIN in
-    // bit 28, PMINU from PMIN in bit 27, all on rs1 - rs2); 0 for other kinds.
-    // Only bits 30..26 and 14..12 of w are used.
+    // A packed instruction's operation (P), by opcode, funct7 and funct3 as the encodings
+    // have them. OP-32: .B differs from .H in bit 26; funct3 tells the adds (PSUB from PADD
+    // in bit 30, PSADD in bits 28..27, PSADDU from PSADD in bit 29) from min/max (PMAX from
+    // PMIN in bit 28, PMINU from PMIN in bit 27, all on rs1 - rs2). OP-IMM-32, the shifts:
+    // funct3 tells left from right, bit 30 arithmetic, bit 27 the amount in rs2 (then bit
+    // 26 bytes) from an immediate (then bit 24 halfwords). 0 for other kinds.
+    // Only bits 30..24, 14..12 and the opcode of w are used.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic pk_ctrl_t pk_model(input kind_e kind, input insn_t w);
+        logic rs2_amt;
         if (kind != KIND_PACKED)
             return '0;
+        if (w[6:0] == PSLLI_B[6:0]) begin
+            rs2_amt = w[27] == PSLL_BS[27];
+            return '{op: PK_SHIFT, sub: 1'b0, max: 1'b0, is_unsigned: w[30] != PSRA_BS[30],
+                     left: w[14:12] == PSLL_BS[14:12], amt_rs2: rs2_amt,
+                     lane: (rs2_amt ? w[26] == PSLL_BS[26] : w[24] != PSLLI_H[24]) ?
+                           PackedPkg::LANE_8 : PackedPkg::LANE_16};
+        end
         if (w[14:12] == PMIN_H[14:12])
-            return '{sub: 1'b1, sat: 1'b0, minmax: 1'b1, max: w[28] == PMAX_H[28],
-                     is_unsigned: w[27] == PMINU_H[27],
+            return '{op: PK_MIN_MAX, sub: 1'b1, max: w[28] == PMAX_H[28],
+                     is_unsigned: w[27] == PMINU_H[27], left: 1'b0, amt_rs2: 1'b0,
                      lane: w[26] == PMIN_B[26] ? PackedPkg::LANE_8 : PackedPkg::LANE_16};
-        return '{sub: w[30] == PSUB_H[30], sat: w[28:27] == PSADD_H[28:27], minmax: 1'b0,
-                 max: 1'b0, is_unsigned: w[29] == PSADDU_H[29],
+        return '{op: w[28:27] == PSADD_H[28:27] ? PK_SAT : PK_ADD, sub: w[30] == PSUB_H[30],
+                 max: 1'b0, is_unsigned: w[29] == PSADDU_H[29], left: 1'b0, amt_rs2: 1'b0,
                  lane: w[26] == PADD_B[26] ? PackedPkg::LANE_8 : PackedPkg::LANE_16};
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */

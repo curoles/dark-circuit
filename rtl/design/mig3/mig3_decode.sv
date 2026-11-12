@@ -50,6 +50,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             PSSUB_B, PSSUB_H, PSSUBU_B, PSSUBU_H:                   kind_enc = KIND_PACKED;  // P
             PMIN_B, PMIN_H, PMINU_B, PMINU_H:                       kind_enc = KIND_PACKED;  // P
             PMAX_B, PMAX_H, PMAXU_B, PMAXU_H:                       kind_enc = KIND_PACKED;  // P
+            PSLLI_B, PSLLI_H, PSRLI_B, PSRLI_H, PSRAI_B, PSRAI_H:   kind_enc = KIND_PACKED;  // P
+            PSLL_BS, PSLL_HS, PSRL_BS, PSRL_HS, PSRA_BS, PSRA_HS:   kind_enc = KIND_PACKED;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -115,13 +117,14 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
     // on ID's path. They may claim a read that does not happen (an immediate in an rs
     // field: CSRRWI, FCVT.S.WU's rs2 field; an illegal instruction), never miss one: LUI,
     // AUIPC, JAL read nothing; branches, stores, OP (also M, Zba, Zbb), AMO, F (OP-FP,
-    // the R4 forms) and OP-32 (P) rs1 and rs2; all others rs1. Opcodes from the encodings.
+    // the R4 forms), OP-32 and OP-IMM-32 (P) rs1 and rs2; all others rs1. Opcodes from the
+    // encodings.
     logic hz1;          // may read rs1
     logic hz2;          // may read rs2
     always_comb
         case (f.r.opcode)
             LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
-            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0],
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0], PSLL_BS[6:0],
             FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
             default:                                             {hz1, hz2} = 2'b10;
         endcase
@@ -266,29 +269,41 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
 
     // @kb: rtl/design/mig3/packed_unit
     // A packed instruction's operation (P), by the encodings; 0 for other kinds. The
-    // fields in pk_ctrl_t's order: sub, sat, minmax, max, is_unsigned, lane.
+    // fields in pk_ctrl_t's order: op, sub, max, is_unsigned, left, amt_rs2, lane.
     function automatic pk_ctrl_t pk_of(insn_t w);
         casez (w)
-            PADD_B:   return '{1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PADD_H:   return '{1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSUB_B:   return '{1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSUB_H:   return '{1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSADD_B:  return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSADD_H:  return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSADDU_B: return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_8};
-            PSADDU_H: return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_16};
-            PSSUB_B:  return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSSUB_H:  return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSSUBU_B: return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_8};
-            PSSUBU_H: return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_16};
-            PMIN_B:   return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PMIN_H:   return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PMINU_B:  return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_8};
-            PMINU_H:  return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_16};
-            PMAX_B:   return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_8};
-            PMAX_H:   return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_16};
-            PMAXU_B:  return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_8};
-            PMAXU_H:  return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_16};
+            PADD_B:   return '{PK_ADD,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PADD_H:   return '{PK_ADD,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSUB_B:   return '{PK_ADD,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSUB_H:   return '{PK_ADD,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSADD_B:  return '{PK_SAT,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSADD_H:  return '{PK_SAT,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSADDU_B: return '{PK_SAT,     1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSADDU_H: return '{PK_SAT,     1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSSUB_B:  return '{PK_SAT,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSSUB_H:  return '{PK_SAT,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSSUBU_B: return '{PK_SAT,     1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSSUBU_H: return '{PK_SAT,     1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PMIN_B:   return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PMIN_H:   return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PMINU_B:  return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PMINU_H:  return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PMAX_B:   return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PMAX_H:   return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PMAXU_B:  return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PMAXU_H:  return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSLLI_B:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_8};
+            PSLLI_H:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_16};
+            PSRLI_B:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSRLI_H:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSRAI_B:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSRAI_H:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSLL_BS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_8};
+            PSLL_HS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_16};
+            PSRL_BS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_8};
+            PSRL_HS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_16};
+            PSRA_BS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_8};
+            PSRA_HS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_16};
             default:  return '0;
         endcase
     endfunction
@@ -398,7 +413,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             end
             KIND_PACKED: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_PACKED;
-                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.pk = pk_of(insn);
+                dec.uses_rs1 = 1'b1;  dec.pk = pk_of(insn);
+                dec.uses_rs2 = dec.pk.op != PK_SHIFT || dec.pk.amt_rs2;  // not by an imm
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;

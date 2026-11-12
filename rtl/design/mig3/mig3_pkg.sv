@@ -435,13 +435,22 @@ package Mig3Pkg;
 
     // Packed instructions (P, kb rtl/design/mig3/p_profile): Mig3Packed's operation on
     // the lanes of rs1 and rs2.
+    typedef enum logic [1:0] {
+        PK_ADD,         // PackedAdd's sum, wrapping: PADD, PSUB
+        PK_SAT,         // PackedSaturate: PSADD, PSADDU, PSSUB, PSSUBU (they set vxsat)
+        PK_MIN_MAX,     // PackedMinMax by rs1 - rs2: PMIN, PMINU, PMAX, PMAXU
+        PK_SHIFT        // PackedShift: PSLL(I), PSRL(I), PSRA(I)
+    } pk_op_e;
+
     typedef struct packed {
+        pk_op_e           op;          // the block whose result rd takes
         logic             sub;         // rs1 - rs2 per lane, else +: PSUB, PSSUB(U), PMIN...
-        logic             sat;         // PSADD, PSADDU, PSSUB, PSSUBU: saturating
-        logic             minmax;      // PMIN, PMINU, PMAX, PMAXU: by rs1 - rs2 (sub)
         logic             max;         // PMAX, PMAXU: the larger, else the smaller
-        logic             is_unsigned; // PSADDU, PSSUBU, PMINU, PMAXU: unsigned lanes
-        PackedPkg::lane_e lane;        // .B: bytes, .H: halfwords
+        logic             is_unsigned; // unsigned lanes: PSADDU, PSSUBU, PMINU, PMAXU;
+                                       // logical shifts: PSLL(I), PSRL(I)
+        logic             left;        // PSLL(I): a left shift, else right
+        logic             amt_rs2;     // PSLL.BS ...: the amount is rs2[4:0], else the imm
+        PackedPkg::lane_e lane;        // .B, .BS: bytes; .H, .HS: halfwords
     } pk_ctrl_t;
 
     // Decode -> parts: the instruction taken apart, with the controls of every part.

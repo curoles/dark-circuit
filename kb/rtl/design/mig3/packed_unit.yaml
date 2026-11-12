@@ -22,7 +22,12 @@ decision: >
   some lane clamped is Mig3Csr's vxsat_set, applied when the instruction completes. The
   minimum and maximum (PMIN, PMINU, PMAX, PMAXU): pk_ctrl_t's minmax and max, sub set by
   decode; PackedMinMax (kb rtl/lib/numeric/packed/min_max) on the same PackedAdd's
-  carries, picked by minmax.
+  carries. The shifts (PSLL, PSRL, PSRA by rs2[4:0], PSLLI, PSRLI, PSRAI by an immediate,
+  its low 3 or 4 bits by the lane): PackedShift (kb rtl/lib/numeric/packed/shift) on rs1;
+  OP-IMM-32 joins the interlock rule's rs1-and-rs2 row (the register forms read rs2, the
+  immediate forms claim it). pk_ctrl_t's op (PK_ADD, PK_SAT, PK_MIN_MAX, PK_SHIFT) picks
+  the result; it replaced the sat and minmax bits with the shifts, which keeps pk_of's
+  table, one row per instruction, within 100 columns.
 why: >
   A kind and a control struct of its own is how every unit of Mig3 gets its instructions
   (decode classifies once, the unit decodes nothing). PackedAdd is the ALU's adder with lane
@@ -64,4 +69,12 @@ evidence: >
   pk_min_max (operands that make all eight results differ, equal lanes, a ReLU forwarded
   into a clamp, no vxsat) and eight more decode cases; sky130 5.4 ns, the longest path in
   the caches (the D-cache's line register into the memory arbiter's address), no packed
-  logic on it; 415 964 um2.
+  logic on it; 415 964 um2. The shifts (2026-11-11): the Mig3 suite passes (142 tests),
+  with pk_shift (all six immediate forms; by rs2 amounts 3, 9, 31 and 0x103 of which only
+  rs2[4:0] counts; rs2 loaded right before the shift; a result forwarded at once) and
+  twelve more decode cases; sky130 5.5 ns, 420 740 um2, the longest path from the ID/EX
+  register through EX's result and its forwarding into ID (id_rs1_data). The same run
+  with the packed unit's result tied to 0: 5.4 ns, the same end point (the core's own
+  EX-to-ID forwarding path), 414 198 um2. Within ABC's spread, but the packed results now
+  reach the top path's level: further one-cycle packed operations need the result register
+  of the profile's fallback, or a cut in that path.

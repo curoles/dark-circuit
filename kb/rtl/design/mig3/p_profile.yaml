@@ -88,6 +88,9 @@ evidence: >
   ns, the caches on top, no packed logic on the longest path. P's version from clang
   (2026-11-11, cmake/riscv.cmake dc_riscv_p_march): clang-23 configures P TRUE '_p0p21'
   and the P tests pass; a clang-23 wrapper listing p 0.22 gives the warning, P FALSE
-  '_p0p22' and no P tests.
+  '_p0p22' and no P tests. 3 (2026-11-11): PackedShift in the library (kb
+  rtl/lib/numeric/packed/shift; 1.5 ns alone), then the twelve shifts in Mig3: the suite
+  passes (142 tests); sky130 5.5 ns, the top path EX's result forwarded into ID, 5.4 ns on
+  the same path without the packed unit: the one-cycle packed slice has used the margin.
 code:
   - rtl/design/mig3/p_profile.md

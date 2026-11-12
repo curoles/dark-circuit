@@ -186,6 +186,11 @@
     EXPECT K_PACKED, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, 0
     .endm
 
+    .macro PKI op, rd, rs1, shamt                   /* pslli psrli psrai: no rs2 */
+    \op x\rd, x\rs1, \shamt
+    EXPECT K_PACKED, 1, 1, 0, \rd, \rs1, 0, 0, 0, 0
+    .endm
+
     .macro ILLEGAL word                             /* not an RV32I instruction */
     .word \word
     EXPECT K_ILLEGAL, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -405,6 +410,18 @@ cases:
     PK     pmax.h,   21, 23, 25
     PK     pmaxu.b,  27, 29, 31
     PK     pmaxu.h,  2,  4,  6
+    PKI    pslli.b,  1,  2,  7
+    PKI    pslli.h,  3,  4,  15
+    PKI    psrli.b,  5,  6,  0
+    PKI    psrli.h,  7,  8,  9
+    PKI    psrai.b,  9,  10, 3
+    PKI    psrai.h,  11, 12, 12
+    PK     psll.bs,  13, 14, 15
+    PK     psll.hs,  16, 17, 18
+    PK     psrl.bs,  19, 20, 21
+    PK     psrl.hs,  22, 23, 24
+    PK     psra.bs,  25, 26, 27
+    PK     psra.hs,  28, 29, 30
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
