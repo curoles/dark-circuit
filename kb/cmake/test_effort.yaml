@@ -1,0 +1,33 @@
+type: decision
+title: Slow tests have a quick version by default and a full one by DARK_CIRCUIT_TEST_EFFORT
+date: 2026-11-12
+question: >
+  Numeric tests that check every case (every pair of bytes in every mode) take seconds, and
+  run over and over while a group of blocks is built. How do they stay fast by default and
+  still run in full from time to time?
+decision: >
+  One cache variable, DARK_CIRCUIT_TEST_EFFORT (0 by default), given to every simulation as
+  the plusarg +effort=<n> (dc_run_command, cmake/dark_circuit.cmake). A testbench with a quick
+  and a full version reads it ($value$plusargs "effort=%d", 0 when absent) and says in its
+  header what each level runs: 0 the quick version, about a second; 1 the full one, the
+  exhaustive parts. A change reconfigures and re-runs; it rebuilds nothing. Mutant runs use
+  the default: the quick version must catch every mutant. While working on a group of
+  blocks, a scratch tree may set it to 1.
+why: >
+  The user's request (2026-11-12): long numeric tests cannot run over and over, and a run
+  time parameter changes the effort without recompiling the simulations. One project-wide
+  knob, read only by the tests that have levels, keeps the rule in one place.
+rejected:
+  - choice: A compile-time define per test
+    why_not: Every change rebuilds the simulations; a plusarg only re-runs them.
+  - choice: Cutting the exhaustive parts for good
+    why_not: The full version still has its use, before a block is written and after changes.
+relies_on: []
+code:
+  - cmake/dark_circuit.cmake#dc_run_command
+  - test/numeric/packed/mul/tb_packed_mul.sv
+evidence: >
+  2026-11-12, Verilator: numeric_packed_mul's command has +effort=0; it runs in 0.4 s (b's
+  bytes 16 values against every byte of a) and catches its eight mutants; reconfigured with
+  DARK_CIRCUIT_TEST_EFFORT=1 it runs every byte pair, 5.1 s, without a rebuild. The Mig3
+  suite (142 tests) passes with the plusarg on every command line.

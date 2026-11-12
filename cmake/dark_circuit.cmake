@@ -18,6 +18,11 @@
 set(DARK_CIRCUIT_DESIGNS ALL CACHE STRING "Designs to build and test: ALL, a list (mig1), or empty")
 option(DARK_CIRCUIT_LIB_TESTS "Build and run the tests of the library (gates, parts, blocks, ...)" ON)
 option(DARK_CIRCUIT_BENCHMARKS "Build and run the benchmarks of the designs (label benchmark)" OFF)
+# How much of their cases tests with a quick and a full version run: every simulation gets
+# +effort=<n> (dc_run_command); 0, the default, is the quick version (about a second), 1
+# the full one (exhaustive parts). A change re-runs the tests, it rebuilds nothing.
+set(DARK_CIRCUIT_TEST_EFFORT 0 CACHE STRING
+    "Effort of tests with levels: 0 quick (default), 1 full (exhaustive parts)")
 
 set(DARK_CIRCUIT_RTL_LIB    ${PROJECT_SOURCE_DIR}/rtl/lib)
 set(DARK_CIRCUIT_RTL_DESIGN ${PROJECT_SOURCE_DIR}/rtl/design)
@@ -156,16 +161,19 @@ endmacro()
 
 # dc_run_command(<out-var> <command>...)
 #
-# Command of a test that runs simulation <command>: <command> itself, the test passes
+# Command of a test that runs simulation <command>: <command> itself with
+# +effort=<DARK_CIRCUIT_TEST_EFFORT> (a testbench with levels reads it), the test passes
 # with exit code 0. With R_OUTPUT of dc_parse_run_args() it is cmake -P run_check.cmake,
 # which also checks that the output matches R_OUTPUT (CTest alone checks either exit
 # code or output).
+# @kb: cmake/test_effort
 function(dc_run_command OUT)
+    set(command ${ARGN} +effort=${DARK_CIRCUIT_TEST_EFFORT})
     if("${R_OUTPUT}" STREQUAL "")
-        set(${OUT} ${ARGN} PARENT_SCOPE)
+        set(${OUT} ${command} PARENT_SCOPE)
     else()
         set(${OUT} ${CMAKE_COMMAND} -D "OUTPUT=${R_OUTPUT}"
-                   -P ${PROJECT_SOURCE_DIR}/cmake/run_check.cmake -- ${ARGN} PARENT_SCOPE)
+                   -P ${PROJECT_SOURCE_DIR}/cmake/run_check.cmake -- ${command} PARENT_SCOPE)
     endif()
 endfunction()
 

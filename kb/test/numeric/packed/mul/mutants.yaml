@@ -21,3 +21,33 @@ mutants:
         old: "assign xa = mode == MUL_B11 ? ah : al;"
         new: "assign xa = (mode == MUL_B11 || mode == MUL_B01) ? ah : al;"
     expect: caught
+  - name: the byte dot product's HH at weight 8, not 0 (ah one byte up in xh)
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "assign xh = dot_b ? {16'b0, ah} : {ah, al, 8'b0};"
+        new: "assign xh = dot_b ? {8'b0, ah, 8'b0} : {ah, al, 8'b0};"
+    expect: caught
+  - name: the cross piece HL left on in the byte dot product (ah in xl)
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "dot_b ? {8'b0, al} : {ah, al}"
+        new: "dot_b ? {ah, al} : {ah, al}"
+    expect: caught
+  - name: HH's constant left at weight 16 in the byte dot product
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "((p == 3 && dot_b) ? 0 : 8 * (p / 2 + p % 2))"
+        new: "((p == 3 && dot_b && 1'b0) ? 0 : 8 * (p / 2 + p % 2))"
+    expect: caught
+  - name: the accumulator dropped
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "(dots && acc_en) ? acc[16*k +: 32] : '0"
+        new: "(dots && acc_en && 1'b0) ? acc[16*k +: 32] : '0"
+    expect: caught
+  - name: STAGES 1's product adders read the rows before the register
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: ".in1(tree.sum[k]), .in2(tree.carry[k])"
+        new: ".in1(tree_in.sum[k]), .in2(tree.carry[k])"
+    expect: caught

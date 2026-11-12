@@ -208,7 +208,7 @@ numeric:
         kb: [rtl/lib/numeric/packed/min_max]
     mul:
       PackedMul:
-        what: "Packed multiply: the product of a and b in every 16-bit lane, 16 x 16 or of one byte pair, each operand signed or unsigned"
+        what: "Packed multiply: the product of a and b in every 16-bit lane, 16 x 16 or of one byte pair, or the dot product of every 32-bit group plus an accumulator; each operand signed or unsigned"
         versions: [hybrid]
         path: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
         test: test/numeric/packed/mul

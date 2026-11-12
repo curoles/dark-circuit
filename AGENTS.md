@@ -447,6 +447,11 @@ document intent and stop the simulation in the cycle a rule breaks.
   Verilator only, `dc_add_verilator_test` with a comment why: event-driven Icarus takes
   seconds there even for a short run, while its parts' tests still run on the main simulator.
 - Block tests run the same testbench with `block_behave.flist` and `block_struct.flist`.
+- A test that would take seconds in full (exhaustive numeric cases) has levels: it reads
+  `+effort=<n>` (`$value$plusargs("effort=%d", ...)`, 0 when absent; every simulation
+  gets `DARK_CIRCUIT_TEST_EFFORT`), runs a quick version at 0 (about a second, catching
+  every mutant) and the full one at 1, and its header says what each level runs
+  (`test/numeric/packed/mul`; kb `cmake/test_effort`).
 
 ## Adding things
 
