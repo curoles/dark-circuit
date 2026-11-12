@@ -210,6 +210,41 @@ function(dc_riscv_probe_zfinx_c OUT MARCH)
     endif()
 endfunction()
 
+# dc_riscv_p_march(<march-var> <flags-var>)
+#
+# P (packed SIMD) as clang lists it (-print-supported-extensions): a ratified P is the
+# -march part _p with no options; a draft is an experimental extension, named in -march
+# with its version (clang-23: p 0.21, _p0p21) and enabled by
+# -menable-experimental-extensions. Both empty when clang does not list P, and with GNU
+# (gcc 12.2 has no P). The version comes from clang, not from here, so a newer clang is
+# probed with its own and the P tests are not dropped without a word.
+function(dc_riscv_p_march MARCH_OUT FLAGS_OUT)
+    set(${MARCH_OUT} "" PARENT_SCOPE)
+    set(${FLAGS_OUT} "" PARENT_SCOPE)
+    if(NOT DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
+        return()
+    endif()
+    execute_process(COMMAND ${RISCV_CC_BIN} --target=riscv32-unknown-elf
+                            -print-supported-extensions
+                    OUTPUT_VARIABLE list ERROR_QUIET)
+    # The list: the ratified extensions, then a heading and the experimental ones.
+    string(FIND "${list}" "Experimental extensions" at)
+    if(at EQUAL -1)
+        set(ratified "${list}")
+        set(experimental "")
+    else()
+        string(SUBSTRING "${list}" 0 ${at} ratified)
+        string(SUBSTRING "${list}" ${at} -1 experimental)
+    endif()
+    set(line "\n[ \t]+p[ \t]+([0-9]+)\\.([0-9]+)[ \t]")   # "    p    0.21    'P' ..."
+    if(ratified MATCHES "${line}")
+        set(${MARCH_OUT} _p PARENT_SCOPE)
+    elseif(experimental MATCHES "${line}")
+        set(${MARCH_OUT} _p${CMAKE_MATCH_1}p${CMAKE_MATCH_2} PARENT_SCOPE)
+        set(${FLAGS_OUT} -menable-experimental-extensions PARENT_SCOPE)
+    endif()
+endfunction()
+
 # What the compiler needs and knows, probed (not its version: any toolchain may be used).
 # Since the ISA spec 20191213 the base ISA leaves out the CSR instructions and FENCE.I:
 # they are the extensions Zicsr and Zifencei, which older compilers do not know by name;
@@ -219,7 +254,8 @@ endfunction()
 # its assembler knows Zfinx (F on the x registers); DARK_CIRCUIT_RISCV_ZFINX_C: it makes
 # Zfinx code from C (tests in C of the FPU need it); DARK_CIRCUIT_RISCV_P: it knows the
 # draft P (packed SIMD) as the -march part DC_RISCV_P_MARCH with the options
-# DC_RISCV_P_FLAGS (clang-23: the experimental p 0.21). DC_RISCV_CC_VERSION: the compiler
+# DC_RISCV_P_FLAGS (dc_riscv_p_march; clang-23: the experimental p 0.21), a warning when
+# clang lists P but does not assemble it so. DC_RISCV_CC_VERSION: the compiler
 # and its version, gcc-12.2.0 or clang-23.1.6 (dc_riscv_cycle_ceiling).
 if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(base_has_csr rv32i "csrr a0, mscratch")
@@ -235,10 +271,17 @@ if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZFINX rv32i${DC_RISCV_ARCH_SUFFIX}_zfinx
                    "fadd.s a0, a1, a2")
     dc_riscv_probe_zfinx_c(DARK_CIRCUIT_RISCV_ZFINX_C rv32im${DC_RISCV_ARCH_SUFFIX}_zfinx)
-    set(DC_RISCV_P_MARCH _p0p21)
-    set(DC_RISCV_P_FLAGS -menable-experimental-extensions)
-    dc_riscv_probe(DARK_CIRCUIT_RISCV_P rv32i${DC_RISCV_ARCH_SUFFIX}${DC_RISCV_P_MARCH}
-                   "padd.b a0, a1, a2" ${DC_RISCV_P_FLAGS})
+    dc_riscv_p_march(DC_RISCV_P_MARCH DC_RISCV_P_FLAGS)
+    set(DARK_CIRCUIT_RISCV_P FALSE)
+    if(DC_RISCV_P_MARCH)
+        dc_riscv_probe(DARK_CIRCUIT_RISCV_P rv32i${DC_RISCV_ARCH_SUFFIX}${DC_RISCV_P_MARCH}
+                       "padd.b a0, a1, a2" ${DC_RISCV_P_FLAGS})
+        if(NOT DARK_CIRCUIT_RISCV_P)
+            message(WARNING "RISCV: ${RISCV_CC_BIN} lists P, but does not assemble padd.b "
+                            "with -march=rv32i${DC_RISCV_P_MARCH} ${DC_RISCV_P_FLAGS}: "
+                            "the P tests are not added")
+        endif()
+    endif()
     if(DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
         execute_process(COMMAND ${RISCV_CC_BIN} -dumpversion OUTPUT_VARIABLE dc_version
                         OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
@@ -254,7 +297,8 @@ if(DARK_CIRCUIT_RISCV)
                    "'${DC_RISCV_ARCH_SUFFIX}', Zba ${DARK_CIRCUIT_RISCV_ZBA}, "
                    "Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
                    "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}, Zfinx ${DARK_CIRCUIT_RISCV_ZFINX}, "
-                   "Zfinx from C ${DARK_CIRCUIT_RISCV_ZFINX_C}, P ${DARK_CIRCUIT_RISCV_P}")
+                   "Zfinx from C ${DARK_CIRCUIT_RISCV_ZFINX_C}, "
+                   "P ${DARK_CIRCUIT_RISCV_P} '${DC_RISCV_P_MARCH}'")
 endif()
 
 # dc_riscv_cycle_ceiling(<out-var> <test> <compiler-version> <cycles> [...]...)
