@@ -199,6 +199,13 @@ numeric:
         path: rtl/lib/numeric/packed/add/hybrid/packed_add.sv
         test: test/numeric/packed/add
         kb: [rtl/lib/numeric/packed/design]
+    min_max:
+      PackedMinMax:
+        what: "Packed minimum and maximum: the smaller or the larger of a and b in every lane, signed or unsigned, from PackedAdd's a - b"
+        versions: [hybrid]
+        path: rtl/lib/numeric/packed/min_max/hybrid/packed_min_max.sv
+        test: test/numeric/packed/min_max
+        kb: [rtl/lib/numeric/packed/min_max]
     saturate:
       PackedSaturate:
         what: "Packed saturation: PackedAdd's sum with every lane that overflowed at the lane's limit, signed or unsigned, and whether some lane did"

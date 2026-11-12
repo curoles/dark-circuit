@@ -31,9 +31,18 @@ There is no single must-have use (the user's goals, 2026-11-10):
   The v0.6 document's 60 new scalar instructions (`aadd`, `mul.h00`, `macc.h00`, `mseq`,
   ...) are not in riscv-opcodes yet, and not used here.
 - **The toolchain:** clang-23 knows P as experimental version 0.21
-  (`-menable-experimental-extensions`), with the intrinsics of `P-ext-intrinsics.adoc`.
+  (`-menable-experimental-extensions`), with the intrinsics of `P-ext-intrinsics.adoc` in
+  `riscv_packed_simd.h`: add and subtract (wrapping, saturating, averaging), min/max,
+  compares, absolute values and differences, reductions, merge; no multiplies, dot
+  products or shifts (inline assembly for those).
 - **Re-syncing** to a newer draft or the ratified version is regenerating RiscvInstrPkg
-  (`tools/riscv_opcodes.sh rv_p rv32_p ...`) and following the decode tests.
+  (`tools/riscv_opcodes.sh`, its pinned commit moved) and following the decode tests: they
+  are assembled by clang and decoded by the RTL from riscv-opcodes, so the two sources
+  must agree; a renamed instruction stops the build, an instruction on a new opcode
+  fails the interlock's assertion (`a_hz_covers_uses`). A newer clang: P's version is
+  read from clang (`-print-supported-extensions`), not written in `cmake/riscv.cmake`, so
+  the P tests are not skipped silently (a chunk after 2g); the kernel's inline assembly
+  wrappers take the names of `P-ext-intrinsics.adoc`, dropped when clang has them.
 
 ## Prerequisites
 
@@ -52,7 +61,36 @@ write two registers and come, if ever, after Mig4's RV64 makes them unnecessary.
 
 Chunks are small (the user: small enough to review, each with its timing measured): a
 library block or a few instructions at a time, every chunk passing the suite and the
-timing rule below.
+timing rule below. A chunk with a new library block comes in two: the block with its own
+test, then Mig3 (2c-1 PackedSaturate, 2c-2 the saturating instructions).
+
+**The order follows the int8 kernel** (below; revised 2026-11-11 after 2c): what an int8
+layer needs comes first, the rest waits until something asks for it:
+
+1. Prerequisites: 1a, 1b (done).
+2. Packed ALU: 2a, 2b, 2c (done); 2g `pmin`, `pmax` (activation and clamping) next,
+   then P's version read from clang (below, Re-syncing).
+3. Shifts by an immediate and by a register: 3a, 3b.
+4. Multiplies and dot products: their library blocks first (4a the lane-partitioned
+   multiplier, 4d's dot-product tree; the same in any ISA), their Mig3 instructions after
+   a look at the draft's activity (the group most likely to change); the kernel comes
+   with the dot products (4d).
+5. Requantization: 3c's rounding and saturating shifts with the multiply-high forms the
+   kernel's requantization uses (chosen when it is written; scalar `mulhr`, `mulqr`,
+   `srari`, `sati` are candidates, and riscv-opcodes' RV32 `sati`, `srari` differ from
+   the v0.6 document: checked then).
+6. Data movement the kernel needs: `psext.h.b` (bytes to halfwords), `ppaire`, `ppairo`
+   (packing).
+
+**Deferred** (one more select input each, cheap; they come back when a kernel uses them):
+
+- 2d averaging (`paadd`, `paaddu`, `pasub`, `pasubu`): codecs, image blending and audio
+  mixing average, with rounding (x86 `pavgb`, Arm `urhadd`); P's forms truncate, and no
+  int8 layer averages pairs.
+- 2e absolute difference (`pabd`, `pabdu`): its use is the sum of absolute differences of
+  motion search and template matching, which P has as `pabdsumu.b`, `pabdsumau.b`.
+- 2f compares (`pmseq`, `pmslt`, `pmsltu`): masks for a select (`merge`); clamping is
+  `pmin`, `pmax`.
 
 1. **Prerequisites.**
    - 1a: Zba (`sh1add`, `sh2add`, `sh3add`) in the ALU.
@@ -83,6 +121,23 @@ timing rule below.
 Later, if wanted: reductions (`predsum`), sums of absolute differences (`pabdsumu.b`), the
 cross forms (`pas.hx`, ...), `merge`, `mvm`, packing.
 
+## The int8 kernel
+
+The yardstick of the line: one C program on Mig3, a fully connected int8 layer as
+TensorFlow Lite Micro and CMSIS-NN run it, a matrix of 8-bit weights times a vector of
+8-bit inputs:
+
+    acc[n] = bias[n] + sum over k of x[k] * w[n][k]       (32 bits)
+    y[n]   = clamp(zero_point + requantize(acc[n]))       (8 bits, four to a word)
+
+requantize is a Q31 multiply with rounding and a rounding shift right; clamp keeps the
+activation's range (ReLU: no negatives). Two versions in the program, plain C (the
+reference) and P (the intrinsics, inline assembly where they stop), run side by side on
+the same random weights and inputs: every output equal is exit 0 (as `fp_diff`), and the
+cycles of both are printed. It enters with the dot products (4d: four multiply-adds per
+instruction), each later slice moves another step to P, and the cycle counts show what
+each slice buys. What it would use decides what comes after the order above.
+
 ## Library blocks first
 
 Each slice begins with its blocks in `rtl/lib`, hybrid family, tested on their own:
@@ -102,8 +157,8 @@ Then Mig3: decode by riscv-opcodes names (RiscvInstrPkg), a control struct per u
   against a model.
 - **Assembly with expected registers,** per slice: each instruction with lanes that saturate,
   overflow, round, and vxsat set and read back.
-- **Differential C, as fp_diff:** one kernel written with clang's P intrinsics against the
-  same computation in plain scalar C, run side by side on the core, every lane equal.
+- **Differential C, as fp_diff:** the int8 kernel (above), P against plain C, every output
+  equal.
 
 ## The timing rule
 

@@ -1,0 +1,39 @@
+type: decision
+title: Packed min/max is a block after PackedAdd's a - b, compared by the carry and the signs
+date: 2026-11-11
+question: >
+  The packed minimum and maximum (RISC-V P pmin, pminu, pmax, pmaxu; kb
+  rtl/design/mig3/p_profile, chunk 2g) pick a or b in every lane by a compare. Where does
+  the compare come from, and which signals does it wait for?
+decision: >
+  PackedMinMax (rtl/lib/numeric/packed/min_max/hybrid) takes a, b and PackedAdd's carries
+  for a - b in the same lanes, is_unsigned and max. Per byte, a < b if it were a lane's top
+  byte: unsigned, no carry out; signed, a's sign when the signs of a and b differ, else no
+  carry out. PackedPkg::lane_broadcast spreads it over the lane; a Mux2 per byte picks a or
+  b (b for the maximum when a < b, for the minimum when not).
+why: >
+  As for saturation (kb rtl/lib/numeric/packed/saturate), one adder serves every packed
+  operation that adds, and the block takes its flags. The compare waits for the carries
+  only: not the sum's top bit (the adder's latest output) nor the signed overflow (one XOR
+  more), and the data of the select are the operands, there before the adder.
+rejected:
+  - choice: The signed compare as the sum's sign XOR the signed overflow
+    why_not: >
+      Correct, but it waits for the sum, the adder's last level; the signs of the operands
+      give the same answer when they differ, and the carry when they agree.
+  - choice: A comparator of its own
+    why_not: A second subtractor beside PackedAdd, for one operation at a time.
+relies_on:
+  - rtl/lib/numeric/packed/design
+  - rtl/lib/numeric/packed/saturate
+  - rtl/design/mig3/p_profile
+code:
+  - rtl/lib/numeric/packed/min_max/hybrid/packed_min_max.sv
+evidence: >
+  2026-11-11, Verilator: numeric_packed_min_max passes (PackedAdd's a - b into
+  PackedMinMax; lanes of 8 bits every pair of bytes in every lane, minimum and maximum,
+  signed and unsigned; lanes of 16 and 32 bits edge values and 30 000 random words each;
+  against lane minimum and maximum; 0.2 s). Mutants (kb
+  test/numeric/packed/min_max/mutants): three, caught. sky130 (Yosys, ABC), 32 bits:
+  PackedAdd alone 1.5 ns, 2537 um2; PackedAdd's a - b into PackedMinMax 2.2 ns (lane ->
+  the select), 1375 um2 (the sum unused there: only the carries are kept).

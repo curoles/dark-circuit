@@ -1,0 +1,23 @@
+type: mutants
+title: Mutants of PackedMinMax
+date: 2026-11-11
+tests: [numeric_packed_min_max]
+mutants:
+  - name: signed lanes compared as unsigned (the signs ignored)
+    edits:
+      - file: rtl/lib/numeric/packed/min_max/hybrid/packed_min_max.sv
+        old: "(!is_unsigned && sa[k] != sb[k]) ? sa[k] : !co[k]"
+        new: "(!is_unsigned && sa[k] != sb[k]) ? !co[k] : !co[k]"
+    expect: caught
+  - name: signs that differ decided by b's sign
+    edits:
+      - file: rtl/lib/numeric/packed/min_max/hybrid/packed_min_max.sv
+        old: "(!is_unsigned && sa[k] != sb[k]) ? sa[k] : !co[k]"
+        new: "(!is_unsigned && sa[k] != sb[k]) ? sb[k] : !co[k]"
+    expect: caught
+  - name: the compare of a halfword lane not spread (every byte by its own carry)
+    edits:
+      - file: rtl/lib/numeric/packed/min_max/hybrid/packed_min_max.sv
+        old: "assign lt     = BYTES'(lane_broadcast(8'(less), lane));"
+        new: "assign lt     = BYTES'(lane_broadcast(8'(less), lane == LANE_16 ? LANE_8 : lane));"
+    expect: caught
