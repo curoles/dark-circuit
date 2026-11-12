@@ -3,8 +3,9 @@
  * A word of 32 or 64 bits is split into lanes of 8, 16 or 32 bits (RISC-V P's .b, .h, .w)
  * that compute alone. The blocks give flags per byte (at the top bit of every byte); a
  * lane's flags are those of its top byte, and lane_broadcast spreads them over the lane's
- * bytes for the selects that act on the whole lane (saturation, minimum, maximum). Words up
- * to 64 bits (8 bytes): a 32-bit user takes the low half of the results.
+ * bytes for the selects that act on the whole lane (saturation, minimum, maximum);
+ * lane_tops marks every lane's top byte, the one with its sign. Words up to 64 bits (8
+ * bytes): a 32-bit user takes the low half of the results.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -44,6 +45,16 @@ package PackedPkg;
             LANE_8:  return flags;
             LANE_16: return {{2{flags[7]}}, {2{flags[5]}}, {2{flags[3]}}, {2{flags[1]}}};
             default: return {{4{flags[7]}}, {4{flags[3]}}};
+        endcase
+    endfunction
+
+    // The top byte of every lane (with the lane's sign bit), of a 64-bit word: byte k is 1
+    // when it is its lane's top byte.
+    function automatic logic [7:0] lane_tops(lane_e lane);
+        case (lane)
+            LANE_8:  return 8'b1111_1111;
+            LANE_16: return 8'b1010_1010;
+            default: return 8'b1000_1000;
         endcase
     endfunction
 

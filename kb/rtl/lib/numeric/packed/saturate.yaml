@@ -1,0 +1,50 @@
+type: decision
+title: Packed saturation is a block after PackedAdd, on its sum and per-byte flags
+date: 2026-11-11
+question: >
+  The saturating packed instructions (RISC-V P psadd, psaddu, pssub, pssubu; kb
+  rtl/design/mig3/p_profile) put a lane that overflowed at its limit and report that some
+  lane did. Where does saturation sit relative to the lane-cut adder (kb
+  rtl/lib/numeric/packed/design), and what does it give its user?
+decision: >
+  PackedSaturate (rtl/lib/numeric/packed/saturate/hybrid) takes PackedAdd's sum, co and ov
+  with the same a, sub and lane, and is_unsigned. Per byte, the flags of its lane
+  (PackedPkg::lane_broadcast) decide whether the lane overflowed (signed: ov; unsigned: co
+  for an addition, no co for a subtraction); the limit comes from inputs only (signed: by
+  a's sign in the lane, which is the true result's whenever the lane overflows, its top
+  byte by PackedPkg::lane_tops; unsigned: all ones or 0); a Mux2 per byte picks sum or
+  limit; sat is the OR of the flags at the lanes' top bytes. It always saturates; the user
+  picks its result or PackedAdd's sum by the instruction.
+why: >
+  One adder serves every packed operation that adds (wrapping, saturating, averaging,
+  compares, minimum and maximum, absolute difference): each takes PackedAdd's sum and
+  flags, so in Mig3's packed unit they share one adder and a select picks the result, the
+  same way Mig3's ALU picks among its operations. A block per operation stays small, is
+  tested on its own and is reused by a vector lane later. Limits from a, not from the
+  sum's sign (the latest bit of the adder), and sat from the unspread flags keep the
+  adder's delay plus one select on the result path.
+rejected:
+  - choice: Saturation inside PackedAdd (sat and is_unsigned inputs)
+    why_not: >
+      Every later user (averaging, compares, min/max) would add its mode to the adder
+      block; the adder would grow into the packed ALU, tested as one large block.
+  - choice: A block with its own adder (add and saturate in one)
+    why_not: >
+      Mig3 would carry two adders, the plain one for padd and psub and this one, for one
+      operation at a time.
+relies_on:
+  - rtl/lib/numeric/packed/design
+  - rtl/design/mig3/p_profile
+code:
+  - rtl/lib/numeric/packed/saturate/hybrid/packed_saturate.sv
+  - rtl/lib/numeric/packed/packed_pkg.sv#lane_tops
+evidence: >
+  2026-11-11, Verilator: numeric_packed_saturate passes (PackedAdd into PackedSaturate;
+  lanes of 8 bits every pair of bytes in every lane and in lane 0 alone, add and subtract,
+  signed and unsigned; lanes of 16 and 32 bits edge values and 30 000 random words each;
+  against clamped lane arithmetic; lane_tops; 0.7 s). Mutants (kb
+  test/numeric/packed/saturate/mutants): four, caught. sky130 (Yosys, ABC), 32 bits: PackedAdd
+  alone 1.5 ns, 2537 um2; PackedAdd into PackedSaturate with a final pick of result or sum
+  2.7 ns, 3318 um2 (lane -> result), 2.8 ns without sat (sub -> result). A first version
+  with the signed limit from the sum's sign and sat ORed from the spread flags: 3.0 ns, the
+  path ending at sat.

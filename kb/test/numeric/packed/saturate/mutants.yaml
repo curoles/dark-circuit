@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of PackedSaturate and PackedPkg::lane_tops
+date: 2026-11-11
+tests: [numeric_packed_saturate]
+mutants:
+  - name: a signed limit's lower bytes take a's sign in their top bit
+    edits:
+      - file: rtl/lib/numeric/packed/saturate/hybrid/packed_saturate.sv
+        old: "{sign_l[k] ^ !top[k], {7{!sign_l[k]}}}"
+        new: "{sign_l[k], {7{!sign_l[k]}}}"
+    expect: caught
+  - name: an unsigned subtraction saturates on a carry out instead of a borrow
+    edits:
+      - file: rtl/lib/numeric/packed/saturate/hybrid/packed_saturate.sv
+        old: "is_unsigned ? co ^ {BYTES{sub}} : ov"
+        new: "is_unsigned ? co : ov"
+    expect: caught
+  - name: lane_tops marks a halfword lane's low byte
+    edits:
+      - file: rtl/lib/numeric/packed/packed_pkg.sv
+        old: "LANE_16: return 8'b1010_1010;"
+        new: "LANE_16: return 8'b0101_0101;"
+    expect: caught
+  - name: sat from the top lane only
+    edits:
+      - file: rtl/lib/numeric/packed/saturate/hybrid/packed_saturate.sv
+        old: "assign sat    = |(flag & top);"
+        new: "assign sat    = flag[BYTES-1];"
+    expect: caught

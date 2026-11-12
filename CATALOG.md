@@ -191,7 +191,7 @@ numeric:
       kind: package
       what: "Packed SIMD: the lanes of a word, for the blocks of rtl/lib/numeric/packed"
       path: rtl/lib/numeric/packed/packed_pkg.sv
-      kb: [rtl/lib/numeric/packed/design]
+      kb: [rtl/lib/numeric/packed/design, rtl/lib/numeric/packed/saturate]
     add:
       PackedAdd:
         what: "Packed add and subtract: a + b or a - b lane by lane, in lanes of 8, 16 or 32 bits that each wrap alone, with the carry and the signed overflow at the top bit of every byte"
@@ -199,6 +199,13 @@ numeric:
         path: rtl/lib/numeric/packed/add/hybrid/packed_add.sv
         test: test/numeric/packed/add
         kb: [rtl/lib/numeric/packed/design]
+    saturate:
+      PackedSaturate:
+        what: "Packed saturation: PackedAdd's sum with every lane that overflowed at the lane's limit, signed or unsigned, and whether some lane did"
+        versions: [hybrid]
+        path: rtl/lib/numeric/packed/saturate/hybrid/packed_saturate.sv
+        test: test/numeric/packed/saturate
+        kb: [rtl/lib/numeric/packed/saturate]
 riscv:
   RiscvCsrPkg:
     kind: package

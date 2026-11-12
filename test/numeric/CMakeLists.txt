@@ -21,3 +21,4 @@ set(PACKED_FLISTS ${DARK_CIRCUIT_RTL_LIB}/gate/generic/gate_generic.flist
                   ${DARK_CIRCUIT_RTL_LIB}/part/part.flist
                   ${DARK_CIRCUIT_RTL_LIB}/numeric/packed/packed.flist)
 add_subdirectory(packed/add)
+add_subdirectory(packed/saturate)
