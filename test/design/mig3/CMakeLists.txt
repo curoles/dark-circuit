@@ -198,6 +198,8 @@ if(DARK_CIRCUIT_RISCV)
     if(DARK_CIRCUIT_RISCV_P)
         mig3_program_test(pk_add SOURCES pk_add.S ARCH rv32i${DC_RISCV_P_MARCH}
                           FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
+        mig3_program_test(pk_sat SOURCES pk_sat.S ARCH rv32i${DC_RISCV_P_MARCH}
+                          FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
     endif()
     # The FPU against SoftFloat (fp_diff.c): one C kernel compiled as Zfinx code and as
     # soft-float code on SoftFloat (sw/riscv/softfloat), every result and the flags

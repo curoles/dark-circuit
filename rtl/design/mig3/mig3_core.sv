@@ -140,6 +140,7 @@ module Mig3Core import Mig3Pkg::*; #(
     word_t        ex_atomic_rd_data; // SC: 0 stored, 1 failed
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
     word_t        ex_packed_result;     // packed SIMD (Mig3Packed)
+    logic         ex_packed_sat;        // it saturated a lane: sets vxsat
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
     trap_t        ex_trap;          // instruction in EX faults: retires as a trap
@@ -293,7 +294,7 @@ module Mig3Core import Mig3Pkg::*; #(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
         .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm),
-        .vxsat_set(1'b0));  // the packed unit (P): none yet, kb rtl/design/mig3/p_profile
+        .vxsat_set(ex_packed_sat));
 
     // A division starts in the first cycle the instruction acts, when Control takes
     // interrupts, as the FPU's operations (not behind a load in MEM/WB: an interrupt
@@ -321,7 +322,8 @@ module Mig3Core import Mig3Pkg::*; #(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
 
     Mig3Packed u_mig3_packed(
-        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .result(ex_packed_result));
+        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .result(ex_packed_result),
+        .sat(ex_packed_sat));
 
     // rd value: decode tells whether rd is written and where its value comes from.
     assign ex_rd_write = ex_done && ex_dec.rd_we && ex_dec.rd != '0;

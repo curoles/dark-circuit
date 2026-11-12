@@ -436,8 +436,10 @@ package Mig3Pkg;
     // Packed instructions (P, kb rtl/design/mig3/p_profile): Mig3Packed's operation on
     // the lanes of rs1 and rs2.
     typedef struct packed {
-        logic             sub;  // PSUB: rs1 - rs2 in every lane, else rs1 + rs2
-        PackedPkg::lane_e lane; // .B: bytes, .H: halfwords
+        logic             sub;         // PSUB, PSSUB, PSSUBU: rs1 - rs2 per lane, else +
+        logic             sat;         // PSADD, PSADDU, PSSUB, PSSUBU: saturating
+        logic             is_unsigned; // PSADDU, PSSUBU: unsigned limits, else signed
+        PackedPkg::lane_e lane;        // .B: bytes, .H: halfwords
     } pk_ctrl_t;
 
     // Decode -> parts: the instruction taken apart, with the controls of every part.

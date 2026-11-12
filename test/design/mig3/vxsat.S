@@ -4,7 +4,7 @@
  * - After reset vxsat reads 0.
  * - csrwi of 1 sets it; csrsi and csrci of other bits change nothing but bit 0; csrrw of all
  *   ones returns the old value and leaves 1; csrci of 1 clears it.
- * No P instruction sets it yet (they come with the packed unit, kb rtl/design/mig3/p_profile).
+ * The saturating P instructions that set it: pk_sat.S.
  * After the halting EBREAK: number of expected registers, then pairs register, value.
  */
     .macro EXPECT_REG r, value

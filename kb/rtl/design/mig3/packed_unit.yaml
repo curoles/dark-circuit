@@ -16,7 +16,10 @@ decision: >
   rtl/design/mig3/interlock_by_opcode) reads rs1 and rs2 for OP-32, P's opcode. Tests are
   assembled by clang's experimental P (cmake/riscv.cmake: DARK_CIRCUIT_RISCV_P, the march
   part DC_RISCV_P_MARCH = _p0p21 and DC_RISCV_P_FLAGS = -menable-experimental-extensions);
-  gcc 12.2 has no P and the tests are not added.
+  gcc 12.2 has no P and the tests are not added. The saturating forms (PSADD, PSADDU,
+  PSSUB, PSSUBU): pk_ctrl_t's sat and is_unsigned; Mig3Packed puts PackedSaturate after
+  PackedAdd (kb rtl/lib/numeric/packed/saturate) and picks its result by sat; sat with
+  some lane clamped is Mig3Csr's vxsat_set, applied when the instruction completes.
 why: >
   A kind and a control struct of its own is how every unit of Mig3 gets its instructions
   (decode classifies once, the unit decodes nothing). PackedAdd is the ALU's adder with lane
@@ -47,4 +50,10 @@ evidence: >
   does (0x84c5853b for a0, a1, a2); with P enabled it assembles li of a constant with equal
   halfwords as PLI.H, so pk_add builds it with LUI and ADDI. sky130 (Yosys, ABC): Mig3Core
   5.4 ns, the longest path the rs3 read (ID/EX register into Mig3Fpu's rs3_data) as before,
-  no packed logic on it; 415 360 um2 (413 011 at the interlock by opcode).
+  no packed logic on it; 415 360 um2 (413 011 at the interlock by opcode). The saturating
+  forms (2026-11-11): the Mig3 suite passes (140 tests), with pk_sat (every saturating
+  instruction clamping some lane and setting vxsat, read by the next instruction; no
+  vxsat from PADD's wrapping overflow nor from lanes that reach a limit exactly; vxsat
+  sticky; a saturated result forwarded at once) and eight more decode cases; sky130 5.3
+  ns, the longest path into Mig3Fpu's FMA (ID/EX register into the addend's CSA), no
+  packed logic on it; 415 086 um2 (ABC's spread is larger than PackedSaturate's 800).

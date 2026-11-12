@@ -325,13 +325,15 @@ module TbMig3Decode;
     /* verilator lint_on UNUSEDSIGNAL */
 
     // A packed instruction's operation (P), by funct7 as the encodings have it: PSUB
-    // differs from PADD in bit 30, .B from .H in bit 26; 0 for other kinds.
-    // Only bits 30 and 26 of w are used.
+    // differs from PADD in bit 30, .B from .H in bit 26, PSADD in bits 28..27, PSADDU from
+    // PSADD in bit 29; 0 for other kinds.
+    // Only bits 30..26 of w are used.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic pk_ctrl_t pk_model(input kind_e kind, input insn_t w);
         if (kind != KIND_PACKED)
             return '0;
-        return '{sub: w[30] == PSUB_H[30],
+        return '{sub: w[30] == PSUB_H[30], sat: w[28:27] == PSADD_H[28:27],
+                 is_unsigned: w[29] == PSADDU_H[29],
                  lane: w[26] == PADD_B[26] ? PackedPkg::LANE_8 : PackedPkg::LANE_16};
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */

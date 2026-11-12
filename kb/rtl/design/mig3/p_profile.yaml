@@ -62,6 +62,9 @@ evidence: >
   unit); vxsat.S passes with the Mig3 suite (138 tests, clang-23). 2b (2026-11-11): PADD.B,
   PADD.H, PSUB.B, PSUB.H in Mig3 (kb rtl/design/mig3/packed_unit): the Mig3 suite passes
   (139 tests, clang-23); sky130 5.4 ns, the rs3 read on top, no packed logic on the
-  longest path.
+  longest path. 2c (2026-11-11): PackedSaturate in the library (kb
+  rtl/lib/numeric/packed/saturate; after PackedAdd 2.7 ns alone), then PSADD, PSADDU,
+  PSSUB, PSSUBU in Mig3, setting vxsat: the Mig3 suite passes (140 tests); sky130 5.3 ns,
+  the FMA on top, no packed logic on the longest path.
 code:
   - rtl/design/mig3/p_profile.md
