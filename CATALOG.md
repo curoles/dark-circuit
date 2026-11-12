@@ -899,6 +899,11 @@ part:
     what: "Logic-in-Memory DFF"
     path: rtl/lib/part/lim_dff.sv
     test: test/part/lim_dff
+  MulRows:
+    what: "Multiplier rows: the partial products of a * b, each operand signed or unsigned, as W + 3 rows of OUT bits whose sum modulo 2^OUT is the product"
+    path: rtl/lib/part/mul_rows.sv
+    test: test/part/mul_rows
+    kb: [rtl/lib/numeric/packed/mul]
   RippleCarryAdder:
     what: "Ripple Carry Adder: {co, sum} = in1 + in2 + ci"
     path: rtl/lib/part/ripple_carry_adder.sv

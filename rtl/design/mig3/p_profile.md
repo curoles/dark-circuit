@@ -71,10 +71,12 @@ layer needs comes first, the rest waits until something asks for it:
 2. Packed ALU: 2a, 2b, 2c (done); 2g `pmin`, `pmax` (activation and clamping) next,
    then P's version read from clang (below, Re-syncing).
 3. Shifts by an immediate and by a register: 3a, 3b.
-4. Multiplies and dot products: their library blocks first (4a the lane-partitioned
-   multiplier, 4d's dot-product tree; the same in any ISA), their Mig3 instructions after
-   a look at the draft's activity (the group most likely to change); the kernel comes
-   with the dot products (4d).
+4. Multiplies and dot products: the library block first, one packed multiplier of its own
+   (not Int32Mul) made of 8 x 8 pieces combined by mode (16 x 16 products, byte products,
+   byte and halfword dot products, accumulate; kb `rtl/lib/numeric/packed/mul`, the user's
+   choice 2026-11-12), in chunks: the piece (MulRows), the products, the dot products;
+   their Mig3 instructions after a look at the draft's activity (the group most likely to
+   change); the kernel comes with the dot products (4d).
 5. Requantization: 3c's rounding and saturating shifts with the multiply-high forms the
    kernel's requantization uses (chosen when it is written; scalar `mulhr`, `mulqr`,
    `srari`, `sati` are candidates, and riscv-opcodes' RV32 `sati`, `srari` differ from
@@ -146,8 +148,9 @@ Each slice begins with its blocks in `rtl/lib`, hybrid family, tested on their o
   saturating and averaging results from the lane carries; lane compare from the same adder.
   8-bit lanes are tested exhaustively (every pair), 16-bit lanes by random and edge values.
 - **Packed shifts:** the BarrelShifter with lane masks, or a shifter per lane width.
-- **A lane-partitioned multiplier** (4 x 8 x 8, 2 x 16 x 16) and **an int8/int16
-  dot-product tree** with an accumulate input.
+- **A packed multiplier** of 8 x 8 pieces (MulRows, each signed or unsigned) combined by
+  mode: 2 x 16 x 16 and byte products, int8 and int16 dot products with an accumulate
+  input, all from one array.
 
 Then Mig3: decode by riscv-opcodes names (RiscvInstrPkg), a control struct per unit, EX.
 

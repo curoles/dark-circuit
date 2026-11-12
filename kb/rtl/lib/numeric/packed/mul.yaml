@@ -1,0 +1,47 @@
+type: decision
+title: The packed multiplier is a block of its own, built from 8 x 8 pieces combined by mode
+date: 2026-11-12
+question: >
+  Slice 4 of the P profile (kb rtl/design/mig3/p_profile) needs 8 x 8 products (pmul.h.b00,
+  b11, b01), 16 x 16 products (pmulh.h, pmulhr.h, pmulq.h), dot products of byte and
+  halfword lanes (pm4add.b, pm2add.h) and their accumulating forms. Does the packed
+  multiplier share Mig3's scalar Int32Mul, and how is it built inside?
+decision: >
+  A block of its own, not Int32Mul. Inside, each 16-bit lane is four 8 x 8 pieces (al*bl,
+  ah*bl, al*bh, ah*bh), each signed or unsigned per operand; a mode combines their rows: a
+  16 x 16 product (the four at weights 0, 8, 8, 16), byte products (one piece), the byte dot
+  product (the two diagonal pieces of both lanes at weight 0), the halfword dot product
+  (both lanes' 16 x 16), plus an accumulator. A piece is MulRows (rtl/lib/part): the rows
+  of a W x W product whose sum modulo 2^OUT is the product, Int32Mul's sign correction with
+  the complements in OUT bits, so pieces sum exactly in a wider tree. The user chose both
+  (2026-11-12).
+why: >
+  Scalar MUL is one cycle in EX on the forwarding path that is at 5.4 to 5.5 ns (kb
+  rtl/design/mig3/mul_timing, rtl/design/mig3/packed_unit): lane masks in Int32Mul would be
+  on it, while the packed multiplies go through a result register. Mig4 needs a 64 x 64
+  scalar multiplier anyway, and Mig6's vector lanes need the packed one alone. The pieces
+  give one array, 512 partial-product bits (two 16 x 16), for every slice-4 instruction; a
+  16 x 16 lane multiplier with a separate dot-product tree needs about 1.5 times that.
+rejected:
+  - choice: Share Int32Mul (lane masks in its array), measured first as the profile said
+    why_not: >
+      The masks would sit on the core's longest path; the saving, about 24 000 um2, does not
+      pay for that, so the user dropped the measurement.
+  - choice: The profile's split, two 16 x 16 lane multipliers partitioned into diagonal
+            8 x 8 blocks, and a dot-product tree of its own
+    why_not: >
+      Two arrays for one operation at a time, about 1.5 times the partial products, and
+      the byte dot product's pieces would not share the products' ones.
+relies_on:
+  - rtl/design/mig3/p_profile
+  - rtl/design/mig3/mul_timing
+  - rtl/lib/numeric/packed/design
+code:
+  - rtl/lib/part/mul_rows.sv
+evidence: >
+  2026-11-12, Verilator: part_mul_rows passes (the sum of the rows against the product:
+  W 8 every pair in all four sign modes at OUT 16 and 32, W 16 edge values and 30 000 random
+  operands at OUT 32; 0.1 s). Its first run failed on -128 * -128 at OUT 32 (0xffff4000):
+  Int32Mul's rows leave out the 1 << 2W of two negative operands, which only modulo 2^2W
+  vanishes; MulRows adds it when OUT > 2W. Mutants (kb test/part/mul_rows/mutants): four,
+  caught.

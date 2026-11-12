@@ -2,6 +2,7 @@ carry_save_adder.sv
 ripple_carry_adder.sv
 kogge_stone_adder.sv
 segmented_kogge_stone_adder.sv
+mul_rows.sv
 brent_kung_adder.sv
 gated_clk.sv
 lim_dff.sv
