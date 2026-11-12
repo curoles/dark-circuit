@@ -3,3 +3,4 @@ add/hybrid/packed_add.sv
 saturate/hybrid/packed_saturate.sv
 min_max/hybrid/packed_min_max.sv
 shift/hybrid/packed_shift.sv
+mul/hybrid/packed_mul.sv

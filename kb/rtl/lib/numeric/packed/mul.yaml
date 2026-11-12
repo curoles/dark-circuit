@@ -1,5 +1,5 @@
 type: decision
-title: The packed multiplier is a block of its own, built from 8 x 8 pieces combined by mode
+title: The packed multiplier is a block of its own, 8 x 8 pieces of one array, signs by Baugh-Wooley
 date: 2026-11-12
 question: >
   Slice 4 of the P profile (kb rtl/design/mig3/p_profile) needs 8 x 8 products (pmul.h.b00,
@@ -7,14 +7,17 @@ question: >
   halfword lanes (pm4add.b, pm2add.h) and their accumulating forms. Does the packed
   multiplier share Mig3's scalar Int32Mul, and how is it built inside?
 decision: >
-  A block of its own, not Int32Mul. Inside, each 16-bit lane is four 8 x 8 pieces (al*bl,
-  ah*bl, al*bh, ah*bh), each signed or unsigned per operand; a mode combines their rows: a
-  16 x 16 product (the four at weights 0, 8, 8, 16), byte products (one piece), the byte dot
-  product (the two diagonal pieces of both lanes at weight 0), the halfword dot product
-  (both lanes' 16 x 16), plus an accumulator. A piece is MulRows (rtl/lib/part): the rows
-  of a W x W product whose sum modulo 2^OUT is the product, Int32Mul's sign correction with
-  the complements in OUT bits, so pieces sum exactly in a wider tree. The user chose both
-  (2026-11-12).
+  A block of its own, PackedMul (rtl/lib/numeric/packed/mul/hybrid), not Int32Mul. Each
+  16-bit lane is one 16 x 16 array of partial-product bits in 16 rows, whose quadrants are
+  four 8 x 8 pieces (al*bl, ah*bl, al*bh, ah*bh), each signed or unsigned per operand; a
+  mode picks the active pieces and their flags: a 16 x 16 product (the four; a signed
+  operand is a signed high byte and an unsigned low byte), byte products (one piece, the
+  selected bytes in al*bl's place), later the byte dot product (the two diagonal pieces of
+  both lanes at weight 0), the halfword dot product and an accumulator. Signs by
+  Baugh-Wooley per piece: the bits of a signed byte's sign bit are inverted, and one
+  constant row per lane, a function of the mode and the flags, holds the pieces'
+  corrections modulo 2^32: 17 rows a lane. The user chose a block of its own and the pieces
+  (2026-11-12), then Baugh-Wooley over correction rows after the first measurement.
 why: >
   Scalar MUL is one cycle in EX on the forwarding path that is at 5.4 to 5.5 ns (kb
   rtl/design/mig3/mul_timing, rtl/design/mig3/packed_unit): lane masks in Int32Mul would be
@@ -22,6 +25,8 @@ why: >
   scalar multiplier anyway, and Mig6's vector lanes need the packed one alone. The pieces
   give one array, 512 partial-product bits (two 16 x 16), for every slice-4 instruction; a
   16 x 16 lane multiplier with a separate dot-product tree needs about 1.5 times that.
+  Baugh-Wooley puts the signs into the partial-product bits and one constant, so the pieces
+  fold back into the plain array's rows (al*bl and ah*bl share rows, in disjoint columns).
 rejected:
   - choice: Share Int32Mul (lane masks in its array), measured first as the profile said
     why_not: >
@@ -32,11 +37,20 @@ rejected:
     why_not: >
       Two arrays for one operation at a time, about 1.5 times the partial products, and
       the byte dot product's pieces would not share the products' ones.
+  - choice: Pieces as MulRows (rtl/lib/part), Int32Mul's sign correction per piece (two
+            complemented rows with ones above and a constant, the product exact in OUT bits)
+    why_not: >
+      Built first (4-1, 4-2): 44 rows a lane against 17, and slower than a plain 16 x 16
+      lane (evidence).
+  - choice: Plain 16 x 16 lanes, byte products by sign-extending the bytes into them
+    why_not: >
+      4.6 ns, but no byte dot product: its two diagonal pieces are not separate there.
 relies_on:
   - rtl/design/mig3/p_profile
   - rtl/design/mig3/mul_timing
   - rtl/lib/numeric/packed/design
 code:
+  - rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
   - rtl/lib/part/mul_rows.sv
 evidence: >
   2026-11-12, Verilator: part_mul_rows passes (the sum of the rows against the product:
@@ -44,4 +58,11 @@ evidence: >
   operands at OUT 32; 0.1 s). Its first run failed on -128 * -128 at OUT 32 (0xffff4000):
   Int32Mul's rows leave out the 1 << 2W of two negative operands, which only modulo 2^2W
   vanishes; MulRows adds it when OUT > 2W. Mutants (kb test/part/mul_rows/mutants): four,
+  caught. sky130 (Yosys, ABC), 32 bits, two lanes: PackedMul from MulRows pieces 5.2 ns,
+  30 654 um2 (44 rows a lane; mode -> product); plain 16 x 16 lanes (MulRows W 16, 19 rows,
+  bytes sign-extended in) 4.6 ns, 27 093 um2; Int32Mul for scale 4.5 ns, 45 385 um2;
+  PackedMul with Baugh-Wooley (17 rows a lane) 4.4 ns, 24 106 um2 (mode -> product), below
+  both. numeric_packed_mul passes (byte modes every byte pair in every position and all sign
+  modes, 16 x 16 edge values in every pair and sign mode, 30 000 random words in all modes;
+  against lane products; 2.1 s). Mutants (kb test/numeric/packed/mul/mutants): three,
   caught.

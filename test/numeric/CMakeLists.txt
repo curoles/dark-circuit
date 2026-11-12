@@ -21,8 +21,10 @@ add_subdirectory(fp32/div_sqrt)
 set(PACKED_FLISTS ${DARK_CIRCUIT_RTL_LIB}/gate/generic/gate_generic.flist
                   ${DARK_CIRCUIT_RTL_LIB}/part/part.flist
                   ${DARK_CIRCUIT_RTL_LIB}/block/barrel_shifter/struct/barrel_shifter.flist
+                  ${DARK_CIRCUIT_RTL_LIB}/block/wallace_tree/struct/wallace_tree.flist
                   ${DARK_CIRCUIT_RTL_LIB}/numeric/packed/packed.flist)
 add_subdirectory(packed/add)
 add_subdirectory(packed/saturate)
 add_subdirectory(packed/min_max)
 add_subdirectory(packed/shift)
+add_subdirectory(packed/mul)

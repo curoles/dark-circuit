@@ -19,6 +19,14 @@ package PackedPkg;
         LANE_32         // words
     } lane_e;
 
+    // A packed multiply's operation (PackedMul), in every 16-bit lane {ah, al} * {bh, bl}.
+    typedef enum logic [2:0] {
+        MUL_16,         // the 16 x 16 product
+        MUL_B00,        // al*bl: the even bytes (RISC-V P pmul.h.b00)
+        MUL_B11,        // ah*bh: the odd bytes (pmul.h.b11)
+        MUL_B01         // al*bh: a's even byte, b's odd one (pmul.h.b01)
+    } mul_e;
+
     // The bits that start a lane, of a 64-bit word (bit 0 starts one always, not marked):
     // the cut of a SegmentedKoggeStoneAdder.
     function automatic logic [63:0] lane_cuts(lane_e lane);

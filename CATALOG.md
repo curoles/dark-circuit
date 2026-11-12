@@ -206,6 +206,13 @@ numeric:
         path: rtl/lib/numeric/packed/min_max/hybrid/packed_min_max.sv
         test: test/numeric/packed/min_max
         kb: [rtl/lib/numeric/packed/min_max]
+    mul:
+      PackedMul:
+        what: "Packed multiply: the product of a and b in every 16-bit lane, 16 x 16 or of one byte pair, each operand signed or unsigned"
+        versions: [hybrid]
+        path: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        test: test/numeric/packed/mul
+        kb: [rtl/lib/numeric/packed/mul]
     saturate:
       PackedSaturate:
         what: "Packed saturation: PackedAdd's sum with every lane that overflowed at the lane's limit, signed or unsigned, and whether some lane did"

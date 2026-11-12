@@ -1,0 +1,23 @@
+type: mutants
+title: Mutants of PackedMul
+date: 2026-11-12
+tests: [numeric_packed_mul]
+mutants:
+  - name: a 16-bit lane's low byte of a taken as signed (piece LL in MUL_16)
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "{a_signed, 1'b0, a_signed, 1'b0}"
+        new: "{a_signed, 1'b0, a_signed, a_signed}"
+    expect: caught
+  - name: the constant of a piece with both bytes signed as if only one were
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "if (fa && fb) return 32'(1 << 8) * 32'((1 << 7) - 1);"
+        new: "if (fa && fb) return 32'(1 << 7) * 32'((1 << 8) - 1);"
+    expect: caught
+  - name: MUL_B01 takes a's odd byte
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "assign xa = mode == MUL_B11 ? ah : al;"
+        new: "assign xa = (mode == MUL_B11 || mode == MUL_B01) ? ah : al;"
+    expect: caught
