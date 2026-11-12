@@ -436,9 +436,11 @@ package Mig3Pkg;
     // Packed instructions (P, kb rtl/design/mig3/p_profile): Mig3Packed's operation on
     // the lanes of rs1 and rs2.
     typedef struct packed {
-        logic             sub;         // PSUB, PSSUB, PSSUBU: rs1 - rs2 per lane, else +
+        logic             sub;         // rs1 - rs2 per lane, else +: PSUB, PSSUB(U), PMIN...
         logic             sat;         // PSADD, PSADDU, PSSUB, PSSUBU: saturating
-        logic             is_unsigned; // PSADDU, PSSUBU: unsigned limits, else signed
+        logic             minmax;      // PMIN, PMINU, PMAX, PMAXU: by rs1 - rs2 (sub)
+        logic             max;         // PMAX, PMAXU: the larger, else the smaller
+        logic             is_unsigned; // PSADDU, PSSUBU, PMINU, PMAXU: unsigned lanes
         PackedPkg::lane_e lane;        // .B: bytes, .H: halfwords
     } pk_ctrl_t;
 

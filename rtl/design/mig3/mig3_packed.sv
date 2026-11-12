@@ -2,13 +2,15 @@
  * packed instruction, and whether it saturated.
  *
  * The library's packed blocks (rtl/lib/numeric/packed) on rs1 and rs2 as lanes of 8 or 16
- * bits (dec.pk, Mig3Pkg pk_ctrl_t): PackedAdd adds or subtracts every lane, wrapping (PADD,
- * PSUB); PackedSaturate puts every lane that overflowed at its limit, signed or unsigned
- * (PSADD, PSADDU, PSSUB, PSSUBU). Averaging, compares, shifts and multiplies come in later
- * steps (rtl/design/mig3/p_profile.md); they take PackedAdd's sum and flags too.
+ * bits (dec.pk, Mig3Pkg pk_ctrl_t), all on one PackedAdd: its sum, every lane wrapping
+ * (PADD, PSUB); PackedSaturate, every lane that overflowed at its limit, signed or unsigned
+ * (PSADD, PSADDU, PSSUB, PSSUBU); PackedMinMax, the smaller or the larger of rs1 and rs2 in
+ * every lane by PackedAdd's rs1 - rs2 (PMIN, PMINU, PMAX, PMAXU; decode sets sub). Shifts and
+ * multiplies come in later steps (rtl/design/mig3/p_profile.md).
  *
  *   rs1, rs2 --> PackedAdd --> sum, co, ov --> PackedSaturate --> saturated, some lane
- *   sum, saturated --> select (dec.pk.sat) --> result
+ *                                   co     --> PackedMinMax   --> min_max
+ *   sum, saturated, min_max --> select (dec.pk.minmax, dec.pk.sat) --> result
  *   dec.pk.sat and some lane --> sat
  *
  * Mig3Core instantiates it in EX, for the instruction in EX; result is rd's value (rd_src
@@ -29,6 +31,7 @@ module Mig3Packed import Mig3Pkg::*; (
 );
     word_t              sum;        // every lane wrapped
     word_t              saturated;  // every lane that overflowed at its limit
+    word_t              min_max;    // every lane's minimum or maximum
     logic [WIDTH/8-1:0] co;         // carry and signed overflow at every byte's top bit
     logic [WIDTH/8-1:0] ov;
     logic               some_lane;  // some lane overflowed
@@ -41,7 +44,11 @@ module Mig3Packed import Mig3Pkg::*; (
         .a(rs1_data), .sum, .co, .ov, .sub(dec.pk.sub), .is_unsigned(dec.pk.is_unsigned),
         .lane(dec.pk.lane), .result(saturated), .sat(some_lane));
 
-    assign result = dec.pk.sat ? saturated : sum;
+    PackedMinMax #(.WIDTH(WIDTH)) u_packed_min_max(
+        .a(rs1_data), .b(rs2_data), .co, .is_unsigned(dec.pk.is_unsigned), .max(dec.pk.max),
+        .lane(dec.pk.lane), .result(min_max));
+
+    assign result = dec.pk.minmax ? min_max : dec.pk.sat ? saturated : sum;
     assign sat    = dec.pk.sat && some_lane;
 
 endmodule

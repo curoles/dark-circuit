@@ -48,6 +48,8 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             PADD_B, PADD_H, PSUB_B, PSUB_H:                         kind_enc = KIND_PACKED;  // P
             PSADD_B, PSADD_H, PSADDU_B, PSADDU_H:                   kind_enc = KIND_PACKED;  // P
             PSSUB_B, PSSUB_H, PSSUBU_B, PSSUBU_H:                   kind_enc = KIND_PACKED;  // P
+            PMIN_B, PMIN_H, PMINU_B, PMINU_H:                       kind_enc = KIND_PACKED;  // P
+            PMAX_B, PMAX_H, PMAXU_B, PMAXU_H:                       kind_enc = KIND_PACKED;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -263,21 +265,30 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
     endfunction
 
     // @kb: rtl/design/mig3/packed_unit
-    // A packed instruction's operation (P), by the encodings; 0 for other kinds.
+    // A packed instruction's operation (P), by the encodings; 0 for other kinds. The
+    // fields in pk_ctrl_t's order: sub, sat, minmax, max, is_unsigned, lane.
     function automatic pk_ctrl_t pk_of(insn_t w);
         casez (w)
-            PADD_B:   return '{sub: 1'b0, sat: 1'b0, is_unsigned: 1'b0, lane: PackedPkg::LANE_8};
-            PADD_H:   return '{sub: 1'b0, sat: 1'b0, is_unsigned: 1'b0, lane: PackedPkg::LANE_16};
-            PSUB_B:   return '{sub: 1'b1, sat: 1'b0, is_unsigned: 1'b0, lane: PackedPkg::LANE_8};
-            PSUB_H:   return '{sub: 1'b1, sat: 1'b0, is_unsigned: 1'b0, lane: PackedPkg::LANE_16};
-            PSADD_B:  return '{sub: 1'b0, sat: 1'b1, is_unsigned: 1'b0, lane: PackedPkg::LANE_8};
-            PSADD_H:  return '{sub: 1'b0, sat: 1'b1, is_unsigned: 1'b0, lane: PackedPkg::LANE_16};
-            PSADDU_B: return '{sub: 1'b0, sat: 1'b1, is_unsigned: 1'b1, lane: PackedPkg::LANE_8};
-            PSADDU_H: return '{sub: 1'b0, sat: 1'b1, is_unsigned: 1'b1, lane: PackedPkg::LANE_16};
-            PSSUB_B:  return '{sub: 1'b1, sat: 1'b1, is_unsigned: 1'b0, lane: PackedPkg::LANE_8};
-            PSSUB_H:  return '{sub: 1'b1, sat: 1'b1, is_unsigned: 1'b0, lane: PackedPkg::LANE_16};
-            PSSUBU_B: return '{sub: 1'b1, sat: 1'b1, is_unsigned: 1'b1, lane: PackedPkg::LANE_8};
-            PSSUBU_H: return '{sub: 1'b1, sat: 1'b1, is_unsigned: 1'b1, lane: PackedPkg::LANE_16};
+            PADD_B:   return '{1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PADD_H:   return '{1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSUB_B:   return '{1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSUB_H:   return '{1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSADD_B:  return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSADD_H:  return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSADDU_B: return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_8};
+            PSADDU_H: return '{1'b0, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_16};
+            PSSUB_B:  return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PSSUB_H:  return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PSSUBU_B: return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_8};
+            PSSUBU_H: return '{1'b1, 1'b1, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_16};
+            PMIN_B:   return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
+            PMIN_H:   return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
+            PMINU_B:  return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_8};
+            PMINU_H:  return '{1'b1, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_16};
+            PMAX_B:   return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_8};
+            PMAX_H:   return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_16};
+            PMAXU_B:  return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_8};
+            PMAXU_H:  return '{1'b1, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_16};
             default:  return '0;
         endcase
     endfunction

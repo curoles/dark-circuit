@@ -82,6 +82,9 @@ evidence: >
   longest path. 2c (2026-11-11): PackedSaturate in the library (kb
   rtl/lib/numeric/packed/saturate; after PackedAdd 2.7 ns alone), then PSADD, PSADDU,
   PSSUB, PSSUBU in Mig3, setting vxsat: the Mig3 suite passes (140 tests); sky130 5.3 ns,
-  the FMA on top, no packed logic on the longest path.
+  the FMA on top, no packed logic on the longest path. 2g (2026-11-11): PackedMinMax in
+  the library (kb rtl/lib/numeric/packed/min_max; after PackedAdd's a - b 2.2 ns alone),
+  then PMIN, PMINU, PMAX, PMAXU in Mig3: the Mig3 suite passes (141 tests); sky130 5.4
+  ns, the caches on top, no packed logic on the longest path.
 code:
   - rtl/design/mig3/p_profile.md

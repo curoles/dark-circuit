@@ -324,16 +324,21 @@ module TbMig3Decode;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 
-    // A packed instruction's operation (P), by funct7 as the encodings have it: PSUB
-    // differs from PADD in bit 30, .B from .H in bit 26, PSADD in bits 28..27, PSADDU from
-    // PSADD in bit 29; 0 for other kinds.
-    // Only bits 30..26 of w are used.
+    // A packed instruction's operation (P), by funct7 and funct3 as the encodings have
+    // them: .B differs from .H in bit 26; funct3 tells the adds (PSUB from PADD in bit 30,
+    // PSADD in bits 28..27, PSADDU from PSADD in bit 29) from min/max (PMAX from PMIN in
+    // bit 28, PMINU from PMIN in bit 27, all on rs1 - rs2); 0 for other kinds.
+    // Only bits 30..26 and 14..12 of w are used.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic pk_ctrl_t pk_model(input kind_e kind, input insn_t w);
         if (kind != KIND_PACKED)
             return '0;
-        return '{sub: w[30] == PSUB_H[30], sat: w[28:27] == PSADD_H[28:27],
-                 is_unsigned: w[29] == PSADDU_H[29],
+        if (w[14:12] == PMIN_H[14:12])
+            return '{sub: 1'b1, sat: 1'b0, minmax: 1'b1, max: w[28] == PMAX_H[28],
+                     is_unsigned: w[27] == PMINU_H[27],
+                     lane: w[26] == PMIN_B[26] ? PackedPkg::LANE_8 : PackedPkg::LANE_16};
+        return '{sub: w[30] == PSUB_H[30], sat: w[28:27] == PSADD_H[28:27], minmax: 1'b0,
+                 max: 1'b0, is_unsigned: w[29] == PSADDU_H[29],
                  lane: w[26] == PADD_B[26] ? PackedPkg::LANE_8 : PackedPkg::LANE_16};
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */

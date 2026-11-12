@@ -19,7 +19,10 @@ decision: >
   gcc 12.2 has no P and the tests are not added. The saturating forms (PSADD, PSADDU,
   PSSUB, PSSUBU): pk_ctrl_t's sat and is_unsigned; Mig3Packed puts PackedSaturate after
   PackedAdd (kb rtl/lib/numeric/packed/saturate) and picks its result by sat; sat with
-  some lane clamped is Mig3Csr's vxsat_set, applied when the instruction completes.
+  some lane clamped is Mig3Csr's vxsat_set, applied when the instruction completes. The
+  minimum and maximum (PMIN, PMINU, PMAX, PMAXU): pk_ctrl_t's minmax and max, sub set by
+  decode; PackedMinMax (kb rtl/lib/numeric/packed/min_max) on the same PackedAdd's
+  carries, picked by minmax.
 why: >
   A kind and a control struct of its own is how every unit of Mig3 gets its instructions
   (decode classifies once, the unit decodes nothing). PackedAdd is the ALU's adder with lane
@@ -57,3 +60,8 @@ evidence: >
   sticky; a saturated result forwarded at once) and eight more decode cases; sky130 5.3
   ns, the longest path into Mig3Fpu's FMA (ID/EX register into the addend's CSA), no
   packed logic on it; 415 086 um2 (ABC's spread is larger than PackedSaturate's 800).
+  The minimum and maximum (2026-11-11): the Mig3 suite passes (141 tests), with
+  pk_min_max (operands that make all eight results differ, equal lanes, a ReLU forwarded
+  into a clamp, no vxsat) and eight more decode cases; sky130 5.4 ns, the longest path in
+  the caches (the D-cache's line register into the memory arbiter's address), no packed
+  logic on it; 415 964 um2.

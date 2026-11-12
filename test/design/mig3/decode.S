@@ -181,7 +181,7 @@
     .endm
 
 /* Packed SIMD (P, a draft). */
-    .macro PK op, rd, rs1, rs2                      /* padd psub psadd(u) pssub(u) */
+    .macro PK op, rd, rs1, rs2              /* padd psub psadd(u) pssub(u) pmin(u) pmax(u) */
     \op x\rd, x\rs1, x\rs2
     EXPECT K_PACKED, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, 0
     .endm
@@ -397,6 +397,14 @@ cases:
     PK     pssub.h,  18, 19, 20
     PK     pssubu.b, 21, 22, 23
     PK     pssubu.h, 24, 25, 26
+    PK     pmin.b,   27, 28, 29
+    PK     pmin.h,   30, 31, 1
+    PK     pminu.b,  3,  5,  7
+    PK     pminu.h,  9,  11, 13
+    PK     pmax.b,   15, 17, 19
+    PK     pmax.h,   21, 23, 25
+    PK     pmaxu.b,  27, 29, 31
+    PK     pmaxu.h,  2,  4,  6
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
