@@ -14,7 +14,8 @@
  * rtl/design/mig3/cbo); an F instruction (Zfinx: on the x registers) its FPU unit and
  * operation in dec.fp, rs3 for the R4 forms, rd_src RD_FP; FLW, FSW, FMV.X.W and FMV.W.X
  * are not in Zfinx, and a reserved rm field (101, 110) is illegal (kb
- * rtl/design/mig3/fp_decode).
+ * rtl/design/mig3/fp_decode); a packed instruction (P, a draft) its operation in dec.pk
+ * for Mig3Packed, rd_src RD_PACKED (kb rtl/design/mig3/packed_unit).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -44,6 +45,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind_enc = KIND_OP;
             ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR:        kind_enc = KIND_OP;  // Zbb
             SH1ADD, SH2ADD, SH3ADD:                                 kind_enc = KIND_OP;  // Zba
+            PADD_B, PADD_H, PSUB_B, PSUB_H:                         kind_enc = KIND_PACKED;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -108,14 +110,14 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
     // the match of all encodings, which grows with every extension: the load-use check is
     // on ID's path. They may claim a read that does not happen (an immediate in an rs
     // field: CSRRWI, FCVT.S.WU's rs2 field; an illegal instruction), never miss one: LUI,
-    // AUIPC, JAL read nothing; branches, stores, OP (also M, Zba, Zbb), AMO and F (OP-FP,
-    // the R4 forms) rs1 and rs2; all others rs1. Opcodes from the encodings.
+    // AUIPC, JAL read nothing; branches, stores, OP (also M, Zba, Zbb), AMO, F (OP-FP,
+    // the R4 forms) and OP-32 (P) rs1 and rs2; all others rs1. Opcodes from the encodings.
     logic hz1;          // may read rs1
     logic hz2;          // may read rs2
     always_comb
         case (f.r.opcode)
             LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
-            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0],
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0],
             FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
             default:                                             {hz1, hz2} = 2'b10;
         endcase
@@ -258,6 +260,18 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         endcase
     endfunction
 
+    // @kb: rtl/design/mig3/packed_unit
+    // A packed instruction's operation (P), by the encodings; 0 for other kinds.
+    function automatic pk_ctrl_t pk_of(insn_t w);
+        casez (w)
+            PADD_B:  return '{sub: 1'b0, lane: PackedPkg::LANE_8};
+            PADD_H:  return '{sub: 1'b0, lane: PackedPkg::LANE_16};
+            PSUB_B:  return '{sub: 1'b1, lane: PackedPkg::LANE_8};
+            PSUB_H:  return '{sub: 1'b1, lane: PackedPkg::LANE_16};
+            default: return '0;
+        endcase
+    endfunction
+
     // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0). A JAL or
     // JALR that writes a link register is a call (it pushes the return-address stack), a JALR
     // that reads one is a return (it pops), both for a swap (a coroutine: pop, then push).
@@ -293,6 +307,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.sys      = '0;
         dec.muldiv   = '0;
         dec.fp       = '0;
+        dec.pk       = '0;
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
@@ -359,6 +374,10 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             KIND_BITMANIP: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_BITMANIP;  dec.uses_rs1 = 1'b1;
                 dec.bitmanip = bitmanip_of(insn);
+            end
+            KIND_PACKED: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_PACKED;
+                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.pk = pk_of(insn);
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;

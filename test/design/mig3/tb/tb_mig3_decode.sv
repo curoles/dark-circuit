@@ -15,10 +15,11 @@
  * A CBO: a store of rs1 (imm 0) that reads no rs2, its cmo by its encoding. An F
  * instruction (Zfinx): rd_src FP, the rm field in funct3, its FPU controls against a
  * model by opcode, funct5 and funct3 (fp_model), uses_rs3 for the R4 forms and rs3 (the
- * case's imm column).
+ * case's imm column). A packed instruction (P): rd_src PACKED, its operation against a
+ * model by funct7 (pk_model).
  * At the end every kind must have had a case; KIND_BITMANIP only with +zbb, KIND_CBO only
- * with +zicbom, KIND_FP only with +zfinx (their cases need a compiler that knows Zbb,
- * Zicbom, Zfinx).
+ * with +zicbom, KIND_FP only with +zfinx, KIND_PACKED only with +p (their cases need a
+ * compiler that knows Zbb, Zicbom, Zfinx, P).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -103,6 +104,7 @@ module TbMig3Decode;
             KIND_LOAD, KIND_LR, KIND_AMO: return RD_LOAD;
             KIND_SC:             return RD_ATOMIC;
             KIND_FP:             return RD_FP;
+            KIND_PACKED:         return RD_PACKED;
             KIND_CSR:            return RD_CSR;
             KIND_MULDIV:         return RD_MULDIV;
             KIND_BITMANIP:       return RD_BITMANIP;
@@ -155,7 +157,7 @@ module TbMig3Decode;
         logic hz2;
         case (opcode)
             LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
-            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0],
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0],
             FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
             default:                                             {hz1, hz2} = 2'b10;
         endcase
@@ -322,6 +324,18 @@ module TbMig3Decode;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // A packed instruction's operation (P), by funct7 as the encodings have it: PSUB
+    // differs from PADD in bit 30, .B from .H in bit 26; 0 for other kinds.
+    // Only bits 30 and 26 of w are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic pk_ctrl_t pk_model(input kind_e kind, input insn_t w);
+        if (kind != KIND_PACKED)
+            return '0;
+        return '{sub: w[30] == PSUB_H[30],
+                 lane: w[26] == PADD_B[26] ? PackedPkg::LANE_8 : PackedPkg::LANE_16};
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
     // Compare one field of case cn with instruction w.
     task automatic check(input integer cn, input insn_t w, input string field, input word_t got,
                          input word_t exp);
@@ -353,6 +367,7 @@ module TbMig3Decode;
             check(c, insn, "muldiv", 32'(dec.muldiv), 32'(muldiv_of(exp_kind, insn)));
             check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));
             check(c, insn, "fp",     32'(dec.fp),     32'(fp_model(exp_kind, insn)));
+            check(c, insn, "pk",     32'(dec.pk),     32'(pk_model(exp_kind, insn)));
             check(c, insn, "hz_rs1", 32'(dec.hz_rs1), 32'(hz_model(insn[6:0]) >> 1));
             check(c, insn, "hz_rs2", 32'(dec.hz_rs2), 32'(hz_model(insn[6:0]) & 2'b01));
             check(c, insn, "uses_rs3", 32'(dec.uses_rs3),
@@ -383,11 +398,12 @@ module TbMig3Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        last_kind = KIND_FP;
+        last_kind = KIND_PACKED;
         for (k = 0; k <= last_kind; k = k + 1)
             if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")) &&
                 !(k == int'(KIND_CBO) && !$test$plusargs("zicbom")) &&
-                !(k == int'(KIND_FP) && !$test$plusargs("zfinx")))
+                !(k == int'(KIND_FP) && !$test$plusargs("zfinx")) &&
+                !(k == int'(KIND_PACKED) && !$test$plusargs("p")))
                 $fatal(1, "Mig3Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
         $finish;

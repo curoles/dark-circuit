@@ -1,0 +1,50 @@
+type: decision
+title: Mig3's packed instructions are KIND_PACKED, done in one EX cycle by Mig3Packed
+date: 2026-11-11
+question: >
+  The first P instructions (PADD.B, PADD.H, PSUB.B, PSUB.H; kb rtl/design/mig3/p_profile):
+  where do their encodings come from, how does decode hand them to EX, which unit computes
+  them and in how many cycles, how does the interlock see their registers, and how are they
+  assembled?
+decision: >
+  RiscvInstrPkg is generated with riscv-opcodes' unratified/rv_p and unratified/rv32_p
+  (the generator takes unratified tables only with that prefix): 564 encodings, the earlier
+  names unchanged. Decode: KIND_PACKED, rd from RD_PACKED (rd_src_e grows to 4 bits), rs1
+  and rs2 read, the operation in pk_ctrl_t (sub, lane: PackedPkg::lane_e) by the
+  encodings. EX: Mig3Packed, PackedAdd on rs1 and rs2, combinational: one cycle, its result
+  in EX's rd mux and forwarded like the ALU's. The interlock's opcode rule (kb
+  rtl/design/mig3/interlock_by_opcode) reads rs1 and rs2 for OP-32, P's opcode. Tests are
+  assembled by clang's experimental P (cmake/riscv.cmake: DARK_CIRCUIT_RISCV_P, the march
+  part DC_RISCV_P_MARCH = _p0p21 and DC_RISCV_P_FLAGS = -menable-experimental-extensions);
+  gcc 12.2 has no P and the tests are not added.
+why: >
+  A kind and a control struct of its own is how every unit of Mig3 gets its instructions
+  (decode classifies once, the unit decodes nothing). PackedAdd is the ALU's adder with lane
+  cuts (1.5 ns against 1.3 ns alone, kb rtl/lib/numeric/packed/design): it fits EX's one
+  cycle; the timing rule of the profile checks the rd mux it widens. OP-32 is RV64's
+  opcode, free on RV32, which P reuses: without its row the rule would miss rs2.
+rejected:
+  - choice: The packed add/sub inside Alu2
+    why_not: >
+      Alu2 is the scalar ALU of Mig2 and Mig3; lanes, carries for saturation and later
+      packed operations belong to the packed family and a unit of their own.
+  - choice: P instructions assembled with .insn and numbers
+    why_not: >
+      Encodings typed by hand in tests; clang knows the draft and gives riscv-opcodes'
+      encodings.
+relies_on:
+  - rtl/design/mig3/p_profile
+  - rtl/design/mig3/interlock_by_opcode
+  - rtl/lib/numeric/packed/design
+code:
+  - rtl/design/mig3/mig3_packed.sv
+  - rtl/design/mig3/mig3_decode.sv#pk_of
+  - test/design/mig3/pk_add.S
+evidence: >
+  2026-11-11, Verilator, clang-23.1.6: the Mig3 suite passes (139 tests), with pk_add (every
+  lane wrapping alone, a result forwarded at once, rs2 loaded right before PADD.B) and the
+  decode test's four P cases against its pk_model. clang encodes PADD.B as riscv-opcodes
+  does (0x84c5853b for a0, a1, a2); with P enabled it assembles li of a constant with equal
+  halfwords as PLI.H, so pk_add builds it with LUI and ADDI. sky130 (Yosys, ABC): Mig3Core
+  5.4 ns, the longest path the rs3 read (ID/EX register into Mig3Fpu's rs3_data) as before,
+  no packed logic on it; 415 360 um2 (413 011 at the interlock by opcode).

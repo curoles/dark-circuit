@@ -2,12 +2,12 @@ set(LIB  ${DARK_CIRCUIT_RTL_LIB})
 set(MIG3 ${DARK_CIRCUIT_RTL_DESIGN}/mig3)
 set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
-# Mig3 uses blocks of the library (behave versions are fast to simulate), the fp32 blocks
-# (one version: hybrid), its devices (io: the UART, which takes a part) and RISC-V formats
+# Mig3 uses blocks of the library (behave versions are fast to simulate), the fp32 and packed
+# blocks (one version: hybrid), its devices (io: the UART, which takes a part) and RISC-V formats
 # and encodings.
 set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
            ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
-           ${LIB}/numeric/fp32/fp32.flist
+           ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
            ${LIB}/io/io_behave.flist ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Files generated from cfg/mig3_config.yaml are up to date.
@@ -17,7 +17,7 @@ dc_add_config_check(design_mig3 CONFIG ${MIG3}/cfg/mig3_config.yaml)
 # (not the fast simulation models). Mig3Cpu is not included: its memories are simulation models.
 set(SYNTH_FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
                  ${LIB}/block/block_struct.flist ${LIB}/numeric/numeric_struct.flist
-                 ${LIB}/numeric/fp32/fp32.flist
+                 ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
                  ${LIB}/io/io_struct.flist ${LIB}/riscv/riscv.flist ${MIG3}/mig3.flist)
 
 # Mig3Core converts to Verilog-2005 with sv2v and elaborates: the syntax of Mig3 is what
@@ -50,9 +50,10 @@ if(DARK_CIRCUIT_RISCV)
                         ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/design_mig3_mem.hex)
 
     # Decode: unit test of Mig3Decode with cases encoded by the assembler (A for the LR/SC
-    # cases); the Zicbom, Zfinx and Zbb cases only when the compiler knows the extension
-    # (DARK_CIRCUIT_RISCV_ZICBOM, _ZFINX, _ZBB, cmake/riscv.cmake). +zicbom, +zfinx, +zbb:
-    # the testbench then wants a case of KIND_CBO, KIND_FP, KIND_BITMANIP too.
+    # cases); the Zicbom, Zfinx, Zbb and P cases only when the compiler knows the extension
+    # (DARK_CIRCUIT_RISCV_ZICBOM, _ZFINX, _ZBB, _P, cmake/riscv.cmake). +zicbom, +zfinx,
+    # +zbb, +p: the testbench then wants a case of KIND_CBO, KIND_FP, KIND_BITMANIP,
+    # KIND_PACKED too.
     set(decode_arch rv32ima)
     set(decode_flags)
     set(decode_args)
@@ -74,6 +75,11 @@ if(DARK_CIRCUIT_RISCV)
         string(APPEND decode_arch _zbb)
         list(APPEND decode_flags -DHAVE_ZBB)
         list(APPEND decode_args +zbb)
+    endif()
+    if(DARK_CIRCUIT_RISCV_P)
+        string(APPEND decode_arch ${DC_RISCV_P_MARCH})
+        list(APPEND decode_flags ${DC_RISCV_P_FLAGS} -DHAVE_P)
+        list(APPEND decode_args +p)
     endif()
     dc_add_riscv_program(design_mig3_decode SOURCES decode.S ARCH ${decode_arch}
                          FLAGS ${decode_flags} LINK_FLAGS -T ${SW}/mig3.ld)
@@ -187,6 +193,11 @@ if(DARK_CIRCUIT_RISCV)
         mig3_program_test(fcsr SOURCES fcsr.S ARCH rv32i_zfinx ARGS +expect_regs)
         mig3_program_test(fp SOURCES fp.S ARCH rv32i_zfinx ARGS +expect_regs)
         mig3_program_test(fp_fma SOURCES fp_fma.S ARCH rv32i_zfinx ARGS +expect_regs)
+    endif()
+    # Packed SIMD (P, a draft, Mig3Packed): its names need a compiler that knows P.
+    if(DARK_CIRCUIT_RISCV_P)
+        mig3_program_test(pk_add SOURCES pk_add.S ARCH rv32i${DC_RISCV_P_MARCH}
+                          FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
     endif()
     # The FPU against SoftFloat (fp_diff.c): one C kernel compiled as Zfinx code and as
     # soft-float code on SoftFloat (sw/riscv/softfloat), every result and the flags

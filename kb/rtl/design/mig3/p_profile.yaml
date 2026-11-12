@@ -59,6 +59,9 @@ evidence: >
   without Alu2's shift 5.9 ns (into the FPU's result register): no Zba logic on the longest
   path, and ABC's spread on Mig3 near +-0.4 ns. 1b (2026-11-11): vxsat in Mig3Csr (bit 0,
   CSR reads and writes, vxsat_set when an instruction completes, tied 0 until the packed
-  unit); vxsat.S passes with the Mig3 suite (138 tests, clang-23).
+  unit); vxsat.S passes with the Mig3 suite (138 tests, clang-23). 2b (2026-11-11): PADD.B,
+  PADD.H, PSUB.B, PSUB.H in Mig3 (kb rtl/design/mig3/packed_unit): the Mig3 suite passes
+  (139 tests, clang-23); sky130 5.4 ns, the rs3 read on top, no packed logic on the
+  longest path.
 code:
   - rtl/design/mig3/p_profile.md

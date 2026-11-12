@@ -47,6 +47,7 @@
     .equ K_AMO,     20
     .equ K_CBO,     21
     .equ K_FP,      22
+    .equ K_PACKED,  23
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -177,6 +178,12 @@
     .macro FP1 op, f3, rd, rs1                      /* fclass.s */
     \op x\rd, x\rs1
     EXPECT K_FP, 1, 1, 0, \rd, \rs1, 0, \f3, 0, 0
+    .endm
+
+/* Packed SIMD (P, a draft). */
+    .macro PK op, rd, rs1, rs2                      /* padd.b padd.h psub.b psub.h */
+    \op x\rd, x\rs1, x\rs2
+    EXPECT K_PACKED, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, 0
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -374,6 +381,14 @@ cases:
     FP1RM  fcvt.wu.s, 29, 30, dyn, 7
     FP1RM  fcvt.s.w,  31, 1,  rne, 0
     FP1RM  fcvt.s.wu, 2,  3,  rdn, 2
+#endif
+
+#ifdef HAVE_P
+    /*     Packed SIMD (P, a draft), only when the compiler knows it: op rd rs1 rs2 */
+    PK     padd.b, 1,  2,  3
+    PK     padd.h, 31, 30, 29
+    PK     psub.b, 5,  0,  31
+    PK     psub.h, 0,  31, 1
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */

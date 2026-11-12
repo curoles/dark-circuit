@@ -169,15 +169,16 @@ function(dc_riscv_target OUT MARCH)
     endif()
 endfunction()
 
-# dc_riscv_probe(<out-var> <march> <instruction>)
+# dc_riscv_probe(<out-var> <march> <instruction> [<flag>...])
 #
-# <out-var> is TRUE when the compiler assembles <instruction> with -march=<march>.
+# <out-var> is TRUE when the compiler assembles <instruction> with -march=<march> and the
+# flags.
 function(dc_riscv_probe OUT MARCH INSN)
     set(dir ${CMAKE_BINARY_DIR}/CMakeFiles/dc_riscv_probe)
     file(MAKE_DIRECTORY ${dir})
     file(WRITE ${dir}/probe.S "    ${INSN}\n")
     dc_riscv_target(target ${MARCH})
-    execute_process(COMMAND ${RISCV_CC_BIN} ${target} -march=${MARCH} -mabi=ilp32
+    execute_process(COMMAND ${RISCV_CC_BIN} ${target} -march=${MARCH} -mabi=ilp32 ${ARGN}
                             -c -o ${dir}/probe.o ${dir}/probe.S
                     RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
     if(result EQUAL 0)
@@ -216,8 +217,10 @@ endfunction()
 # DARK_CIRCUIT_RISCV_ZBA, _ZBB: the compiler knows Zba, Zbb (their tests need it);
 # DARK_CIRCUIT_RISCV_ZICBOM: it knows Zicbom (tests of the CBOs); DARK_CIRCUIT_RISCV_ZFINX:
 # its assembler knows Zfinx (F on the x registers); DARK_CIRCUIT_RISCV_ZFINX_C: it makes
-# Zfinx code from C (tests in C of the FPU need it). DC_RISCV_CC_VERSION: the compiler and
-# its version, gcc-12.2.0 or clang-23.1.6 (dc_riscv_cycle_ceiling).
+# Zfinx code from C (tests in C of the FPU need it); DARK_CIRCUIT_RISCV_P: it knows the
+# draft P (packed SIMD) as the -march part DC_RISCV_P_MARCH with the options
+# DC_RISCV_P_FLAGS (clang-23: the experimental p 0.21). DC_RISCV_CC_VERSION: the compiler
+# and its version, gcc-12.2.0 or clang-23.1.6 (dc_riscv_cycle_ceiling).
 if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(base_has_csr rv32i "csrr a0, mscratch")
     if(base_has_csr)
@@ -232,6 +235,10 @@ if(DARK_CIRCUIT_RISCV)
     dc_riscv_probe(DARK_CIRCUIT_RISCV_ZFINX rv32i${DC_RISCV_ARCH_SUFFIX}_zfinx
                    "fadd.s a0, a1, a2")
     dc_riscv_probe_zfinx_c(DARK_CIRCUIT_RISCV_ZFINX_C rv32im${DC_RISCV_ARCH_SUFFIX}_zfinx)
+    set(DC_RISCV_P_MARCH _p0p21)
+    set(DC_RISCV_P_FLAGS -menable-experimental-extensions)
+    dc_riscv_probe(DARK_CIRCUIT_RISCV_P rv32i${DC_RISCV_ARCH_SUFFIX}${DC_RISCV_P_MARCH}
+                   "padd.b a0, a1, a2" ${DC_RISCV_P_FLAGS})
     if(DC_RISCV_TOOLCHAIN STREQUAL "LLVM")
         execute_process(COMMAND ${RISCV_CC_BIN} -dumpversion OUTPUT_VARIABLE dc_version
                         OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
@@ -247,7 +254,7 @@ if(DARK_CIRCUIT_RISCV)
                    "'${DC_RISCV_ARCH_SUFFIX}', Zba ${DARK_CIRCUIT_RISCV_ZBA}, "
                    "Zbb ${DARK_CIRCUIT_RISCV_ZBB}, "
                    "Zicbom ${DARK_CIRCUIT_RISCV_ZICBOM}, Zfinx ${DARK_CIRCUIT_RISCV_ZFINX}, "
-                   "Zfinx from C ${DARK_CIRCUIT_RISCV_ZFINX_C}")
+                   "Zfinx from C ${DARK_CIRCUIT_RISCV_ZFINX_C}, P ${DARK_CIRCUIT_RISCV_P}")
 endif()
 
 # dc_riscv_cycle_ceiling(<out-var> <test> <compiler-version> <cycles> [...]...)

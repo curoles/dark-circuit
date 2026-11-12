@@ -22,8 +22,8 @@
  * - Mig3Forward: results not yet in the register file, for ID;
  * - Mig3Pipe: the ID/EX and EX/MEM registers;
  * - Mig3Alu, Mig3Branch, Mig3Lsu (D-cache requests), Mig3Atomic (the reservation of LR/SC),
- *   Mig3Csr, Mig3MulDiv, Mig3Fpu (F on the x registers: Zfinx) and the library block
- *   ComputeCoreBitmanip (Zbb with one operand): the parts of EX;
+ *   Mig3Csr, Mig3MulDiv, Mig3Fpu (F on the x registers: Zfinx), Mig3Packed (packed SIMD:
+ *   P) and the library block ComputeCoreBitmanip (Zbb with one operand): the parts of EX;
  * - Mig3LoadData: the loaded value, in MEM/WB.
  *
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
@@ -139,6 +139,7 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_sc_cancel;     // the SC in EX fails: no store (Mig3Atomic)
     word_t        ex_atomic_rd_data; // SC: 0 stored, 1 failed
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
+    word_t        ex_packed_result;     // packed SIMD (Mig3Packed)
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
     trap_t        ex_trap;          // instruction in EX faults: retires as a trap
@@ -319,6 +320,9 @@ module Mig3Core import Mig3Pkg::*; #(
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
 
+    Mig3Packed u_mig3_packed(
+        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .result(ex_packed_result));
+
     // rd value: decode tells whether rd is written and where its value comes from.
     assign ex_rd_write = ex_done && ex_dec.rd_we && ex_dec.rd != '0;
     assign ex_rd       = (ex_fetch.valid && ex_dec.rd_we) ? ex_dec.rd : '0;
@@ -330,6 +334,7 @@ module Mig3Core import Mig3Pkg::*; #(
             RD_MULDIV:   ex_rd_data = ex_muldiv_result;
             RD_FP:       ex_rd_data = ex_fpu_result;
             RD_BITMANIP: ex_rd_data = ex_bitmanip_result;
+            RD_PACKED:   ex_rd_data = ex_packed_result;
             default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
         endcase
 

@@ -5,10 +5,12 @@
 #
 # Usage: tools/riscv_opcodes.sh [extension ...]
 #        default: rv_i rv32_i rv_zicsr rv_system rv_m rv_a rv_zba rv_zbb rv32_zbb rv_zicbo rv_f
+#                 unratified/rv_p unratified/rv32_p
 #
 # Clones riscv-opcodes at COMMIT into a temporary directory, runs its generator
 # for SystemVerilog and splits its output into the two packages. Encodings are of the
-# given extensions; CSR addresses are all that riscv-opcodes knows.
+# given extensions; CSR addresses are all that riscv-opcodes knows. Tables of extensions
+# not yet ratified (P, a draft) are named with their directory, unratified/.
 # Needs git and python3. Run it again only to add extensions (M, ...) or to move to a
 # newer COMMIT.
 set -euo pipefail
@@ -21,7 +23,7 @@ OUT_CSR=$ROOT/rtl/lib/riscv/riscv_csr_pkg.sv
 
 if [ $# -gt 0 ]; then EXTENSIONS=("$@")
 else EXTENSIONS=(rv_i rv32_i rv_zicsr rv_system rv_m rv_a rv_zba rv_zbb rv32_zbb rv_zicbo
-                 rv_f); fi
+                 rv_f unratified/rv_p unratified/rv32_p); fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

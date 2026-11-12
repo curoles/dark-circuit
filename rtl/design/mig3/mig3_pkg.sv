@@ -329,11 +329,12 @@ package Mig3Pkg;
         KIND_SC,        // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
         KIND_AMO,       // AMO*.W (Zaamo): a load with an atop, done in front of memory
         KIND_CBO,       // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
-        KIND_FP         // F on the x registers (Zfinx): the FPU, dec.fp
+        KIND_FP,        // F on the x registers (Zfinx): the FPU, dec.fp
+        KIND_PACKED     // packed SIMD (P, a draft): Mig3Packed, dec.pk
     } kind_e;
 
     // Source of the value written to rd.
-    typedef enum logic [2:0] {
+    typedef enum logic [3:0] {
         RD_ALU,         // Mig3Alu result: OP, OP-IMM, LUI, AUIPC
         RD_LINK,        // pc + 4: JAL, JALR
         RD_LOAD,        // loaded data
@@ -341,7 +342,8 @@ package Mig3Pkg;
         RD_MULDIV,      // product or quotient/remainder: M instructions
         RD_BITMANIP,    // ComputeCoreBitmanip result: Zbb with one operand
         RD_ATOMIC,      // Mig3Atomic: SC's 0 (stored) or 1 (failed)
-        RD_FP           // the FPU: an F instruction's result (Zfinx)
+        RD_FP,          // the FPU: an F instruction's result (Zfinx)
+        RD_PACKED       // Mig3Packed: a packed instruction's result (P)
     } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
@@ -431,6 +433,13 @@ package Mig3Pkg;
         RiscvPkg::funct3_t rm;          // that field; RiscvPkg::FRM_DYN: frm's mode (EX)
     } fp_ctrl_t;
 
+    // Packed instructions (P, kb rtl/design/mig3/p_profile): Mig3Packed's operation on
+    // the lanes of rs1 and rs2.
+    typedef struct packed {
+        logic             sub;  // PSUB: rs1 - rs2 in every lane, else rs1 + rs2
+        PackedPkg::lane_e lane; // .B: bytes, .H: halfwords
+    } pk_ctrl_t;
+
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
         kind_e             kind;     // for testbenches and traces; parts read the controls
@@ -452,6 +461,7 @@ package Mig3Pkg;
         sys_ctrl_t         sys;      // Mig3Control, Mig3Csr
         muldiv_ctrl_t      muldiv;   // Mig3MulDiv
         fp_ctrl_t          fp;       // the FPU (Zfinx)
+        pk_ctrl_t          pk;       // Mig3Packed (P)
         ComputeCoreBitmanipPkg::bm_op_e bitmanip;   // ComputeCoreBitmanip: the operation
         RiscvPkg::funct3_t funct3;   // operation within a part: ALU op, branch compare,
                                      // load/store size
