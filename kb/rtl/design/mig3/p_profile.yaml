@@ -14,7 +14,11 @@ decision: >
   through the read port borrowed in EX). Library blocks before Mig3 (a lane-cut adder, a
   lane-partitioned multiplier, a dot-product tree), in small chunks (the user: small enough
   to review, each one timed). No register-pair forms. Every chunk keeps Mig3's longest path
-  at 5.5 ns within ABC's spread, measured, or it is not done. Revised 2026-11-11 after 2c:
+  at 5.5 ns within ABC's spread, measured, or it is not done. STOPPED 2026-11-12 (the
+  user, after the int8 kernel's first run): Mig3 keeps the subset built (63 instructions,
+  p_profile.md's first section), C with P uses register-pair instructions on RV32 (64-bit
+  arithmetic; CoreMark's PADD.DW) and v0.6 scalar ones (MACC.H00) outside it, and P is
+  better taken up on a 64-bit core. Revised 2026-11-11 after 2c:
   the order follows an int8 kernel (a fully connected layer, P against plain C on Mig3,
   every output equal, cycles of both): min/max (2g), P's version read from clang, shifts
   (3a, 3b), multiplies and dot products (slice 4: library blocks first, Mig3 instructions
@@ -45,6 +49,12 @@ rejected:
     why_not: >
       riscv-opcodes is machine-readable and matches v0.6 for every packed instruction; a
       newer draft is a regeneration, not a hand edit.
+  - choice: Full P on Mig3 (2026-11-12), so that any C compiled with P runs
+    why_not: >
+      On RV32 it needs the register-pair instructions (a 64-bit value in two registers:
+      two written, up to four read), which clang uses for any 64-bit arithmetic, against
+      Mig3's two read ports and one write port; the draft and clang's support still move.
+      On RV64 there are no scalar pairs.
   - choice: One slice of 38 one-cycle instructions
     why_not: The user wants small chunks, each reviewed and timed.
   - choice: The packed ALU slice in full before shifts and multiplies (2d averaging, 2e
@@ -101,6 +111,11 @@ evidence: >
   ns, EX's result forwarded into ID on top (the core's own path); 455 633 um2. The high
   halves and Q15 (PackedMul's rounding row: STAGES 1 3.9 ns): 146 tests; 5.6 ns, the same
   path on top; 458 525 um2. PLI.B, PLI.H, PLUI.H (kb rtl/design/mig3/pli, the value made in
-  decode, through the ALU as LUI): 147 tests; 5.5 ns, the same path; 459 442 um2.
+  decode, through the ALU as LUI): 147 tests; 5.5 ns, the same path; 459 442 um2. The int8
+  kernel (kb test/design/mig3/int8_kernel, 2026-11-12): its P file with the requantization
+  in it gave WMUL, ADDD, NSRLI, WSLAI (register pairs, from the 64-bit arithmetic) and
+  trapped; with the requantization compiled without P, the outputs agree and the layer
+  takes 2 560 cycles against 9 220 in plain C (3.6 times). CoreMark compiled with P
+  (clang-23, -O2 and -O3 with unrolling): MACC.H00 (8) and PADD.DW (2), not in Mig3.
 code:
   - rtl/design/mig3/p_profile.md

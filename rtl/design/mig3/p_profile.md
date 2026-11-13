@@ -4,6 +4,31 @@ What of RISC-V's P extension Mig3 implements, from which version, in what order,
 which rules. Decisions here come before any RTL; the knowledge base records them as they are
 made (this profile: `kb/rtl/design/mig3/p_profile.yaml`; the chunks' records beside it).
 
+## Where the line stopped (2026-11-12)
+
+The user stopped the P line in Mig3 after the int8 kernel's first measurement; what
+follows below is the plan as it was, the record of how the subset came about.
+
+- **In Mig3:** 63 instructions. One cycle: PADD, PSUB, the saturating PSADD(U),
+  PSSUB(U), PMIN(U), PMAX(U), the shifts PSLL(I), PSRL(I), PSRA(I); the load immediates
+  PLI.B, PLI.H, PLUI.H (decode, through the ALU). Through Mig3PackedMul (3 or 4 cycles):
+  the byte products PMUL.H.B00/B01/B11 and forms, the dot products PM4ADD.B, PM2ADD.H and
+  forms, their accumulating forms, the high halves PMULH(R) and forms, Q15 PMULQ(R). The
+  clock unchanged within ABC's spread, about 11 % more area.
+- **The payoff:** the int8 kernel (16 outputs of 64 inputs, requantization included),
+  plain C 9 220 cycles, P 2 560: 3.6 times faster.
+- **Why it stops:** C compiled with P uses instructions outside the subset that do not
+  fit Mig3. clang turns 64-bit arithmetic into RV32 register-pair instructions (the
+  kernel's requantization: WMUL, ADDD, NSRLI, WSLAI; two registers written, up to four
+  read, against Mig3's two read ports and one write port), and CoreMark into PADD.DW (a
+  pair) and MACC.H00 (a v0.6 scalar instruction riscv-opcodes does not have yet). Full P
+  on RV32 means the register pairs; the draft and clang's support still move.
+- **Using the subset:** P code in files of its own, intrinsics or inline assembly, no
+  64-bit arithmetic there; tools/check_insns.py lists what such an object uses that Mig3
+  does not decode (test design_mig3_int8_insns).
+- **P's natural home is a 64-bit core:** on RV64 there are no scalar register pairs and
+  the lanes double. The library blocks (rtl/lib/numeric/packed) take WIDTH 64 already.
+
 ## Why
 
 There is no single must-have use (the user's goals, 2026-11-10):

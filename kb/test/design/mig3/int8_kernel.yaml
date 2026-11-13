@@ -1,0 +1,44 @@
+type: decision
+title: The int8 kernel test compiles only its P file with P, and checks what clang put in it
+date: 2026-11-12
+question: >
+  The P profile's yardstick (kb rtl/design/mig3/p_profile) is an int8 layer, P against plain
+  C on Mig3. With -march including P, clang may use any P instruction (P is one extension to
+  it, all or nothing), and Mig3 has a subset. How is the kernel built and checked so that
+  the program only contains instructions Mig3 has, and so that we learn which others clang
+  wants?
+decision: >
+  One program of two kinds of sources (as fp_diff): int8_kernel_p.c, the layer with
+  PM4ADDA.B (the intrinsic's name of P-ext-intrinsics.adoc, as inline assembly while clang
+  lacks it), compiled with P; the plain-C reference, the requantization (TFLite's
+  MultiplyByQuantizedMultiplier), the driver, crt0 and semihosting compiled without P. Both
+  versions call the same requantization, so their outputs must agree bit for bit and they
+  differ only in the dot products; the driver prints the cycles of both. A second test,
+  design_mig3_int8_insns, runs tools/check_insns.py on the P object: every instruction
+  (objdump without aliases) against the names of Mig3's decoder (mig3_decode.sv's kind
+  case), failing on one it does not decode.
+why: >
+  The user asked what code compiled with P would use (A of the direction, 2026-11-12) before
+  finishing P (B). Plain C in the P file (the requantization, the loops) lets clang choose;
+  the check makes its choices visible at build time, not only as an illegal-instruction trap
+  when the code runs, and reads the decoder itself, so it can not go stale.
+rejected:
+  - choice: The whole program compiled with P
+    why_not: The reference itself could use P, and P instructions would spread everywhere.
+  - choice: The P kernel all in inline assembly
+    why_not: Says nothing about what clang emits from C, the question of this step.
+relies_on:
+  - rtl/design/mig3/p_profile
+  - rtl/design/mig3/packed_mul
+code:
+  - test/design/mig3/int8_kernel_p.c
+  - test/design/mig3/int8_kernel.c
+  - tools/check_insns.py
+evidence: >
+  2026-11-12, Verilator, clang-23: the first build had the requantization in the P file;
+  design_mig3_int8_insns listed WMUL, ADDD, NSRLI, WSLAI there (RV32 register pairs, from
+  its 64-bit arithmetic) and the kernel trapped on one. With the requantization compiled
+  without P both tests pass: the P object uses lw, addi, pm4adda.b (16 per output), sw,
+  sb, branches; the outputs agree in all three rounds; the layer (16 outputs of 64 inputs)
+  takes 9 214 to 9 322 cycles in plain C, 2 558 to 2 565 with P (3.6 times faster; 2 304 of
+  the run's cycles are pmul bubbles, 3 per PM4ADDA.B). The run takes 0.5 s.

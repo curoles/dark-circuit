@@ -214,6 +214,26 @@ if(DARK_CIRCUIT_RISCV)
                           FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
         mig3_program_test(pk_pli SOURCES pk_pli.S ARCH rv32i${DC_RISCV_P_MARCH}
                           FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
+        # The int8 kernel (kb test/design/mig3/int8_kernel): only int8_kernel_p.c compiled
+        # with P, the reference and the rest without; outputs compared, cycles printed.
+        # design_mig3_int8_insns lists the P object's instructions and fails on one that
+        # Mig3 does not decode (tools/check_insns.py).
+        mig3_program_test(int8_kernel SOURCES int8_kernel_p.c
+                          ARCH rv32im_zba_zbb${DC_RISCV_P_MARCH}
+                          ALT_ARCH rv32im_zba_zbb
+                          ALT_SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                                      int8_kernel.c int8_kernel_ref.c
+                          FLAGS -O2 -ffreestanding -I${SW} ${DC_RISCV_P_FLAGS})
+        if(PYTHON3_BIN)
+            set(int8_p_obj
+                ${CMAKE_CURRENT_BINARY_DIR}/design_mig3_int8_kernel.objs/0_int8_kernel_p.c.o)
+            add_test(NAME design_mig3_int8_insns
+                     COMMAND ${PYTHON3_BIN} ${PROJECT_SOURCE_DIR}/tools/check_insns.py
+                             --decode ${MIG3}/mig3_decode.sv --objdump ${RISCV_OBJDUMP_BIN}
+                             ${int8_p_obj})
+            dc_test_labels(labels)
+            set_tests_properties(design_mig3_int8_insns PROPERTIES LABELS "${labels}")
+        endif()
     endif()
     # The FPU against SoftFloat (fp_diff.c): one C kernel compiled as Zfinx code and as
     # soft-float code on SoftFloat (sw/riscv/softfloat), every result and the flags
