@@ -13,7 +13,8 @@
  * follows a load,
  * and the next instruction may read its rd (its rs1 or rs2 field, by the opcode: the
  * interlock's rule); division bubbles come right before a division,
- * fpu bubbles right before an F instruction (Zfinx);
+ * fpu bubbles right before an F instruction (Zfinx); pmul bubbles right before a packed
+ * multiply (P);
  * fill bubbles only before the first instruction after reset or resume; imem bubbles
  * (IF2 waits for imem) at any time; dmem bubbles come right before a load or store; wfi
  * bubbles (asleep) right before a WFI. The trace
@@ -64,6 +65,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
     reg_id_t use_rd;                // after a load-use bubble: the next one reads it
     logic    div_pending;           // after a division bubble: the next one divides
     logic    fpu_pending;           // after an fpu bubble: the next one is an F instruction
+    logic    pmul_pending;          // after a pmul bubble: the next one is a packed multiply
     logic    wfi_pending;           // after a wfi bubble: the next one is a WFI
     logic    dmem_pending;          // after a dmem bubble: the next one loads or stores
     logic    prev_ret;              // the last retired instruction is a return (also one that
@@ -127,6 +129,15 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
         endcase
     endfunction
 
+    function automatic logic is_pmul(input insn_t insn);
+        casez (insn)
+            PMUL_H_B00, PMUL_H_B01, PMUL_H_B11, PMULU_H_B00, PMULU_H_B01, PMULU_H_B11,
+            PMULSU_H_B00, PMULSU_H_B11:
+                     return 1'b1;
+            default: return 1'b0;
+        endcase
+    endfunction
+
     // The instruction may read register r by the interlock's rule: its rs1 or rs2 field, by
     // the opcode (Mig3Decode hz_rs1, hz_rs2; kb rtl/design/mig3/interlock_by_opcode).
     function automatic logic may_read(input insn_t insn, input reg_id_t r);
@@ -156,6 +167,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                     $fatal(1, "Mig3: cycle %0d: load-use bubble, no load retired before it", cycle);
             BUBBLE_DIV: ;   // the next retired instruction must be a division
             BUBBLE_FPU: ;   // the next retired instruction must be an F instruction
+            BUBBLE_PMUL: ;  // the next retired instruction must be a packed multiply
             BUBBLE_IMEM: ;  // ID waits for imem: at any time
             BUBBLE_DMEM: ;  // the next retired instruction must load or store
             BUBBLE_WFI: ;   // the next retired instruction must be a WFI
@@ -189,6 +201,9 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                    cycle, bubble_name(b));
         if (fpu_pending && b != BUBBLE_FPU)
             $fatal(1, "Mig3: cycle %0d: %s bubble between fpu bubbles and the F instruction",
+                   cycle, bubble_name(b));
+        if (pmul_pending && b != BUBBLE_PMUL)
+            $fatal(1, "Mig3: cycle %0d: %s bubble between pmul bubbles and the multiply",
                    cycle, bubble_name(b));
     endtask
 
@@ -241,6 +256,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
                     div_pending <= 1'b1;
                 if (retire.bubble == BUBBLE_FPU)
                     fpu_pending <= 1'b1;
+                if (retire.bubble == BUBBLE_PMUL)
+                    pmul_pending <= 1'b1;
                 if (retire.bubble == BUBBLE_WFI)
                     wfi_pending <= 1'b1;
                 if (retire.bubble == BUBBLE_DMEM)
@@ -263,6 +280,9 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             if (fpu_pending && !is_fp(retire.insn))
                 $fatal(1, "Mig3: pc %h after fpu bubbles is not an F instruction",
                        retire.pc_rdata);
+            if (pmul_pending && !is_pmul(retire.insn))
+                $fatal(1, "Mig3: pc %h after pmul bubbles is not a packed multiply",
+                       retire.pc_rdata);
             if (dmem_pending && retire.mem_rmask == '0 && retire.mem_wmask == '0)
                 $fatal(1, "Mig3: pc %h after dmem bubbles neither loads nor stores",
                        retire.pc_rdata);
@@ -278,6 +298,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             use_rd           <= '0;
             div_pending      <= 1'b0;
             fpu_pending      <= 1'b0;
+            pmul_pending     <= 1'b0;
             wfi_pending      <= 1'b0;
             dmem_pending     <= 1'b0;
             filling          <= 1'b0;
@@ -297,6 +318,7 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
         use_rd           = '0;
         div_pending      = 1'b0;
         fpu_pending      = 1'b0;
+        pmul_pending     = 1'b0;
         wfi_pending      = 1'b0;
         dmem_pending     = 1'b0;
         prev_ret         = 1'b0;

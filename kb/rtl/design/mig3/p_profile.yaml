@@ -92,5 +92,9 @@ evidence: >
   rtl/lib/numeric/packed/shift; 1.5 ns alone), then the twelve shifts in Mig3: the suite
   passes (142 tests); sky130 5.5 ns, the top path EX's result forwarded into ID, 5.4 ns on
   the same path without the packed unit: the one-cycle packed slice has used the margin.
+  4 (2026-11-12): PackedMul in the library (kb rtl/lib/numeric/packed/mul: 8 x 8 pieces,
+  Baugh-Wooley, dot products, STAGES 1 3.4 ns), then Mig3PackedMul (kb
+  rtl/design/mig3/packed_mul) with the byte products: the suite passes (143 tests);
+  sky130 5.6 ns, the rs3 read on top, no packed multiply logic on the longest path.
 code:
   - rtl/design/mig3/p_profile.md

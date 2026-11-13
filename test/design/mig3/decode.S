@@ -48,6 +48,7 @@
     .equ K_CBO,     21
     .equ K_FP,      22
     .equ K_PACKED,  23
+    .equ K_PMUL,    24
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -189,6 +190,11 @@
     .macro PKI op, rd, rs1, shamt                   /* pslli psrli psrai: no rs2 */
     \op x\rd, x\rs1, \shamt
     EXPECT K_PACKED, 1, 1, 0, \rd, \rs1, 0, 0, 0, 0
+    .endm
+
+    .macro PMUL op, rd, rs1, rs2                    /* pmul(u, su).h.b00 b01 b11 */
+    \op x\rd, x\rs1, x\rs2
+    EXPECT K_PMUL, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, 0
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -422,6 +428,14 @@ cases:
     PK     psrl.hs,  22, 23, 24
     PK     psra.bs,  25, 26, 27
     PK     psra.hs,  28, 29, 30
+    PMUL   pmul.h.b00,   1,  2,  3
+    PMUL   pmul.h.b01,   4,  5,  6
+    PMUL   pmul.h.b11,   7,  8,  9
+    PMUL   pmulu.h.b00,  10, 11, 12
+    PMUL   pmulu.h.b01,  13, 14, 15
+    PMUL   pmulu.h.b11,  16, 17, 18
+    PMUL   pmulsu.h.b00, 19, 20, 21
+    PMUL   pmulsu.h.b11, 22, 23, 31
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */

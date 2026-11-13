@@ -16,6 +16,7 @@ mig3_csr.sv
 mig3_muldiv.sv
 mig3_fpu.sv
 mig3_packed.sv
+mig3_packed_mul.sv
 mig3_pipe.sv
 mig3_caches.sv
 mig3_core.sv

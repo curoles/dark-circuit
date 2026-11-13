@@ -31,9 +31,9 @@
  * followed but is not taken to the next instruction, a return that ID sent elsewhere to
  * its target; EX updates the BTB with every branch and JAL that completes. An
  * instruction behind a redirect or halt in EX is dropped with ID; a jump or branch to a
- * misaligned target traps in EX. ex_muldiv_stall (division not done) and ex_fpu_stall
- * (the result of an F instruction not there yet) keep the instruction in EX: ID and IF
- * hold.
+ * misaligned target traps in EX. ex_muldiv_stall (division not done), ex_fpu_stall (the
+ * result of an F instruction not there yet) and ex_pmul_stall (a packed multiply's) keep
+ * the instruction in EX: ID and IF hold.
  * Interlock: results are forwarded to ID (Mig3Forward), except load data, which comes
  * in MEM/WB, and an SC's result, which goes there (Mig3Atomic): the instruction in ID
  * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
@@ -105,6 +105,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     input  wire                        ex_muldiv_stall,   // division of the instruction in EX not done
     input  wire                        ex_fpu_stall,      // F insn in EX waits for its result
     input  wire                        ex_fpu_illegal,    // F insn in EX can not be done
+    input  wire                        ex_pmul_stall,     // packed multiply in EX waits
     input  wire                        ex_dmem_wait,      // dmem does not take the request of EX
     input  wire                        mem_wait,          // the load in MEM/WB waits for its word
     input  csr_t                       csr,         // mtvec, mepc
@@ -136,7 +137,7 @@ module Mig3Control import Mig3Pkg::*, RiscvPkg::*; (
     // @kb: rtl/design/mig2/data_waits
     // @kb: rtl/design/mig3/wfi
     assign ex_wfi_wait = ex_fetch.valid && ex_dec.sys.wfi && !csr.pending;
-    assign ex_hold     = ex_muldiv_stall || ex_fpu_stall || ex_wfi_wait;
+    assign ex_hold     = ex_muldiv_stall || ex_fpu_stall || ex_pmul_stall || ex_wfi_wait;
     assign ex_stall    = ex_hold || ex_dmem_wait || mem_wait;
     assign ex_act   = ex_fetch.valid && !mem_wait;
 

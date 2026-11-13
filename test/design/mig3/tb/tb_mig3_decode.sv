@@ -16,10 +16,11 @@
  * instruction (Zfinx): rd_src FP, the rm field in funct3, its FPU controls against a
  * model by opcode, funct5 and funct3 (fp_model), uses_rs3 for the R4 forms and rs3 (the
  * case's imm column). A packed instruction (P): rd_src PACKED, its operation against a
- * model by opcode, funct7 and funct3 (pk_model); a shift by an immediate reads no rs2.
+ * model by opcode, funct7 and funct3 (pk_model); a shift by an immediate reads no rs2. A
+ * packed multiply: rd_src PMUL, its operation and signs against a model (pmul_model).
  * At the end every kind must have had a case; KIND_BITMANIP only with +zbb, KIND_CBO only
- * with +zicbom, KIND_FP only with +zfinx, KIND_PACKED only with +p (their cases need a
- * compiler that knows Zbb, Zicbom, Zfinx, P).
+ * with +zicbom, KIND_FP only with +zfinx, KIND_PACKED and KIND_PMUL only with +p (their
+ * cases need a compiler that knows Zbb, Zicbom, Zfinx, P).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -105,6 +106,7 @@ module TbMig3Decode;
             KIND_SC:             return RD_ATOMIC;
             KIND_FP:             return RD_FP;
             KIND_PACKED:         return RD_PACKED;
+            KIND_PMUL:           return RD_PMUL;
             KIND_CSR:            return RD_CSR;
             KIND_MULDIV:         return RD_MULDIV;
             KIND_BITMANIP:       return RD_BITMANIP;
@@ -353,6 +355,25 @@ module TbMig3Decode;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 
+    // A packed multiply's operation and signs (P), by funct7 and funct3 as the encodings
+    // have them: funct3 tells B01 from the others, bit 28 B11 from B00; bit 30 PMULSU (rs1
+    // signed, rs2 unsigned), else bit 29 PMULU (both unsigned), else both signed. 0 for
+    // other kinds. Only bits 30..28 and 14..12 of w are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic pmul_ctrl_t pmul_model(input kind_e kind, input insn_t w);
+        logic su;
+        logic u;
+        if (kind != KIND_PMUL)
+            return '0;
+        su = w[30] == PMULSU_H_B00[30];
+        u  = !su && w[29] == PMULU_H_B00[29];
+        return '{en: 1'b1,
+                 mode: w[14:12] == PMUL_H_B01[14:12] ? PackedPkg::MUL_B01 :
+                       w[28] == PMUL_H_B11[28] ? PackedPkg::MUL_B11 : PackedPkg::MUL_B00,
+                 a_signed: !u, b_signed: !u && !su};
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
     // Compare one field of case cn with instruction w.
     task automatic check(input integer cn, input insn_t w, input string field, input word_t got,
                          input word_t exp);
@@ -385,6 +406,7 @@ module TbMig3Decode;
             check(c, insn, "bitmanip", 32'(dec.bitmanip), 32'(bitmanip_of(exp_kind, insn)));
             check(c, insn, "fp",     32'(dec.fp),     32'(fp_model(exp_kind, insn)));
             check(c, insn, "pk",     32'(dec.pk),     32'(pk_model(exp_kind, insn)));
+            check(c, insn, "pmul",   32'(dec.pmul),   32'(pmul_model(exp_kind, insn)));
             check(c, insn, "hz_rs1", 32'(dec.hz_rs1), 32'(hz_model(insn[6:0]) >> 1));
             check(c, insn, "hz_rs2", 32'(dec.hz_rs2), 32'(hz_model(insn[6:0]) & 2'b01));
             check(c, insn, "uses_rs3", 32'(dec.uses_rs3),
@@ -415,12 +437,13 @@ module TbMig3Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        last_kind = KIND_PACKED;
+        last_kind = KIND_PMUL;
         for (k = 0; k <= last_kind; k = k + 1)
             if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")) &&
                 !(k == int'(KIND_CBO) && !$test$plusargs("zicbom")) &&
                 !(k == int'(KIND_FP) && !$test$plusargs("zfinx")) &&
-                !(k == int'(KIND_PACKED) && !$test$plusargs("p")))
+                !(k == int'(KIND_PACKED) && !$test$plusargs("p")) &&
+                !(k == int'(KIND_PMUL) && !$test$plusargs("p")))
                 $fatal(1, "Mig3Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
         $finish;

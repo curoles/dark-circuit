@@ -1,0 +1,51 @@
+type: decision
+title: Mig3's packed multiplies are a unit of their own, through a result register as the FPU's
+date: 2026-11-12
+question: >
+  The packed multiplies of the P profile (kb rtl/design/mig3/p_profile, slice 4) use
+  PackedMul (kb rtl/lib/numeric/packed/mul), whose dot products need its one pipeline stage
+  to fit Mig3's clock. How do they go into Mig3's EX, which already has no margin left on
+  the one-cycle path (kb rtl/design/mig3/packed_unit)?
+decision: >
+  Mig3PackedMul, a unit in EX beside Mig3MulDiv and Mig3Fpu, with their rules: PackedMul
+  with STAGES 1, the operation entering in the instruction's first acting cycle (valid: not
+  behind a load in MEM/WB, no interrupt taken on it), its result taken into a register one
+  clock later, the instruction completing from there: 3 cycles in EX, stall to Mig3Control
+  until then, a taken result kept while a load in MEM/WB waits (hold). Decode gives the
+  multiplies a kind of their own (KIND_PMUL, rd_src RD_PMUL) and a control struct
+  (pmul_ctrl_t: en, PackedPkg::mul_e mode, a_signed, b_signed); the bubbles while EX waits
+  are BUBBLE_PMUL. First the byte products PMUL.H.B00, B01, B11 with PMULU and PMULSU (each
+  lane's low 16 bits); the dot products, the accumulating forms and the high halves follow.
+why: >
+  The result register keeps the multiplier off the path from EX to ID's forwarding, the
+  core's longest, as for the FPU (kb rtl/design/mig3/fpu); starting only when no interrupt
+  can be taken any more keeps an operation from running for a cancelled instruction (kb
+  rtl/design/mig3/interrupts). A unit and a kind of its own, as M beside the ALU, leaves
+  pk_ctrl_t and the one-cycle Mig3Packed alone.
+rejected:
+  - choice: The multiplies in Mig3Packed, one cycle
+    why_not: >
+      PackedMul without its stage is 5.8 ns for the dot products, and the one-cycle path
+      has no margin left (the shifts brought it to 5.5 ns).
+  - choice: Completing from PackedMul's stage, without the result register (2 cycles)
+    why_not: >
+      Its second stage (adders, the dot product's tree) would be on the forwarding path;
+      left to a measurement once the unit works.
+relies_on:
+  - rtl/design/mig3/p_profile
+  - rtl/design/mig3/fpu
+  - rtl/design/mig3/interrupts
+  - rtl/lib/numeric/packed/mul
+code:
+  - rtl/design/mig3/mig3_packed_mul.sv
+  - rtl/design/mig3/mig3_decode.sv#pmul_of
+  - test/design/mig3/pk_mul.S
+evidence: >
+  2026-11-12, Verilator, clang-23: the Mig3 suite passes (143 tests), with pk_mul (the eight
+  byte products, operands that make the signed, unsigned and mixed results differ; a
+  product used at once by the next multiply and by an ADD; rs2 loaded right before a
+  multiply), eight more decode cases against the testbench's pmul_model, and the bubble
+  check (pmul bubbles right before a packed multiply). sky130 (Yosys, ABC): Mig3Core 5.6 ns,
+  the longest path the rs3 read (ID/EX register into Mig3Fpu's rs3_data) as before the P
+  line, no packed multiply logic on it; 432 157 um2 (420 740 before; PackedMul's dot
+  product and accumulator are not used yet and not synthesized).

@@ -15,7 +15,9 @@
  * operation in dec.fp, rs3 for the R4 forms, rd_src RD_FP; FLW, FSW, FMV.X.W and FMV.W.X
  * are not in Zfinx, and a reserved rm field (101, 110) is illegal (kb
  * rtl/design/mig3/fp_decode); a packed instruction (P, a draft) its operation in dec.pk
- * for Mig3Packed, rd_src RD_PACKED (kb rtl/design/mig3/packed_unit).
+ * for Mig3Packed, rd_src RD_PACKED (kb rtl/design/mig3/packed_unit); a packed multiply its
+ * operation and signs in dec.pmul for Mig3PackedMul, rd_src RD_PMUL (kb
+ * rtl/design/mig3/packed_mul).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -52,6 +54,9 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             PMAX_B, PMAX_H, PMAXU_B, PMAXU_H:                       kind_enc = KIND_PACKED;  // P
             PSLLI_B, PSLLI_H, PSRLI_B, PSRLI_H, PSRAI_B, PSRAI_H:   kind_enc = KIND_PACKED;  // P
             PSLL_BS, PSLL_HS, PSRL_BS, PSRL_HS, PSRA_BS, PSRA_HS:   kind_enc = KIND_PACKED;  // P
+            PMUL_H_B00, PMUL_H_B01, PMUL_H_B11:                     kind_enc = KIND_PMUL;  // P
+            PMULU_H_B00, PMULU_H_B01, PMULU_H_B11:                  kind_enc = KIND_PMUL;  // P
+            PMULSU_H_B00, PMULSU_H_B11:                             kind_enc = KIND_PMUL;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -268,6 +273,23 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
     endfunction
 
     // @kb: rtl/design/mig3/packed_unit
+    // @kb: rtl/design/mig3/packed_mul
+    // A packed multiply's operation and signs (P), by the encodings; 0 for other kinds.
+    // The fields in pmul_ctrl_t's order: en, mode, a_signed, b_signed.
+    function automatic pmul_ctrl_t pmul_of(insn_t w);
+        casez (w)
+            PMUL_H_B00:   return '{1'b1, PackedPkg::MUL_B00, 1'b1, 1'b1};
+            PMUL_H_B01:   return '{1'b1, PackedPkg::MUL_B01, 1'b1, 1'b1};
+            PMUL_H_B11:   return '{1'b1, PackedPkg::MUL_B11, 1'b1, 1'b1};
+            PMULU_H_B00:  return '{1'b1, PackedPkg::MUL_B00, 1'b0, 1'b0};
+            PMULU_H_B01:  return '{1'b1, PackedPkg::MUL_B01, 1'b0, 1'b0};
+            PMULU_H_B11:  return '{1'b1, PackedPkg::MUL_B11, 1'b0, 1'b0};
+            PMULSU_H_B00: return '{1'b1, PackedPkg::MUL_B00, 1'b1, 1'b0};
+            PMULSU_H_B11: return '{1'b1, PackedPkg::MUL_B11, 1'b1, 1'b0};
+            default:      return '0;
+        endcase
+    endfunction
+
     // A packed instruction's operation (P), by the encodings; 0 for other kinds. The
     // fields in pk_ctrl_t's order: op, sub, max, is_unsigned, left, amt_rs2, lane.
     function automatic pk_ctrl_t pk_of(insn_t w);
@@ -344,6 +366,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.muldiv   = '0;
         dec.fp       = '0;
         dec.pk       = '0;
+        dec.pmul     = '0;
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
@@ -415,6 +438,10 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
                 dec.rd_we = 1'b1;  dec.rd_src = RD_PACKED;
                 dec.uses_rs1 = 1'b1;  dec.pk = pk_of(insn);
                 dec.uses_rs2 = dec.pk.op != PK_SHIFT || dec.pk.amt_rs2;  // not by an imm
+            end
+            KIND_PMUL: begin
+                dec.rd_we = 1'b1;  dec.rd_src = RD_PMUL;
+                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.pmul = pmul_of(insn);
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;

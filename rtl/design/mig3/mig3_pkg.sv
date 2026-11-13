@@ -93,6 +93,7 @@ package Mig3Pkg;
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
         BUBBLE_DIV,         // EX holds a division
         BUBBLE_FPU,         // EX holds an F instruction until its result (Mig3Fpu)
+        BUBBLE_PMUL,        // EX holds a packed multiply until its result (Mig3PackedMul)
         BUBBLE_IMEM,        // ID waits for the instruction from imem
         BUBBLE_DMEM,        // a load or store waits for dmem: to take it, or a load's word
         BUBBLE_WFI          // WFI in EX waits for an interrupt (sleeps)
@@ -330,7 +331,8 @@ package Mig3Pkg;
         KIND_AMO,       // AMO*.W (Zaamo): a load with an atop, done in front of memory
         KIND_CBO,       // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
         KIND_FP,        // F on the x registers (Zfinx): the FPU, dec.fp
-        KIND_PACKED     // packed SIMD (P, a draft): Mig3Packed, dec.pk
+        KIND_PACKED,    // packed SIMD (P, a draft): Mig3Packed, dec.pk
+        KIND_PMUL       // packed multiplies (P): Mig3PackedMul, dec.pmul
     } kind_e;
 
     // Source of the value written to rd.
@@ -343,7 +345,8 @@ package Mig3Pkg;
         RD_BITMANIP,    // ComputeCoreBitmanip result: Zbb with one operand
         RD_ATOMIC,      // Mig3Atomic: SC's 0 (stored) or 1 (failed)
         RD_FP,          // the FPU: an F instruction's result (Zfinx)
-        RD_PACKED       // Mig3Packed: a packed instruction's result (P)
+        RD_PACKED,      // Mig3Packed: a packed instruction's result (P)
+        RD_PMUL         // Mig3PackedMul: a packed multiply's result (P)
     } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
@@ -453,6 +456,14 @@ package Mig3Pkg;
         PackedPkg::lane_e lane;        // .B, .BS: bytes; .H, .HS: halfwords
     } pk_ctrl_t;
 
+    // Packed multiplies (P): Mig3PackedMul's PackedMul operation and the operands' signs.
+    typedef struct packed {
+        logic             en;          // a packed multiply (Mig3PackedMul)
+        PackedPkg::mul_e  mode;        // PackedMul's operation
+        logic             a_signed;    // rs1's lanes signed
+        logic             b_signed;    // rs2's lanes signed
+    } pmul_ctrl_t;
+
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
         kind_e             kind;     // for testbenches and traces; parts read the controls
@@ -475,6 +486,7 @@ package Mig3Pkg;
         muldiv_ctrl_t      muldiv;   // Mig3MulDiv
         fp_ctrl_t          fp;       // the FPU (Zfinx)
         pk_ctrl_t          pk;       // Mig3Packed (P)
+        pmul_ctrl_t        pmul;     // Mig3PackedMul (P)
         ComputeCoreBitmanipPkg::bm_op_e bitmanip;   // ComputeCoreBitmanip: the operation
         RiscvPkg::funct3_t funct3;   // operation within a part: ALU op, branch compare,
                                      // load/store size

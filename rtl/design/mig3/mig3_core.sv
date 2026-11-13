@@ -22,8 +22,9 @@
  * - Mig3Forward: results not yet in the register file, for ID;
  * - Mig3Pipe: the ID/EX and EX/MEM registers;
  * - Mig3Alu, Mig3Branch, Mig3Lsu (D-cache requests), Mig3Atomic (the reservation of LR/SC),
- *   Mig3Csr, Mig3MulDiv, Mig3Fpu (F on the x registers: Zfinx), Mig3Packed (packed SIMD:
- *   P) and the library block ComputeCoreBitmanip (Zbb with one operand): the parts of EX;
+ *   Mig3Csr, Mig3MulDiv, Mig3Fpu (F on the x registers: Zfinx), Mig3Packed and
+ *   Mig3PackedMul (packed SIMD: P) and the library block ComputeCoreBitmanip (Zbb with one
+ *   operand): the parts of EX;
  * - Mig3LoadData: the loaded value, in MEM/WB.
  *
  * Pipeline IF | ID | EX | MEM/WB: IF fetches; ID decodes the instruction that arrives
@@ -130,6 +131,8 @@ module Mig3Core import Mig3Pkg::*; #(
     word_t        ex_fpu_result;    // result of an F instruction (Zfinx)
     FpPkg::flags_t ex_fpu_flags;    // its flags, for fflags
     logic         ex_fpu_stall;
+    word_t        ex_pmul_result;   // result of a packed multiply (Mig3PackedMul)
+    logic         ex_pmul_stall;
     logic         ex_fpu_illegal;   // the F instruction can not be done: it traps
     logic         ex_fpu_rs3_read;  // the R4 in EX wants rs3 (not valid-gated)
     logic         ex_rs3_read;      // ... and is there: ID's rs2 port is lent to it
@@ -191,8 +194,8 @@ module Mig3Core import Mig3Pkg::*; #(
         .id_ras_top, .ex_ras_target(id_ex_q.ras_target),
         .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
         .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
-        .ex_csr_illegal, .ex_muldiv_stall, .ex_fpu_stall, .ex_fpu_illegal, .ex_dmem_wait,
-        .mem_wait, .csr,
+        .ex_csr_illegal, .ex_muldiv_stall, .ex_fpu_stall, .ex_fpu_illegal, .ex_pmul_stall,
+        .ex_dmem_wait, .mem_wait, .csr,
         .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
         .ras_ctrl,
@@ -318,6 +321,12 @@ module Mig3Core import Mig3Pkg::*; #(
     // ID's instruction does not move while its rs2 port is lent to EX's R4.
     `DC_ASSERT(a_rs3_port_lent, !ex_rs3_read || pipe_ctrl.ex_stall || pipe_ctrl.ex_flush)
 
+    // Packed multiplies (P): started and held as the FPU's operations, 3 cycles in EX.
+    Mig3PackedMul u_mig3_packed_mul(
+        .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
+        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
+        .stall(ex_pmul_stall), .result(ex_pmul_result));
+
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
 
@@ -335,6 +344,7 @@ module Mig3Core import Mig3Pkg::*; #(
             RD_CSR:      ex_rd_data = ex_csr_rdata;
             RD_MULDIV:   ex_rd_data = ex_muldiv_result;
             RD_FP:       ex_rd_data = ex_fpu_result;
+            RD_PMUL:     ex_rd_data = ex_pmul_result;
             RD_BITMANIP: ex_rd_data = ex_bitmanip_result;
             RD_PACKED:   ex_rd_data = ex_packed_result;
             default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
@@ -368,16 +378,19 @@ module Mig3Core import Mig3Pkg::*; #(
                           mem_wdata: ex_lsu_mem.wdata};
 
     // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
-    // a division, an F instruction's result, an interrupt (WFI) or the D-cache to take its
-    // request (EX/MEM keeps its load while it waits for its word: no bubble goes in then).
+    // a division, an F instruction's or a packed multiply's result, an interrupt (WFI) or
+    // the D-cache to take its request (EX/MEM keeps its load while it waits for its word:
+    // no bubble goes in then).
     assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
                        !ex_fetch.valid ? ex_fetch.bubble :
                        ex_muldiv_stall ? BUBBLE_DIV :
                        ex_fpu_stall    ? BUBBLE_FPU :
+                       ex_pmul_stall   ? BUBBLE_PMUL :
                        ex_wfi_wait     ? BUBBLE_WFI : BUBBLE_DMEM;
 
     `DC_ASSERT(a_ex_bubble_why, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall ||
-                                ex_fpu_stall || ex_wfi_wait || ex_dmem_wait || mem_wait)
+                                ex_fpu_stall || ex_pmul_stall || ex_wfi_wait ||
+                                ex_dmem_wait || mem_wait)
 
     // load: a load that sent its read (a misaligned one traps and reads nothing); MEM/WB
     // waits for its word.
