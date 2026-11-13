@@ -134,7 +134,8 @@ module TbMig3BubbleCheck import Mig3Pkg::*, RiscvPkg::*, TbMig3Pkg::*; (
             PMUL_H_B00, PMUL_H_B01, PMUL_H_B11, PMULU_H_B00, PMULU_H_B01, PMULU_H_B11,
             PMULSU_H_B00, PMULSU_H_B11, PM4ADD_B, PM4ADDU_B, PM4ADDSU_B, PM2ADD_H,
             PM2ADDU_H, PM2ADDSU_H, PM4ADDA_B, PM4ADDAU_B, PM4ADDASU_B, PM2ADDA_H,
-            PM2ADDAU_H, PM2ADDASU_H:
+            PM2ADDAU_H, PM2ADDASU_H, PMULH_H, PMULHU_H, PMULHSU_H, PMULHR_H, PMULHRU_H,
+            PMULHRSU_H, PMULQ_H, PMULQR_H:
                      return 1'b1;
             default: return 1'b0;
         endcase

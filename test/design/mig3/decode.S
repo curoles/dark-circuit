@@ -453,6 +453,14 @@ cases:
     PMULA  pm2adda.h,    20, 21, 22
     PMULA  pm2addau.h,   23, 24, 25
     PMULA  pm2addasu.h,  26, 27, 28
+    PMUL   pmulh.h,      29, 30, 31
+    PMUL   pmulhu.h,     1,  3,  5
+    PMUL   pmulhsu.h,    7,  9,  11
+    PMUL   pmulhr.h,     13, 15, 17
+    PMUL   pmulhru.h,    19, 21, 23
+    PMUL   pmulhrsu.h,   25, 27, 29
+    PMUL   pmulq.h,      31, 2,  4
+    PMUL   pmulqr.h,     6,  8,  10
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */

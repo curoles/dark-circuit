@@ -356,26 +356,40 @@ module TbMig3Decode;
     /* verilator lint_on UNUSEDSIGNAL */
 
     // A packed multiply's operation and signs (P), by funct7 and funct3 as the encodings
-    // have them: funct3 tells the dot products (then bit 26: bytes, PM4ADD) and B01 from
-    // the byte products, bit 28 B11 from B00; bit 27 the accumulating dot products; bit 30
-    // the SU forms (rs1 signed, rs2 unsigned), else bit 29 the U forms (both unsigned),
-    // else both signed. 0 for other kinds. Only bits 30..26 and 14..12 of w are used.
+    // have them. funct3 111: the high halves and Q15 (bits 30 and 28: both signed, 01
+    // unsigned, 10 rs1 signed and rs2 unsigned, 11 Q15), bit 26 rounded. Otherwise
+    // funct3 tells the dot products (then bit 26: bytes, PM4ADD; bit 27 accumulating)
+    // and B01 from the byte products, bit 28 B11 from B00; bit 30 the SU forms, else bit
+    // 29 the U forms, else both signed. 0 for other kinds. Only bits 30..26 and 14..12
+    // of w are used.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic pmul_ctrl_t pmul_model(input kind_e kind, input insn_t w);
         logic su;
         logic u;
+        logic dot;
+        logic b30;
+        logic b28;
         if (kind != KIND_PMUL)
             return '0;
-        su = w[30] == PMULSU_H_B00[30];
-        u  = !su && w[29] == PMULU_H_B00[29];
+        if (w[14:12] == PMULH_H[14:12]) begin
+            b30 = w[30] == PMULHSU_H[30];
+            b28 = w[28] == PMULHU_H[28];
+            return '{en: 1'b1, mode: PackedPkg::MUL_16, a_signed: b30 || !b28,
+                     b_signed: b30 == b28, acc: 1'b0,
+                     res: (b30 && b28) ? PMR_Q15 : PMR_HIGH,
+                     round: w[26] == PMULHR_H[26]};
+        end
+        su  = w[30] == PMULSU_H_B00[30];
+        u   = !su && w[29] == PMULU_H_B00[29];
+        dot = w[14:12] == PM4ADD_B[14:12];
         return '{en: 1'b1,
-                 mode: w[14:12] == PM4ADD_B[14:12] ?
-                           (w[26] == PM4ADD_B[26] ? PackedPkg::MUL_DOT_B :
-                                                    PackedPkg::MUL_DOT_H) :
+                 mode: dot ? (w[26] == PM4ADD_B[26] ? PackedPkg::MUL_DOT_B :
+                                                      PackedPkg::MUL_DOT_H) :
                        w[14:12] == PMUL_H_B01[14:12] ? PackedPkg::MUL_B01 :
                        w[28] == PMUL_H_B11[28] ? PackedPkg::MUL_B11 : PackedPkg::MUL_B00,
                  a_signed: !u, b_signed: !u && !su,
-                 acc: w[14:12] == PM4ADD_B[14:12] && w[27] == PM4ADDA_B[27]};
+                 acc: dot && w[27] == PM4ADDA_B[27], res: dot ? PMR_DOT : PMR_BYTES,
+                 round: 1'b0};
     endfunction
 
     // An accumulating packed multiply: it reads rd as rs3.

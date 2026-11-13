@@ -133,6 +133,7 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_fpu_stall;
     word_t        ex_pmul_result;   // result of a packed multiply (Mig3PackedMul)
     logic         ex_pmul_stall;
+    logic         ex_pmul_sat;      // a Q15 lane saturated: sets vxsat
     logic         ex_fpu_illegal;   // the F instruction can not be done: it traps
     logic         ex_fpu_rs3_read;  // the R4 in EX wants rs3 (not valid-gated)
     logic         ex_pmul_rs3_read; // an accumulating packed multiply wants rd (as rs3)
@@ -298,7 +299,7 @@ module Mig3Core import Mig3Pkg::*; #(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
         .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm),
-        .vxsat_set(ex_packed_sat));
+        .vxsat_set(ex_packed_sat || ex_pmul_sat));
 
     // A division starts in the first cycle the instruction acts, when Control takes
     // interrupts, as the FPU's operations (not behind a load in MEM/WB: an interrupt
@@ -328,7 +329,7 @@ module Mig3Core import Mig3Pkg::*; #(
         .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
         .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
         .rs3_data(id_rs2_data), .rs3_read(ex_pmul_rs3_read), .stall(ex_pmul_stall),
-        .result(ex_pmul_result));
+        .result(ex_pmul_result), .sat(ex_pmul_sat));
 
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));

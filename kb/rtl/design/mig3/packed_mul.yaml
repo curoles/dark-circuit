@@ -20,7 +20,11 @@ decision: >
   read in EX through ID's rs2 port as an R4's rs3 (kb rtl/design/mig3/rs3_read; decode
   gives uses_rs3 and rs3 = rd, Mig3PackedMul raises rs3_read beside Mig3Fpu's), taken
   into a register in the first acting cycle, the operation entering the cycle after (4
-  cycles in EX); the high halves follow.
+  cycles in EX); then the high halves PMULH.H, PMULHU.H, PMULHSU.H, rounded PMULHR.H and
+  theirs, and the Q15 products PMULQ.H, PMULQR.H: pmul_ctrl_t's res (low or high halves,
+  Q15, dot) and round (PackedMul's rounding at bit 15, Q15 14); a Q15 lane of 0x8000 *
+  0x8000 saturates to 0x7fff, found on the operands, and sets vxsat with Mig3Packed's
+  saturation when the instruction completes.
 why: >
   The result register keeps the multiplier off the path from EX to ID's forwarding, the
   core's longest, as for the FPU (kb rtl/design/mig3/fpu); starting only when no interrupt
@@ -65,4 +69,8 @@ evidence: >
   also rs1) and six more decode cases (rs3 = rd); sky130 5.5 ns, the longest path EX's
   result forwarded into ID (id_rs1_data), the core's own as after the shifts (kb
   rtl/design/mig3/packed_unit), the rs3 read's select now an OR of two units' requests;
-  455 633 um2.
+  455 633 um2. The high halves and Q15 (2026-11-12): the suite passes (146 tests), with
+  pk_mulh (the eight, by P's definitions computed by a script; vxsat not set by Q15
+  products that fit, set by a lane of 0x8000 * 0x8000 and read by the next instruction)
+  and eight more decode cases; sky130 5.6 ns, EX's result forwarded into ID on top as
+  after the accumulating forms (5.5 ns) and the shifts, the core's own path; 458 525 um2.

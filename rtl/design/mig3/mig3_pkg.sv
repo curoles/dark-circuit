@@ -456,6 +456,14 @@ package Mig3Pkg;
         PackedPkg::lane_e lane;        // .B, .BS: bytes; .H, .HS: halfwords
     } pk_ctrl_t;
 
+    // A packed multiply's result (Mig3PackedMul).
+    typedef enum logic [1:0] {
+        PMR_BYTES,      // every lane's low half: the byte products (PMUL.H.B00 ...)
+        PMR_DOT,        // the dot products (PM4ADD.B, PM2ADD.H, their A forms)
+        PMR_HIGH,       // every lane's high half (PMULH.H, PMULHR.H ...)
+        PMR_Q15         // every lane's bits 30..15, saturated (PMULQ.H, PMULQR.H)
+    } pmul_res_e;
+
     // Packed multiplies (P): Mig3PackedMul's PackedMul operation and the operands' signs.
     typedef struct packed {
         logic             en;          // a packed multiply (Mig3PackedMul)
@@ -463,6 +471,8 @@ package Mig3Pkg;
         logic             a_signed;    // rs1's lanes signed
         logic             b_signed;    // rs2's lanes signed
         logic             acc;         // PM4ADDA.B ...: rd added, read as rs3 (uses_rs3)
+        pmul_res_e        res;         // the result: low or high halves, Q15, dot
+        logic             round;       // PMULHR.H, PMULQR.H ...: rounded (2^15; Q15 2^14)
     } pmul_ctrl_t;
 
     // Decode -> parts: the instruction taken apart, with the controls of every part.

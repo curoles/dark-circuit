@@ -8,8 +8,11 @@
  * product of one byte pair, its low 16 bits in the lane; the dot products PM4ADD.B (four
  * byte products summed) and PM2ADD.H (two halfword products) with their PMxADDU and
  * PMxADDSU forms, every 32-bit group's sum; the accumulating forms PM4ADDA.B, PM2ADDA.H and
- * theirs, rd plus the sum. The high halves come in a later step
- * (rtl/design/mig3/p_profile.md).
+ * theirs, rd plus the sum; the high halves PMULH.H, PMULHU.H, PMULHSU.H and, rounded (2^15
+ * added), PMULHR.H and theirs, every lane's bits 31..16; the Q15 products PMULQ.H and,
+ * rounded (2^14 added), PMULQR.H, every lane's bits 30..15, 0x7fff when both operands are
+ * 0x8000 (the one product that does not fit), which sets vxsat (sat, when the instruction
+ * completes). dec.pmul.res picks the result, dec.pmul.round PackedMul's rounding.
  *
  * As Mig3Fpu (kb rtl/design/mig3/fpu): the operation enters in the instruction's first
  * acting cycle, its result comes one clock later and is taken into a register, and the
@@ -24,10 +27,10 @@
  *   rs3_data --> acc_q (an accumulating form's first cycle) -------+
  *   rs1_data, rs2_data, dec.pmul --> PackedMul (STAGES 1) <---------+ acc
  *                                    --> product, dot, one clock later
- *   lanes' low halves, or dot --> result_q (taken once) --> result
+ *   by dec.pmul.res: lanes' low or high halves, Q15, dot --> result_q, sat_q (taken once)
  *
  * Mig3Core instantiates it in EX, for the instruction in EX. stall goes to Mig3Control;
- * result is rd's value (rd_src RD_PMUL).
+ * result is rd's value (rd_src RD_PMUL); sat goes to Mig3Csr (vxsat_set).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -49,7 +52,8 @@ module Mig3PackedMul import Mig3Pkg::*; (
     input  word_t    rs3_data,  // accumulating forms: rd through ID's rs2 port, while rs3_read
     output wire      rs3_read,  // an accumulating form wants rd now, from flops (not valid-gated)
     output wire      stall,     // the result of the instruction in EX is not there yet
-    output word_t    result
+    output word_t    result,
+    output wire      sat        // a Q15 lane saturated: sets vxsat when the insn completes
 );
     logic pm;           // a packed multiply that acts
     logic start;        // its operation enters PackedMul
@@ -80,36 +84,48 @@ module Mig3PackedMul import Mig3Pkg::*; (
 
     assign start = pm && !busy && !ready && (!dec.pmul.acc || acc_got);
 
-    // The lanes' 32-bit products; their low halves are the byte products, the high halves
-    // are not used yet.
-    /* verilator lint_off UNUSEDSIGNAL */
-    logic [2*WIDTH-1:0] product;
-    /* verilator lint_on UNUSEDSIGNAL */
+    logic [2*WIDTH-1:0] product;    // the lanes' 32-bit products
     word_t              dot;        // the dot products of the 32-bit groups
 
     // @kb: rtl/design/mig3/packed_mul
     PackedMul #(.WIDTH(WIDTH), .STAGES(1)) u_packed_mul(
         .clk, .rst_n, .in_valid(start), .a(rs1_data), .b(rs2_data),
         .a_signed(dec.pmul.a_signed), .b_signed(dec.pmul.b_signed), .mode(dec.pmul.mode),
-        .acc(acc_q), .acc_en(dec.pmul.acc), .round_en(1'b0), .round_pos('0), .product, .dot,
-        .out_valid);
+        .acc(acc_q), .acc_en(dec.pmul.acc), .round_en(dec.pmul.round),
+        .round_pos(dec.pmul.res == PMR_Q15 ? 5'd14 : 5'd15), .product, .dot, .out_valid);
 
     always_ff @(posedge clk)
         if (!rst_n) busy <= 1'b0;
         else        busy <= start || (busy && !out_valid);
 
-    // Every lane's 16-bit byte product (the low half of its 32-bit product), or the dot
-    // products.
-    word_t byte_products;
-    word_t unit_result;
+    // The results by kind (dec.pmul.res): every lane's low half (the byte products), high
+    // half (PMULH, PMULHR) or bits 30..15 (Q15: PMULQ, PMULQR; 0x7fff for 0x8000 * 0x8000,
+    // the one product that does not fit, which saturates), or the dot products.
+    word_t               low_halves;
+    word_t               high_halves;
+    word_t               q15;
+    logic [WIDTH/16-1:0] q15_sat;     // a lane's operands both 0x8000
+    word_t               unit_result;
+    logic                unit_sat;    // a Q15 lane saturated
     for (genvar k = 0; k < WIDTH / 16; k++) begin : g_lane
-        assign byte_products[16*k +: 16] = product[32*k +: 16];
+        assign low_halves[16*k +: 16]  = product[32*k +: 16];
+        assign high_halves[16*k +: 16] = product[32*k + 16 +: 16];
+        assign q15_sat[k] = rs1_data[16*k +: 16] == 16'h8000 &&
+                            rs2_data[16*k +: 16] == 16'h8000;
+        assign q15[16*k +: 16] = q15_sat[k] ? 16'h7fff : product[32*k + 15 +: 16];
     end
-    assign unit_result = (dec.pmul.mode == PackedPkg::MUL_DOT_B ||
-                          dec.pmul.mode == PackedPkg::MUL_DOT_H) ? dot : byte_products;
+    always_comb
+        case (dec.pmul.res)
+            PMR_DOT:  unit_result = dot;
+            PMR_HIGH: unit_result = high_halves;
+            PMR_Q15:  unit_result = q15;
+            default:  unit_result = low_halves;
+        endcase
+    assign unit_sat = dec.pmul.res == PMR_Q15 && |q15_sat;
 
     // The result register: taken once per instruction, kept while EX holds.
     word_t result_q;
+    logic  sat_q;       // the result saturated a lane (Q15)
 
     assign take = pm && out_valid && !ready;
 
@@ -118,10 +134,14 @@ module Mig3PackedMul import Mig3Pkg::*; (
         else        ready <= take || (ready && hold);
 
     always_ff @(posedge clk)
-        if (take) result_q <= unit_result;
+        if (take) begin
+            result_q <= unit_result;
+            sat_q    <= unit_sat;
+        end
 
     assign stall  = pm && !ready;
     assign result = result_q;
+    assign sat    = ready && sat_q;
 
     // An operation runs only while its instruction is in EX: nothing removes a packed
     // multiply from EX before its result (an interrupt comes before it starts).
