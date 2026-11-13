@@ -15,7 +15,12 @@ decision: >
   multiplies a kind of their own (KIND_PMUL, rd_src RD_PMUL) and a control struct
   (pmul_ctrl_t: en, PackedPkg::mul_e mode, a_signed, b_signed); the bubbles while EX waits
   are BUBBLE_PMUL. First the byte products PMUL.H.B00, B01, B11 with PMULU and PMULSU (each
-  lane's low 16 bits); the dot products, the accumulating forms and the high halves follow.
+  lane's low 16 bits), then the dot products PM4ADD.B, PM2ADD.H with their U and SU forms
+  (PackedMul's dot), then the accumulating forms PM4ADDA.B, PM2ADDA.H and theirs: rd is
+  read in EX through ID's rs2 port as an R4's rs3 (kb rtl/design/mig3/rs3_read; decode
+  gives uses_rs3 and rs3 = rd, Mig3PackedMul raises rs3_read beside Mig3Fpu's), taken
+  into a register in the first acting cycle, the operation entering the cycle after (4
+  cycles in EX); the high halves follow.
 why: >
   The result register keeps the multiplier off the path from EX to ID's forwarding, the
   core's longest, as for the FPU (kb rtl/design/mig3/fpu); starting only when no interrupt
@@ -36,6 +41,7 @@ relies_on:
   - rtl/design/mig3/fpu
   - rtl/design/mig3/interrupts
   - rtl/lib/numeric/packed/mul
+  - rtl/design/mig3/rs3_read
 code:
   - rtl/design/mig3/mig3_packed_mul.sv
   - rtl/design/mig3/mig3_decode.sv#pmul_of
@@ -48,4 +54,15 @@ evidence: >
   check (pmul bubbles right before a packed multiply). sky130 (Yosys, ABC): Mig3Core 5.6 ns,
   the longest path the rs3 read (ID/EX register into Mig3Fpu's rs3_data) as before the P
   line, no packed multiply logic on it; 432 157 um2 (420 740 before; PackedMul's dot
-  product and accumulator are not used yet and not synthesized).
+  product and accumulator are not used yet and not synthesized). The dot products
+  (2026-11-12): the suite passes (144 tests), with pk_dot (the six, operands that make
+  the signed, unsigned and mixed sums differ; a sum used at once by an ADD; rs2 loaded
+  right before) and six more decode cases; sky130 5.6 ns, the rs3 read on top as before,
+  no packed multiply logic on it; 452 856 um2 (PackedMul's dot tree and adder now kept;
+  the accumulator not used yet). The accumulating forms (2026-11-12): the suite passes
+  (145 tests), with pk_dota (the six; accumulators an immediate, rd written by the
+  instruction before (MEM/WB, a chain), a word loaded right before (the sum wraps), rd
+  also rs1) and six more decode cases (rs3 = rd); sky130 5.5 ns, the longest path EX's
+  result forwarded into ID (id_rs1_data), the core's own as after the shifts (kb
+  rtl/design/mig3/packed_unit), the rs3 read's select now an OR of two units' requests;
+  455 633 um2.

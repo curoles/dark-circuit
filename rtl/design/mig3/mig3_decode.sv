@@ -57,6 +57,10 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             PMUL_H_B00, PMUL_H_B01, PMUL_H_B11:                     kind_enc = KIND_PMUL;  // P
             PMULU_H_B00, PMULU_H_B01, PMULU_H_B11:                  kind_enc = KIND_PMUL;  // P
             PMULSU_H_B00, PMULSU_H_B11:                             kind_enc = KIND_PMUL;  // P
+            PM4ADD_B, PM4ADDU_B, PM4ADDSU_B:                        kind_enc = KIND_PMUL;  // P
+            PM2ADD_H, PM2ADDU_H, PM2ADDSU_H:                        kind_enc = KIND_PMUL;  // P
+            PM4ADDA_B, PM4ADDAU_B, PM4ADDASU_B:                     kind_enc = KIND_PMUL;  // P
+            PM2ADDA_H, PM2ADDAU_H, PM2ADDASU_H:                     kind_enc = KIND_PMUL;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -275,17 +279,29 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
     // @kb: rtl/design/mig3/packed_unit
     // @kb: rtl/design/mig3/packed_mul
     // A packed multiply's operation and signs (P), by the encodings; 0 for other kinds.
-    // The fields in pmul_ctrl_t's order: en, mode, a_signed, b_signed.
+    // The fields in pmul_ctrl_t's order: en, mode, a_signed, b_signed, acc.
     function automatic pmul_ctrl_t pmul_of(insn_t w);
         casez (w)
-            PMUL_H_B00:   return '{1'b1, PackedPkg::MUL_B00, 1'b1, 1'b1};
-            PMUL_H_B01:   return '{1'b1, PackedPkg::MUL_B01, 1'b1, 1'b1};
-            PMUL_H_B11:   return '{1'b1, PackedPkg::MUL_B11, 1'b1, 1'b1};
-            PMULU_H_B00:  return '{1'b1, PackedPkg::MUL_B00, 1'b0, 1'b0};
-            PMULU_H_B01:  return '{1'b1, PackedPkg::MUL_B01, 1'b0, 1'b0};
-            PMULU_H_B11:  return '{1'b1, PackedPkg::MUL_B11, 1'b0, 1'b0};
-            PMULSU_H_B00: return '{1'b1, PackedPkg::MUL_B00, 1'b1, 1'b0};
-            PMULSU_H_B11: return '{1'b1, PackedPkg::MUL_B11, 1'b1, 1'b0};
+            PMUL_H_B00:   return '{1'b1, PackedPkg::MUL_B00,   1'b1, 1'b1, 1'b0};
+            PMUL_H_B01:   return '{1'b1, PackedPkg::MUL_B01,   1'b1, 1'b1, 1'b0};
+            PMUL_H_B11:   return '{1'b1, PackedPkg::MUL_B11,   1'b1, 1'b1, 1'b0};
+            PMULU_H_B00:  return '{1'b1, PackedPkg::MUL_B00,   1'b0, 1'b0, 1'b0};
+            PMULU_H_B01:  return '{1'b1, PackedPkg::MUL_B01,   1'b0, 1'b0, 1'b0};
+            PMULU_H_B11:  return '{1'b1, PackedPkg::MUL_B11,   1'b0, 1'b0, 1'b0};
+            PMULSU_H_B00: return '{1'b1, PackedPkg::MUL_B00,   1'b1, 1'b0, 1'b0};
+            PMULSU_H_B11: return '{1'b1, PackedPkg::MUL_B11,   1'b1, 1'b0, 1'b0};
+            PM4ADD_B:     return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b1, 1'b0};
+            PM4ADDU_B:    return '{1'b1, PackedPkg::MUL_DOT_B, 1'b0, 1'b0, 1'b0};
+            PM4ADDSU_B:   return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b0, 1'b0};
+            PM2ADD_H:     return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b1, 1'b0};
+            PM2ADDU_H:    return '{1'b1, PackedPkg::MUL_DOT_H, 1'b0, 1'b0, 1'b0};
+            PM2ADDSU_H:   return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b0, 1'b0};
+            PM4ADDA_B:    return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b1, 1'b1};
+            PM4ADDAU_B:   return '{1'b1, PackedPkg::MUL_DOT_B, 1'b0, 1'b0, 1'b1};
+            PM4ADDASU_B:  return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b0, 1'b1};
+            PM2ADDA_H:    return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b1, 1'b1};
+            PM2ADDAU_H:   return '{1'b1, PackedPkg::MUL_DOT_H, 1'b0, 1'b0, 1'b1};
+            PM2ADDASU_H:  return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b0, 1'b1};
             default:      return '0;
         endcase
     endfunction
@@ -442,6 +458,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             KIND_PMUL: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_PMUL;
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.pmul = pmul_of(insn);
+                dec.uses_rs3 = dec.pmul.acc;  dec.rs3 = dec.rd;    // the accumulator
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;

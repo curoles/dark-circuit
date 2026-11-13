@@ -27,7 +27,10 @@
  * accumulator (acc_en) is one more row of the first lane of every 32-bit group, and the two
  * lanes' trees are added in carry-save form, their four rows into a WallaceTree and one
  * adder: the group's dot product modulo 2^32 at bit 32g of dot (product is then not
- * meaningful, nor dot in the other modes). WIDTH 32 or 64. Hybrid (AGENTS.md): the trees
+ * meaningful, nor dot in the other modes). In the product modes round_en adds
+ * 1 << round_pos to every lane's product (RISC-V P: 15 rounds a high half, 14 a Q15 one)
+ * as one more row of its tree: 18 or 19 rows take a tree no deeper than 17. WIDTH 32 or
+ * 64. Hybrid (AGENTS.md): the trees
  * and the adders are library blocks; the partial-product bits, the selects and the
  * constants are glue.
  *
@@ -64,6 +67,8 @@ module PackedMul import PackedPkg::*; #(
     input  mul_e               mode,
     input  wire  [WIDTH-1:0]   acc,         // dot modes: added to group g's sum, bits 32g
     input  wire                acc_en,      // add acc, else 0
+    input  wire                round_en,    // product modes: add 1 << round_pos to every lane
+    input  wire  [4:0]         round_pos,
     output wire  [2*WIDTH-1:0] product,     // lane k (16 bits): its 32-bit product at bit 32k
     output wire  [WIDTH-1:0]   dot,         // dot modes: group g's dot product at bit 32g
     output wire                out_valid    // product and dot are the operation's, STAGES later
@@ -133,6 +138,7 @@ module PackedMul import PackedPkg::*; #(
     logic       bytes;      // one byte pair per lane (MUL_B00, MUL_B11, MUL_B01)
     logic       dot_b;      // the byte dot product: LL and HH, HH at weight 0
     logic       dots;       // a dot product (MUL_DOT_B, MUL_DOT_H): the accumulator counts
+    logic [31:0] rounding;  // added to every lane's product (product modes)
     logic [3:0] active;     // the pieces in use
     logic [3:0] fa;         // a piece's a byte is signed
     logic [3:0] fb;         // a piece's b byte is signed
@@ -141,6 +147,7 @@ module PackedMul import PackedPkg::*; #(
     assign bytes = mode == MUL_B00 || mode == MUL_B11 || mode == MUL_B01;
     assign dot_b = mode == MUL_DOT_B;
     assign dots  = dot_b || mode == MUL_DOT_H;
+    assign rounding = (round_en && !dots) ? 32'(1) << round_pos : '0;
 
     always_comb
         if (bytes) begin
@@ -158,7 +165,7 @@ module PackedMul import PackedPkg::*; #(
         end
 
     for (genvar k = 0; k < LANES; k++) begin : g_lane
-        localparam int ROWS = (k % 2 == 0) ? 18 : 17;   // a group's first lane: + acc
+        localparam int ROWS = (k % 2 == 0) ? 19 : 18;   // a group's first lane: + acc
         logic [7:0]  al;
         logic [7:0]  ah;
         logic [7:0]  bl;
@@ -193,8 +200,9 @@ module PackedMul import PackedPkg::*; #(
             assign rows[j] = 32'(pp) << (j - 8);
         end
         assign rows[16] = lane_constant(active, fa, fb, dot_b);
+        assign rows[17] = rounding;
         if (k % 2 == 0) begin : g_acc
-            assign rows[17] = (dots && acc_en) ? acc[16*k +: 32] : '0;
+            assign rows[18] = (dots && acc_en) ? acc[16*k +: 32] : '0;
         end
 
         WallaceTree #(.ROWS(ROWS), .WIDTH(32)) u_wallace_tree(

@@ -462,6 +462,7 @@ package Mig3Pkg;
         PackedPkg::mul_e  mode;        // PackedMul's operation
         logic             a_signed;    // rs1's lanes signed
         logic             b_signed;    // rs2's lanes signed
+        logic             acc;         // PM4ADDA.B ...: rd added, read as rs3 (uses_rs3)
     } pmul_ctrl_t;
 
     // Decode -> parts: the instruction taken apart, with the controls of every part.
@@ -470,14 +471,15 @@ package Mig3Pkg;
         reg_id_t           rd;
         reg_id_t           rs1;
         reg_id_t           rs2;
-        reg_id_t           rs3;      // R4 (FMADD.S ...): the third operand
+        reg_id_t           rs3;      // the third operand: an R4's (FMADD.S ...), or rd
+                                     // (PM4ADDA.B ...)
         logic              rd_we;    // writes rd (writes to x0 are dropped by the register file)
         rd_src_e           rd_src;   // value written to rd
         logic              uses_rs1; // reads rs1, exactly (the retire trace)
         logic              uses_rs2;
         logic              hz_rs1;   // may read rs1, by the opcode alone: the interlock
         logic              hz_rs2;   // (Mig3Control); never 0 when uses_rs* is 1
-        logic              uses_rs3; // R4: reads rs3 (Zfinx)
+        logic              uses_rs3; // reads rs3 in EX: R4 (Zfinx), PM4ADDA.B ... (P)
         alu_ctrl_t         alu;      // Mig3Alu
         br_ctrl_t          br;       // Mig3Branch
         mem_ctrl_t         mem;      // Mig3Lsu

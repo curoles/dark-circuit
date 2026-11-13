@@ -6,7 +6,9 @@
  * (16 x 16, or the byte pair of the mode: al*bl, ah*bh, al*bh), each signed or unsigned by
  * its flag, exact in 32 bits; the dot product is the sum of the four byte products al*bl +
  * ah*bh of both lanes (MUL_DOT_B) or of the two lanes' 16 x 16 products (MUL_DOT_H), plus acc
- * when acc_en, modulo 2^32. STAGES 1, streaming: an operation enters every clock, and one
+ * when acc_en, modulo 2^32; with round_en (a random position, in every case) the products
+ * have 1 << round_pos added, the dot products not. STAGES 1, streaming: an operation
+ * enters every clock, and one
  * clock later, with the next operation's inputs already applied, out_valid is 1 and the
  * result equals STAGES 0's for that operation (so nothing after the register reads the
  * inputs). Byte modes and MUL_DOT_B: each byte of a runs through all values and each byte
@@ -36,6 +38,8 @@ module TbPackedMul;
     mul_e               mode;
     logic [WIDTH-1:0]   acc;
     logic               acc_en;
+    logic               round_en;
+    logic [4:0]         round_pos;
     logic [2*WIDTH-1:0] product;
     logic [WIDTH-1:0]   dot;
     logic [2*WIDTH-1:0] product1;   // STAGES 1
@@ -53,11 +57,11 @@ module TbPackedMul;
     logic [WIDTH-1:0]   prev_dot;
 
     PackedMul #(.WIDTH(WIDTH), .STAGES(0)) u_packed_mul(
-        .clk, .rst_n, .in_valid, .a, .b, .a_signed, .b_signed, .mode, .acc, .acc_en, .product,
-        .dot, .out_valid);
+        .clk, .rst_n, .in_valid, .a, .b, .a_signed, .b_signed, .mode, .acc, .acc_en,
+        .round_en, .round_pos, .product, .dot, .out_valid);
     PackedMul #(.WIDTH(WIDTH), .STAGES(1)) u_packed_mul_staged(
         .clk, .rst_n, .in_valid, .a, .b, .a_signed, .b_signed, .mode, .acc, .acc_en,
-        .product(product1), .dot(dot1), .out_valid(out_valid1));
+        .round_en, .round_pos, .product(product1), .dot(dot1), .out_valid(out_valid1));
 
     // An operand as a number: signed (two's complement in w bits) or unsigned.
     function automatic longint value(input logic [15:0] v, input int w, input logic s);
@@ -116,6 +120,8 @@ module TbPackedMul;
                     MUL_B01: p = 32'(byte_product(x, 0, y, 1));
                     default: p = 32'(value(x, 16, a_signed) * value(y, 16, b_signed));
                 endcase
+                if (round_en)
+                    p += 32'(1) << round_pos;
                 if (product[32*k +: 32] !== p)
                     $fatal(1, "PackedMul lane %0d, mode %0d (signed %b %b): %h * %h -> %h, expected %h",
                            k, mode, a_signed, b_signed, x, y, product[32*k +: 32], p);
@@ -162,8 +168,10 @@ module TbPackedMul;
                             a[8*j +: 8] = 8'(x + 85 * j);
                             b[8*j +: 8] = y ^ 8'(8'h5b * j);
                         end
-                        acc    = $urandom();
-                        acc_en = 1'($urandom() % 2);
+                        acc       = $urandom();
+                        acc_en    = 1'($urandom() % 2);
+                        round_en  = 1'($urandom() % 2);
+                        round_pos = 5'($urandom());
                         check();
                     end
         // MUL_16 and MUL_DOT_H: edge values, with the accumulators that make the sum wrap.
@@ -178,8 +186,10 @@ module TbPackedMul;
                             {a_signed, b_signed} = 2'(s);
                             a      = {edges[(i + 1) % 5], edges[i]};
                             b      = {edges[(k + 2) % 5], edges[k]};
-                            acc    = accs[c];
-                            acc_en = 1'b1;
+                            acc       = accs[c];
+                            acc_en    = 1'b1;
+                            round_en  = 1'($urandom() % 2);
+                            round_pos = 5'($urandom());
                             check();
                         end
         for (int n = 0; n < RANDOM_CASES; n++) begin
@@ -188,8 +198,10 @@ module TbPackedMul;
             a_signed = 1'($urandom() % 2);
             b_signed = 1'($urandom() % 2);
             mode     = mul_e'($urandom() % 6);
-            acc      = $urandom();
-            acc_en   = 1'($urandom() % 2);
+            acc       = $urandom();
+            acc_en    = 1'($urandom() % 2);
+            round_en  = 1'($urandom() % 2);
+            round_pos = 5'($urandom());
             check();
         end
         $display("PASS");

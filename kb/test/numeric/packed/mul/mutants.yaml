@@ -45,6 +45,18 @@ mutants:
         old: "(dots && acc_en) ? acc[16*k +: 32] : '0"
         new: "(dots && acc_en && 1'b0) ? acc[16*k +: 32] : '0"
     expect: caught
+  - name: the rounding bit one place too high
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "32'(1) << round_pos"
+        new: "32'(1) << (round_pos + 5'd1)"
+    expect: caught
+  - name: rounding in the dot modes too
+    edits:
+      - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv
+        old: "(round_en && !dots)"
+        new: "(round_en)"
+    expect: caught
   - name: STAGES 1's product adders read the rows before the register
     edits:
       - file: rtl/lib/numeric/packed/mul/hybrid/packed_mul.sv

@@ -135,6 +135,7 @@ module Mig3Core import Mig3Pkg::*; #(
     logic         ex_pmul_stall;
     logic         ex_fpu_illegal;   // the F instruction can not be done: it traps
     logic         ex_fpu_rs3_read;  // the R4 in EX wants rs3 (not valid-gated)
+    logic         ex_pmul_rs3_read; // an accumulating packed multiply wants rd (as rs3)
     logic         ex_rs3_read;      // ... and is there: ID's rs2 port is lent to it
     RiscvPkg::funct3_t ex_frm;      // fcsr.frm: the FPU's mode for FRM_DYN
     logic         ex_lsu_valid;     // the load or store in EX may send its request
@@ -218,7 +219,7 @@ module Mig3Core import Mig3Pkg::*; #(
     // read means nothing then. Forwarding from EX is off meanwhile (EX holds the R4
     // itself); rs3's newest writer is in MEM/WB. The select comes from flops.
     // @kb: rtl/design/mig3/rs3_read
-    assign ex_rs3_read  = ex_fetch.valid && ex_fpu_rs3_read;
+    assign ex_rs3_read  = ex_fetch.valid && (ex_fpu_rs3_read || ex_pmul_rs3_read);
     assign id_rf_rs2    = ex_rs3_read ? ex_dec.rs3 : id_dec.rs2;
     assign id_fwd_ex_rd = ex_rs3_read ? '0 : ex_rd;
 
@@ -321,11 +322,13 @@ module Mig3Core import Mig3Pkg::*; #(
     // ID's instruction does not move while its rs2 port is lent to EX's R4.
     `DC_ASSERT(a_rs3_port_lent, !ex_rs3_read || pipe_ctrl.ex_stall || pipe_ctrl.ex_flush)
 
-    // Packed multiplies (P): started and held as the FPU's operations, 3 cycles in EX.
+    // Packed multiplies (P): started and held as the FPU's operations, 3 cycles in EX; the
+    // accumulating forms read rd first, through ID's rs2 port as an R4's rs3: 4 cycles.
     Mig3PackedMul u_mig3_packed_mul(
         .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
         .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
-        .stall(ex_pmul_stall), .result(ex_pmul_result));
+        .rs3_data(id_rs2_data), .rs3_read(ex_pmul_rs3_read), .stall(ex_pmul_stall),
+        .result(ex_pmul_result));
 
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));

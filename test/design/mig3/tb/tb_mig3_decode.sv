@@ -356,9 +356,10 @@ module TbMig3Decode;
     /* verilator lint_on UNUSEDSIGNAL */
 
     // A packed multiply's operation and signs (P), by funct7 and funct3 as the encodings
-    // have them: funct3 tells B01 from the others, bit 28 B11 from B00; bit 30 PMULSU (rs1
-    // signed, rs2 unsigned), else bit 29 PMULU (both unsigned), else both signed. 0 for
-    // other kinds. Only bits 30..28 and 14..12 of w are used.
+    // have them: funct3 tells the dot products (then bit 26: bytes, PM4ADD) and B01 from
+    // the byte products, bit 28 B11 from B00; bit 27 the accumulating dot products; bit 30
+    // the SU forms (rs1 signed, rs2 unsigned), else bit 29 the U forms (both unsigned),
+    // else both signed. 0 for other kinds. Only bits 30..26 and 14..12 of w are used.
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic pmul_ctrl_t pmul_model(input kind_e kind, input insn_t w);
         logic su;
@@ -368,9 +369,20 @@ module TbMig3Decode;
         su = w[30] == PMULSU_H_B00[30];
         u  = !su && w[29] == PMULU_H_B00[29];
         return '{en: 1'b1,
-                 mode: w[14:12] == PMUL_H_B01[14:12] ? PackedPkg::MUL_B01 :
+                 mode: w[14:12] == PM4ADD_B[14:12] ?
+                           (w[26] == PM4ADD_B[26] ? PackedPkg::MUL_DOT_B :
+                                                    PackedPkg::MUL_DOT_H) :
+                       w[14:12] == PMUL_H_B01[14:12] ? PackedPkg::MUL_B01 :
                        w[28] == PMUL_H_B11[28] ? PackedPkg::MUL_B11 : PackedPkg::MUL_B00,
-                 a_signed: !u, b_signed: !u && !su};
+                 a_signed: !u, b_signed: !u && !su,
+                 acc: w[14:12] == PM4ADD_B[14:12] && w[27] == PM4ADDA_B[27]};
+    endfunction
+
+    // An accumulating packed multiply: it reads rd as rs3.
+    function automatic logic pmul_acc(input kind_e kind, input insn_t w);
+        pmul_ctrl_t m;
+        m = pmul_model(kind, w);
+        return m.acc;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 
@@ -410,7 +422,8 @@ module TbMig3Decode;
             check(c, insn, "hz_rs1", 32'(dec.hz_rs1), 32'(hz_model(insn[6:0]) >> 1));
             check(c, insn, "hz_rs2", 32'(dec.hz_rs2), 32'(hz_model(insn[6:0]) & 2'b01));
             check(c, insn, "uses_rs3", 32'(dec.uses_rs3),
-                  32'(exp_kind == KIND_FP && insn[6:0] != FADD_S[6:0]));
+                  32'((exp_kind == KIND_FP && insn[6:0] != FADD_S[6:0]) ||
+                      pmul_acc(exp_kind, insn)));
             if (dec.uses_rs3)
                 check(c, insn, "rs3", 32'(dec.rs3), e[9]);
             if (uses_alu(exp_kind))

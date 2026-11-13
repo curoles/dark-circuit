@@ -25,7 +25,10 @@ decision: >
   the lanes' adders (two adders in series); the accumulator is one more row of the
   group's first lane (18 rows take a tree no deeper than 17). STAGES 1 registers the
   lanes' trees' rows (a DelayLine of the boundary struct, as Fp32Fma): the adders and
-  the dot product's tree come in the next clock. The user chose a block of its own and
+  the dot product's tree come in the next clock. Rounding (P's rounded high halves and
+  Q15): round_en adds 1 << round_pos to every lane's product as one more row (19 rows
+  take a tree no deeper than 17; added into the constant row it cost an adder in front
+  of the tree: 4.2 ns with STAGES 1). The user chose a block of its own and
   the pieces
   (2026-11-12), then Baugh-Wooley over correction rows after the first measurement.
 why: >
@@ -87,4 +90,8 @@ evidence: >
   an operation every clock, its result one clock later with the next one's inputs
   applied; the dot products by the same exhaustive and edge cases with accumulators that
   wrap; 6.0 s in full). With levels (kb cmake/test_effort): 0.4 s at effort 0, b's bytes
-  16 values, 5.1 s at effort 1, every byte. Mutants: eight, caught at effort 0.
+  16 values, 5.1 s at effort 1, every byte. Mutants: eight, caught at effort 0. Rounding
+  (2026-11-12): in the constant row, an adder in front of the tree, STAGES 1 4.2 ns; as a
+  row of its own 3.9 ns, 36 870 um2 (3.4 ns without rounding: its decoder and the row on
+  the slowest lane, about ABC's spread). The test passes with rounding at a random
+  position in every case (0.6 s, 5.8 s at effort 1); mutants: ten, caught.

@@ -192,9 +192,14 @@
     EXPECT K_PACKED, 1, 1, 0, \rd, \rs1, 0, 0, 0, 0
     .endm
 
-    .macro PMUL op, rd, rs1, rs2                    /* pmul(u, su).h.b00 b01 b11 */
+    .macro PMUL op, rd, rs1, rs2                    /* pmul.h.b*, pm4add.b, pm2add.h */
     \op x\rd, x\rs1, x\rs2
     EXPECT K_PMUL, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, 0
+    .endm
+
+    .macro PMULA op, rd, rs1, rs2                   /* pm4adda.b ...: rd read as rs3 */
+    \op x\rd, x\rs1, x\rs2
+    EXPECT K_PMUL, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, \rd
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -436,6 +441,18 @@ cases:
     PMUL   pmulu.h.b11,  16, 17, 18
     PMUL   pmulsu.h.b00, 19, 20, 21
     PMUL   pmulsu.h.b11, 22, 23, 31
+    PMUL   pm4add.b,     24, 25, 26
+    PMUL   pm4addu.b,    27, 28, 29
+    PMUL   pm4addsu.b,   30, 31, 1
+    PMUL   pm2add.h,     2,  3,  4
+    PMUL   pm2addu.h,    5,  6,  7
+    PMUL   pm2addsu.h,   8,  9,  10
+    PMULA  pm4adda.b,    11, 12, 13
+    PMULA  pm4addau.b,   14, 15, 16
+    PMULA  pm4addasu.b,  17, 18, 19
+    PMULA  pm2adda.h,    20, 21, 22
+    PMULA  pm2addau.h,   23, 24, 25
+    PMULA  pm2addasu.h,  26, 27, 28
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */
