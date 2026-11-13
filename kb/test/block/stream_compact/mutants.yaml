@@ -1,0 +1,47 @@
+type: mutants
+title: Mutants of the StreamCompact test (behave and struct versions)
+date: 2026-11-13
+tests: [block_stream_compact_behave, block_stream_compact_struct]
+mutants:
+  - name: behave, overflow already at exactly MAX valid elements
+    edits:
+      - file: rtl/lib/block/stream_compact/behave/stream_compact.sv
+        old: "assign overflow          = int'(count) > MAX;"
+        new: "assign overflow          = int'(count) >= MAX;"
+    expect: model
+  - name: behave, empty slots are not 0
+    edits:
+      - file: rtl/lib/block/stream_compact/behave/stream_compact.sv
+        old: "o = '0;"
+        new: "o = '1;"
+    expect: model
+  - name: struct, every stage keeps or moves by bit 0 of the gap
+    edits:
+      - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
+        old: "Inv  #(1) u_inv(.in(p[s][j][DATA_WIDTH+s]), .out(move_n));"
+        new: "Inv  #(1) u_inv(.in(p[s][j][DATA_WIDTH]), .out(move_n));"
+    expect: model
+  - name: struct, an element moves in whether or not its gap has bit s
+    edits:
+      - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
+        old: "And2 #(1) u_and2_take(.in1(v[s][j+S]), .in2(p[s][j+S][DATA_WIDTH+s]),"
+        new: "And2 #(1) u_and2_take(.in1(v[s][j+S]), .in2(1'b1),"
+    expect: model
+  - name: struct, count one less (no + 1 of WIDTH - invalid)
+    edits:
+      - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
+        old: ".in1(CW'(WIDTH)), .in2(invalid_total_n), .ci(1'b1), .co, .sum(count));"
+        new: ".in1(CW'(WIDTH)), .in2(invalid_total_n), .ci(1'b0), .co, .sum(count));"
+    expect: model
+  - name: struct, overflow already when lane MAX - 1 is valid
+    edits:
+      - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
+        old: "OrReduce #(WIDTH - MAX) u_or_reduce(.in(v[LEVELS][WIDTH-1:MAX]), .out(overflow));"
+        new: "OrReduce #(WIDTH - MAX + 1) u_or_reduce(.in(v[LEVELS][WIDTH-1:MAX-1]), .out(overflow));"
+    expect: model
+  - name: struct, slot data not masked by valid
+    edits:
+      - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
+        old: ".in2({DATA_WIDTH{v[LEVELS][j]}}), .out(out_data[j]));"
+        new: ".in2({DATA_WIDTH{1'b1}}), .out(out_data[j]));"
+    expect: model

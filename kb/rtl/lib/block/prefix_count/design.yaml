@@ -1,0 +1,43 @@
+type: decision
+title: PrefixCount, the ones below every bit, a parallel prefix of small adders
+date: 2026-11-13
+question: >
+  StreamCompact (kb rtl/lib/block/stream_compact/design) needs for every element the number
+  of invalid elements below it; ranking the active requests or turning a bit vector into
+  slots need the same count of ones below every bit. A block of its own or part of
+  StreamCompact, and how is the struct version built?
+decision: >
+  A generic block of its own (the user: generic sub-blocks for a modular design),
+  PrefixCount #(WIDTH): prefix[k] the ones in in[k-1:0] (0 for k = 0, an exclusive prefix)
+  as one packed array [WIDTH-1:0][CW-1:0], total the ones in all of in, CW = $clog2(WIDTH +
+  1) bits each; combinational, WIDTH 1 or more. The behave version counts from bit 0 up. The
+  struct version is a parallel prefix as KoggeStoneAdder's carries: level l adds to every
+  count the one 2^l below it, log2(WIDTH) levels; a count before level l covers at most 2^l
+  bits, so each adder is a KoggeStoneAdder of l + 1 bits whose carry out is the sum's top
+  bit, the bits above constant 0.
+why: >
+  An exclusive prefix is a one's place among the ones directly (the first one gets 0) and
+  is what StreamCompact moves by; total comes from the same network at no cost. Adders as
+  narrow as their counts keep the network about WIDTH x log2(WIDTH) adders of a few bits:
+  the widths grow with the level, never to CW at the first levels. The levels as one array
+  per level with Verilator's split_var, as in KoggeStoneAdder.
+rejected:
+  - choice: The count inside StreamCompact
+    why_not: >
+      Ranking and a bit vector to slots use it alone; as a block it has its own test, and
+      StreamCompact reads as its steps.
+  - choice: An inclusive prefix (the ones in in[k:0])
+    why_not: >
+      A one's place would need a subtraction of 1; the exclusive count is the place and the
+      inclusive one is prefix[k] + in[k] when someone needs it.
+  - choice: One PopCount per bit (each of in[k-1:0])
+    why_not: About WIDTH^2 / 2 counter bits against WIDTH x log2(WIDTH) small adders.
+evidence: >
+  2026-11-13: behave and struct versions against one testbench (widths 1, 2, 3, 5, 8, 12
+  exhaustive on Verilator, up to 8 on Icarus; 33 and 64 directed and random on Verilator;
+  a running count, every count checked against the one below it), Verilator and Icarus
+  (each under 0.1 s on Verilator; 0.1 and 0.3 s on Icarus). sky130 inside StreamCompact (kb
+  rtl/lib/block/stream_compact/design).
+code:
+  - rtl/lib/block/prefix_count/struct/prefix_count.sv#g_level
+  - rtl/lib/block/prefix_count/behave/prefix_count.sv#counts

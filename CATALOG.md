@@ -420,6 +420,12 @@ block:
     path: rtl/lib/block/pop_count
     test: test/block/pop_count
     kb: [rtl/lib/block/compute_core_bitmanip/library_block]
+  PrefixCount:
+    what: "Prefix count: for every bit of in, the number of ones below it; combinational"
+    versions: [behave, struct]
+    path: rtl/lib/block/prefix_count
+    test: test/block/prefix_count
+    kb: [rtl/lib/block/prefix_count/design]
   PrgCounter:
     what: "Program counter"
     versions: [behave, struct]
@@ -507,6 +513,12 @@ block:
     path: rtl/lib/block/strb_reg
     test: test/block/strb_reg
     kb: [rtl/lib/block/strb_reg/design]
+  StreamCompact:
+    what: "Stream compaction: the valid elements of a row moved to its front, in order; combinational"
+    versions: [behave, struct]
+    path: rtl/lib/block/stream_compact
+    test: test/block/stream_compact
+    kb: [rtl/lib/block/stream_compact/design]
   TickGen:
     what: "Tick generator: a one-clock tick every div + 1 clocks, on average"
     versions: [behave, struct]

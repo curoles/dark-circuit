@@ -1,0 +1,55 @@
+type: decision
+title: StreamCompact, the valid elements moved to the front, a network of shifts by their gaps
+date: 2026-11-13
+question: >
+  The first block of the QEC detour (the user: a small detour, a couple of generic RTL
+  blocks): a round of detection events is a wide, mostly-zero bit vector, and a decoder
+  wants the short list of the defects' positions (zero suppression, as a detector's hit
+  channels). Which ports make it generic, and how is it built: one position per clock, every
+  slot choosing among all elements, or every element moving down?
+decision: >
+  StreamCompact #(WIDTH, MAX, DATA_WIDTH), combinational: elements valid[k] with data[k]
+  (one packed array, as ArgMaxTree's values) go to the first slots in order: out_data[j] the
+  j-th valid element's data, out_valid[j] = j < count, count the valid elements, overflow
+  count > MAX (then only the first MAX go out), empty slots' data 0; positions are data[k] =
+  k. The behave version appends every valid element. The struct version (the user's choice
+  (c)): every valid element moves down by its gap, the invalid elements below it (a
+  PrefixCount of ~valid), in log2(WIDTH) stages from the smallest move up; stage s moves an
+  element by 2^s when bit s of its gap is 1, the gap travelling with it, so a stage is a row
+  of 2-input muxes (take the lane 2^s above if it moves, else keep this lane if it stays).
+  Slots are the last stage's first MAX lanes, data And-ed with valid; overflow an OrReduce of
+  the lanes from MAX up; count = WIDTH - PrefixCount's total of the invalid ones.
+why: >
+  Data instead of positions makes it a packer of anything present (requests, packets) and
+  still zero suppression with data[k] = k. Moving by the gap, smallest stage first, never
+  puts two elements in one lane nor lets one pass another (the gaps grow from element to
+  element by the invalid ones between, so after the stages below s two neighbours stay at
+  least one lane apart): the muxes need no priority, and the network grows as WIDTH x
+  log2(WIDTH), where every slot comparing every element's rank grows as WIDTH x MAX.
+  Defined results (0 in empty slots) cost one And2 per slot bit and spare callers a guard.
+rejected:
+  - choice: One position per clock (PriorityEncoder, clear the lowest one, again)
+    why_not: >
+      As many clocks as ones, and mostly a wrapper around PriorityEncoder; a QEC round
+      wants its list at once.
+  - choice: Every slot choosing the element whose rank is its index (gather, a one-hot mux)
+    why_not: >
+      WIDTH x MAX rank comparators and a WIDTH-input one-hot mux per slot; the shift network
+      grows as WIDTH x log2(WIDTH). Not built or measured.
+  - choice: Positions only, without data
+    why_not: Less generic; positions are data[k] = k at no cost.
+relies_on:
+  - rtl/lib/block/prefix_count/design
+code:
+  - rtl/lib/block/stream_compact/struct/stream_compact.sv#g_stage
+  - rtl/lib/block/stream_compact/behave/stream_compact.sv#compact
+evidence: >
+  2026-11-13: behave and struct versions against one testbench (WIDTH/MAX 1/1, 2/1, 3/3,
+  5/2, 8/4, 12/5 exhaustive over the valid bits on Verilator, up to 8 on Icarus; 24/8 and on
+  Verilator 40/16, 33/33 directed (none, all, MAX, MAX + 1 valid) and random of three
+  densities; data positions or random; the model places from the top element down;
+  coverage of none, all, exactly MAX, overflow), Verilator and Icarus (each under 0.1 s on
+  Verilator; 0.1 and 1.0 s on Icarus, where the widest struct configurations take seconds
+  to elaborate). sky130 (Yosys, ABC), WIDTH 24, MAX 8, DATA_WIDTH 5 (a distance-7 round):
+  struct 13 627 um2, 4.2 ns; behave 32 265 um2, 12.0 ns. WIDTH 40, MAX 16, DATA_WIDTH 6
+  (distance 9): struct 35 492 um2, 4.9 ns.

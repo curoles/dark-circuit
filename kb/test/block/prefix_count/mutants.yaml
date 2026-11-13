@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the PrefixCount test (behave and struct versions)
+date: 2026-11-13
+tests: [block_prefix_count_behave, block_prefix_count_struct]
+mutants:
+  - name: behave, an inclusive count (a bit counts itself)
+    edits:
+      - file: rtl/lib/block/prefix_count/behave/prefix_count.sv
+        old: "p[k] = n;"
+        new: "p[k] = n + CW'(v[k]);"
+    expect: model
+  - name: struct, an adder adds the count one below instead of 2^l below
+    edits:
+      - file: rtl/lib/block/prefix_count/struct/prefix_count.sv
+        old: ".in1(run[l][k][B-1:0]), .in2(run[l][k-S][B-1:0]), .ci(1'b0),"
+        new: ".in1(run[l][k][B-1:0]), .in2(run[l][k-1][B-1:0]), .ci(1'b0),"
+    expect: model
+  - name: struct, a narrow adder adds one too many
+    edits:
+      - file: rtl/lib/block/prefix_count/struct/prefix_count.sv
+        old: ".in1(run[l][k][B-1:0]), .in2(run[l][k-S][B-1:0]), .ci(1'b0),"
+        new: ".in1(run[l][k][B-1:0]), .in2(run[l][k-S][B-1:0]), .ci(1'b1),"
+    expect: model
+  - name: struct, the low bits of a level lose their counts
+    edits:
+      - file: rtl/lib/block/prefix_count/struct/prefix_count.sv
+        old: "assign run[l+1][k] = run[l][k];"
+        new: "assign run[l+1][k] = '0;"
+    expect: model
+  - name: struct, bit 0 counts itself
+    edits:
+      - file: rtl/lib/block/prefix_count/struct/prefix_count.sv
+        old: "assign prefix[0] = '0;"
+        new: "assign prefix[0] = CW'(in[0]);"
+    expect: model
