@@ -20,9 +20,9 @@ follows below is the plan as it was, the record of how the subset came about.
 - **Why it stops:** C compiled with P uses instructions outside the subset that do not
   fit Mig3. clang turns 64-bit arithmetic into RV32 register-pair instructions (the
   kernel's requantization: WMUL, ADDD, NSRLI, WSLAI; two registers written, up to four
-  read, against Mig3's two read ports and one write port), and CoreMark into PADD.DW (a
-  pair) and MACC.H00 (a v0.6 scalar instruction riscv-opcodes does not have yet). Full P
-  on RV32 means the register pairs; the draft and clang's support still move.
+  read, against Mig3's two read ports and one write port), and CoreMark into MACC.H00 (a
+  v0.6 scalar 16-bit multiply-add, which Mig3 does not decode). Full P on RV32 means the
+  register pairs; the draft and clang's support still move.
 - **Using the subset:** P code in files of its own, intrinsics or inline assembly, no
   64-bit arithmetic there; tools/check_insns.py lists what such an object uses that Mig3
   does not decode (test design_mig3_int8_insns).
@@ -53,13 +53,14 @@ There is no single must-have use (the user's goals, 2026-11-10):
   project's pinned commit f24ac23 (its table says v0.20). Compared mechanically with the
   v0.6 document: 542 of the 546 instructions in both have the same encoding; the 4 others
   are scalar RV32/RV64 forms (`rev`, `sati`, `srari`, `usati`), outside the slices below.
-  The v0.6 document's 60 new scalar instructions (`aadd`, `mul.h00`, `macc.h00`, `mseq`,
-  ...) are not in riscv-opcodes yet, and not used here.
+  The v0.6 document's new scalar instructions (`aadd`, `mul.h00`, `macc.h00`, `mseq`, ...)
+  are in riscv-opcodes too (RiscvInstrPkg has them; corrected 2026-11-12, this said they
+  were not), and not used here.
 - **The toolchain:** clang-23 knows P as experimental version 0.21
   (`-menable-experimental-extensions`), with the intrinsics of `P-ext-intrinsics.adoc` in
   `riscv_packed_simd.h`: add and subtract (wrapping, saturating, averaging), min/max,
-  compares, absolute values and differences, reductions, merge; no multiplies, dot
-  products or shifts (inline assembly for those).
+  compares, absolute values and differences, reductions, merge, shifts by a scalar amount;
+  no multiplies or dot products (inline assembly for those).
 - **Re-syncing** to a newer draft or the ratified version is regenerating RiscvInstrPkg
   (`tools/riscv_opcodes.sh`, its pinned commit moved) and following the decode tests: they
   are assembled by clang and decoded by the RTL from riscv-opcodes, so the two sources

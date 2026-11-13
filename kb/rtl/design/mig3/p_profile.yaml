@@ -17,8 +17,8 @@ decision: >
   at 5.5 ns within ABC's spread, measured, or it is not done. STOPPED 2026-11-12 (the
   user, after the int8 kernel's first run): Mig3 keeps the subset built (63 instructions,
   p_profile.md's first section), C with P uses register-pair instructions on RV32 (64-bit
-  arithmetic; CoreMark's PADD.DW) and v0.6 scalar ones (MACC.H00) outside it, and P is
-  better taken up on a 64-bit core. Revised 2026-11-11 after 2c:
+  arithmetic) and v0.6 scalar ones (CoreMark's MACC.H00) outside it, and P is better taken
+  up on a 64-bit core. Revised 2026-11-11 after 2c:
   the order follows an int8 kernel (a fully connected layer, P against plain C on Mig3,
   every output equal, cycles of both): min/max (2g), P's version read from clang, shifts
   (3a, 3b), multiplies and dot products (slice 4: library blocks first, Mig3 instructions
@@ -75,9 +75,11 @@ evidence: >
   extensions/unratified/rv_p, rv32_p, rv64_p (table "v0.20", 2026-03-24). A script compared
   the fixed bits of every instruction diagram in the v0.6 document with riscv-opcodes: 546
   instructions in both, 542 the same; rev, sati, srari, usati differ only as RV64 forms
-  against the document's RV32 diagrams (riscv-opcodes has rev.rv32, and no RV32 sati,
-  srari, usati); 60 scalar instructions of v0.6 (aadd, asub, mul.h00, macc.h00, mhacc,
-  mqacc, mseq, mslt, ...) are not in riscv-opcodes yet. Every packed instruction of the
+  against the document's RV32 diagrams (riscv-opcodes has the RV32 forms too, as rev.rv32,
+  sati.rv32, srari.rv32, usati.rv32); the v0.6 scalar instructions (aadd, asub, mul.h00,
+  macc.h00, mhacc, mqacc.h00, mseq, mslt, ...) are in riscv-opcodes as well, RiscvInstrPkg
+  has them (corrected 2026-11-12: this said no RV32 sati, srari, usati, and the scalar
+  instructions not in riscv-opcodes yet). Every packed instruction of the
   profile is in rv_p with the document's encoding. clang-23.1.6 lists p 0.21 among its
   experimental extensions. 1a (2026-11-11): Zba in Alu2 (ALU2_SH1ADD..SH3ADD, a_shl: a
   shifted into Alu1; struct a Mux4), Mig3's decode, the Zba probe; Alu2's tests, the Mig2 and
@@ -116,6 +118,10 @@ evidence: >
   in it gave WMUL, ADDD, NSRLI, WSLAI (register pairs, from the 64-bit arithmetic) and
   trapped; with the requantization compiled without P, the outputs agree and the layer
   takes 2 560 cycles against 9 220 in plain C (3.6 times). CoreMark compiled with P
-  (clang-23, -O2 and -O3 with unrolling): MACC.H00 (8) and PADD.DW (2), not in Mig3.
+  (clang-23, all five sources, -O2 and -O3, with and without -funroll-loops): MACC.H00
+  only (8: the three matrix multiplies, matrix_test, main), not in Mig3; the PADD.DW (2)
+  first recorded here did not reproduce (rechecked 2026-11-12). clang-23's encodings of
+  what it emits (pli.h, pli.b, wmul, wmulu, addd, subd, nsrli, wslai, macc.h00, sati, sadd)
+  match riscv-opcodes' patterns (2026-11-12).
 code:
   - rtl/design/mig3/p_profile.md
