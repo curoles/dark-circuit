@@ -1,0 +1,35 @@
+type: decision
+title: Mig3's packed load immediates are made in decode and go through the ALU, as LUI
+date: 2026-11-12
+question: >
+  PLI.B, PLI.H and PLUI.H put one small immediate into every lane of rd. clang emits them
+  for constants with equal lanes once P is on (a li of 0x00010001 becomes PLI.H), so code
+  compiled with P needs them. Where is the value made, with the one-cycle path in EX
+  without margin (kb rtl/design/mig3/packed_unit)?
+decision: >
+  In decode, in the immediate's opcode case (kb rtl/design/mig2/imm_by_opcode): OP-IMM-32's
+  immediate is the shifts' field, or, when bit 28 says a load immediate, the lanes' value
+  (bit 26 PLI.B, bit 30 PLUI.H; the spec's field order: PLI.H imm[8:0] at bits 24:16 and
+  imm[9] at 15, PLUI.H the halfword's imm[15:7] at bits 23:15 and imm[6] at 24). A kind of
+  its own, KIND_PLI, has LUI's controls: rd = 0 + imm through Mig3Alu.
+why: >
+  No new logic in EX (the ALU adds 0 as for LUI), and the immediate stays by opcode and a
+  few fixed bits, not by kind (the match of every encoding), off ID's path.
+rejected:
+  - choice: The value made in Mig3Packed
+    why_not: A new input of its result select on the one-cycle path, which has no margin.
+  - choice: The value chosen by kind after the match of the encodings
+    why_not: The immediate would wait for kind; imm_by_opcode keeps it beside it.
+relies_on:
+  - rtl/design/mig2/imm_by_opcode
+  - rtl/design/mig3/packed_unit
+code:
+  - rtl/design/mig3/mig3_decode.sv#imm_op_imm_32_of
+  - test/design/mig3/pk_pli.S
+evidence: >
+  2026-11-12, Verilator, clang-23: the Mig3 suite passes (147 tests), with pk_pli (values
+  whose bits are not symmetric, the PLI.H extremes 511 and -512; a li of 0x00010001, which
+  clang assembles as pli.h a1, 0x1; a value used at once by PADD.H) and ten more decode
+  cases whose immediates are what clang was asked to encode (clang's pli.h t0, -0x200 is
+  b000a29b: imm[9] at bit 15, imm[8:0] at 24:16, as read). sky130 5.5 ns, EX's result
+  forwarded into ID on top (the core's own path), 459 442 um2.

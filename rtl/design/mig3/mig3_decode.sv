@@ -64,6 +64,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             PMULH_H, PMULHU_H, PMULHSU_H:                           kind_enc = KIND_PMUL;  // P
             PMULHR_H, PMULHRU_H, PMULHRSU_H:                        kind_enc = KIND_PMUL;  // P
             PMULQ_H, PMULQR_H:                                      kind_enc = KIND_PMUL;  // P
+            PLI_B, PLI_H, PLUI_H:                                   kind_enc = KIND_PLI;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -120,6 +121,7 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             LR_W[6:0]:            imm = '0;                 // AMO: the address is rs1
             CBO_INVAL[6:0]:       imm = '0;                 // MISC-MEM: a CBO's address
                                                             // is rs1 (FENCE: no imm)
+            PLI_H[6:0]:           imm = imm_op_imm_32_of(insn);  // OP-IMM-32 (P)
             default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM
         endcase
 
@@ -140,6 +142,26 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
             FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
             default:                                             {hz1, hz2} = 2'b10;
         endcase
+
+    // @kb: rtl/design/mig3/pli
+    // OP-IMM-32's immediate (P), by fixed bits, not by kind: the shifts' immediate field
+    // (imm_i_of: its low bits are the amount), or the packed load immediates' value, every
+    // lane the same (bit 28 tells them from the shifts, bit 26 PLI.B, bit 30 PLUI.H): PLI.B
+    // the byte at bits 23:16; PLI.H the 10-bit signed value, imm[8:0] at bits 24:16 and
+    // imm[9] at bit 15, sign-extended; PLUI.H the halfword's top 10 bits, imm[15:7] at
+    // bits 23:15 and imm[6] at bit 24.
+    function automatic word_t imm_op_imm_32_of(insn_t w);
+        logic [15:0] h;
+        if (w[28] != PLI_H[28])
+            return imm_i_of(w);
+        if (w[26] == PLI_B[26])
+            return {4{w[23:16]}};
+        if (w[30] == PLUI_H[30])
+            h = {w[23:15], w[24], 6'b0};
+        else
+            h = {{6{w[15]}}, w[15], w[24:16]};
+        return {2{h}};
+    endfunction
 
     // Controls of an M instruction from its funct3.
     function automatic muldiv_ctrl_t muldiv_of(funct3_t f3);
@@ -397,6 +419,9 @@ module Mig3Decode import Mig3Pkg::*, RiscvPkg::*; (
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
+                dec.rd_we = 1'b1;  dec.alu.a = A_ZERO;
+            end
+            KIND_PLI: begin     // the lanes' value is the immediate (OP-IMM-32's case)
                 dec.rd_we = 1'b1;  dec.alu.a = A_ZERO;
             end
             KIND_AUIPC: begin

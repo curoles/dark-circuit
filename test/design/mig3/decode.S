@@ -49,6 +49,7 @@
     .equ K_FP,      22
     .equ K_PACKED,  23
     .equ K_PMUL,    24
+    .equ K_PLI,     25
 
 /* funct7 of the Zbb rotates ROL, ROR, RORI (0110000); RORI's immediate is {F7_ROT, shamt}. */
     .equ F7_ROT,    0x30
@@ -200,6 +201,11 @@
     .macro PMULA op, rd, rs1, rs2                   /* pm4adda.b ...: rd read as rs3 */
     \op x\rd, x\rs1, x\rs2
     EXPECT K_PMUL, 1, 1, 1, \rd, \rs1, \rs2, 0, 0, \rd
+    .endm
+
+    .macro PLI op, rd, imm, value                   /* pli.b pli.h plui.h: the lanes */
+    \op x\rd, \imm
+    EXPECT K_PLI, 1, 0, 0, \rd, 0, 0, 0, 0, \value
     .endm
 
     .macro ILLEGAL word                             /* not an RV32I instruction */
@@ -461,6 +467,16 @@ cases:
     PMUL   pmulhrsu.h,   25, 27, 29
     PMUL   pmulq.h,      31, 2,  4
     PMUL   pmulqr.h,     6,  8,  10
+    PLI    pli.b,  1,  -1,   0xffffffff
+    PLI    pli.b,  2,  0x5a, 0x5a5a5a5a
+    PLI    pli.h,  3,  -3,   0xfffdfffd
+    PLI    pli.h,  4,  511,  0x01ff01ff
+    PLI    pli.h,  5,  -512, 0xfe00fe00
+    PLI    pli.h,  6,  421,  0x01a501a5
+    PLI    pli.h,  7,  -346, 0xfea6fea6
+    PLI    plui.h, 8,  1,    0x00400040
+    PLI    plui.h, 9,  341,  0x55405540
+    PLI    plui.h, 31, -1,   0xffc0ffc0
 #endif
 
     ILLEGAL 0x00000000      /* all zeros: defined to be illegal */

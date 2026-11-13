@@ -17,10 +17,11 @@
  * model by opcode, funct5 and funct3 (fp_model), uses_rs3 for the R4 forms and rs3 (the
  * case's imm column). A packed instruction (P): rd_src PACKED, its operation against a
  * model by opcode, funct7 and funct3 (pk_model); a shift by an immediate reads no rs2. A
- * packed multiply: rd_src PMUL, its operation and signs against a model (pmul_model).
+ * packed multiply: rd_src PMUL, its operation and signs against a model (pmul_model). A
+ * packed load immediate: 0 + imm through the ALU, imm the lanes' value from the case.
  * At the end every kind must have had a case; KIND_BITMANIP only with +zbb, KIND_CBO only
- * with +zicbom, KIND_FP only with +zfinx, KIND_PACKED and KIND_PMUL only with +p (their
- * cases need a compiler that knows Zbb, Zicbom, Zfinx, P).
+ * with +zicbom, KIND_FP only with +zfinx, KIND_PACKED, KIND_PMUL and KIND_PLI only with +p
+ * (their cases need a compiler that knows Zbb, Zicbom, Zfinx, P).
  * Loads +hex=<file> into a SimROM and reads it with peek().
  * Stops at the first mismatch with $fatal.
  *
@@ -86,7 +87,7 @@ module TbMig3Decode;
     function automatic logic has_imm(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_JAL, KIND_JALR, KIND_BRANCH, KIND_LOAD, KIND_STORE,
-            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC, KIND_AMO, KIND_CBO:
+            KIND_OP_IMM, KIND_CSR, KIND_LR, KIND_SC, KIND_AMO, KIND_CBO, KIND_PLI:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -118,7 +119,8 @@ module TbMig3Decode;
     function automatic logic uses_alu(input kind_e kind);
         case (kind)
             KIND_LUI, KIND_AUIPC, KIND_LOAD, KIND_STORE, KIND_OP_IMM, KIND_OP,
-            KIND_LR, KIND_SC, KIND_AMO, KIND_CBO:   // the address rs1 + 0
+            KIND_LR, KIND_SC, KIND_AMO, KIND_CBO,   // the address rs1 + 0
+            KIND_PLI:                               // 0 + the lanes' value
                 return 1'b1;
             default:
                 return 1'b0;
@@ -174,6 +176,7 @@ module TbMig3Decode;
         ctrl.alu2  = Alu2Pkg::ctrl_of(alu_op_of(w));
         case (kind)
             KIND_LUI:   ctrl.a = A_ZERO;
+            KIND_PLI:   ctrl.a = A_ZERO;
             KIND_AUIPC: ctrl.a = A_PC;
             KIND_OP:    ctrl.b_imm = 1'b0;
             default: ;
@@ -464,13 +467,14 @@ module TbMig3Decode;
             tested[exp_kind] = 1'b1;
         end
 
-        last_kind = KIND_PMUL;
+        last_kind = KIND_PLI;
         for (k = 0; k <= last_kind; k = k + 1)
             if (!tested[k] && !(k == int'(KIND_BITMANIP) && !$test$plusargs("zbb")) &&
                 !(k == int'(KIND_CBO) && !$test$plusargs("zicbom")) &&
                 !(k == int'(KIND_FP) && !$test$plusargs("zfinx")) &&
                 !(k == int'(KIND_PACKED) && !$test$plusargs("p")) &&
-                !(k == int'(KIND_PMUL) && !$test$plusargs("p")))
+                !(k == int'(KIND_PMUL) && !$test$plusargs("p")) &&
+                !(k == int'(KIND_PLI) && !$test$plusargs("p")))
                 $fatal(1, "Mig3Decode: no case of kind %0d", k);
         $display("PASS: %0d cases", n);
         $finish;

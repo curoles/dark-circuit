@@ -332,7 +332,8 @@ package Mig3Pkg;
         KIND_CBO,       // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
         KIND_FP,        // F on the x registers (Zfinx): the FPU, dec.fp
         KIND_PACKED,    // packed SIMD (P, a draft): Mig3Packed, dec.pk
-        KIND_PMUL       // packed multiplies (P): Mig3PackedMul, dec.pmul
+        KIND_PMUL,      // packed multiplies (P): Mig3PackedMul, dec.pmul
+        KIND_PLI        // packed load immediates (P): rd = imm through Mig3Alu, as LUI
     } kind_e;
 
     // Source of the value written to rd.
