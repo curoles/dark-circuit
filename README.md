@@ -29,6 +29,9 @@ rtl/lib/
                  <format>/<op>/<kind>/{behave,struct,hybrid}, aggregate flists like block/
   io/            device controllers with pins: uart/ (UartTx, UartRx, the devices on them);
                  aggregate flists io_behave.flist, io_struct.flist like block/
+  qec/           quantum error correction: QecPkg (the rotated surface code of distance d),
+                 DetectionEvents; aggregate flists qec_behave.flist, qec_struct.flist like block/
+  ai/            AI sketches: systolic_array/ (AiSystolicArray, not in flists, not tested)
   bus/           standard on-chip buses, the only place for one: axi/ AxiPkg and adapters
                  between AXI and the library's channels (blocks take no concrete bus)
   riscv/         RISC-V instruction encodings and CSR addresses, generated from riscv-opcodes
@@ -45,6 +48,7 @@ test/part/<part>/   testbench of a part
 test/block/<block>/ testbench of a block
 test/io/<device>/<part>/ testbench of a device's part
 test/numeric/<format>/<op>/ testbench of a numeric unit
+test/qec/<block>/   testbench of a QEC block
 test/sim/        testbenches of simulation models
 test/design/mig1/ tests of Mig1
 test/design/mig2/ tests of Mig2

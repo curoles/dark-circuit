@@ -1,0 +1,43 @@
+type: decision
+title: DetectionEvents, a round's outcomes XOR the round before, the first round against 0 where known
+date: 2026-11-13
+question: >
+  A surface-code decoder does not decode the stabilizer outcomes themselves: a data error
+  flips its stabilizers in every round after it, a wrong measurement flips one outcome in
+  one round. What does the first block after the readout give the decoder, and what happens
+  in the first round, which has no round before it?
+decision: >
+  DetectionEvents #(N), one type's N stabilizers: events = syndrome ^ the round before, kept
+  in a register taken with in_valid; combinational from syndrome, 0 while in_valid is 0. In
+  the first round (first = 1) an outcome the starting state fixes (first_known[k] = 1: the
+  Z-type ones of a memory experiment from |0...0>) is compared with 0, the others give no
+  event. The round of the final data measurement (parities computed from it) is a round
+  like the others. Reset clears the round kept. Behave (a register and one expression) and
+  struct (DffSyncRstEn and And2, Or2, Xor2, Inv) versions.
+why: >
+  Events are where something changed: a data error gives events once, at its 1 or 2
+  stabilizers, in the round it happened, and a wrong measurement two events at one
+  stabilizer in consecutive rounds, so the decoder's graph has space and time edges and
+  every fault has two ends (or one at the boundary). first_known as N bits covers both types
+  and both starting states without a parameter per case; outputs 0 without a round spare a
+  guard. EdgeDetector (rtl/lib/part) compares every clock, one bit, without a first round:
+  not reused.
+rejected:
+  - choice: Events as a list (positions) in the same block
+    why_not: StreamCompact (kb rtl/lib/block/stream_compact/design) does that and is generic.
+  - choice: Registered events
+    why_not: >
+      A register can follow (or StreamCompact first); the block stays one stage of logic
+      after the round's register.
+relies_on:
+  - rtl/lib/qec/surface_code
+code:
+  - rtl/lib/qec/detection_events/behave/detection_events.sv
+  - rtl/lib/qec/detection_events/struct/detection_events.sv
+evidence: >
+  2026-11-13: behave and struct versions against one testbench, distances 3 and 5: a random
+  stream with resets against a model (3000 clocks on Verilator, 300 on Icarus) and a QEC
+  stream of a memory experiment (2000 rounds, 200 on Icarus) with data errors (events exactly
+  at the qubit's Z-type stabilizers, 1 at the edge and 2 inside both seen) and wrong
+  measurements (events at that stabilizer in that round and the next); Verilator 0.04 s,
+  Icarus 0.15 s.

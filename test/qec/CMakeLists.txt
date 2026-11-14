@@ -1,0 +1,2 @@
+add_subdirectory(qec_pkg)
+add_subdirectory(detection_events)

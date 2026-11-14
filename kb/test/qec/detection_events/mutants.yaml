@@ -1,0 +1,35 @@
+type: mutants
+title: Mutants of the DetectionEvents test (behave and struct versions)
+date: 2026-11-13
+tests: [qec_detection_events_behave, qec_detection_events_struct]
+mutants:
+  - name: behave, the first round compares with the round before, not 0
+    edits:
+      - file: rtl/lib/qec/detection_events/behave/detection_events.sv
+        old: "first     ? syndrome & first_known :"
+        new: "first     ? (syndrome ^ last) & first_known :"
+    expect: model
+  - name: behave, the round is kept also without in_valid
+    edits:
+      - file: rtl/lib/qec/detection_events/behave/detection_events.sv
+        old: "else if (in_valid)"
+        new: "else"
+    expect: model
+  - name: struct, every outcome counts in the first round (first instead of ~first)
+    edits:
+      - file: rtl/lib/qec/detection_events/struct/detection_events.sv
+        old: ".in2({N{first_n}}), .out(known));"
+        new: ".in2({N{first}}), .out(known));"
+    expect: model
+  - name: struct, events also without a round
+    edits:
+      - file: rtl/lib/qec/detection_events/struct/detection_events.sv
+        old: ".in2({N{in_valid}}), .out(counts));"
+        new: ".in2({N{1'b1}}), .out(counts));"
+    expect: model
+  - name: struct, reset sets the round kept to all ones
+    edits:
+      - file: rtl/lib/qec/detection_events/struct/detection_events.sv
+        old: "DffSyncRstEn #(N) u_dff_sync_rst_en("
+        new: "DffSyncRstEn #(.WIDTH(N), .RST_VAL({N{1'b1}})) u_dff_sync_rst_en("
+    expect: model

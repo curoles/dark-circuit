@@ -227,6 +227,19 @@ numeric:
         path: rtl/lib/numeric/packed/shift/hybrid/packed_shift.sv
         test: test/numeric/packed/shift
         kb: [rtl/lib/numeric/packed/shift]
+qec:
+  DetectionEvents:
+    what: "Detection events: which stabilizer outcomes changed since the last round"
+    versions: [behave, struct]
+    path: rtl/lib/qec/detection_events
+    test: test/qec/detection_events
+    kb: [rtl/lib/qec/detection_events/design]
+  QecPkg:
+    kind: package
+    what: "QEC: the rotated surface code of distance d, the layout every QEC block shares"
+    path: rtl/lib/qec/qec_pkg.sv
+    test: test/qec/qec_pkg
+    kb: [rtl/lib/qec/surface_code]
 riscv:
   RiscvCsrPkg:
     kind: package

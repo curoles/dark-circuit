@@ -1,0 +1,36 @@
+type: mutants
+title: Mutants of the QecPkg test
+date: 2026-11-13
+tests: [qec_pkg]
+mutants:
+  - name: the checkerboard inside is the other way round
+    edits:
+      - file: rtl/lib/qec/qec_pkg.sv
+        old: "return (t == STAB_X) == x;"
+        new: "return (t == STAB_X) != x;"
+  - name: the left and right edges keep the other half of their plaquettes
+    edits:
+      - file: rtl/lib/qec/qec_pkg.sv
+        old: "return t == STAB_Z && !x;"
+        new: "return t == STAB_Z && x;"
+  - name: Z-type stabilizers at the top and bottom, X-type at the left and right (rotated)
+    edits:
+      - file: rtl/lib/qec/qec_pkg.sv
+        old: "return t == STAB_X && x;                    // top, bottom: X-type"
+        new: "return t == STAB_Z && !x;                   // top, bottom: X-type"
+      - file: rtl/lib/qec/qec_pkg.sv
+        old: "return t == STAB_Z && !x;                   // left, right: Z-type"
+        new: "return t == STAB_X && x;                    // left, right: Z-type"
+    expect: logical
+    why: Still a code (the layout turned by 90 degrees), but a column of X errors is seen.
+  - name: a stabilizer touches the columns to the right of its plaquette
+    edits:
+      - file: rtl/lib/qec/qec_pkg.sv
+        old: "(c == j - 1 || c == j)"
+        new: "(c == j || c == j + 1)"
+  - name: one stabilizer too many of each type
+    edits:
+      - file: rtl/lib/qec/qec_pkg.sv
+        old: "return (d * d - 1) / 2;"
+        new: "return (d * d + 1) / 2;"
+    expect: count
