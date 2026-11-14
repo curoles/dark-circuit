@@ -16,7 +16,7 @@ rtl/lib/
   block/         blocks: Counter, Decoder, MuxN, PriorityEncoder, ShiftReg, Sram1R1W,
                  RegFile, RegFileSram, BarrelShifter, PrgCounter, Fifo, SkidBuffer, Incr,
                  Alu1, AddCmp, Lfsr, StochasticBitstreamGen, CsaMultiplier, Divider,
-                 PrefixCount, StreamCompact, ...
+                 PrefixCount, StreamCompact, ParityCheck, ...
     <block>/behave/  behavioral version, fast to simulate
     <block>/struct/  version made of blocks, parts and gates
     <block>/hybrid/  wide datapath of blocks and parts, narrow glue as operators

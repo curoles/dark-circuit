@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the ParityCheck test (behave and struct versions)
+date: 2026-11-13
+tests: [block_parity_check_behave, block_parity_check_struct]
+mutants:
+  - name: behave, bits outside the row count too (OR instead of AND)
+    edits:
+      - file: rtl/lib/block/parity_check/behave/parity_check.sv
+        old: "assign syndrome[r] = ^(h[r] & in);"
+        new: "assign syndrome[r] = ^(h[r] | in);"
+    expect: model
+  - name: behave, even parity instead of odd
+    edits:
+      - file: rtl/lib/block/parity_check/behave/parity_check.sv
+        old: "assign syndrome[r] = ^(h[r] & in);"
+        new: "assign syndrome[r] = ~^(h[r] & in);"
+    expect: model
+  - name: struct, any chosen one instead of the parity (OR reduction)
+    edits:
+      - file: rtl/lib/block/parity_check/struct/parity_check.sv
+        old: "Parity #(COLS) u_parity(.in(chosen), .parity(syndrome[r]));"
+        new: "OrReduce #(COLS) u_parity(.in(chosen), .out(syndrome[r]));"
+    expect: model
+  - name: struct, the top input bit is never chosen
+    edits:
+      - file: rtl/lib/block/parity_check/struct/parity_check.sv
+        old: "And2   #(COLS) u_and2(.in1(in),"
+        new: "And2   #(COLS) u_and2(.in1(in & ~(COLS'(1) << (COLS - 1))),"
+    expect: model

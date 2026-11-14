@@ -1,0 +1,39 @@
+type: decision
+title: ParityCheck, H times in over GF(2), the matrix an input that may be tied to constants
+date: 2026-11-13
+question: >
+  The final round of a QEC experiment is the stabilizers' parities of the measured data
+  qubits; a Hamming or SECDED syndrome, a CRC of a whole word, an LDPC syndrome and a linear
+  code's encoder are the same operation: the parities of chosen subsets of bits, a matrix
+  times a vector over GF(2). One generic block for all of them (the user: generic blocks
+  from the QEC detour): how does it get its matrix?
+decision: >
+  ParityCheck #(ROWS, COLS): syndrome[r] = ^(h[r] & in), h an input [ROWS-1:0][COLS-1:0]
+  (the user's choice (a)); combinational, ROWS and COLS 1 or more. Tied to constants (a
+  localparam table) synthesis keeps only the XOR trees of the chosen bits; driven by
+  registers it is a code software can change. Behave: one expression per row. Struct: an
+  And2 and a Parity gate per row.
+why: >
+  One block serves the fixed codes and the programmable ones; tying the input costs nothing
+  (sky130: d = 5 tied 255 um2 against 4 139 um2 programmable). A matrix parameter would only
+  ever be fixed, and a large packed parameter is clumsy to pass down a hierarchy.
+rejected:
+  - choice: The matrix as a parameter (b)
+    why_not: Never programmable; a tied input gives the same circuit.
+  - choice: A QEC-only block computing the parities from QecPkg inside
+    why_not: >
+      The same circuit is every linear code's syndrome and encoder; the caller passes
+      QecPkg's table.
+code:
+  - rtl/lib/block/parity_check/behave/parity_check.sv#g_row
+  - rtl/lib/block/parity_check/struct/parity_check.sv#g_row
+evidence: >
+  2026-11-13: behave and struct versions against one testbench (random matrices for 1x1,
+  3x7, 4x9, 12x25, 8x8, 5x33, 16x64; Hamming(7,4), a flipped bit p gives syndrome p; the
+  Z-type stabilizers of d = 3 and 5 from QecPkg, a single X error gives 1 or 2 events and a
+  column none; the identity; inputs exhaustive up to 10 bits), Verilator 0.1 s, Icarus 0.8 s.
+  sky130 (Yosys, ABC), struct, 12 x 25 (d = 5 Z-type): h tied to QecPkg's table 255 um2, 51
+  cells, 0.5 ns; h programmable 4 139 um2, 589 cells, 0.9 ns. Tied to d = 9's table (40 x
+  81) Yosys's Verilog front end did not finish in 5 minutes: it evaluates the scratch top's
+  constant function, 3 240 calls of QecPkg's touches, each scanning the plaquettes; a block
+  that builds QecPkg tables at elaboration needs a one-pass table function.

@@ -422,6 +422,12 @@ block:
     path: rtl/lib/block/mux_one_hot
     test: test/block/mux_one_hot
     kb: [rtl/lib/block/mux_one_hot/design]
+  ParityCheck:
+    what: "Parity check: the parities of chosen subsets of the input bits, H times in over GF(2); combinational"
+    versions: [behave, struct]
+    path: rtl/lib/block/parity_check
+    test: test/block/parity_check
+    kb: [rtl/lib/block/parity_check/design]
   Plic:
     what: "PLIC: the RISC-V Platform-Level Interrupt Controller (riscv-plic-spec), wiring only"
     path: rtl/lib/block/plic

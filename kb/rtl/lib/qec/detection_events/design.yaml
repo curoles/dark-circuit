@@ -1,5 +1,5 @@
 type: decision
-title: DetectionEvents, a round's outcomes XOR the round before, the first round against 0 where known
+title: DetectionEvents, a round XOR the round before; the first round against 0 where known
 date: 2026-11-13
 question: >
   A surface-code decoder does not decode the stabilizer outcomes themselves: a data error

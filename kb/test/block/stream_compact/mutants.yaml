@@ -36,8 +36,11 @@ mutants:
   - name: struct, overflow already when lane MAX - 1 is valid
     edits:
       - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
-        old: "OrReduce #(WIDTH - MAX) u_or_reduce(.in(v[LEVELS][WIDTH-1:MAX]), .out(overflow));"
-        new: "OrReduce #(WIDTH - MAX + 1) u_or_reduce(.in(v[LEVELS][WIDTH-1:MAX-1]), .out(overflow));"
+        old: "OrReduce #(WIDTH - MAX) u_or_reduce("
+        new: "OrReduce #(WIDTH - MAX + 1) u_or_reduce("
+      - file: rtl/lib/block/stream_compact/struct/stream_compact.sv
+        old: ".in(v[LEVELS][WIDTH-1:MAX]), .out(overflow));"
+        new: ".in(v[LEVELS][WIDTH-1:MAX-1]), .out(overflow));"
     expect: model
   - name: struct, slot data not masked by valid
     edits:

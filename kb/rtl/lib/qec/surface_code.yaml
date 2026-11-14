@@ -1,5 +1,5 @@
 type: decision
-title: QecPkg, the rotated surface code of distance d as functions, the layout every QEC block shares
+title: QecPkg, the rotated surface code of distance d as functions, shared by every QEC block
 date: 2026-11-13
 question: >
   The QEC detour (the user: a small detour, a couple of RTL blocks, no software packages
@@ -20,8 +20,9 @@ decision: >
   rtl/lib/block (PrefixCount, StreamCompact).
 why: >
   The surface code is the standard code of superconducting qubits (nearest neighbours on a
-  grid, a high threshold) and its decoding graph is a regular grid, which suits hardware. The rotated layout needs d^2 data qubits for distance d. Functions of d
-  instead of tables let blocks, testbenches and synthesis use any odd d. The test checks
+  grid, a high threshold) and its decoding graph is a regular grid, which suits hardware.
+  The rotated layout needs d^2 data qubits for distance d. Functions of d instead of tables
+  let blocks, testbenches and synthesis use any odd d. The test checks
   what makes the layout a code: X-type and Z-type stabilizers share an even number of data
   qubits (they commute), every data qubit is watched by each type, and the logical
   operators (a column of X errors, a row of Z errors) are unseen, d errors.
