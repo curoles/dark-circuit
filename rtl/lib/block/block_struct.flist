@@ -54,6 +54,8 @@
 -F prefix_count/struct/prefix_count.flist
 -F stream_compact/struct/stream_compact.flist
 -F parity_check/struct/parity_check.flist
+-F disjoint_set/disjoint_set.flist
+-F disjoint_set/struct/disjoint_set.flist
 -F arg_max_tree/struct/arg_max_tree.flist
 -F reg_port_target/struct/reg_port_target.flist
 -F strb_reg/struct/strb_reg.flist

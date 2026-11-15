@@ -320,6 +320,12 @@ Icarus means Icarus 13, the version the project uses.
 - Icarus cannot read a function's own name as a variable inside the function
   (`stamp[f]` in function f): it compiles, then vvp stops with "unresolved functor
   reference". Use a local variable and `return` it.
+- Icarus crashes (vvp stops without a message) on a function with a `return` inside a loop
+  whose result is assigned to a concatenation, `{i, j} = place(d, k);` (which of the two,
+  not isolated). Keep the result in a variable, return it at the end, one value a function
+  (`qec/qec_pkg.sv`: `stab_row`, `stab_col`).
+- Icarus fails an assertion (v2009_enum.c, compare_value_eequal) on an enum's `.name()`;
+  print the value, `int'(t)`.
 
 ## Valid/ready channels
 

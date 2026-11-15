@@ -9,22 +9,32 @@ question: >
   parents live, how is the per-group data kept without the block knowing its meaning, and
   how does an operation run?
 decision: >
-  DisjointSet #(N, PAYLOAD_WIDTH), behave version first: parents, ranks and payloads in
-  flip-flops (the user's choice for a first version), one operation at a time on a valid/ready
-  channel req (DisjointSetPkg::ds_op_e: DS_FIND, DS_UNION, DS_SET, DS_CLEAR) answered on a
-  channel rsp (root, the group's payload, same). The payload is the user's: a width here and a
-  type in the wrapper DisjointSetT #(N, T) (the user asked for a type parameter; the
-  library's idiom for stored values), never looked inside; in the clock a union links,
-  merge_a and merge_b are the two groups' payloads and the user's combinational merge comes
-  back on input merge. Union by rank (equal ranks: a's root stays); find with path halving,
-  two levels a clock (parent and grandparent read together); a union finds a, then b, then
-  links. Reset and DS_CLEAR make every item its own group, payloads 0, in one clock.
+  DisjointSet #(N, PAYLOAD_WIDTH), behave and struct versions: parents, ranks and payloads in
+  flip-flops (the user's choice for a first version), one operation at a time on a
+  valid/ready channel req (DisjointSetPkg::ds_op_e: DS_FIND, DS_UNION, DS_SET, DS_CLEAR)
+  answered on a channel rsp (root, the group's payload, same). The payload is the user's: a
+  width here and a type in the wrapper DisjointSetT #(N, T) (the user asked for a type
+  parameter; the library's idiom for stored values), never looked inside; in the clock a
+  union links, merge_a and merge_b are the two groups' payloads and the user's combinational
+  merge comes back on input merge. Union by rank (equal ranks: a's root stays); find with
+  path halving, two levels a clock (parent and grandparent read together); a union finds a,
+  then b, then links. Reset and DS_CLEAR make every item its own group, payloads 0, in one
+  clock. Both versions share one design (2026-11-15, the struct version's review): named
+  events of the clock (take, clear, start, step, done_a, to_b, done_find, set_write,
+  done_b, link, differ, grow), the state machine as AGENTS.md's rule (state_d in
+  always_comb, the always_ff only state_q), a write port per table (parent, rank, payload)
+  plus the clear, and rsp_payload read from the payload table at rsp_root instead of a
+  register (nothing writes the table while an answer waits). Struct: a one-hot state of five
+  flops, each table entry a DffSyncRstEn reset to its start by rst_n or DS_CLEAR and written
+  through a Decoder of the write address, reads by MuxN, CmpEq/CmpGe/Incr for the link.
 why: >
   Flip-flops clear in one clock, which a decoder needs between rounds, and suit QEC's few
   hundred vertices; Sram1R1W can come later for large N. Only the user knows how payloads
   combine (a size adds, an odd count XORs, a flag ORs), so the merge is the user's function,
   not fields the block would fix. Union by rank keeps trees log2(N) high whatever the order
-  of unions; path halving needs no second pass, so it fits the same walk.
+  of unions; path halving needs no second pass, so it fits the same walk. Reading the
+  answer's payload from the table saves a register and a write path; the struct version
+  then has nothing the behave version lacks.
 rejected:
   - choice: Payload fields fixed by the block (a size, bits ORed on union)
     why_not: >
@@ -39,8 +49,11 @@ rejected:
     why_not: >
       Twice the read multiplexers for a shorter union; one walker first, measured before
       anything faster.
+  - choice: RegFile for the tables
+    why_not: It has no clear of all entries in one clock; an entry here resets to its start.
 code:
   - rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+  - rtl/lib/block/disjoint_set/struct/disjoint_set.sv
   - rtl/lib/block/disjoint_set/disjoint_set_t.sv
 evidence: >
   2026-11-14: the behave version through DisjointSetT (payload a count added, an odd bit
@@ -49,6 +62,14 @@ evidence: >
   labels (no trees): every payload, rsp_same and root checked, every answer within 2 log2(N)
   + 6 clocks; Verilator 0.05 s (3000 operations each), Icarus 0.13 s (300). Found on the way:
   the testbench released reset at a clock edge (a race; now 1 after it), and the block read
-  rst_n twice in one branch (reset and DS_CLEAR now separate branches). sky130 (Yosys, ABC),
-  behave, payload 10 bits: N = 16 17 607 um2, 6.7 ns; N = 64 67 335 um2, 8.5 ns, the longest
-  path from the parents through the parent and grandparent multiplexers.
+  rst_n twice in one branch (reset and DS_CLEAR now separate). 2026-11-15: the behave
+  version restructured and the struct version added; both pass the same test (N = 64 on
+  Verilator only: the struct version takes seconds to elaborate on Icarus), Verilator
+  0.07 s, Icarus 0.12 and 0.3 s; 14 mutants, 13 caught, 1 survives as expected (no path
+  halving). Icarus traps met, all in AGENTS.md: a package name alone in a port expression
+  (.in2(DisjointSetPkg::DS_CLEAR) needed), $onehot of a concatenation (a named state
+  vector). sky130 (Yosys, ABC), payload 10 bits: N = 16 behave 18 827 um2 4.0 ns, struct
+  18 506 um2 3.9 ns; N = 64 behave 72 029 um2 5.9 ns, struct 74 039 um2 5.4 ns (before the
+  restructuring the behave version was 17 607 um2 6.7 ns and 67 335 um2 8.5 ns: the answer's
+  payload register and the merged state and data process); longest paths from cur and the
+  parents through the parent and grandparent MuxNs.

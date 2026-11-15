@@ -1,52 +1,85 @@
 type: mutants
-title: Mutants of the DisjointSet test (behave version, through DisjointSetT)
-date: 2026-11-14
-tests: [block_disjoint_set_behave]
+title: Mutants of the DisjointSet test (behave and struct versions, through DisjointSetT)
+date: 2026-11-15
+tests: [block_disjoint_set_behave, block_disjoint_set_struct]
 mutants:
-  - name: a union does not hang b's root under a's (the groups stay apart)
+  - name: behave, a union does not hang the loser's root under the winner's
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
-        old: "parent[root_b]  <= root_a;"
-        new: "parent[root_b]  <= root_b;"
-  - name: a union keeps a's payload instead of the merge
+        old: "parent[loser] <= winner;"
+        new: "parent[loser] <= loser;"
+  - name: behave, a union keeps the merge XOR a's payload instead of the merge
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
-        old: "payload[root_a] <= merge;"
-        new: "payload[root_a] <= merge_a;"
+        old: "payload[winner] <= merge;"
+        new: "payload[winner] <= merge ^ merge_a;"
     expect: model
-  - name: path halving cuts the item off its group (points it at itself)
+  - name: behave, path halving cuts the item off its group (points it at itself)
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
-        old: "parent[cur] <= g;                       // path halving"
-        new: "parent[cur] <= cur;                     // path halving"
-  - name: a find stops at the first step (the parent, not the root)
+        old: "parent[cur] <= g;                   // path halving"
+        new: "parent[cur] <= cur;                 // path halving"
+  - name: behave, a find stops at the first step (the parent, not the root)
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
         old: "assign at_root = p == cur || g == p;"
         new: "assign at_root = 1'b1;"
-  - name: a union of one group answers same 0
+  - name: behave, a union of one group answers same 0
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
-        old: "out_same <= root_a == root_b;"
+        old: "out_same <= link && same;"
         new: "out_same <= 1'b0;"
     expect: model
-  - name: DS_SET writes the payload to the item the walk is at, not the root
+  - name: behave, DS_SET writes the payload to the item the walk is at, not the root
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
         old: "payload[found] <= set_payload;"
         new: "payload[cur] <= set_payload;"
     expect: model
-  - name: the answer is dropped without rsp_ready
+  - name: behave, the answer is dropped without rsp_ready
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
-        old: "                if (rsp_ready)\n                    state <= S_IDLE;"
-        new: "                state <= S_IDLE;"
-  - name: no path halving (a walk only moves up)
+        old: "            if (rsp_ready)\n                state_d = S_IDLE;"
+        new: "            state_d = S_IDLE;"
+  - name: behave, no path halving (a walk only moves up)
     edits:
       - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
-        old: "parent[cur] <= g;                       // path halving"
-        new: "parent[cur] <= parent[cur];             // path halving"
+        old: "parent[cur] <= g;                   // path halving"
+        new: "parent[cur] <= parent[cur];         // path halving"
     expect: survives
     why: >
       Halving changes only how fast later finds are, never an answer; union by rank alone
       keeps every tree at most log2(N) high, within the latency bound the test checks.
+  - name: struct, a link writes the loser's own index into its parent
+    edits:
+      - file: rtl/lib/block/disjoint_set/struct/disjoint_set.sv
+        old: "u_mux2_par_wdata(.in0(winner),"
+        new: "u_mux2_par_wdata(.in0(loser),"
+  - name: struct, the grandparent is read at cur (a find stops at the parent)
+    edits:
+      - file: rtl/lib/block/disjoint_set/struct/disjoint_set.sv
+        old: "u_mux_n_g(.in(parent), .sel(p), .out(g));"
+        new: "u_mux_n_g(.in(parent), .sel(cur), .out(g));"
+  - name: struct, DS_CLEAR does not reset the tables
+    edits:
+      - file: rtl/lib/block/disjoint_set/struct/disjoint_set.sv
+        old: "Inv  #(1) u_inv_clear(.in(clear), .out(clear_n));"
+        new: "Inv  #(1) u_inv_clear(.in(1'b0), .out(clear_n));"
+  - name: struct, DS_SET writes the merge instead of its payload
+    edits:
+      - file: rtl/lib/block/disjoint_set/struct/disjoint_set.sv
+        old: ".in1(set_payload), .sel(set_write),"
+        new: ".in1(set_payload), .sel(differ),"
+    expect: model
+  - name: struct, the answer goes idle without rsp_ready while it also stays (two states)
+    edits:
+      - file: rtl/lib/block/disjoint_set/struct/disjoint_set.sv
+        old: "u_and2_rsp_done(.in1(rsp), .in2(rsp_ready), .out(rsp_done));"
+        new: "u_and2_rsp_done(.in1(rsp), .in2(1'b1), .out(rsp_done));"
+    expect: a_state_one_hot
+  - name: struct, the walk from a never steps (it waits at a)
+    edits:
+      - file: rtl/lib/block/disjoint_set/struct/disjoint_set.sv
+        old: "u_and2_step_a(.in1(find_a), .in2(at_root_n), .out(step_a));"
+        new: "u_and2_step_a(.in1(find_a), .in2(1'b0), .out(step_a));"
+    expect: latency

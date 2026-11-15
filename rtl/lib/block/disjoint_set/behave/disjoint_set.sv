@@ -28,9 +28,14 @@
  * log2(N) high. Find walks up from the item with path halving: every item it passes is
  * pointed at its grandparent, so later walks are shorter; a clock reads the parent and the
  * grandparent, two levels a clock. A union finds a's root, then b's, then links them in one
- * clock. The answer is offered in the clock after the last step and stays until rsp_ready;
- * req_ready is 1 only when the block is idle (no answer offered or pending). Reset (and
+ * clock. The answer is offered in the clock after the last step and stays until rsp_ready:
+ * rsp_root is a register, rsp_payload the payload table read at it (nothing writes the
+ * table while an answer waits). req_ready is 1 only when the block is idle. Reset (and
  * DS_CLEAR) make every item its own root.
+ *
+ * Three tables with one write port each (and a clear of all entries): parent (a step's
+ * halving, or a link), rank (a link of equal ranks), payload (DS_SET, or a link's merge).
+ * The struct version has the same events, registers and write ports.
  *
  *   req --> find a --> (union) find b --> link (merge) --> rsp
  *
@@ -76,18 +81,20 @@ module DisjointSet import DisjointSetPkg::*; #(
         S_RSP                                       // offers the answer
     } state_e;
 
+    // The tables.
     logic [IW-1:0]            parent  [N];
     logic [RW-1:0]            rank    [N];          // of a root: its tree's height bound
     logic [PAYLOAD_WIDTH-1:0] payload [N];          // of a root: its group's payload
-    state_e                   state;
+    // The registers of an operation.
+    state_e                   state_q;
+    state_e                   state_d;
     ds_op_e                   op;
     logic [IW-1:0]            cur;                  // the item a walk is at
     logic [IW-1:0]            b;                    // DS_UNION: where the second walk starts
+    logic [PAYLOAD_WIDTH-1:0] set_payload;          // DS_SET
     logic [IW-1:0]            root_a;
     logic [IW-1:0]            root_b;
-    logic [PAYLOAD_WIDTH-1:0] set_payload;          // DS_SET
-    logic [IW-1:0]            out_root;             // the answer
-    logic [PAYLOAD_WIDTH-1:0] out_payload;
+    logic [IW-1:0]            out_root;             // the answer's root
     logic                     out_same;
 
     // One step of a walk at cur: its parent p and grandparent g. cur is the root when p is
@@ -104,91 +111,134 @@ module DisjointSet import DisjointSetPkg::*; #(
 
     // The link: the root of the lower rank goes under the other; equal ranks, a's root
     // stays and its rank grows.
+    logic          same;                            // root_a is root_b: one group already
     logic          a_wins;                          // root_a stays the root
-    assign a_wins  = rank[root_a] >= rank[root_b];
+    logic          rank_eq;
+    logic [IW-1:0] winner;
+    logic [IW-1:0] loser;
 
-    assign req_ready   = state == S_IDLE;
-    assign rsp_valid   = state == S_RSP;
+    assign same    = root_a == root_b;
+    assign a_wins  = rank[root_a] >= rank[root_b];
+    assign rank_eq = rank[root_a] == rank[root_b];
+    assign winner  = a_wins ? root_a : root_b;
+    assign loser   = a_wins ? root_b : root_a;
+
+    // The events of this clock.
+    logic take;                                     // a request is taken
+    logic clear;                                    // ... and it is DS_CLEAR
+    logic start;                                    // ... and it is another operation
+    logic step;                                     // a walk goes up
+    logic done_a;                                   // the walk from a found its root
+    logic to_b;                                     // ... of a union: walk from b now
+    logic done_find;                                // ... of DS_FIND or DS_SET: answer
+    logic set_write;                                // ... of DS_SET: write the payload
+    logic done_b;                                   // the walk from b found its root
+    logic link;                                     // the link clock
+    logic differ;                                   // ... of two groups: link them
+    logic grow;                                     // ... of equal ranks: the rank grows
+
+    assign take      = state_q == S_IDLE && req_valid;
+    assign clear     = take && req_op == DS_CLEAR;
+    assign start     = take && req_op != DS_CLEAR;
+    assign step      = (state_q == S_FIND_A || state_q == S_FIND_B) && !at_root;
+    assign done_a    = state_q == S_FIND_A && at_root;
+    assign to_b      = done_a && op == DS_UNION;
+    assign done_find = done_a && op != DS_UNION;
+    assign set_write = done_find && op == DS_SET;
+    assign done_b    = state_q == S_FIND_B && at_root;
+    assign link      = state_q == S_LINK;
+    assign differ    = link && !same;
+    assign grow      = differ && rank_eq;
+
+    assign req_ready   = state_q == S_IDLE;
+    assign rsp_valid   = state_q == S_RSP;
     assign rsp_root    = out_root;
-    assign rsp_payload = out_payload;
+    assign rsp_payload = payload[out_root];
     assign rsp_same    = out_same;
     assign merge_a     = payload[root_a];
     assign merge_b     = payload[root_b];
 
     // @kb: rtl/lib/block/disjoint_set/design
+    always_comb begin
+        state_d = state_q;
+        case (state_q)
+        // Takes a request; DS_CLEAR answers at once.
+        S_IDLE:
+            if (clear)
+                state_d = S_RSP;
+            else if (start)
+                state_d = S_FIND_A;
+        // Walks up from a; a union then walks from b.
+        S_FIND_A:
+            if (to_b)
+                state_d = S_FIND_B;
+            else if (done_find)
+                state_d = S_RSP;
+        // Walks up from b.
+        S_FIND_B:
+            if (done_b)
+                state_d = S_LINK;
+        // Links the roots (or finds them one).
+        S_LINK:
+            state_d = S_RSP;
+        // Offers the answer until it is taken.
+        S_RSP:
+            if (rsp_ready)
+                state_d = S_IDLE;
+        default:
+            state_d = S_IDLE;
+        endcase
+    end
+
     always_ff @(posedge clk)
-        if (!rst_n) begin
+        if (!rst_n)
+            state_q <= S_IDLE;
+        else
+            state_q <= state_d;
+
+    // The tables: reset and DS_CLEAR make every item its own root; one write each.
+    always_ff @(posedge clk)
+        if (!rst_n || clear)
             for (int i = 0; i < N; i++) begin
                 parent[i]  <= IW'(i);
                 rank[i]    <= '0;
                 payload[i] <= '0;
             end
-            state <= S_IDLE;
-        end else if (state == S_IDLE && req_valid && req_op == DS_CLEAR) begin
-            for (int i = 0; i < N; i++) begin
-                parent[i]  <= IW'(i);
-                rank[i]    <= '0;
-                payload[i] <= '0;
-            end
-            out_root    <= '0;
-            out_payload <= '0;
-            out_same    <= 1'b0;
-            state       <= S_RSP;
-        end else
-            case (state)
-            S_IDLE:
-                if (req_valid) begin
-                    op          <= req_op;
-                    cur         <= req_a;
-                    b           <= req_b;
-                    set_payload <= req_payload;
-                    state       <= S_FIND_A;
-                end
-            S_FIND_A, S_FIND_B:
-                if (!at_root) begin
-                    parent[cur] <= g;                       // path halving
-                    cur         <= g;
-                end else if (state == S_FIND_A && op == DS_UNION) begin
-                    root_a <= found;
-                    cur    <= b;
-                    state  <= S_FIND_B;
-                end else if (state == S_FIND_B) begin
-                    root_b <= found;
-                    state  <= S_LINK;
-                end else begin                              // DS_FIND, DS_SET
-                    out_root    <= found;
-                    out_payload <= op == DS_SET ? set_payload : payload[found];
-                    out_same    <= 1'b0;
-                    if (op == DS_SET)
-                        payload[found] <= set_payload;
-                    state <= S_RSP;
-                end
-            S_LINK: begin
-                out_same <= root_a == root_b;
-                if (root_a == root_b) begin
-                    out_root    <= root_a;
-                    out_payload <= payload[root_a];
-                end else begin
-                    out_root    <= a_wins ? root_a : root_b;
-                    out_payload <= merge;
-                    if (a_wins) begin
-                        parent[root_b]  <= root_a;
-                        payload[root_a] <= merge;
-                        if (rank[root_a] == rank[root_b])
-                            rank[root_a] <= rank[root_a] + 1'b1;
-                    end else begin
-                        parent[root_a]  <= root_b;
-                        payload[root_b] <= merge;
-                    end
-                end
-                state <= S_RSP;
-            end
-            S_RSP:
-                if (rsp_ready)
-                    state <= S_IDLE;
-            default:
-                state <= S_IDLE;
-            endcase
+        else begin
+            if (step)
+                parent[cur] <= g;                   // path halving
+            else if (differ)
+                parent[loser] <= winner;
+            if (grow)
+                rank[root_a] <= rank[root_a] + 1'b1;
+            if (set_write)
+                payload[found] <= set_payload;
+            else if (differ)
+                payload[winner] <= merge;
+        end
+
+    // The registers of an operation.
+    always_ff @(posedge clk) begin
+        if (start) begin
+            op          <= req_op;
+            b           <= req_b;
+            set_payload <= req_payload;
+        end
+        if (start)
+            cur <= req_a;
+        else if (step)
+            cur <= g;
+        else if (to_b)
+            cur <= b;
+        if (done_a)
+            root_a <= found;
+        if (done_b)
+            root_b <= found;
+        if (clear || done_find || link) begin
+            out_root <= clear ? '0 : done_find ? found : winner;
+            out_same <= link && same;
+        end
+    end
 
     // Valid/ready rule 2 on channel rsp: an answer offered and not taken stays.
     `DC_ASSERT_NEXT(a_rsp_held, rsp_valid && !rsp_ready,

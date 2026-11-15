@@ -1,17 +1,17 @@
-/* Test of DisjointSetT (DisjointSet behind it), the behave version.
+/* Test of DisjointSetT (DisjointSet behind it), behave or struct version.
  *
  * The payload is a struct of a member count (merged by adding), an odd bit (XOR) and a flag
  * (OR), so that a wrong merge or a merge of the wrong groups shows. Requests come from a
  * SimVldRdySource and answers go to a SimVldRdySink, both stalling at random: random
  * operations (unions, finds, sets, a clear in the middle and now and then) on N = 2, 5, 16,
- * 64 items, 3000 on Verilator, 300 on Icarus. Model: a group label per item, a union
- * relabels a whole group (no trees), unlike the block. Every answer is checked: the payload
- * of the item's group (model), rsp_same, and the root, which stays the group's root until a
- * union, which must keep one of its two groups' roots (root); after a clear every item is
- * its own root. Every answer must come within 2 log2(N) + 6 clocks of its request
- * (latency). In the end every kind must have happened (a union of two groups of 2 or more
- * from N = 4 up). Checks named with DC_TEST_FAIL: model, root, latency, cover. Stops at the
- * first failure.
+ * 64 items (64 on Verilator only), 3000 on Verilator, 300 on Icarus. Model: a group label
+ * per item, a union relabels a whole group (no trees), unlike the block. Every answer is
+ * checked: the payload of the item's group (model), rsp_same, and the root, which stays the
+ * group's root until a union, which must keep one of its two groups' roots (root); after a
+ * clear every item is its own root. Every answer must come within 2 log2(N) + 6 clocks of
+ * its request (latency). In the end every kind must have happened (a union of two groups of
+ * 2 or more from N = 4 up). Checks named with DC_TEST_FAIL: model, root, latency, cover.
+ * Stops at the first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -255,7 +255,12 @@ module TbDisjointSet;
     TbDisjointSetCheck #(.N(2))  u_check_2 (.clk, .done(done_2));
     TbDisjointSetCheck #(.N(5))  u_check_5 (.clk, .done(done_5));
     TbDisjointSetCheck #(.N(16)) u_check_16(.clk, .done(done_16));
+`ifdef VERILATOR
+    // The struct version of 64 items takes seconds to elaborate on event-driven Icarus.
     TbDisjointSetCheck #(.N(64)) u_check_64(.clk, .done(done_64));
+`else
+    assign done_64 = 1'b1;
+`endif
 
     initial begin
         wait (done_2 && done_5 && done_16 && done_64);

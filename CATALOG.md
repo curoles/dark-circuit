@@ -374,7 +374,7 @@ block:
     test: test/block/delay_line
   DisjointSet:
     what: "Disjoint set (union-find): N items in groups that only merge, each group named by one of its items (its root) and carrying a payload; one operation at a time"
-    versions: [behave]
+    versions: [behave, struct]
     path: rtl/lib/block/disjoint_set
     test: test/block/disjoint_set
     kb: [rtl/lib/block/disjoint_set/design]
