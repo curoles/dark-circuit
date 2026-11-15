@@ -372,6 +372,12 @@ block:
     versions: [behave, struct]
     path: rtl/lib/block/delay_line
     test: test/block/delay_line
+  DisjointSet:
+    what: "Disjoint set (union-find): N items in groups that only merge, each group named by one of its items (its root) and carrying a payload; one operation at a time"
+    versions: [behave]
+    path: rtl/lib/block/disjoint_set
+    test: test/block/disjoint_set
+    kb: [rtl/lib/block/disjoint_set/design]
   Divider:
     what: "Divider: quotient and remainder of unsigned integers, one quotient bit per clock (restoring division)"
     versions: [behave, struct]
@@ -663,6 +669,15 @@ block:
     DelayLineT:
       what: "Delay line of type T: DelayLine with WIDTH = $bits(T); out is in, DEPTH clocks later"
       path: rtl/lib/block/delay_line/delay_line_t.sv
+  disjoint_set:
+    DisjointSetPkg:
+      kind: package
+      what: "Disjoint set (union-find): the operations of DisjointSet and DisjointSetT"
+      path: rtl/lib/block/disjoint_set/disjoint_set_pkg.sv
+    DisjointSetT:
+      what: "Disjoint set of payload type T: DisjointSet with PAYLOAD_WIDTH = $bits(T)"
+      path: rtl/lib/block/disjoint_set/disjoint_set_t.sv
+      kb: [rtl/lib/block/disjoint_set/design]
   dma:
     DmaChannel:
       what: "DMA channel: the state of one transfer, its commands to the DMA mover"

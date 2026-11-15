@@ -1,0 +1,52 @@
+type: mutants
+title: Mutants of the DisjointSet test (behave version, through DisjointSetT)
+date: 2026-11-14
+tests: [block_disjoint_set_behave]
+mutants:
+  - name: a union does not hang b's root under a's (the groups stay apart)
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "parent[root_b]  <= root_a;"
+        new: "parent[root_b]  <= root_b;"
+  - name: a union keeps a's payload instead of the merge
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "payload[root_a] <= merge;"
+        new: "payload[root_a] <= merge_a;"
+    expect: model
+  - name: path halving cuts the item off its group (points it at itself)
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "parent[cur] <= g;                       // path halving"
+        new: "parent[cur] <= cur;                     // path halving"
+  - name: a find stops at the first step (the parent, not the root)
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "assign at_root = p == cur || g == p;"
+        new: "assign at_root = 1'b1;"
+  - name: a union of one group answers same 0
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "out_same <= root_a == root_b;"
+        new: "out_same <= 1'b0;"
+    expect: model
+  - name: DS_SET writes the payload to the item the walk is at, not the root
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "payload[found] <= set_payload;"
+        new: "payload[cur] <= set_payload;"
+    expect: model
+  - name: the answer is dropped without rsp_ready
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "                if (rsp_ready)\n                    state <= S_IDLE;"
+        new: "                state <= S_IDLE;"
+  - name: no path halving (a walk only moves up)
+    edits:
+      - file: rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+        old: "parent[cur] <= g;                       // path halving"
+        new: "parent[cur] <= parent[cur];             // path halving"
+    expect: survives
+    why: >
+      Halving changes only how fast later finds are, never an answer; union by rank alone
+      keeps every tree at most log2(N) high, within the latency bound the test checks.

@@ -1,0 +1,54 @@
+type: decision
+title: DisjointSet, union-find in flip-flops with a payload per group the user merges
+date: 2026-11-14
+question: >
+  The Union-Find decoder of the QEC detour keeps clusters of detection events that only
+  merge, asks which cluster a vertex is in and merges two, and keeps data per cluster (its
+  size, whether its count of events is odd, whether it touches the boundary); connected
+  component labeling and Kruskal need the same structure. As a generic block: where do the
+  parents live, how is the per-group data kept without the block knowing its meaning, and
+  how does an operation run?
+decision: >
+  DisjointSet #(N, PAYLOAD_WIDTH), behave version first: parents, ranks and payloads in
+  flip-flops (the user's choice for a first version), one operation at a time on a valid/ready
+  channel req (DisjointSetPkg::ds_op_e: DS_FIND, DS_UNION, DS_SET, DS_CLEAR) answered on a
+  channel rsp (root, the group's payload, same). The payload is the user's: a width here and a
+  type in the wrapper DisjointSetT #(N, T) (the user asked for a type parameter; the
+  library's idiom for stored values), never looked inside; in the clock a union links,
+  merge_a and merge_b are the two groups' payloads and the user's combinational merge comes
+  back on input merge. Union by rank (equal ranks: a's root stays); find with path halving,
+  two levels a clock (parent and grandparent read together); a union finds a, then b, then
+  links. Reset and DS_CLEAR make every item its own group, payloads 0, in one clock.
+why: >
+  Flip-flops clear in one clock, which a decoder needs between rounds, and suit QEC's few
+  hundred vertices; Sram1R1W can come later for large N. Only the user knows how payloads
+  combine (a size adds, an odd count XORs, a flag ORs), so the merge is the user's function,
+  not fields the block would fix. Union by rank keeps trees log2(N) high whatever the order
+  of unions; path halving needs no second pass, so it fits the same walk.
+rejected:
+  - choice: Payload fields fixed by the block (a size, bits ORed on union)
+    why_not: >
+      Not generic; QEC's odd count must XOR, not OR; the user asked for a type parameter.
+  - choice: Full path compression (every item on the path to the root)
+    why_not: A second pass back down the path; halving shortens it in the same walk.
+  - choice: Parents in Sram1R1W
+    why_not: >
+      A clear writes every entry (N clocks) and a walk reads one level a clock; later, for
+      large N.
+  - choice: Both finds of a union at once
+    why_not: >
+      Twice the read multiplexers for a shorter union; one walker first, measured before
+      anything faster.
+code:
+  - rtl/lib/block/disjoint_set/behave/disjoint_set.sv
+  - rtl/lib/block/disjoint_set/disjoint_set_t.sv
+evidence: >
+  2026-11-14: the behave version through DisjointSetT (payload a count added, an odd bit
+  XORed, a flag ORed), N = 2, 5, 16, 64, random unions, finds, sets and clears from a
+  SimVldRdySource into a SimVldRdySink, both stalling at random, against a model of group
+  labels (no trees): every payload, rsp_same and root checked, every answer within 2 log2(N)
+  + 6 clocks; Verilator 0.05 s (3000 operations each), Icarus 0.13 s (300). Found on the way:
+  the testbench released reset at a clock edge (a race; now 1 after it), and the block read
+  rst_n twice in one branch (reset and DS_CLEAR now separate branches). sky130 (Yosys, ABC),
+  behave, payload 10 bits: N = 16 17 607 um2, 6.7 ns; N = 64 67 335 um2, 8.5 ns, the longest
+  path from the parents through the parent and grandparent multiplexers.
