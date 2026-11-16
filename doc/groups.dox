@@ -34,3 +34,7 @@
 /** @defgroup mig3 Mig3
  * RISC-V CPU (rtl/design/mig3), a copy of Mig2 that grows floating point.
  */
+
+/** @defgroup mig6 Mig6
+ * Prototype (rtl/design/mig6): Mig3 cores on a network on chip, toward an AI chip.
+ */

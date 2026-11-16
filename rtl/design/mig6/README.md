@@ -120,15 +120,18 @@ Zicbom (cbo.clean, cbo.inval, already in Mig3) or a directory protocol (MSI/MESI
 ## The chunks, for now
 
 1. This page.
-2. Mig3: `mhartid` a parameter (configuration).
-3. The network interface (rtl/lib/block/noc): the library's memory channel to NoC packets
+2. Mig6Core: a copy of Mig3's core (rtl/design/mig3 without Mig3Cpu and its devices),
+   renamed and nothing else; Mig3 stays as it is (done 2026-11-15: sv2v of Mig6Core and
+   Mig3Core identical but for the names). The `@kb:` tags still point to Mig3's records.
+3. Mig6Pe without the network: core and local memory, a `HART_ID` parameter that `mhartid`
+   reads; a testbench for N cores; a program that prints its hart ID, on one PE.
+4. The same program on four PEs (2 x 2), every hart ID exiting once.
+5. The network interface (rtl/lib/block/noc): the library's memory channel to NoC packets
    and back, a library block with its own test; the same block at the memory edge.
-4. Mig6Pe: core, local memory, address decode, network interface; tested alone against a
-   network model.
-5. Mig6: four PEs, NocMesh, the shared memory at the edge; a first program: every hart
-   writes its ID to shared memory and arrives at a barrier.
-6. The layer on four PEs, outputs checked, cycles against one Mig3.
-7. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),
+6. Mig6Pe with the network interface; Mig6: four PEs, NocMesh, the shared memory at the
+   edge; a program where every hart writes its ID to shared memory and arrives at a barrier.
+7. The layer on four PEs, outputs checked, cycles against one Mig3.
+8. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),
    number formats (OCP MX, FP8), softmax and normalization.
 
 ## Open questions

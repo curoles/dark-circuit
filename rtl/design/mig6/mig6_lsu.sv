@@ -1,0 +1,136 @@
+/* Mig6 load/store unit: data memory requests of loads and stores.
+ *
+ * addr is the byte address rs1 + imm (Mig6Alu). A load or a store sends its request to
+ * dmem in EX. A store writes there: the bytes of rs2 are repeated over the word and wstrb
+ * selects the bytes at addr. A load's word comes 1 or more clocks later, in MEM/WB, where
+ * Mig6LoadData takes the loaded value from it. valid=0 sends nothing (Mig6Core: a load in
+ * MEM/WB waits, one dmem request in flight).
+ * misaligned=1 when the address is not aligned to the access size (LW, SW: 4 bytes;
+ * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete. The byte
+ * in the word (offset: alignment, strobes) is rs1[1:0] + imm[1:0], added here: the low bits
+ * of a sum depend only on the low bits of the operands, so the trap does not wait for the
+ * adder and result mux of Mig6Alu; addr, the same sum, gives the word address.
+ * mem describes the access for the retire trace (RVFI): bytes read or written; the word
+ * read is added in MEM/WB. dmem_req also carries the byte and the size of the access, so
+ * an uncached one reaches memory or a device exactly. cancel=1 (an SC that fails,
+ * Mig6Atomic) does not do the store: no request, no write in mem; a misaligned SC still
+ * traps. An AMO is a word load with its atop (dec.atomic.atop) and its operand rs2 in
+ * wdata (AMOAND: ~rs2, a clear); mem has its read and its write, mem.wdata 0 (the new
+ * word is made in front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom)
+ * is a store of no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache
+ * block, so it is never misaligned; mem has its address and no masks (kb
+ * rtl/design/mig3/cbo).
+ *
+ * Mig6Core instantiates it in EX, for the instruction in EX. In: addr is the result of
+ * Mig6Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
+ * Mig6Core to data memory (SimLatencyRAM in Mig3Cpu); misaligned goes to Mig6Control, which
+ * makes it a misaligned load or store trap with mtval = addr; mem goes into the retire
+ * entry. The loaded word comes back from dmem in MEM/WB, where Mig6LoadData picks its
+ * bytes by the offset and funct3 that EX/MEM carries.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
+    input  wire              valid,      // instruction in EX is valid
+    // Of dec only mem, funct3 and the low bits of imm are used, of rs1_data the low bits, of
+    // addr the word address.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  decoded_t         dec,
+    input  word_t            rs1_data,   // base address
+    input  word_t            addr,       // rs1 + imm, from Mig6Alu
+    /* verilator lint_on UNUSEDSIGNAL */
+    input  word_t            rs2_data,   // store data
+    input  wire              cancel,     // the store is not done: an SC that fails
+    output dmem_req_t       dmem_req,
+    output wire              misaligned, // address not aligned to the access size: a fault
+    output lsu_mem_t         mem         // access for the retire trace
+);
+    // Parts of the address and of the store data.
+    byte_offset_t           offset;     // byte in the word
+    logic                   odd;        // odd byte address
+    logic [7:0]             rs2_b;
+    logic [15:0]            rs2_h;
+    // @kb: rtl/design/mig2/narrow_local_compute
+    // @kb: rtl/design/mig2/lsu_own_offset
+    assign offset = rs1_data[DADDR_START-1:0] + dec.imm[DADDR_START-1:0];
+    assign odd    = offset[0];
+    assign rs2_b  = rs2_data[7:0];
+    assign rs2_h  = rs2_data[15:0];
+
+    logic  load;
+    logic  store;       // a store, also one that is cancelled (it may be misaligned)
+    logic  write;       // a store that writes: not cancelled
+    logic  amo;         // an AMO: a load with an atop
+    logic  clear;       // AMOAND: the operand is ~rs2
+    logic  cbo;         // a CBO: a store of no bytes, never misaligned
+    logic  unaligned;   // offset is not aligned to the size of funct3
+    word_t wr_data;
+    strb_t strb;        // bytes of the access: size of funct3 at offset
+    strb_t strb_b;      // strobes of a byte at offset 0
+    strb_t strb_h;      // strobes of a halfword at offset 0
+    size_t size;        // bytes of the access: 1 << size
+    assign strb_b = {{(STRB_WIDTH - 1){1'b0}}, 1'b1};
+    assign strb_h = {{(STRB_WIDTH - 2){1'b0}}, 2'b11};
+
+    assign load  = valid && dec.mem.read;
+    assign store = valid && dec.mem.write;
+    assign write = store && !cancel;
+    assign amo   = load && AtomicPkg::is_atomic(dec.atomic.atop);
+    assign clear = dec.atomic.atop == AtomicPkg::ATOP_LD_CLR;
+    // @kb: rtl/design/mig3/cbo
+    assign cbo   = store && dec.mem.cmo != CachePkg::CMO_NONE;
+
+    always_comb
+        case (dec.funct3)
+            F3_H, F3_HU: unaligned = odd;
+            F3_W:        unaligned = offset != '0;
+            default:     unaligned = 1'b0;      // bytes
+        endcase
+
+    assign misaligned = (load || store) && unaligned && !cbo;
+
+    // Bytes of the access; loads and stores have the same funct3 sizes (B, H, W); a CBO
+    // writes none.
+    always_comb
+        if (cbo)
+            strb = '0;
+        else
+            case (dec.funct3)
+                F3_B, F3_BU: strb = strb_b << offset;
+                F3_H, F3_HU: strb = strb_h << offset;
+                default:     strb = '1;
+            endcase
+
+    always_comb
+        case (dec.funct3)
+            F3_B, F3_BU: size = SIZE_B;
+            F3_H, F3_HU: size = SIZE_H;
+            default:     size = SIZE_W;
+        endcase
+
+    // Store: bytes of rs2 repeated over the word, strobes select the bytes at offset.
+    always_comb
+        case (dec.funct3)
+            F3_B:    wr_data = {STRB_WIDTH{rs2_b}};
+            F3_H:    wr_data = {(STRB_WIDTH / 2){rs2_h}};
+            default: wr_data = rs2_data;
+        endcase
+
+    assign dmem_req.valid = (load || write) && !misaligned;
+    assign dmem_req.we    = write;
+    assign dmem_req.addr   = addr[WIDTH-1:DADDR_START];
+    assign dmem_req.offset = cbo ? '0 : offset;
+    assign dmem_req.size   = size;
+    assign dmem_req.wdata = wr_data ^ {WIDTH{clear}};
+    assign dmem_req.wstrb = strb;
+    assign dmem_req.atop  = dec.atomic.atop;
+    assign dmem_req.cmo   = dec.mem.cmo;
+
+    // Access for the retire trace, 0 for other instructions and misaligned addresses.
+    assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
+    assign mem.rmask = (load && !misaligned) ? strb : '0;
+    assign mem.wmask = ((write || amo) && !misaligned) ? strb : '0;
+    assign mem.wdata = (write && !misaligned && !cbo) ? wr_data : '0;
+
+endmodule

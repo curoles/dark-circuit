@@ -42,6 +42,7 @@ rtl/lib/
 rtl/design/mig1/ Mig1 RISC-V CPU (RV32IM, 4-stage pipeline), see its README.md
 rtl/design/mig2/ Mig2 RISC-V CPU, where bigger changes of Mig1 go first
 rtl/design/mig3/ Mig3 RISC-V CPU, a copy of Mig2 that grows floating point
+rtl/design/mig6/ Mig6 prototype: Mig3 cores on a network on chip, see its README.md
 cmake/           cmake helpers, one file per simulator
 test/gate/       testbenches of gates
 test/part/<part>/   testbench of a part
@@ -53,6 +54,7 @@ test/sim/        testbenches of simulation models
 test/design/mig1/ tests of Mig1
 test/design/mig2/ tests of Mig2
 test/design/mig3/ tests of Mig3
+test/design/mig6/ tests of Mig6
 sw/riscv/        RISC-V software for tests: crt0.S, linker scripts, semihosting/, bench/
                  (support of the riscv-tests benchmarks)
 test/sw/         tests of software, run on QEMU

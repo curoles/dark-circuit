@@ -1,0 +1,416 @@
+/* Mig6 control: when the core runs, where it fetches, when it traps and when it stops,
+ * and the stalls and flushes of the pipeline (IF | ID | EX | MEM/WB).
+ *
+ * Traps (machine mode): when the instruction in EX faults, it does not complete (no
+ * register or memory write, minstret does not count it), it retires as a trap with
+ * ex_trap (cause and tval for mcause and mtval, see Mig6Csr) and fetch goes to mtvec.
+ * Faults: cause, tval:
+ * - taken jump or branch to an address not divisible by 4: misaligned fetch, the target;
+ * - illegal instruction, CSR instruction on a CSR that does not exist or writing a
+ *   read-only CSR, an F instruction the FPU can not do (ex_fpu_illegal: frm not a
+ *   rounding mode): illegal instruction, the instruction;
+ * - EBREAK while ebreak_halt=0: breakpoint, its address;
+ * - load or store with a misaligned address: misaligned load or store, the address;
+ * - ECALL: machine ECALL, 0.
+ * MRET goes to mepc. EBREAK while ebreak_halt=1 (a debugger is attached; dcsr.ebreakm of
+ * the debug spec) completes and halts the core: fetch stops and ID is flushed at once,
+ * halt=1 comes the cycle after EBREAK retired in MEM/WB; halt_pc is its address, nothing
+ * is in flight; resume=1 runs again from halt_pc + 4 (a redirect: IF has fetched beyond
+ * EBREAK).
+ * A redirect from EX (branch guessed wrong, JALR, trap, MRET; resume) drops the
+ * instructions in ID and IF (two bubbles). The BTB of Mig6Fetch sends fetch to the target
+ * of a branch or JAL it knows in IF already (no bubble). ID checks what the BTB said: it
+ * trusts a hit that fits the instruction, corrects one that does not (one bubble,
+ * BUBBLE_BTB_FIX; two pcs share an entry) and clears its entry. Without a hit, ID
+ * redirects fetch to pc + imm for a JAL (always taken) and for a conditional branch
+ * guessed taken (Mig6BranchPredict) when the instruction leaves ID: only the instruction
+ * in IF is dropped (one bubble). A return goes from ID to the top of the return-address
+ * stack (in Mig6Core), which Control pushes for every call and pops for every return that
+ * leaves ID. EX redirects when the outcome differs from where fetch
+ * went: a taken branch that fetch did not follow goes to its target, one that fetch
+ * followed but is not taken to the next instruction, a return that ID sent elsewhere to
+ * its target; EX updates the BTB with every branch and JAL that completes. An
+ * instruction behind a redirect or halt in EX is dropped with ID; a jump or branch to a
+ * misaligned target traps in EX. ex_muldiv_stall (division not done), ex_fpu_stall (the
+ * result of an F instruction not there yet) and ex_pmul_stall (a packed multiply's) keep
+ * the instruction in EX: ID and IF hold.
+ * Interlock: results are forwarded to ID (Mig6Forward), except load data, which comes
+ * in MEM/WB, and an SC's result, which goes there (Mig6Atomic): the instruction in ID
+ * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
+ * bubble meanwhile. Whether it reads rs1 or rs2 comes from its opcode alone (hz_rs1,
+ * hz_rs2 of Mig6Decode): an immediate in an rs field may cost a needless bubble, a read
+ * is never missed.
+ * Interrupts: an interrupt that is pending and enabled (csr.irq) is taken on the
+ * instruction in EX in the first cycle it acts, before it sends a request or starts a
+ * division: ex_irq=1, the instruction does nothing and traps (mepc = its pc, it runs
+ * again after MRET); not on a WFI (below).
+ * WFI waits in EX (ex_wfi_wait, a stall) until an interrupt is pending and enabled in mie
+ * (csr.pending, whatever mstatus.MIE), then completes. With MIE = 1 the interrupt is then
+ * taken on the next instruction (mepc = WFI + 4): the WFI acted in an earlier cycle. An
+ * interrupt is never taken on the WFI itself, also when it is pending as the WFI comes:
+ * the WFI completes at once and the next instruction takes it; otherwise MRET would
+ * return to the WFI, which would sleep again (an idle loop `wfi; check a flag` would
+ * hang). Its bubbles are BUBBLE_WFI (kb rtl/design/mig3/wfi).
+ * Every bubble carries its reason (bubble_e, Mig6Pkg): the redirect class (JAL, branch
+ * guessed taken, return, BTB corrected from ID; branch guessed wrong, JALR or return (not
+ * predicted, predicted wrong), trap, MRET from EX), fill
+ * for resume and for the slot the halting EBREAK flushes, load-use for the interlock.
+ * ex_done=1: the instruction in EX completes: CSR write and minstret now; it writes rd
+ * and retires in MEM/WB, which it always reaches.
+ *
+ * @author    Igor Lesik
+ * @copyright 2026 Igor Lesik, MIT License
+ */
+
+`include "dark_circuit_assert.svh"
+
+// @kb: rtl/design/mig2/control_blocks_outside
+module Mig6Control import Mig6Pkg::*, RiscvPkg::*; (
+    input  wire                        clk,
+    input  wire                        rst_n,       // synchronous reset, active low
+    input  iaddr_t                     id_next_pc,  // address fetch requested after ID's
+    // Only valid and pc are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  fetch_t                     id_fetch,    // instruction in ID: valid and pc
+    /* verilator lint_on UNUSEDSIGNAL */
+    // Only hz_rs1, hz_rs2, uses_rs1, uses_rs2 (an assertion), rs1, rs2, br and imm are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  decoded_t                   id_dec,      // instruction in ID taken apart
+    /* verilator lint_on UNUSEDSIGNAL */
+    input  wire                        id_pred_taken, // branch in ID guessed taken
+    // Only hit and taken are used: ID checks where fetch went.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  btb_pred_t                  id_btb,      // what the BTB said in IF for it
+    /* verilator lint_on UNUSEDSIGNAL */
+    input  iaddr_t                     id_ras_top,  // top of the return stack: a return goes there
+    // Only valid and pc are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  fetch_t                     ex_fetch,    // instruction in EX: valid and pc
+    /* verilator lint_on UNUSEDSIGNAL */
+    input  insn_t                      ex_insn,     // for mtval of illegal instructions
+    // Only sys, mem, br, rd_we and rd are used.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  decoded_t                   ex_dec,      // instruction in EX taken apart
+    /* verilator lint_on UNUSEDSIGNAL */
+    input  wire                        ex_redirected, // fetch went to its target
+    // Only hit and counter are used: they go into the update of the BTB.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  btb_pred_t                  ex_btb,      // what the BTB said in IF for it
+    /* verilator lint_on UNUSEDSIGNAL */
+    input  iaddr_t                     ex_ras_target, // where ID sent the return in EX
+    input  word_t                      ex_addr,     // load/store address, for mtval
+    input  branch_t                    ex_branch,   // next pc of the instruction in EX
+    input  wire                        ex_lsu_misaligned, // load/store address not aligned: a fault
+    input  wire                        ex_csr_illegal,    // CSR instruction can not be done
+    input  wire                        ex_muldiv_stall,   // division of the instruction in EX not done
+    input  wire                        ex_fpu_stall,      // F insn in EX waits for its result
+    input  wire                        ex_fpu_illegal,    // F insn in EX can not be done
+    input  wire                        ex_pmul_stall,     // packed multiply in EX waits
+    input  wire                        ex_dmem_wait,      // dmem does not take the request of EX
+    input  wire                        mem_wait,          // the load in MEM/WB waits for its word
+    input  csr_t                       csr,         // mtvec, mepc
+    input  wire                        ebreak_halt, // debug: EBREAK halts instead of trapping
+    input  wire                        resume,      // debug: continue after EBREAK
+    output fetch_ctrl_t                fetch_ctrl,
+    output pipe_ctrl_t                 pipe_ctrl,
+    output btb_update_t                btb_update,  // a branch or JAL completes in EX
+    output btb_inval_t                 btb_inval,   // the BTB was wrong for the insn in ID
+    output ras_ctrl_t                  ras_ctrl,    // push and pop of the return stack
+    output wire                        id_redirected, // fetch went to the target of the
+                                                    // insn in ID; carried to EX
+    output wire                        ex_done,
+    output trap_t                      ex_trap,
+    output wire                        ex_irq,      // an interrupt is taken on the insn in EX
+    output wire                        ex_wfi_wait, // WFI in EX waits for an interrupt
+    output iaddr_t                     ex_next_pc,  // next pc of the instruction in EX (retire)
+    output wire                        halt,
+    output iaddr_t                     halt_pc
+);
+    logic       rst;         // reset active
+    logic       ex_stall;    // the instruction in EX stays for another cycle
+    logic       ex_hold;     // ... from flops only: a division, an F instruction, a WFI
+    logic       ex_act;      // the instruction in EX acts now: it does not wait behind MEM/WB
+    assign rst      = !rst_n;
+    // The stalls that come from flops (the divider's state; WFI: ID/EX, mie, meip, a flop
+    // of the PLIC) are grouped, so the late ones (the D-cache's handshake) pass no more
+    // gates than before.
+    // @kb: rtl/design/mig2/data_waits
+    // @kb: rtl/design/mig3/wfi
+    assign ex_wfi_wait = ex_fetch.valid && ex_dec.sys.wfi && !csr.pending;
+    assign ex_hold     = ex_muldiv_stall || ex_fpu_stall || ex_pmul_stall || ex_wfi_wait;
+    assign ex_stall    = ex_hold || ex_dmem_wait || mem_wait;
+    assign ex_act   = ex_fetch.valid && !mem_wait;
+
+    logic       running;     // 1 from reset until EBREAK halts the core, again after resume
+    logic       ex_stop;     // EBREAK in EX halts the core
+    logic       ex_mret;     // MRET in EX
+    logic       ex_fault;    // instruction in EX traps
+    excp_code_t ex_cause;
+    word_t      ex_tval;
+    logic       resuming;    // resume while halted
+    logic       ex_redirect; // EX (or resume) redirects fetch: ID and IF are dropped
+    logic       ex_wrong;    // the jump or branch in EX does not go where ID sent fetch
+    iaddr_t     ex_branch_pc; // where the jump or branch in EX goes: target or next insn
+    logic       ex_jal;      // JAL in EX
+    logic       id_jal;      // JAL in ID
+    logic       id_taken;    // ID sends fetch to the target: JAL, branch guessed taken
+    logic       id_at_target; // fetch requested pc + imm after the instruction in ID
+    logic       id_btb_ok;   // the BTB hit fits the instruction in ID: ID trusts it
+    logic       id_btb_fix;  // the BTB hit does not fit: ID corrects fetch, clears the entry
+    logic       id_ret;      // a return in ID: it goes to the top of the return stack
+    logic       id_go;       // ID sends fetch to a target: JAL, branch guessed taken, return
+    logic       ex_ras_wrong; // the return in EX does not go where ID sent it
+    logic       id_redirect; // ID redirects fetch when the instruction moves
+    iaddr_t     id_redirect_pc; // where ID sends fetch: the target or the next instruction
+    word_t      id_target;   // target of the instruction in ID: pc + imm, byte address
+    logic       id_moves;    // the instruction in ID goes to EX at the rising edge
+    logic       ex_writes;   // the instruction in EX writes a register at the end of its cycle
+    logic       mem_halting; // the EBREAK that halts the core is in MEM/WB, it retires now
+    logic       id_load_use; // ID reads the rd of a load in EX: its data comes in MEM/WB
+    logic       id_hazard;   // the instruction in ID must wait
+    logic       flush_id;    // the instruction in ID must not go on
+    bubble_e    redirect_why; // reason of the bubbles of a redirect
+
+    // Interrupts: taken on the instruction in EX in the first cycle it acts, before it
+    // sends a request or starts a division (it may stay in EX: a division, the D-cache
+    // does not take its request; a request once offered is not withdrawn). It then does
+    // nothing and traps; its own exception, if any, comes when it runs again after MRET.
+    // csr.irq comes from flops and meip: a CSR write or MRET that enables it counts for
+    // the next instruction, as the spec asks.
+    // @kb: rtl/design/mig3/interrupts
+    logic ex_acted;     // the instruction in EX acted in an earlier cycle (it stays)
+    always_ff @(posedge clk)
+        if (rst || !ex_stall)    ex_acted <= 1'b0;
+        else if (ex_act)         ex_acted <= 1'b1;
+    assign ex_irq = ex_act && !ex_acted && csr.irq && !ex_dec.sys.wfi;
+
+    // Traps, MRET, a halting EBREAK and redirects of EX happen once, in a cycle the
+    // instruction acts (not while it waits behind a load in MEM/WB); an interrupted
+    // EBREAK or MRET does nothing.
+    assign ex_stop = ex_act && ex_dec.sys.ebreak && ebreak_halt && !ex_irq;
+    assign ex_mret = ex_act && ex_dec.sys.mret && !ex_irq;
+
+    // Fault of the instruction in EX; at most one exception applies to an instruction,
+    // an interrupt comes first.
+    always_comb begin
+        ex_fault = ex_act;
+        ex_cause = '0;
+        ex_tval  = '0;
+        if (ex_irq)
+            ex_cause = IRQ_MACHINE_EXTERNAL;
+        // An F instruction the FPU can not do: frm not a mode (kb rtl/design/mig3/fpu).
+        else if (ex_dec.sys.illegal || ex_csr_illegal || ex_fpu_illegal) begin
+            ex_cause = CAUSE_ILLEGAL_INSTRUCTION;
+            ex_tval  = ex_insn;
+        end else if (ex_dec.sys.ecall)
+            ex_cause = CAUSE_MACHINE_ECALL;
+        else if (ex_dec.sys.ebreak && !ebreak_halt) begin
+            ex_cause = CAUSE_BREAKPOINT;
+            ex_tval  = {ex_fetch.pc, {IADDR_START{1'b0}}};
+        end else if (ex_branch.taken && ex_branch.misaligned) begin
+            // The target byte address: misaligned means bit 1 is set, bit 0 is always 0
+            // (JALR clears it, other offsets are even).
+            ex_cause = CAUSE_MISALIGNED_FETCH;
+            ex_tval  = {ex_branch.target, 2'b10};
+        end else if (ex_lsu_misaligned) begin
+            // An AMO is a load for the core, but its fault is store/AMO misaligned.
+            ex_cause = ex_dec.mem.write || AtomicPkg::is_atomic(ex_dec.atomic.atop)
+                       ? CAUSE_MISALIGNED_STORE : CAUSE_MISALIGNED_LOAD;
+            ex_tval  = ex_addr;
+        end else
+            ex_fault = 1'b0;
+    end
+
+    assign ex_trap.valid     = ex_fault;
+    assign ex_trap.irq       = ex_irq;
+    assign ex_trap.cause     = ex_cause;
+    assign ex_trap.tval      = ex_tval;
+
+    // EBREAK decides in EX (ex_stop: fetch stops, ID is flushed); the core halts after
+    // it retired in MEM/WB, so halt=1 comes the cycle after its retire.
+    always_ff @(posedge clk)
+        if (rst) mem_halting <= 1'b0;
+        else     mem_halting <= ex_stop;
+
+    always_ff @(posedge clk)
+        if (rst)                 running <= 1'b1;
+        else if (mem_halting)    running <= 1'b0;
+        else if (halt && resume) running <= 1'b1;
+
+    always_ff @(posedge clk)
+        if (ex_stop) halt_pc <= ex_fetch.pc;
+
+    assign resuming = halt && resume;
+    // EX redirects when a jump or branch does not go where fetch went: taken, but fetch did
+    // not follow it (guessed not taken, JALR), or fetch followed it (guessed taken) but it is
+    // not taken, or a return that ID sent to the top of the return stack goes elsewhere (only
+    // returns go to a target that ID does not compute itself).
+    assign ex_jal       = ex_dec.br.jump && !ex_dec.br.target_rs1;
+    assign ex_ras_wrong = ex_redirected && ex_dec.br.ret && ex_branch.target != ex_ras_target;
+    assign ex_wrong     = ex_act && (ex_branch.taken != ex_redirected || ex_ras_wrong);
+    assign ex_branch_pc = ex_branch.taken ? ex_branch.target : ex_fetch.pc + 1'b1;
+    assign ex_redirect  = ex_fault || ex_mret || ex_wrong || resuming;
+    assign flush_id     = ex_redirect || ex_stop;
+
+    // Class of a redirect from EX: a branch guessed wrong (either way) or JALR by its kind,
+    // a trap, MRET; a resume refills the pipeline.
+    always_comb
+        if (ex_fault)              redirect_why = BUBBLE_TRAP;
+        else if (ex_mret)          redirect_why = BUBBLE_XRET;
+        else if (resuming)         redirect_why = BUBBLE_FILL;
+        else if (ex_dec.br.branch) redirect_why = BUBBLE_COND_BRANCH;
+        else if (ex_dec.br.ret)    redirect_why = BUBBLE_RET;
+        else                       redirect_why = BUBBLE_INDIR_JUMP;
+
+    // ID acts (redirects now; pushes to a return stack, shifts a history later) only for an
+    // instruction that goes on to EX: once per instruction, never on the wrong path. It
+    // stays while EX holds a division or it waits for load data; it is dropped when an
+    // older instruction in EX redirects or halts.
+    // @kb: rtl/design/mig2/id_moves_correct_path
+    assign id_moves = id_fetch.valid && !ex_stall && !id_hazard && !flush_id;
+
+    // ID sends fetch to pc + imm for a JAL (always taken) and for a conditional branch
+    // guessed taken. A target not divisible by 4 is a fault: EX traps, ID does not redirect.
+    assign id_jal      = id_fetch.valid && id_dec.br.jump && !id_dec.br.target_rs1;
+    assign id_target   = {id_fetch.pc, {IADDR_START{1'b0}}} + id_dec.imm;
+    assign id_taken    = (id_jal || (id_fetch.valid && id_pred_taken)) &&
+                         !target_misaligned(id_target);
+
+    // Fetch went to pc + imm: the address it requested after the instruction (id_next_pc,
+    // kb rtl/design/mig3/fetch_stage: IF is two instructions ahead of ID by then). AddCmp,
+    // not the adder of id_target and a compare: it has no carry chain, and this check is on
+    // the path of ID's redirect. Word addresses: the offset of a branch or JAL is even, so
+    // imm[1] + 0 does not carry into bit 2 (a misaligned target traps anyway).
+    // @kb: rtl/lib/block/add_cmp/design
+    // @kb: rtl/design/mig2/addcmp_id_check
+    AddCmp #(.WIDTH($bits(iaddr_t))) u_add_cmp(
+        .a(id_fetch.pc), .b(id_dec.imm[WIDTH-1:IADDR_START]), .c(id_next_pc), .eq(id_at_target));
+
+    // What the BTB said in IF: a hit fits when the instruction is a branch or a JAL and
+    // fetch went where it says: to pc + imm (the address it requested after the instruction)
+    // when taken; a JAL must be taken. ID trusts a hit that fits, also its direction
+    // (no static guess on top: the counter knows the branch). A hit that does not fit (two
+    // pcs share an entry; never when the tag covers imem) is corrected as if the BTB had
+    // missed, and its entry is cleared. Without a hit, ID decides as before.
+    // @kb: rtl/design/mig2/btb_in_if
+    assign id_btb_ok  = id_btb.hit &&
+                        ((id_dec.br.branch && (!id_btb.taken || id_at_target)) ||
+                         (id_jal && id_btb.taken && id_at_target));
+    assign id_btb_fix = id_fetch.valid && id_btb.hit && !id_btb_ok;
+
+    // Returns: ID sends a return to the top of the return-address stack (in Mig6Core), and
+    // tells the stack what leaves ID: a call pushes the address after it, a return pops, a
+    // swap does both (the top is replaced). Only on id_moves: an instruction that leaves ID
+    // is on the correct path and leaves once, so the stack never needs repair.
+    // @kb: rtl/design/mig2/ras_in_id
+    assign id_ret             = id_fetch.valid && id_dec.br.ret;
+    assign ras_ctrl.push      = id_moves && id_dec.br.call;
+    assign ras_ctrl.pop       = id_moves && id_dec.br.ret;
+    assign ras_ctrl.push_addr = id_fetch.pc + 1'b1;
+
+    // ID sends fetch to a target: pc + imm for a JAL or a branch guessed taken, the top of the
+    // return stack for a return. It redirects when the instruction moves: without a hit for
+    // its target; for a hit that does not fit, when fetch must go to a target or went to a
+    // wrong one (else fetch went on to the next instruction, which is right).
+    assign id_go          = id_taken || id_ret;
+    assign id_redirect    = id_moves && (id_btb.hit ? id_btb_fix && (id_go || id_btb.taken)
+                                                    : id_go);
+    // @kb: rtl/design/mig2/late_input_last_mux
+    // @kb: rtl/design/mig2/id_target_mux_order
+    // The target from the adder comes last (decode, then pc + imm): it enters the last mux;
+    // the top of the return stack and pc + 1 are ready early (id_taken and id_ret never hold
+    // together).
+    assign id_redirect_pc = id_taken ? id_target[WIDTH-1:IADDR_START] :
+                            id_ret   ? id_ras_top : id_fetch.pc + 1'b1;
+    // Fetch went to the target: by the BTB in IF (a hit that fits), else by ID.
+    assign id_redirected  = id_btb_ok ? id_btb.taken : id_go;
+
+    // The BTB learns every branch and JAL that completes in EX (not one that traps), with
+    // what it said in IF; ID clears an entry that did not fit, once (when it moves).
+    assign btb_update = '{en:      ex_done && (ex_dec.br.branch || ex_jal),
+                          pc:      ex_fetch.pc,
+                          hit:     ex_btb.hit,
+                          counter: ex_btb.counter,
+                          taken:   ex_branch.taken,
+                          target:  ex_branch.target};
+    assign btb_inval  = '{en: id_btb_fix && id_moves, pc: id_fetch.pc};
+
+    // Interlock: other results are forwarded to ID (Mig6Forward), but a load's data comes
+    // from dmem in MEM/WB, one cycle after EX, so it can not be forwarded to ID while the
+    // load is in EX; an SC's result goes to MEM/WB too (kb rtl/design/mig3/lr_sc). The
+    // instruction in ID that reads the rd of either waits one cycle, EX gets a bubble.
+    // hz_rs1/hz_rs2: by the opcode alone, not by kind (the match of all encodings, which
+    // grows with every extension and was ID's longest path).
+    // @kb: rtl/design/mig3/interlock_by_opcode
+    logic ex_load;          // the instruction in EX writes a register in MEM/WB: load, SC
+    logic id_reads_ex_rd;   // the instruction in ID reads the register EX writes
+
+    assign ex_writes      = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
+    assign ex_load        = ex_writes &&
+                            (ex_dec.rd_src == RD_LOAD || ex_dec.rd_src == RD_ATOMIC);
+    assign id_reads_ex_rd = (id_dec.hz_rs1 && id_dec.rs1 == ex_dec.rd) ||
+                            (id_dec.hz_rs2 && id_dec.rs2 == ex_dec.rd);
+    assign id_load_use    = ex_load && id_reads_ex_rd;
+    assign id_hazard   = id_fetch.valid && id_load_use;
+
+    assign ex_done             = ex_fetch.valid && !ex_fault && !ex_stall;
+    assign fetch_ctrl.run      = rst_n && running && !ex_stop && !mem_halting;
+    assign fetch_ctrl.stall    = (ex_stall || id_hazard) && !flush_id;
+    assign fetch_ctrl.redirect = ex_redirect || id_redirect;
+    assign fetch_ctrl.why      = ex_redirect ? redirect_why : id_btb_fix ? BUBBLE_BTB_FIX :
+                                 id_jal ? BUBBLE_DIR_JUMP : id_ret ? BUBBLE_PRED_RET :
+                                 BUBBLE_PRED_TAKEN;
+    assign fetch_ctrl.target   = ex_fault ? csr.mtvec : ex_mret ? csr.mepc :
+                                 resuming ? halt_pc + 1'b1 :
+                                 ex_redirect ? ex_branch_pc : id_redirect_pc;
+    assign pipe_ctrl.ex_stall  = ex_stall;
+    assign pipe_ctrl.ex_flush  = !ex_stall && (id_hazard || flush_id);
+    assign pipe_ctrl.ex_why    = ex_redirect ? redirect_why :
+                                 ex_stop ? BUBBLE_FILL : BUBBLE_LOAD_USE;
+    assign pipe_ctrl.mem_stall = mem_wait;
+
+    // Next pc of the instruction in EX, for retire: where EX redirects, else where the jump
+    // or branch goes (redirected from ID or not taken), else the next instruction.
+    assign ex_next_pc = ex_redirect ? fetch_ctrl.target : ex_branch_pc;
+    assign halt                = !running;
+
+    // Halted: nothing is in EX, so no redirect comes from EX (only resume redirects).
+    `DC_ASSERT(a_halted_ex_empty, !(halt && ex_fetch.valid))
+    // At most one fault source applies to an instruction (the fault block relies on it).
+    // The interlock's reads cover every real read of the instruction in ID.
+    `DC_ASSERT(a_hz_covers_uses, !id_fetch.valid ||
+               ((!id_dec.uses_rs1 || id_dec.hz_rs1) && (!id_dec.uses_rs2 || id_dec.hz_rs2)))
+    `DC_ASSERT(a_one_fault, !ex_fetch.valid ||
+               $onehot0({ex_dec.sys.illegal || ex_csr_illegal || ex_fpu_illegal,
+                         ex_dec.sys.ecall,
+                         ex_dec.sys.ebreak && !ebreak_halt,
+                         ex_branch.taken && ex_branch.misaligned, ex_lsu_misaligned}))
+    // A stalled instruction stays in EX for the next cycle (EX may also hold a bubble while
+    // MEM/WB waits).
+    `DC_ASSERT_NEXT(a_ex_held, ex_stall && ex_fetch.valid, ex_fetch.valid && $stable(ex_fetch.pc))
+    // ID redirects only for an instruction that moves to EX in this cycle.
+    `DC_ASSERT(a_id_redirect_moves, !id_redirect || (!pipe_ctrl.ex_stall && !pipe_ctrl.ex_flush))
+    // Fetch is never told to redirect and to stall in the same cycle.
+    `DC_ASSERT(a_redirect_no_stall, !(fetch_ctrl.redirect && fetch_ctrl.stall))
+    // Fetch went to the target of a JAL in EX (IF or ID), unless it traps (misaligned).
+    `DC_ASSERT(a_ex_jal_redirected,
+               !(ex_fetch.valid && ex_jal) || ex_redirected || ex_branch.misaligned)
+    // ID redirects only for a JAL or a conditional branch, or to correct the BTB; it
+    // guesses only branches.
+    `DC_ASSERT(a_id_redirect_jump,
+               !id_redirect || id_dec.br.jump || id_dec.br.branch || id_btb_fix)
+    `DC_ASSERT(a_pred_branch, !id_pred_taken || id_dec.br.branch)
+    // The BTB predicts taken only on a hit; ID does not redirect again after a hit that fits.
+    `DC_ASSERT(a_btb_taken_hit, !id_fetch.valid || !id_btb.taken || id_btb.hit)
+    `DC_ASSERT(a_btb_trusted, !(id_btb_ok && id_redirect))
+    // An instruction that leaves ID is in EX at the next edge (it is not dropped on the way):
+    // what the return stack relies on.
+    `DC_ASSERT_NEXT(a_id_moves_ex, id_moves, ex_fetch.valid && ex_fetch.pc == $past(id_fetch.pc))
+    // ID sends a JALR to a target only when it is a return (to the top of the return stack).
+    `DC_ASSERT(a_jalr_redirected_ret,
+               !(ex_fetch.valid && ex_dec.br.target_rs1 && ex_redirected) || ex_dec.br.ret)
+    // AddCmp on word addresses gives the compare of the target for a branch or JAL.
+    `DC_ASSERT(a_at_target, !(id_dec.br.branch || id_jal) ||
+               id_at_target == (id_next_pc == id_target[WIDTH-1:IADDR_START]))
+
+endmodule
