@@ -4,15 +4,19 @@
  * semihosting call, an EBREAK between slli x0,x0,0x1f and srai x0,x0,7 (RISC-V semihosting
  * spec); any other halt fails the run. The operation is a0, its argument a1 (read through the
  * debug port, strings and argument blocks from the PE's memory):
- * - SYS_WRITEC, SYS_WRITE0: print to stdout, resume the core;
+ * - SYS_WRITEC, SYS_WRITE0: the characters go into the PE's line buffer, the core resumes;
  * - SYS_EXIT, SYS_EXIT_EXTENDED: the program ends with a status, the core stays halted. A
  *   status other than 0 fails the run at once, whatever the other PEs do. Status 0: the
  *   hart's ID is a2 (Mig6's exit, test/design/mig6/mig6_exit.c, puts mhartid there; the
  *   debug port reads registers, not CSRs), reported to TbMig6.hart_exited(), which checks it
  *   and ends the run when every hart has exited;
  * - any other operation fails the run.
- * Memory is read with peek() of the PE's memory (TbMig6.g_pe[PE].u_pe), all in mem_byte().
- * Stops at the first failure with $fatal.
+ * Output: a line buffer per PE, so that the lines of PEs running at once never mix, however a
+ * program prints (a character a call, a string a call). A newline prints the line with the
+ * hart's prefix, "[hart <HART_ID>] "; what is left is printed at the exit, and when the run
+ * fails (TbMig6.failing), before the failure's message. Every failure goes through
+ * TbMig6.fail(). Memory is read with peek() of the PE's memory (TbMig6.g_pe[PE].u_pe), all
+ * in mem_byte().
  *
  * TbMig6 instantiates one a PE.
  *
@@ -20,7 +24,8 @@
  * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig6Debugger import Mig6Pkg::*; #(
-    parameter PE = 0                    // the PE: TbMig6.g_pe[PE]
+    parameter        PE      = 0,       // the PE: TbMig6.g_pe[PE]
+    parameter word_t HART_ID = '0       // its hart's ID: the prefix of its lines
 )(
     input  wire      clk,
     input  wire      rst_n,
@@ -44,6 +49,7 @@ module TbMig6Debugger import Mig6Pkg::*; #(
     reg_id_t reg_id;
     logic    resume;
     word_t   halt_pc;                   // byte address of the EBREAK that halted the core
+    string   line;                      // the PE's output since its last newline
 
     assign dbg_req = '{reg_id:      reg_id,
                        reg_wr:      1'b0,
@@ -65,6 +71,22 @@ module TbMig6Debugger import Mig6Pkg::*; #(
             mem_word[8*b +: 8] = mem_byte(a + word_t'(b));
     endfunction
 
+    // One character of the PE's output: a newline prints the line with the prefix.
+    function automatic void put(input logic [7:0] c);
+        if (c == 8'h0a) begin
+            $display("[hart %0d] %s", HART_ID, line);
+            line = "";
+        end else
+            line = $sformatf("%s%c", line, c);
+    endfunction
+
+    // Print what is left of the line, if anything.
+    function automatic void flush();
+        if (line.len() != 0)
+            $display("[hart %0d] %s", HART_ID, line);
+        line = "";
+    endfunction
+
     // Value of register r, read through the debug port while halted.
     task automatic read_reg(input reg_id_t r, output word_t value);
         reg_id = r;
@@ -78,7 +100,8 @@ module TbMig6Debugger import Mig6Pkg::*; #(
         @(posedge clk); #1;
         resume = 1'b0;
         if (halt)
-            $fatal(1, "Mig6: PE %0d: resume at %h, the core is still halted", PE, halt_pc);
+            TbMig6.fail($sformatf("Mig6: PE %0d: resume at %h, the core is still halted", PE,
+                                  halt_pc));
     endtask
 
     // The EBREAK at byte address pc is a semihosting call.
@@ -100,11 +123,11 @@ module TbMig6Debugger import Mig6Pkg::*; #(
         read_reg(RiscvPkg::REG_A1, arg);
         case (op)
             SYS_WRITEC:                 // byte at arg
-                $write("%c", mem_byte(arg));
+                put(mem_byte(arg));
             SYS_WRITE0: begin           // string at arg
                 a = arg;
                 while (mem_byte(a) != 0) begin
-                    $write("%c", mem_byte(a));
+                    put(mem_byte(a));
                     a = a + 1;
                 end
             end
@@ -117,16 +140,19 @@ module TbMig6Debugger import Mig6Pkg::*; #(
                 status = (mem_word(arg) == ADP_STOPPED_APPLICATION_EXIT) ? mem_word(arg + 4) : 1;
             end
             default:
-                $fatal(1, "Mig6: PE %0d: semihosting operation %h at %h is not supported", PE,
-                       op, halt_pc);
+                TbMig6.fail($sformatf(
+                    "Mig6: PE %0d: semihosting operation %h at %h is not supported", PE, op,
+                    halt_pc));
         endcase
         if (!exited) begin
             resume_core();
             return;
         end
+        flush();
         read_reg(RiscvPkg::REG_A2, hart);
         if (status != 0)
-            $fatal(1, "Mig6: PE %0d: hart %0d exited with status %0d", PE, hart, status);
+            TbMig6.fail($sformatf("Mig6: PE %0d: hart %0d exited with status %0d", PE, hart,
+                                  status));
         TbMig6.hart_exited(PE, hart);
     endtask
 
@@ -134,6 +160,7 @@ module TbMig6Debugger import Mig6Pkg::*; #(
         logic exited;
         reg_id = '0;
         resume = 1'b0;
+        line   = "";
         exited = 1'b0;
         @(posedge rst_n);
         while (!exited) begin
@@ -141,9 +168,16 @@ module TbMig6Debugger import Mig6Pkg::*; #(
                 @(posedge clk); #1;
             end
             if (!semihost_call(halt_pc))
-                $fatal(1, "Mig6: PE %0d halted at %h, not at a semihosting call", PE, halt_pc);
+                TbMig6.fail($sformatf("Mig6: PE %0d halted at %h, not at a semihosting call",
+                                      PE, halt_pc));
             semihost(exited);
         end
+    end
+
+    // A failure anywhere: what this PE printed comes first.
+    initial begin
+        wait (TbMig6.failing);
+        flush();
     end
 
 endmodule

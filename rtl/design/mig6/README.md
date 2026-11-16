@@ -129,6 +129,16 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   how many harts there are; the ID must be one of them, must not have exited before, and must
   be the HART_ID of the PE that exited. When every hart has exited, the run passes.
 - **`+max_cycles`** without that end fails the run, naming the harts that have not exited.
+- **Printing:** a line buffer per PE, so that the lines of PEs running at once never mix,
+  however a program prints (a character a call, a string a call). Every line gets the hart's
+  prefix, one PE or many:
+
+  ```
+  [hart 2] hartid: 2
+  [hart 0] hartid: 0
+  ```
+
+  What is left in a buffer is printed at the hart's exit, and before a failure's message.
 
 ## The chunks, for now
 
@@ -139,7 +149,8 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
 3. Mig6Pe without the network: core and local memory, a `HART_ID` parameter that `mhartid`
    reads; a testbench for N cores; a program that prints its hart ID, on one PE (done
    2026-11-15: test design_mig6_mhartid).
-4. The same program on four PEs (2 x 2), every hart ID exiting once.
+4. The same program on four PEs (2 x 2), every hart ID exiting once (done 2026-11-15:
+   TbMig6 with four PEs, line buffers with the hart's prefix).
 5. The network interface (rtl/lib/block/noc): the library's memory channel to NoC packets
    and back, a library block with its own test; the same block at the memory edge.
 6. Mig6Pe with the network interface; Mig6: four PEs, NocMesh, the shared memory at the
