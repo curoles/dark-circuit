@@ -16,7 +16,8 @@
  *   every completed instruction (not traps); a CSR write wins over the count of its cycle.
  * - mscratch: read and write, for the trap handler.
  * - misa (RV32IMA, writes ignored: Zbb has no bit, B stands for the whole extension);
- *   mvendorid, marchid, mimpid, mhartid read 0.
+ *   mvendorid, marchid, mimpid read 0; mhartid reads HART_ID, the hart's ID (the PE's in
+ *   Mig6, Mig6Pe).
  * - mstatus: MIE and MPIE; MPP reads 3 (machine mode only), other bits 0; mstatush 0.
  * - mtvec: direct mode only, bits 1:0 read 0; mepc: bits 1:0 read 0 (no C extension).
  * - mcause, mtval: written by traps, and by CSR instructions.
@@ -50,7 +51,9 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
+module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
+    parameter word_t HART_ID = '0   // the hart's ID: mhartid
+)(
     input  wire      clk,
     input  wire      rst_n,      // synchronous reset, active low
     input  wire      valid,      // instruction in EX is valid
@@ -130,8 +133,8 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; (
             CSR_MIE:                                old = word_t'(mie_meie) << IRQ_MACHINE_EXTERNAL;
             CSR_MIP:                                old = word_t'(meip) << IRQ_MACHINE_EXTERNAL;
             CSR_MISA:                               old = MISA;
-            CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID,
-            CSR_MHARTID:                            old = '0;
+            CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID: old = '0;
+            CSR_MHARTID:                            old = HART_ID;
             CSR_FFLAGS:                             old = word_t'(fflags);
             CSR_FRM:                                old = word_t'(frm_q);
             CSR_FCSR:                               old = word_t'({frm_q, fflags});

@@ -20,3 +20,4 @@ mig6_packed_mul.sv
 mig6_pipe.sv
 mig6_caches.sv
 mig6_core.sv
+mig6_pe.sv

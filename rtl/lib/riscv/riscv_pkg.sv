@@ -91,11 +91,12 @@ package RiscvPkg;
 
     // Integer registers by ABI name, those a design or a test needs: x1 (ra) and x5 (t0)
     // are the link registers of the return-address hints of JAL and JALR, a0 and a1 the
-    // first arguments (semihosting).
+    // first arguments (semihosting), a2 the hart's ID at a Mig6 exit (test/design/mig6).
     localparam logic [4:0] REG_RA = 5'd1;
     localparam logic [4:0] REG_T0 = 5'd5;
     localparam logic [4:0] REG_A0 = 5'd10;
     localparam logic [4:0] REG_A1 = 5'd11;
+    localparam logic [4:0] REG_A2 = 5'd12;
 
     // misa: MXL in the two top bits (1: XLEN 32), one bit per extension, its letter - 'A'.
     localparam logic [1:0] MISA_MXL_32 = 2'd1;

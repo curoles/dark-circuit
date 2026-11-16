@@ -115,7 +115,20 @@ Zicbom (cbo.clean, cbo.inval, already in Mig3) or a directory protocol (MSI/MESI
   of the weights) before reset, as Mig3's tests load their memory. Fetching them over the
   NoC (loads or DMA) is a later step, and a comparison: data local against data fetched.
 - **Results:** each PE stores its 4 outputs to shared memory, then arrives at the barrier;
-  hart 0 waits for all four, checks the outputs, prints the cycles and ends the run.
+  hart 0 waits for all four, checks the outputs and prints the cycles; then every hart exits
+  (see Ending a run).
+
+## Ending a run, for now
+
+Every hart ends its program with a semihosting exit; each PE's debugger in the testbench
+(test/design/mig6/tb) serves its semihosting calls, prints included.
+
+- **A status other than 0** fails the run at once, whichever hart it was.
+- **Status 0:** the hart's ID comes with the exit, in a2 (Mig6's exit puts `mhartid` there,
+  test/design/mig6/mig6_exit.c: the debug port reads registers, not CSRs). The testbench knows
+  how many harts there are; the ID must be one of them, must not have exited before, and must
+  be the HART_ID of the PE that exited. When every hart has exited, the run passes.
+- **`+max_cycles`** without that end fails the run, naming the harts that have not exited.
 
 ## The chunks, for now
 
@@ -124,7 +137,8 @@ Zicbom (cbo.clean, cbo.inval, already in Mig3) or a directory protocol (MSI/MESI
    renamed and nothing else; Mig3 stays as it is (done 2026-11-15: sv2v of Mig6Core and
    Mig3Core identical but for the names). The `@kb:` tags still point to Mig3's records.
 3. Mig6Pe without the network: core and local memory, a `HART_ID` parameter that `mhartid`
-   reads; a testbench for N cores; a program that prints its hart ID, on one PE.
+   reads; a testbench for N cores; a program that prints its hart ID, on one PE (done
+   2026-11-15: test design_mig6_mhartid).
 4. The same program on four PEs (2 x 2), every hart ID exiting once.
 5. The network interface (rtl/lib/block/noc): the library's memory channel to NoC packets
    and back, a library block with its own test; the same block at the memory edge.
@@ -145,8 +159,6 @@ Zicbom (cbo.clean, cbo.inval, already in Mig3) or a directory protocol (MSI/MESI
 - **The packet format:** a request or an answer as NoC packets (the library's NoC owns the
   flit format, by macros), how many flits a line takes, which fields the head carries.
 - **The shared memory's window** and atomics through it (see the address map).
-- **Ending a run and printing with four cores:** semihosting through hart 0 only, or each
-  PE's debug port; the testbench's view of four halts.
 - **Configuration:** a Mig6 configuration (YAML, as Mig3's) once the shape settles.
 - **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
 
