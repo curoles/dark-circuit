@@ -23,6 +23,17 @@ dc_add_sv2v_check(design_mig6 TOP Mig6Core FLISTS ${SYNTH_FLISTS})
 dc_add_yosys_synth(design_mig6 TOP Mig6Core FLISTS ${SYNTH_FLISTS}
                    BLACKBOX_RAM_MODULES CacheTagRam CacheDataRam)
 
+# Simulation: behave versions of the library (fast to simulate).
+set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
+           ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
+           ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
+           ${LIB}/riscv/riscv.flist ${MIG6}/mig6.flist)
+
+# The two network interfaces joined without a mesh, a stand-in core in the testbench;
+# Verilator only, as NocMesh's test (thousands of random requests).
+dc_add_verilator_test(design_mig6_net_if TOP TbMig6NetIf TB tb/tb_mig6_net_if.sv
+                      FLISTS ${FLISTS})
+
 # Mig6 runs on the main simulator only, as Mig3 (see cmake/dark_circuit.cmake); programs need
 # the RISC-V toolchain.
 if(NOT DARK_CIRCUIT_MAINSIM OR NOT DARK_CIRCUIT_RISCV)
@@ -31,11 +42,7 @@ if(NOT DARK_CIRCUIT_MAINSIM OR NOT DARK_CIRCUIT_RISCV)
 endif()
 set(SIM ${DARK_CIRCUIT_MAINSIM})
 
-# Simulation of the PEs: behave versions of the library (fast to simulate).
-set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
-           ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
-           ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
-           ${LIB}/riscv/riscv.flist ${MIG6}/mig6.flist)
+# Simulation of the PEs.
 cmake_language(CALL dc_add_${SIM}_build design_mig6_sim TOP TbMig6 TB tb/tb_mig6.sv
                FLISTS ${FLISTS} ${CMAKE_CURRENT_SOURCE_DIR}/tb/tb_mig6.flist)
 

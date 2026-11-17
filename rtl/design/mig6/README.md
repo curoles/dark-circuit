@@ -101,6 +101,26 @@ library once the format settles, after the layer runs. A message's head is the l
   DATA, and ACK, not sent yet (no acknowledgements of writes). The free codes are room for
   lines and error answers.
 
+### The network interfaces, for now
+
+Two, in rtl/design/mig6 with Mig6NocPkg: Mig6PeNetIf in a PE, Mig6MemNetIf at the shared memory.
+Each faces the library's request channel, a word wide (valid/ready, read answers in order
+with no ready), so anything that speaks it attaches: a core, a DMA through a `ReqMux`,
+AtomicUnit and a RAM.
+
+- **Mig6PeNetIf** turns a request into a head and a body flit, sent while the router has
+  credits, and takes the request with its last flit. Answers go straight to the requester,
+  credits straight back: it holds no answer and limits nothing. Mig6Pe picks the word of
+  the core's line-wide port, as Mig3Cpu does for its devices (only uncached accesses of a
+  word or less come).
+- **Mig6MemNetIf** buffers request flits (the credits it gives), passes a request on to
+  AtomicUnit and the RAM with its body, and drops CBOs (nothing caches the shared memory).
+  Answers have no ready, so a READ or an ATOMIC is taken only when its answer has a place:
+  at most D owed (a FIFO of their sources, a FIFO of answers waiting for a credit).
+- **Backpressure is the credits:** while D answers are owed, Mig6MemNetIf takes no
+  request, returns no credit, and the wait spreads back router by router until a PE's Mig6PeNetIf
+  holds `req_ready` low. Answers drain on their own network, so it ends.
+
 ## A PE: Mig6Pe
 
 ```
@@ -192,13 +212,17 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    TbMig6 with four PEs, line buffers with the hart's prefix).
 5. The network interfaces, in rtl/design/mig6 for now: the one-VC mesh tested in the
    library (done 2026-11-16: NocMesh's test, 2 x 2 with one VC; it fixed NocSwitchAlloc
-   struct for one VC); Mig6NocPkg, the messages; a PE's network interface and the shared
-   memory's, joined without a mesh, with a stand-in core in the testbench; then the 2 x 2
-   mesh with four stand-ins.
+   struct for one VC); Mig6NocPkg, the messages (done 2026-11-16); a PE's network interface
+   and the shared memory's, joined without a mesh, with a stand-in core in the testbench
+   (done 2026-11-16: test design_mig6_net_if); then the 2 x 2 mesh with four stand-ins.
 6. Mig6Pe with the network interface; Mig6: four PEs, NocMesh, the shared memory at the
    edge; a program where every hart writes its ID to shared memory and arrives at a barrier.
-7. The layer on four PEs, outputs checked, cycles against one Mig3.
-8. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),
+7. The layer on four PEs, outputs checked, cycles against one Mig3; the testbench preloads
+   each PE's weights and inputs into its local memory.
+8. A DMA in each PE (the library's DmaSifive, sharing the network interface through a
+   `ReqMux`, as in Mig3Cpu): the weights in shared memory, each PE fetching its part; cycles
+   against the preloaded run.
+9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),
    number formats (OCP MX, FP8), softmax and normalization.
 
 ## Open questions

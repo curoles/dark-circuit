@@ -22,3 +22,5 @@ mig6_pipe.sv
 mig6_caches.sv
 mig6_core.sv
 mig6_pe.sv
+mig6_pe_net_if.sv
+mig6_mem_net_if.sv
