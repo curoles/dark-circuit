@@ -48,7 +48,6 @@ module NocSwitchAlloc #(
     localparam PORT_N = 1 << PORT_WIDTH;        // inputs of a port encoder, outputs of a decoder
 
     wire [N-1:0][NUM_VCS-1:0]    credit;        // per output port: the credits of its VCs
-    wire [N-1:0][NUM_VCS-1:0]    pick;          // per input: one-hot, its stage-1 pick
     wire [N-1:0]                 has_pick;
     wire [N-1:0][VC_WIDTH-1:0]   pick_vc;       // per input: the VC of its pick
     wire [N-1:0][PORT_WIDTH-1:0] pick_route;    // per input: the output its pick wants
@@ -78,7 +77,10 @@ module NocSwitchAlloc #(
         /* verilator lint_on UNUSEDSIGNAL */
 
         for (genvar v = 0; v < NUM_VCS; v++) begin: g_in_vc
+            // out_vc is not read with one VC (g_one_vc: VC 0 is the only one).
+            /* verilator lint_off UNUSEDSIGNAL */
             VC_STATE_T         s;
+            /* verilator lint_on UNUSEDSIGNAL */
             wire               active;
             wire [NUM_VCS-1:0] port_credit;     // the credits of its route's port
             wire               vc_credit;       // ... of its output VC
@@ -100,15 +102,16 @@ module NocSwitchAlloc #(
 
         // One VC: it is the pick when eligible (an arbiter needs two requesters).
         if (NUM_VCS == 1) begin: g_one_vc
-            assign pick[p]       = eligible;
             assign has_pick[p]   = eligible[0];
             assign pick_vc[p]    = '0;
             assign pick_route[p] = routes[0];
         end else begin: g_arbiter
+            wire [NUM_VCS-1:0] pick;            // one-hot, the stage-1 pick
+
             RoundRobinArbiter #(.N(NUM_VCS)) u_in_arbiter(
-                .clk, .rst_n, .req(eligible), .advance(won[p]), .grant(pick[p]));
+                .clk, .rst_n, .req(eligible), .advance(won[p]), .grant(pick));
             PriorityEncoder #(.SIZE(VC_WIDTH)) u_priority_encoder_pick(
-                .in(VC_N'(pick[p])), .out(pick_vc[p]), .valid(has_pick[p]));
+                .in(VC_N'(pick)), .out(pick_vc[p]), .valid(has_pick[p]));
             MuxN #(.N(NUM_VCS), .WIDTH(PORT_WIDTH)) u_mux_n_pick_route(
                 .in(routes), .sel(pick_vc[p]), .out(pick_route[p]));
         end

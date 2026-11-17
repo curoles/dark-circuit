@@ -11,9 +11,10 @@
  * every packet arrives. First a lone packet of two flits from router (0, 0) to the opposite
  * corner measures the latency: its head comes out 3 clocks per router on its way plus LINK_DELAY
  * per link after it went in, its tail a clock later. Every case must happen: packets from and to
- * every node. A 3 x 3 slice at (0, 0) with links of 1 clock and 2 VCs, and a 3 x 2 slice at
- * (1, 1) with links of 2 clocks and 3 VCs; 10000 clocks of traffic each (Verilator only, see
- * its CMake entry).
+ * every node. A 3 x 3 slice at (0, 0) with links of 1 clock and 2 VCs, a 3 x 2 slice at
+ * (1, 1) with links of 2 clocks and 3 VCs, and a 2 x 2 slice at (0, 0) with links of 1 clock
+ * and one VC (Mig6's two networks); 10000 clocks of traffic each (Verilator only, see its
+ * CMake entry).
  * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
@@ -343,6 +344,7 @@ module TbNocMesh;
     wire clk;
     wire done_a;
     wire done_b;
+    wire done_c;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
@@ -350,9 +352,11 @@ module TbNocMesh;
         u_check_a(.clk, .done(done_a));
     TbNocMeshCheck #(.X_SIZE(3), .Y_SIZE(2), .X0(1), .Y0(1), .NUM_VCS(3), .LINK_DELAY(2))
         u_check_b(.clk, .done(done_b));
+    TbNocMeshCheck #(.X_SIZE(2), .Y_SIZE(2), .X0(0), .Y0(0), .NUM_VCS(1), .LINK_DELAY(1))
+        u_check_c(.clk, .done(done_c));
 
     initial begin
-        wait (done_a && done_b);
+        wait (done_a && done_b && done_c);
         $display("PASS");
         $finish;
     end
