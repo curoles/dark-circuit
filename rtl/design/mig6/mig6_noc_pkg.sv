@@ -40,8 +40,14 @@ package Mig6NocPkg;
     localparam STRB_WIDTH = DATA_WIDTH / 8;
     localparam SIZE_WIDTH = 3;      // AXI's AxSIZE: 1 << size bytes
 
-    // The shared memory: node (1, 2), on the south edge link of PE (1, 1); XY routes (X
-    // first) take every PE's requests to it through (1, 1).
+    // The mesh, NocMesh's coordinates (y grows north): PE p at node (p % MESH_X, p / MESH_X),
+    // the mesh's local port p.
+    localparam MESH_X = 2;
+    localparam MESH_Y = 2;
+    localparam N_PES  = MESH_X * MESH_Y;
+
+    // The shared memory: node (1, 2), on the north edge link of PE (1, 1), the mesh's top
+    // row; XY routes (X first) take every PE's requests to it through (1, 1).
     localparam logic [X_WIDTH-1:0] MEM_X = 2'd1;
     localparam logic [Y_WIDTH-1:0] MEM_Y = 2'd2;
 

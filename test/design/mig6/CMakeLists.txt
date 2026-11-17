@@ -29,10 +29,14 @@ set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/pa
            ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
            ${LIB}/riscv/riscv.flist ${MIG6}/mig6.flist)
 
-# The two network interfaces joined without a mesh, a stand-in core in the testbench;
-# Verilator only, as NocMesh's test (thousands of random requests).
+# Network tests with stand-in cores (TbMig6StandIn) in place of the PEs; Verilator only, as
+# NocMesh's test (thousands of random requests): the two network interfaces joined without
+# a mesh; four PEs' network interfaces on Mig6Noc, the shared memory at its edge.
+set(STAND_IN ${CMAKE_CURRENT_SOURCE_DIR}/tb/tb_mig6_stand_in.flist)
 dc_add_verilator_test(design_mig6_net_if TOP TbMig6NetIf TB tb/tb_mig6_net_if.sv
-                      FLISTS ${FLISTS})
+                      FLISTS ${FLISTS} ${STAND_IN})
+dc_add_verilator_test(design_mig6_noc TOP TbMig6Noc TB tb/tb_mig6_noc.sv
+                      FLISTS ${FLISTS} ${STAND_IN})
 
 # Mig6 runs on the main simulator only, as Mig3 (see cmake/dark_circuit.cmake); programs need
 # the RISC-V toolchain.

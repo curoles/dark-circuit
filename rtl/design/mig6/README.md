@@ -21,23 +21,23 @@ cycles compared with one Mig3: 9 220 cycles in plain C, 2 560 with P.
 ## The system, for now
 
 ```
-              +-----------+     +-----------+
-              |  PE (0,0) |-----|  PE (1,0) |
-              |  hart 0   |     |  hart 1   |
-              +-----------+     +-----------+
-                    |                 |
-              +-----------+     +-----------+
-              |  PE (0,1) |-----|  PE (1,1) |
-              |  hart 2   |     |  hart 3   |
-              +-----------+     +-----------+
-                                      |      edge link: node (1,2)
                                 +-----------+
                                 |  shared   |  network interface,
                                 |  memory   |  AtomicUnit, RAM
                                 +-----------+
+                                      |      edge link: node (1,2)
+              +-----------+     +-----------+
+              |  PE (0,1) |-----|  PE (1,1) |
+              |  hart 2   |     |  hart 3   |
+              +-----------+     +-----------+
+                    |                 |
+              +-----------+     +-----------+
+              |  PE (0,0) |-----|  PE (1,0) |
+              |  hart 0   |     |  hart 1   |
+              +-----------+     +-----------+
 
-  every line is the NoC, two networks (NocMesh each, routers and links): requests and
-  answers; outside the PEs
+  y grows north, as in NocMesh; every line is the NoC, two networks (Mig6Noc: a NocMesh
+  each, routers and links): requests and answers; outside the PEs
 ```
 
 - **A 2 x 2 mesh of PEs** (NocMesh, one slice): enough for a real parallel speedup and real
@@ -45,9 +45,13 @@ cycles compared with one Mig3: 9 220 cycles in plain C, 2 560 with P.
   The mesh is parameterized; a larger grid is a parameter.
 - **Shared memory on an edge link** of the mesh, outside the grid, so all four nodes are PEs:
   a network interface, AtomicUnit (atomics done next to the memory) and a RAM. It is node
-  (1, 2), on the south link of PE (1, 1): XY routes go along X first, so every request
+  (1, 2), on the north link of PE (1, 1): XY routes go along X first, so every request
   reaches it through (1, 1). On the east link of (1, 1), as node (2, 1), the requests of
   (0, 0) and (1, 0) would leave the mesh at (1, 0)'s east edge instead.
+- **Not fair, for now:** router (1, 1) takes its inputs in turn (round robin), and its
+  south input carries PE 0's and PE 1's requests together, so PEs 2 and 3 get a third of the
+  memory each, PEs 0 and 1 a sixth (in design_mig6_noc they finish about 35% later). The
+  usual cures: arbitration by age or by source, or more memory ports.
 
 ## What travels on the NoC, for now
 
@@ -214,8 +218,9 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    library (done 2026-11-16: NocMesh's test, 2 x 2 with one VC; it fixed NocSwitchAlloc
    struct for one VC); Mig6NocPkg, the messages (done 2026-11-16); a PE's network interface
    and the shared memory's, joined without a mesh, with a stand-in core in the testbench
-   (done 2026-11-16: test design_mig6_net_if); then the 2 x 2 mesh with four stand-ins.
-6. Mig6Pe with the network interface; Mig6: four PEs, NocMesh, the shared memory at the
+   (done 2026-11-16: test design_mig6_net_if); then the 2 x 2 meshes with four stand-ins
+   (done 2026-11-17: Mig6Noc, test design_mig6_noc, a shared counter's adds atomic).
+6. Mig6Pe with the network interface; Mig6: four PEs, Mig6Noc, the shared memory at the
    edge; a program where every hart writes its ID to shared memory and arrives at a barrier.
 7. The layer on four PEs, outputs checked, cycles against one Mig3; the testbench preloads
    each PE's weights and inputs into its local memory.
