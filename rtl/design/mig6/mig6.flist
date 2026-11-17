@@ -1,5 +1,6 @@
 mig6_config_pkg.sv
 mig6_pkg.sv
+mig6_noc_pkg.sv
 mig6_pipe_reg.sv
 mig6_fetch.sv
 mig6_control.sv

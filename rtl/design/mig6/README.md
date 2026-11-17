@@ -27,18 +27,27 @@ cycles compared with one Mig3: 9 220 cycles in plain C, 2 560 with P.
               +-----------+     +-----------+
                     |                 |
               +-----------+     +-----------+
-              |  PE (0,1) |-----|  PE (1,1) |-----> edge link: shared memory
-              |  hart 2   |     |  hart 3   |       (network interface, AtomicUnit, RAM)
+              |  PE (0,1) |-----|  PE (1,1) |
+              |  hart 2   |     |  hart 3   |
               +-----------+     +-----------+
+                                      |      edge link: node (1,2)
+                                +-----------+
+                                |  shared   |  network interface,
+                                |  memory   |  AtomicUnit, RAM
+                                +-----------+
 
-  the lines between PEs are the NoC (NocMesh: routers and links), outside the PEs
+  every line is the NoC, two networks (NocMesh each, routers and links): requests and
+  answers; outside the PEs
 ```
 
 - **A 2 x 2 mesh of PEs** (NocMesh, one slice): enough for a real parallel speedup and real
   network traffic (up to two hops with XY routing), small enough to simulate on a laptop.
   The mesh is parameterized; a larger grid is a parameter.
 - **Shared memory on an edge link** of the mesh, outside the grid, so all four nodes are PEs:
-  a network interface, AtomicUnit (atomics done next to the memory) and a RAM.
+  a network interface, AtomicUnit (atomics done next to the memory) and a RAM. It is node
+  (1, 2), on the south link of PE (1, 1): XY routes go along X first, so every request
+  reaches it through (1, 1). On the east link of (1, 1), as node (2, 1), the requests of
+  (0, 0) and (1, 0) would leave the mesh at (1, 0)'s east edge instead.
 
 ## What travels on the NoC, for now
 
@@ -54,13 +63,43 @@ interface, new ways to deadlock, a programming model that does not carry over).
 - **PEs talk only to the shared memory,** for now. Reading or writing another PE's local
   memory would be the same protocol with another destination (an address window), not a new
   kind of packet; it may come when chained layers pass data from PE to PE.
-- **Requests and answers on separate virtual channels** (message classes): if requests fill
-  the network, answers still get through and free room, so the two never block each other
-  (no protocol deadlock).
-- **One virtual channel per class, for now,** so a PE's requests to the shared memory keep
-  their order: they take the same XY path on the same channel, and AtomicUnit serves them as
-  they arrive. A PE's result stores are in memory before its barrier `amoadd`, without
-  acknowledgements of writes.
+- **Two networks, one per message class:** requests on one, answers on the other, each a
+  NocMesh. If requests fill their network, answers still get through and free room, so the
+  two never block each other (no protocol deadlock), by construction. Commercial chips do
+  the same (AMBA CHI's channels, Intel's rings, Tilera, OpenPiton): on a chip wires are
+  cheap, buffers and allocators are not, and each network gets its own width. Virtual
+  channel classes in one network would need a router change; they may come later.
+- **One virtual channel per network, for now,** so a PE's requests to the shared memory
+  keep their order: they take the same XY path on the same channel, and AtomicUnit serves
+  them as they arrive. A PE's result stores are in memory before its barrier `amoadd`,
+  without acknowledgements of writes.
+
+### The messages, for now
+
+Mig6NocPkg (`mig6_noc_pkg.sv`) owns them, not the library and not Mig6Pkg: it moves to the
+library once the format settles, after the layer runs. A message's head is the library's
+(the route, `dest_x` and `dest_y`, which the routers read), then the package's fields.
+
+```
+  requests, 48-bit flits:
+    head    | dest 4 | op 3 | src 4 | size 3 | addr 32 | cmo 2 |
+    WRITE   | zero 12 | data 32 | strb 4 |       (body)
+    ATOMIC  | zero 10 | operand 32 | atop 6 |   (body)
+
+  answers, 39-bit flits:
+    DATA    | dest 4 | op 3 | data 32 |
+```
+
+- **A word at a time:** a request reads or writes up to a word (32 bits, 4 strobes). Lines
+  would be new opcodes of more flits, when a cache needs them.
+- **One or two flits:** READ and CBO are a head alone, WRITE and ATOMIC a head and a body.
+  An answer is one flit: the word of a READ, the old word of an ATOMIC.
+- **No IDs:** an answer goes to the request's `src`. A PE's requests and answers stay in
+  order, so a PE matches answers to requests by counting. This holds while a PE talks to one
+  destination (see Open questions).
+- **An opcode list per network,** 3 bits each: requests READ, WRITE, ATOMIC, CBO; answers
+  DATA, and ACK, not sent yet (no acknowledgements of writes). The free codes are room for
+  lines and error answers.
 
 ## A PE: Mig6Pe
 
@@ -151,8 +190,11 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    2026-11-15: test design_mig6_mhartid).
 4. The same program on four PEs (2 x 2), every hart ID exiting once (done 2026-11-15:
    TbMig6 with four PEs, line buffers with the hart's prefix).
-5. The network interface (rtl/lib/block/noc): the library's memory channel to NoC packets
-   and back, a library block with its own test; the same block at the memory edge.
+5. The network interfaces, in rtl/design/mig6 for now: the one-VC mesh tested in the
+   library (done 2026-11-16: NocMesh's test, 2 x 2 with one VC; it fixed NocSwitchAlloc
+   struct for one VC); Mig6NocPkg, the messages; a PE's network interface and the shared
+   memory's, joined without a mesh, with a stand-in core in the testbench; then the 2 x 2
+   mesh with four stand-ins.
 6. Mig6Pe with the network interface; Mig6: four PEs, NocMesh, the shared memory at the
    edge; a program where every hart writes its ID to shared memory and arrives at a barrier.
 7. The layer on four PEs, outputs checked, cycles against one Mig3.
@@ -161,14 +203,13 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
 
 ## Open questions
 
-- **Ordering of a PE's stores and its barrier:** settled for now by one request channel
-  (see What travels on the NoC). If requests are ever spread over several virtual channels
-  for speed, or a PE writes to more than one destination, they need ordering again: the
-  network interface answers writes (an acknowledgement) and `fence` waits for them.
+- **Ordering of a PE's stores and its barrier:** settled for now by one request network
+  with one virtual channel (see What travels on the NoC). If requests are ever spread over
+  several virtual channels for speed, or a PE writes to more than one destination, they need
+  ordering again: the memory side answers writes (ACK) and `fence` waits for them; answers
+  from several destinations may also need IDs.
 - **Other PEs' local memories** as address windows over the NoC (the same protocol): when
   chained layers need to pass data from PE to PE.
-- **The packet format:** a request or an answer as NoC packets (the library's NoC owns the
-  flit format, by macros), how many flits a line takes, which fields the head carries.
 - **The shared memory's window** and atomics through it (see the address map).
 - **Configuration:** a Mig6 configuration (YAML, as Mig3's) once the shape settles.
 - **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
