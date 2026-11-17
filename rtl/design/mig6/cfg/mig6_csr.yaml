@@ -1,0 +1,143 @@
+# Mig6's core CSRs (AGENTS.md, Terminology): every CSR Mig6Csr implements, with its fields.
+#
+# A CSR: name, addr (its 12-bit address, the spec's for a standard CSR), desc, and either
+# fields or view.
+# - fields: the bits that exist, the others read 0 and ignore writes. A field: name, bits
+#   (one bit, or [high, low]), sw and hw, and reset (a stored field's value after reset) or
+#   from (a live field's parameter or signal).
+#     sw: ro  software reads only, a write is ignored
+#         rw  software reads and writes any value
+#     hw: none   only software changes it (or nothing: ro and none is a constant, its reset)
+#         write  stored, and hardware writes it at events (a trap, MRET, a count)
+#         live   not stored: its value is a hardware parameter or signal (from)
+#   No fields: the CSR exists and reads 0.
+# - view: another CSR seen at this address, {of: <csr>}, or some of its fields packed from
+#   bit 0, {of: <csr>, fields: [...]}: the same flops, no state of its own.
+# A CSR whose address has bits 11:10 = 3 is read-only by the spec: a write is illegal.
+# Groups follow the tables of the RISC-V privileged spec; they are for reading only.
+
+groups:
+  - name: unprivileged_fp           # F on the x registers (Zfinx)
+    csrs:
+      - name: fflags
+        addr: 0x001
+        desc: fcsr's exception flags
+        view: {of: fcsr, fields: [fflags]}
+      - name: frm
+        addr: 0x002
+        desc: fcsr's rounding mode
+        view: {of: fcsr, fields: [frm]}
+      - name: fcsr
+        addr: 0x003
+        desc: rounding mode and exception flags; an F instruction ORs its flags in
+        fields:
+          - {name: fflags, bits: [4, 0], reset: 0, sw: rw, hw: write}  # NV DZ OF UF NX
+          - {name: frm,    bits: [7, 5], reset: 0, sw: rw, hw: none}   # any value: the FPU checks
+
+  - name: unprivileged_p            # packed SIMD (P)
+    csrs:
+      - name: vxsat
+        addr: 0x009
+        desc: saturation flag; an instruction that saturated sets it
+        fields:
+          - {name: sat, bits: 0, reset: 0, sw: rw, hw: write}
+
+  - name: unprivileged_counters     # Zicntr: read-only views of the machine counters
+    csrs:
+      - {name: cycle,    addr: 0xC00, desc: mcycle,  view: {of: mcycle}}
+      - {name: time,     addr: 0xC01, desc: mcycle (no real-time clock), view: {of: mcycle}}
+      - {name: instret,  addr: 0xC02, desc: minstret, view: {of: minstret}}
+      - {name: cycleh,   addr: 0xC80, desc: mcycleh, view: {of: mcycleh}}
+      - {name: timeh,    addr: 0xC81, desc: mcycleh (no real-time clock), view: {of: mcycleh}}
+      - {name: instreth, addr: 0xC82, desc: minstreth, view: {of: minstreth}}
+
+  - name: machine_info
+    csrs:
+      - {name: mvendorid, addr: 0xF11, desc: vendor ID, not implemented (0)}
+      - {name: marchid,   addr: 0xF12, desc: architecture ID, not implemented (0)}
+      - {name: mimpid,    addr: 0xF13, desc: implementation ID, not implemented (0)}
+      - name: mhartid
+        addr: 0xF14
+        desc: the hart's ID, one per PE
+        fields:
+          - {name: id, bits: [31, 0], from: HART_ID, sw: ro, hw: live}
+
+  - name: machine_trap_setup
+    csrs:
+      - name: mstatus
+        addr: 0x300
+        desc: interrupt enable, before and now; machine mode only
+        fields:
+          - {name: mie,  bits: 3,        reset: 0, sw: rw, hw: write}  # 0 at a trap, MPIE at MRET
+          - {name: mpie, bits: 7,        reset: 0, sw: rw, hw: write}  # MIE at a trap, 1 at MRET
+          - {name: mpp,  bits: [12, 11], reset: 3, sw: ro, hw: none}   # always machine mode
+      - name: misa
+        addr: 0x301
+        desc: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit)
+        fields:
+          - {name: a,   bits: 0,        reset: 1, sw: ro, hw: none}
+          - {name: i,   bits: 8,        reset: 1, sw: ro, hw: none}
+          - {name: m,   bits: 12,       reset: 1, sw: ro, hw: none}
+          - {name: mxl, bits: [31, 30], reset: 1, sw: ro, hw: none}    # XLEN 32
+      - name: mie
+        addr: 0x304
+        desc: interrupt enables; only the machine external interrupt exists
+        fields:
+          - {name: meie, bits: 11, reset: 0, sw: rw, hw: none}
+      - name: mtvec
+        addr: 0x305
+        desc: trap vector, direct mode only (mode bits 1:0 read 0)
+        fields:
+          - {name: base, bits: [31, 2], reset: 0, sw: rw, hw: none}
+      - {name: mstatush, addr: 0x310, desc: upper half of mstatus, nothing in it (0)}
+
+  - name: machine_trap_handling
+    csrs:
+      - name: mscratch
+        addr: 0x340
+        desc: for the trap handler
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: none}
+      - name: mepc
+        addr: 0x341
+        desc: pc of the trapping instruction (bits 1:0 read 0, no C extension)
+        fields:
+          - {name: pc, bits: [31, 2], reset: 0, sw: rw, hw: write}
+      - name: mcause
+        addr: 0x342
+        desc: the trap's cause; bit 31 for an interrupt
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}
+      - name: mtval
+        addr: 0x343
+        desc: the trap's value (the address, the instruction)
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}
+      - name: mip
+        addr: 0x344
+        desc: pending interrupts; the interrupt controller clears MEIP
+        fields:
+          - {name: meip, bits: 11, from: meip, sw: ro, hw: live}
+
+  - name: machine_counters
+    csrs:
+      - name: mcycle
+        addr: 0xB00
+        desc: clocks since reset, low half; a CSR write wins over the count
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}
+      - name: minstret
+        addr: 0xB02
+        desc: completed instructions (not traps), low half
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}
+      - name: mcycleh
+        addr: 0xB80
+        desc: mcycle, high half
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}
+      - name: minstreth
+        addr: 0xB82
+        desc: minstret, high half
+        fields:
+          - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}

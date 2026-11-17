@@ -3,20 +3,26 @@
 *November 2026. Igor Lesik. Code: [dark-circuit](../README.md), an open library of hardware
 blocks and the small RISC-V cores built from them.*
 
-A DMA engine copies data into memory while the core does something else. When it is done,
-the core reads the buffer and expects the new data. If the core had read that buffer
-before, a copy of it may still be in the data cache, and the DMA wrote memory, not the
-cache. The core then reads its old copy, and nothing tells it so.
+A DMA engine copies data from one place in memory to another while the core does something
+else. When the copy is done, the core reads the destination buffer and expects the new data.
+If the core had read that buffer before, a copy of it may still be in the data cache, and
+the DMA wrote memory, not the cache. The core then reads its old copy, and nothing tells it
+so. That stale copy is the problem this note solves.
 
 There are two ways out. Hardware can keep the cache coherent with the DMA's writes: the
 cache sees every write the DMA makes and drops or updates its copy. Or software tells the
 cache, before it reads the buffer, to drop the lines that hold it. RISC-V has instructions
-for the second way since 2021: Zicbom, with `cbo.inval`, `cbo.clean` and `cbo.flush`.
+for the second way since 2021: Zicbom, with `cbo.inval`, `cbo.clean` and `cbo.flush`. CBO
+stands for cache-block operation: an instruction that acts on one cache block, the line of
+the cache that holds a given address, instead of on the bytes at that address. Zicbom is
+the set for managing blocks (the "m"); its siblings zero a block (Zicboz) and prefetch one
+(Zicbop).
 
-I added them to Mig3, my 5-stage in-order RISC-V core (RV32IM with Zbb and A), which now
-has a DMA next to it. This note shows the stale copy happening in simulation, how a CBO
-travels from the decoder to the memory, and how a testbench can check a load whose right
-answer is "the old value, for now".
+I added these three instructions, which drop a cache line or write it back, to Mig3, my
+5-stage in-order RISC-V core (RV32IM with Zbb and A), which now has a DMA next to it. This
+note shows the stale copy happening in simulation, how a CBO travels from the decoder to
+the memory, and how a testbench can check a load whose right answer is "the old value, for
+now".
 
 ## 1. A stale line, in a trace
 
@@ -101,6 +107,12 @@ cache, sends a request to memory, holds the execute stage until the cache takes 
 the request in order with the loads behind it. What the core adds is a mux on the strobes,
 one on the byte offset, and one term in the misaligned check. The check needs it because a
 CBO's funct3 is a word access's: without `!cbo`, `cbo.inval` of an odd address would trap.
+
+The data cache gets one new input for it, `req_cmo`, next to the request it already had.
+It is `CMO_NONE` for every ordinary load and store. When it is anything else, the request
+arrives looking like a store but is not one: the cache writes no byte of it and acts on
+the line instead (section 5). The cache tells a CBO apart by `req_cmo` alone, never by its
+missing strobes.
 
 Two details came up while doing it:
 

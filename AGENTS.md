@@ -176,6 +176,17 @@ This file has the rules that are not in README.md.
   a small one may sit beside a generate loop or a tricky connection. Diagrams of structure,
   not timing (no WaveDrom). A diagram is code: change it with the code it shows.
 
+## Terminology
+
+- **Core CSR:** a RISC-V control and status register: the core's 12-bit CSR address
+  space, accessed by the Zicsr instructions (`csrr`, `csrw`, ...) in program order; for state
+  tied to the core's instructions (traps, counters, `fcsr`). A design describes its core CSRs
+  in a CSR YAML (`rtl/design/mig6/cfg/mig6_csr.yaml`).
+- **MMIO CSR:** a control or status register of a block outside the core, at a byte address
+  of the memory map, accessed by loads and stores through the register port (`RegPortTarget`,
+  `StrbReg`); for devices and engines that run on their own (PLIC, Timer, UART, DMA). Plain
+  "registers" in a device's own description means these.
+
 ## Library idioms
 
 Before writing a module, look in `CATALOG.md` (every module of `rtl/lib` with what it is,
