@@ -49,7 +49,16 @@ evidence: >
   Mig3 suite passes (125 tests). Timing, sky130: 5.5 ns as before, 334 746 um2 (+0.4 %:
   the D-cache's atop and the decode of the AMOs). misaligned.S (CASE_AMO): a misaligned
   AMOADD.W traps with cause 6 and writes nothing; with the old cause (load misaligned)
-  the test fails.
+  the test fails. 2026-11-16, from readers' questions on the atomics note (its appendix,
+  questions 2 and 3): an AMO is a load only for the datapath. For every check it is a
+  store: a core with an MMU needs write permission as well as read for it and faults it as
+  a store/AMO page fault (copy-on-write and the dirty bit rely on that), and hardware
+  watchpoints see it as a store; Mig3 has no MMU and no triggers. aq and rl hold in Mig3
+  because every access takes one path in program order; a design with several paths
+  (local and shared memories, network routes, a store buffer) needs acknowledged writes
+  and the core waiting for its outstanding accesses at aq, rl and fence.
+publications:
+  - publications/2026-11-atomics-next-to-memory.md
 code:
   - rtl/design/mig3/mig3_decode.sv#atop_of
   - rtl/design/mig3/mig3_lsu.sv#clear

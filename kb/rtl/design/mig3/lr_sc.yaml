@@ -53,7 +53,15 @@ evidence: >
   miss and one after a store of this hart succeed; a counting loop; misaligned LR and SC
   trap with mcause 4 and 6). sky130: SC's result forwarded from EX 5.7 ns (the reservation
   compare in the forwarding path; with that case removed from the rd mux 5.4 ns); from
-  MEM/WB 5.2 ns as before, 331 045 -> 331 524 um2.
+  MEM/WB 5.2 ns as before, 331 045 -> 331 524 um2. OPEN, 2026-11-16 (a reader's question
+  on the atomics note, publications/2026-11-atomics-next-to-memory.md, appendix question
+  6): since Mig3Cpu has a DMA (kb rtl/design/mig3/dma, 2026-11-09), a DMA write to the
+  reserved word does not end the reservation, so an SC can succeed when it should fail. The
+  planned fix: an exclusive monitor next to AtomicUnit (kb rtl/lib/block/atomic/design),
+  where every write to the memory passes and a write of any other agent ends the
+  reservation, as AXI's exclusive accesses.
+publications:
+  - publications/2026-11-atomics-next-to-memory.md
 code:
   - rtl/design/mig3/mig3_atomic.sv#sc_ok
   - rtl/design/mig3/mig3_lsu.sv#cancel
