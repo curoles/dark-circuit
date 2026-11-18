@@ -61,6 +61,12 @@ groups:
         desc: the hart's ID, one per PE
         fields:
           - {name: id, bits: [31, 0], from: HART_ID, sw: ro, hw: live}
+      - name: mnodeid
+        addr: 0xFC0
+        desc: Mig6's own, the PE's node in the mesh (NocMesh's x, y)
+        fields:
+          - {name: x, bits: [7, 0],  from: MY_PE_GRID_X, sw: ro, hw: live}
+          - {name: y, bits: [15, 8], from: MY_PE_GRID_Y, sw: ro, hw: live}
 
   - name: machine_trap_setup
     csrs:
@@ -146,3 +152,4 @@ groups:
 generate:
   - { template: mig6_csr_pkg.sv.j2, output: rtl/design/mig6/mig6_csr_pkg.sv }
   - { template: mig6_csr.h.j2,      output: sw/riscv/mig6_csr.h }
+  - { template: mig6_csr_ops.h.j2,  output: sw/riscv/mig6_csr_ops.h }

@@ -46,8 +46,9 @@
  * Every slot without an instruction carries its reason (bubble_e); retire reports it
  * (retire.bubble), so each cycle retires an instruction or a bubble.
  *
- * Mig6Pe instantiates it, with its local memory and its HART_ID (mhartid, Mig6Csr);
- * synthesis (make mig6_synth) takes Mig6Core as its top.
+ * Mig6Pe instantiates it, with its local memory, its HART_ID (mhartid, Mig6Csr) and its
+ * node in the mesh, MY_PE_GRID_X and MY_PE_GRID_Y (mnodeid); synthesis (make mig6_synth)
+ * takes Mig6Core as its top.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -56,8 +57,10 @@
 `include "dark_circuit_assert.svh"
 
 module Mig6Core import Mig6Pkg::*; #(
-    parameter mig6_cfg_t CFG     = MIG6_CFG,    // configuration, see Mig6ConfigPkg
-    parameter word_t     HART_ID = '0           // the hart's ID: mhartid
+    parameter mig6_cfg_t  CFG          = MIG6_CFG,  // configuration, see Mig6ConfigPkg
+    parameter word_t      HART_ID      = '0,        // the hart's ID: mhartid
+    parameter logic [7:0] MY_PE_GRID_X = '0,        // the PE's node in the mesh: mnodeid
+    parameter logic [7:0] MY_PE_GRID_Y = '0
 )(
     input  wire         clk,
     input  wire         rst_n,             // synchronous reset, active low
@@ -296,7 +299,8 @@ module Mig6Core import Mig6Pkg::*; #(
 
     assign ex_load_offset = ex_alu_result[DADDR_START-1:0];
 
-    Mig6Csr #(.HART_ID(HART_ID)) u_mig6_csr(
+    Mig6Csr #(.HART_ID(HART_ID), .MY_PE_GRID_X(MY_PE_GRID_X), .MY_PE_GRID_Y(MY_PE_GRID_Y))
+        u_mig6_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
         .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm),

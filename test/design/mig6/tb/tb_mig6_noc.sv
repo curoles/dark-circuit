@@ -97,7 +97,7 @@ module TbMig6NocCheck #(
             .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
             .req_wdata, .req_wstrb, .rsp_valid, .rsp_data, .done(stand_in_done));
 
-        Mig6PeNetIf #(.MY_X(X_WIDTH'(p % MESH_X)), .MY_Y(Y_WIDTH'(p / MESH_X)),
+        Mig6PeNetIf #(.MY_PE_GRID_X(X_WIDTH'(p % MESH_X)), .MY_PE_GRID_Y(Y_WIDTH'(p / MESH_X)),
                       .BUF_DEPTH(BUF_DEPTH)) u_pe_net_if(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,

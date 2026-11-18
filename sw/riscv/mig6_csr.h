@@ -110,6 +110,16 @@
 #define MIG6_CSR_MHARTID_ID_SHIFT 0
 #define MIG6_CSR_MHARTID_ID_MASK 0xffffffff
 
+/* mnodeid: Mig6's own, the PE's node in the mesh (NocMesh's x, y) */
+#define MIG6_CSR_MNODEID 0xfc0
+#define MIG6_CSR_MNODEID_RESET 0x00000000
+#define MIG6_CSR_MNODEID_VALID 0x0000ffff
+#define MIG6_CSR_MNODEID_SW_WRITE 0x00000000
+#define MIG6_CSR_MNODEID_X_SHIFT 0
+#define MIG6_CSR_MNODEID_X_MASK 0x000000ff
+#define MIG6_CSR_MNODEID_Y_SHIFT 8
+#define MIG6_CSR_MNODEID_Y_MASK 0x0000ff00
+
 /* ---- machine_trap_setup ---- */
 
 /* mstatus: interrupt enable, before and now; machine mode only */
@@ -327,6 +337,16 @@ typedef union Mig6CsrMhartid {
         uint32_t id         : 32;
     };
 } Mig6CsrMhartid;
+
+/* mnodeid: Mig6's own, the PE's node in the mesh (NocMesh's x, y) */
+typedef union Mig6CsrMnodeid {
+    uint32_t val;
+    struct {
+        uint32_t x          : 8;
+        uint32_t y          : 8;
+        uint32_t zero_31_16 : 16;
+    };
+} Mig6CsrMnodeid;
 
 /* mstatus: interrupt enable, before and now; machine mode only */
 typedef union Mig6CsrMstatus {

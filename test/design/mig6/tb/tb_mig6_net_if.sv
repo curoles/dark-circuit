@@ -90,7 +90,7 @@ module TbMig6NetIfCheck #(
         .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
         .req_wdata, .req_wstrb, .rsp_valid, .rsp_data, .done(stand_in_done));
 
-    Mig6PeNetIf #(.MY_X(2'd1), .MY_Y(2'd0), .BUF_DEPTH(BUF_DEPTH)) u_pe_net_if(
+    Mig6PeNetIf #(.MY_PE_GRID_X(2'd1), .MY_PE_GRID_Y(2'd0), .BUF_DEPTH(BUF_DEPTH)) u_pe_net_if(
         .clk, .rst_n,
         .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
         .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,

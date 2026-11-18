@@ -1,7 +1,8 @@
 /* Testbench of Mig6's PEs running a program, every PE the same program (SPMD).
  *
- * N_PES PEs (Mig6Pe), the 2 x 2 grid of the plan, PE p with HART_ID p; for now without a
- * network, each alone with its local memory. Loads +hex=<file> into every PE's memory,
+ * N_PES PEs (Mig6Pe), the 2 x 2 grid of the plan, PE p with HART_ID p at node
+ * (p % MESH_X, p / MESH_X) (Mig6NocPkg); for now without a network, each alone with its
+ * local memory. Loads +hex=<file> into every PE's memory,
  * releases reset and runs until every hart has exited. Each PE's debugger (TbMig6Debugger)
  * serves its semihosting calls and prints its PE's output a line at a time, each line with
  * the hart's prefix, "[hart <n>] ", so that lines of PEs running at once never mix. The end
@@ -44,7 +45,9 @@ module TbMig6;
         pipe_trace_t pipe_trace;
         /* verilator lint_on UNUSEDSIGNAL */
 
-        Mig6Pe #(.HART_ID(word_t'(p))) u_pe(
+        Mig6Pe #(.HART_ID(word_t'(p)),
+                 .MY_PE_GRID_X(Mig6NocPkg::X_WIDTH'(p % Mig6NocPkg::MESH_X)),
+                 .MY_PE_GRID_Y(Mig6NocPkg::Y_WIDTH'(p / Mig6NocPkg::MESH_X))) u_pe(
             .clk, .rst_n, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
 
         TbMig6Debugger #(.PE(p), .HART_ID(word_t'(p))) u_debugger(

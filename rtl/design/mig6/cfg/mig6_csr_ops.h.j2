@@ -1,0 +1,50 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Mig6's core CSRs for C programs: a static inline function per access, the only place a
+ * program needs a CSR instruction. csr_<name>_read() for every CSR; for a CSR software
+ * writes (a field rw, at an address that is not read-only) csr_<name>_write(v), and
+ * csr_<name>_set(bits) and csr_<name>_clear(bits) (csrs, csrc: the bits of a mask set or
+ * cleared in one instruction, no read-modify-write in the program). The value as fields:
+ * the CSR's union of mig6_csr.h,
+ *     Mig6CsrMstatus mstatus = {.val = csr_mstatus_read()};
+ *     csr_mstatus_set(MIG6_CSR_MSTATUS_MIE_MASK);
+ * A write, set or clear clobbers memory, so the compiler keeps memory accesses on their
+ * side of it.
+ */
+#pragma once
+
+#include <stdint.h>
+
+#include "mig6_csr.h"
+{% for g in groups %}
+
+/* ---- {{ g.name }} ---- */
+    {% for c in g.csrs %}
+
+/* {{ c.title }} */
+static inline uint32_t csr_{{ c.name }}_read(void)
+{
+    uint32_t v;
+    __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(MIG6_CSR_{{ c.NAME }}));
+    return v;
+}
+        {% if c.sw_write and not c.read_only %}
+
+static inline void csr_{{ c.name }}_write(uint32_t v)
+{
+    __asm__ volatile("csrw %0, %1" : : "i"(MIG6_CSR_{{ c.NAME }}), "r"(v) : "memory");
+}
+
+static inline void csr_{{ c.name }}_set(uint32_t bits)
+{
+    __asm__ volatile("csrs %0, %1" : : "i"(MIG6_CSR_{{ c.NAME }}), "r"(bits) : "memory");
+}
+
+static inline void csr_{{ c.name }}_clear(uint32_t bits)
+{
+    __asm__ volatile("csrc %0, %1" : : "i"(MIG6_CSR_{{ c.NAME }}), "r"(bits) : "memory");
+}
+        {% endif %}
+    {% endfor %}
+{% endfor %}

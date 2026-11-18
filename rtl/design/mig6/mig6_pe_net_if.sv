@@ -12,8 +12,8 @@
  * goes straight to rsp_valid and its credit straight back: it holds no answer, so it
  * limits nothing; a requester does (a ReqMux's pending FIFO).
  *
- *   req --> op_of --> head: route MEM_X, MEM_Y; src MY_X, MY_Y --+--> request network
- *                \--> body (WRITE, ATOMIC), after the head ------+    (body_q)
+ *   req --> op_of --+--> head (route MEM_X, MEM_Y; src this PE) --+--> request network
+ *                   \--> body (WRITE, ATOMIC), after the head -----+    (body_q)
  *   rsp <-- the answer's data <-- answer network, its credit back at once
  *
  * @author    Igor Lesik
@@ -23,9 +23,9 @@
 `include "dark_circuit_assert.svh"
 
 module Mig6PeNetIf import Mig6NocPkg::*; #(
-    parameter logic [X_WIDTH-1:0] MY_X      = '0,   // this PE's node: the answers' route
-    parameter logic [Y_WIDTH-1:0] MY_Y      = '0,
-    parameter                     BUF_DEPTH = 4     // the router's input buffer: credits
+    parameter logic [X_WIDTH-1:0] MY_PE_GRID_X = '0,    // this PE's node: the answers' route
+    parameter logic [Y_WIDTH-1:0] MY_PE_GRID_Y = '0,
+    parameter                     BUF_DEPTH    = 4      // the router's input buffer: credits
 )(
     input  wire                   clk,
     input  wire                   rst_n,            // synchronous reset, active low
@@ -83,8 +83,8 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
         req_flit_t f;
 
         r.op     = o;
-        r.src_x  = MY_X;
-        r.src_y  = MY_Y;
+        r.src_x  = MY_PE_GRID_X;
+        r.src_y  = MY_PE_GRID_Y;
         r.size   = size;
         r.addr   = addr;
         r.cmo    = cmo;
@@ -162,7 +162,7 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
     `DC_ASSERT(a_answer_one_flit, !(noc_rsp_fwd.valid
                                     && !(noc_rsp_fwd.flit.head && noc_rsp_fwd.flit.tail)))
     `DC_ASSERT(a_answer_is_data, !(noc_rsp_fwd.valid && answer.op != RSP_DATA))
-    `DC_ASSERT(a_answer_is_mine, !(noc_rsp_fwd.valid && (rsp.dest_x != MY_X
-                                                         || rsp.dest_y != MY_Y)))
+    `DC_ASSERT(a_answer_is_mine, !(noc_rsp_fwd.valid && (rsp.dest_x != MY_PE_GRID_X
+                                                         || rsp.dest_y != MY_PE_GRID_Y)))
 
 endmodule

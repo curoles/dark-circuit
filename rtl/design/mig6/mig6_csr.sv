@@ -27,7 +27,8 @@
  * - mscratch: read and write, for the trap handler.
  * - misa (RV32IMA, writes ignored: Zbb has no bit, B stands for the whole extension);
  *   mvendorid, marchid, mimpid read 0; mhartid reads HART_ID, the hart's ID (the PE's in
- *   Mig6, Mig6Pe).
+ *   Mig6, Mig6Pe); mnodeid, Mig6's own (a custom read-only CSR), reads MY_PE_GRID_X and
+ *   MY_PE_GRID_Y, the PE's node in the mesh.
  * - mstatus: MIE and MPIE; MPP reads 3 (machine mode only), other bits 0; mstatush 0.
  * - mtvec: direct mode only, bits 1:0 read 0; mepc: bits 1:0 read 0 (no C extension).
  * - mcause, mtval: written by traps, and by CSR instructions.
@@ -62,7 +63,9 @@
  * @copyright 2026 Igor Lesik, MIT License
  */
 module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
-    parameter word_t HART_ID = '0   // the hart's ID: mhartid
+    parameter word_t      HART_ID      = '0,    // the hart's ID: mhartid
+    parameter logic [7:0] MY_PE_GRID_X = '0,    // the PE's node in the mesh: mnodeid
+    parameter logic [7:0] MY_PE_GRID_Y = '0
 )(
     input  wire      clk,
     input  wire      rst_n,      // synchronous reset, active low
@@ -137,6 +140,8 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
         state.fcsr.fflags     = fflags;
         state.vxsat.sat       = vxsat;
         state.mhartid.id      = HART_ID;
+        state.mnodeid.x       = MY_PE_GRID_X;
+        state.mnodeid.y       = MY_PE_GRID_Y;
         state.mstatus.mie     = mstatus_mie;
         state.mstatus.mpie    = mstatus_mpie;
         state.mie.meie        = mie_meie;

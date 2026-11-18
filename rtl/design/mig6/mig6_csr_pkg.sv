@@ -116,6 +116,18 @@ package Mig6CsrPkg;
         logic [31:0] id;        // 31:0, sw ro, hw live, from HART_ID
     } mhartid_t;
 
+    // mnodeid: Mig6's own, the PE's node in the mesh (NocMesh's x, y)
+    localparam logic [11:0] MNODEID_ADDR     = 12'hfc0;
+    localparam logic [31:0] MNODEID_RESET    = 32'h0000_0000;
+    localparam logic [31:0] MNODEID_VALID    = 32'h0000_ffff;
+    localparam logic [31:0] MNODEID_SW_WRITE = 32'h0000_0000;
+    localparam logic [31:0] MNODEID_CONST    = 32'h0000_0000;
+    typedef struct packed {
+        logic [15:0] zero_31_16;
+        logic [7:0]  y;         // 15:8, sw ro, hw live, from MY_PE_GRID_Y
+        logic [7:0]  x;         // 7:0, sw ro, hw live, from MY_PE_GRID_X
+    } mnodeid_t;
+
     // ---- machine_trap_setup ----
 
     // mstatus: interrupt enable, before and now; machine mode only
@@ -284,6 +296,7 @@ package Mig6CsrPkg;
         fcsr_t       fcsr;
         vxsat_t      vxsat;
         mhartid_t    mhartid;
+        mnodeid_t    mnodeid;
         mstatus_t    mstatus;
         mie_t        mie;
         mtvec_t      mtvec;
@@ -304,6 +317,7 @@ package Mig6CsrPkg;
         fcsr_t       fcsr;
         vxsat_t      vxsat;
         mhartid_t    mhartid;
+        mnodeid_t    mnodeid;
         mstatus_t    mstatus;
         misa_t       misa;
         mie_t        mie;
@@ -345,6 +359,7 @@ package Mig6CsrPkg;
             MARCHID_ADDR:    r.value = '0;
             MIMPID_ADDR:     r.value = '0;
             MHARTID_ADDR:    r.value = s.mhartid & MHARTID_VALID;
+            MNODEID_ADDR:    r.value = s.mnodeid & MNODEID_VALID;
             MSTATUS_ADDR:    r.value = (s.mstatus & MSTATUS_VALID & ~MSTATUS_CONST)
                                        | (MSTATUS_RESET & MSTATUS_CONST);
             MISA_ADDR:       r.value = MISA_RESET;

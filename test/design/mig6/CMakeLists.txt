@@ -55,8 +55,8 @@ cmake_language(CALL dc_add_${SIM}_build design_mig6_sim TOP TbMig6 TB tb/tb_mig6
 # mig6_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...] [ARGS <arg>...])
 #
 # A C program on every PE of TbMig6: crt0, semihosting and Mig6's exit (the hart's ID in a2,
-# mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6.ld; the test passes when
-# every hart exits with 0 (TbMig6).
+# mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6.ld, sw/riscv's headers
+# (mig6_csr.h) on the include path; the test passes when every hart exits with 0 (TbMig6).
 function(mig6_program_test NAME)
     cmake_parse_arguments(P "" "ARCH" "SOURCES;FLAGS;ARGS" ${ARGN})
     if(NOT P_ARCH)
@@ -66,11 +66,17 @@ function(mig6_program_test NAME)
     dc_add_riscv_program(${prog}
                          SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
                                  ${CMAKE_CURRENT_SOURCE_DIR}/mig6_exit.c ${P_SOURCES}
-                         ARCH ${P_ARCH} FLAGS -O2 -ffreestanding -I${SW}/semihosting ${P_FLAGS}
+                         ARCH ${P_ARCH}
+                         FLAGS -O2 -ffreestanding -I${SW} -I${SW}/semihosting ${P_FLAGS}
                          LINK_FLAGS -T ${SW}/mig6.ld)
     cmake_language(CALL dc_add_${SIM}_run ${prog} BUILD design_mig6_sim
                    ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex ${P_ARGS})
 endfunction()
 
-# Every PE prints its hart ID and exits with 0; every hart ID must exit once.
+# Every PE prints its hart ID and its node (mnodeid) and exits with 0 when the node is the
+# hart's; every hart ID must exit once.
 mig6_program_test(mhartid SOURCES mhartid.c)
+
+# Every standard CSR read by the assembler's name and by mig6_csr.h's address (from
+# cfg/mig6_csr.yaml) gives the same value, inside its valid bits.
+mig6_program_test(csr_names SOURCES csr_names.c)

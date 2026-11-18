@@ -5,7 +5,9 @@
  * network interface, a later chunk). The local memory is a SimLatencyRAM behind the core's
  * memory port (latency 1, always ready), as Mig3Cpu's memory without its devices; the core's
  * caches are in front of it, so it is not a scratchpad (a memory without caches before it).
- * HART_ID is the hart's ID, what mhartid reads, one per PE. The local memory has
+ * HART_ID is the hart's ID, what mhartid reads, one per PE; MY_PE_GRID_X and MY_PE_GRID_Y
+ * are the PE's node in the mesh (Mig6NocPkg: PE p at (p % MESH_X, p / MESH_X)), what
+ * mnodeid reads, and later its network interface's coordinates. The local memory has
  * 1 << CFG.mem_addr_width bytes; the core address bits above them are ignored, so addresses
  * wrap around.
  *
@@ -26,7 +28,10 @@
 
 module Mig6Pe import Mig6Pkg::*; #(
     parameter mig6_cfg_t CFG     = MIG6_CFG,    // configuration, see Mig6ConfigPkg
-    parameter word_t     HART_ID = '0           // the hart's ID: mhartid
+    parameter word_t     HART_ID = '0,          // the hart's ID: mhartid
+    // Its node in the mesh: mnodeid, and its network interface's coordinates.
+    parameter logic [Mig6NocPkg::X_WIDTH-1:0] MY_PE_GRID_X = '0,
+    parameter logic [Mig6NocPkg::Y_WIDTH-1:0] MY_PE_GRID_Y = '0
 )(
     input  wire         clk,
     input  wire         rst_n,                  // synchronous reset, active low
@@ -45,7 +50,8 @@ module Mig6Pe import Mig6Pkg::*; #(
     /* verilator lint_on UNUSEDSIGNAL */
     mem_rsp_t mem_rsp;
 
-    Mig6Core #(.CFG(CFG), .HART_ID(HART_ID)) u_mig6_core(
+    Mig6Core #(.CFG(CFG), .HART_ID(HART_ID), .MY_PE_GRID_X(8'(MY_PE_GRID_X)),
+               .MY_PE_GRID_Y(8'(MY_PE_GRID_Y))) u_mig6_core(
         .clk, .rst_n, .mem_req, .mem_rsp, .uncached(1'b0), .meip(1'b0), .halt, .retire,
         .pipe_trace, .dbg_req, .dbg_rsp);
 
