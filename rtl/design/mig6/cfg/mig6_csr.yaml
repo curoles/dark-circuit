@@ -153,3 +153,4 @@ generate:
   - { template: mig6_csr_pkg.sv.j2, output: rtl/design/mig6/mig6_csr_pkg.sv }
   - { template: mig6_csr.h.j2,      output: sw/riscv/mig6_csr.h }
   - { template: mig6_csr_ops.h.j2,  output: sw/riscv/mig6_csr_ops.h }
+  - { template: mig6_csr_ops.hpp.j2, output: sw/riscv/mig6_csr_ops.hpp }

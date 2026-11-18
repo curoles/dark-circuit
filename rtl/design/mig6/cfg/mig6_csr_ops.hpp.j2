@@ -1,0 +1,52 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Mig6's core CSRs for C++ programs: a namespace per CSR, mig6::csr::<name>, with its
+ * address and masks (addr, reset, valid, sw_write; per field <field>_mask, <field>_shift),
+ * its union of mig6_csr.h (fields), and read(), and for a CSR software writes write(v),
+ * set(bits), clear(bits). They call the C wrappers of mig6_csr_ops.h, the only place with
+ * a CSR instruction.
+ *     using namespace mig6::csr;
+ *     mstatus::set(mstatus::mie_mask);
+ *     mstatus::fields s{.val = mstatus::read()};
+ */
+#pragma once
+
+#include <stdint.h>
+
+extern "C" {
+#include "mig6_csr_ops.h"
+}
+
+namespace mig6::csr {
+{% for g in groups %}
+
+// ---- {{ g.name }} ----
+    {% for c in g.csrs %}
+        {% set w = c.cxx_width %}
+
+// {{ c.title }}
+namespace {{ c.name }} {
+    constexpr uint32_t {{ "addr".ljust(w) }} = MIG6_CSR_{{ c.NAME }};
+        {% if not c.view %}
+    constexpr uint32_t {{ "reset".ljust(w) }} = MIG6_CSR_{{ c.NAME }}_RESET;
+        {% endif %}
+    constexpr uint32_t {{ "valid".ljust(w) }} = MIG6_CSR_{{ c.NAME }}_VALID;
+    constexpr uint32_t {{ "sw_write".ljust(w) }} = MIG6_CSR_{{ c.NAME }}_SW_WRITE;
+        {% for f in c.fields %}
+            {% set field = "MIG6_CSR_" ~ c.NAME ~ "_" ~ f.NAME %}
+    constexpr uint32_t {{ (f.name ~ "_mask").ljust(w) }} = {{ field }}_MASK;
+    constexpr uint32_t {{ (f.name ~ "_shift").ljust(w) }} = {{ field }}_SHIFT;
+        {% endfor %}
+    using fields = Mig6Csr{{ c.Cname }};
+    inline uint32_t read()               { return csr_{{ c.name }}_read(); }
+        {% if c.sw_write and not c.read_only %}
+    inline void     write(uint32_t v)    { csr_{{ c.name }}_write(v); }
+    inline void     set(uint32_t bits)   { csr_{{ c.name }}_set(bits); }
+    inline void     clear(uint32_t bits) { csr_{{ c.name }}_clear(bits); }
+        {% endif %}
+}   // namespace {{ c.name }}
+    {% endfor %}
+{% endfor %}
+
+}   // namespace mig6::csr

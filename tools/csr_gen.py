@@ -129,6 +129,8 @@ def texts(m):
     # C: the type's name, Mig6Csr<Name>, and its bit-fields from bit 0 up (RISC-V's ABI
     # places bit-fields from the lowest bit); a view of some fields packs them from bit 0.
     m["Cname"] = m["name"][0].upper() + m["name"][1:]
+    # C++: the width of the constants' names in the CSR's namespace (sw_write, <field>_shift).
+    m["cxx_width"] = max([len("sw_write")] + [len(f["name"]) + len("_shift") for f in m["fields"]])
     if m["view"] and m["pack"]:
         top = sum(p["field"]["width"] for p in m["pack"])
         m["c_members"] = [{"name": p["field"]["name"], "width": p["field"]["width"]}

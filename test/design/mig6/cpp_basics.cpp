@@ -1,18 +1,16 @@
 // C++ on Mig6, bare metal (no exceptions, RTTI, heap or global constructors; the build's
 // DC_RISCV_CXX_FLAGS, the linker script's check), on every PE of TbMig6: a template, constexpr
-// and a namespace, the C headers inside extern "C". An int8 dot product with an int32 sum,
-// as the layer's kernel will compute, is evaluated by the compiler (static_assert) and by the
-// core from volatile copies of the same vectors; prints "cpp: hart <n> dot <d>" and exits
-// with 0 when the two agree.
+// and a namespace, with C headers (semihosting.h, and mig6_csr_ops.h inside
+// mig6_csr_ops.hpp). An int8 dot product with an int32 sum, as the layer's kernel will
+// compute, is evaluated by the compiler (static_assert) and by the core from volatile copies
+// of the same vectors; prints "cpp: hart <n> dot <d>" and exits with 0 when the two agree.
 //
 // @author    Igor Lesik
 // @copyright 2026 Igor Lesik, MIT License
 
 #include <stdint.h>
 
-extern "C" {
-#include "mig6_csr_ops.h"
-}
+#include "mig6_csr_ops.hpp"
 #include "semihosting.h"
 
 namespace kernel {
@@ -86,7 +84,7 @@ extern "C" int main()
     const int32_t d = kernel::dot<int32_t>(ra, rb);
 
     i = put_str(line, i, "cpp: hart ");
-    i = put_dec(line, i, static_cast<int32_t>(csr_mhartid_read()));
+    i = put_dec(line, i, static_cast<int32_t>(mig6::csr::mhartid::read()));
     i = put_str(line, i, " dot ");
     i = put_dec(line, i, d);
     i = put_str(line, i, "\n");
