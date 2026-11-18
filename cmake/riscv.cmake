@@ -344,6 +344,12 @@ function(dc_riscv_march OUT MARCH)
     endif()
 endfunction()
 
+# Options of a C++ source of a RISC-V program, bare metal: C++20 (designated initializers,
+# {.val = ...} of the CSR unions), no exceptions, no RTTI, no thread-safe statics (no guard
+# calls), no atexit for static destructors (nothing runs after main).
+set(DC_RISCV_CXX_FLAGS -std=c++20 -fno-exceptions -fno-rtti -fno-threadsafe-statics
+    -fno-use-cxa-atexit)
+
 # dc_add_riscv_program(<name> SOURCES <file>...
 #                      [ARCH <march>] [ABI <mabi>]
 #                      [ALT_ARCH <march> ALT_SOURCES <file>...]
@@ -360,6 +366,10 @@ endfunction()
 #   LINK_FLAGS link options, default -Wl,-Ttext=0 (code at address 0);
 #              for example -T <linker script> to place code and data
 #   FLAGS      more compiler options, for example -I<dir> or -D<macro>
+# A C++ source (.cpp) gets DC_RISCV_CXX_FLAGS too: bare metal, no exceptions, RTTI or
+# thread-safe statics. A design's linker script refuses global constructors (crt0.S does
+# not run them; rtl/design/mig6/cfg/mig6.ld.j2). A C++ program defines extern "C" int
+# main(): freestanding (-ffreestanding), main is an ordinary function, its name mangled.
 # Every source is compiled into <name>.objs/<n>_<source>.o with a dependency file (-MD),
 # so the program is rebuilt when a source or a header it includes changes; a linker script
 # given as -T <file> in LINK_FLAGS is a dependency of the link, and so are the options: a
@@ -406,7 +416,7 @@ function(dc_add_riscv_program NAME)
     # changes, so it is newer than the objects only after a change of the options.
     file(MAKE_DIRECTORY ${base}.objs)
     set(options ${base}.objs/options.txt)
-    set(content "${RISCV_CC_BIN} ${arch} ${P_FLAGS}\n${alt_arch}\n")
+    set(content "${RISCV_CC_BIN} ${arch} ${P_FLAGS}\n${alt_arch}\n${DC_RISCV_CXX_FLAGS}\n")
     string(APPEND content "${DC_RISCV_LINK_TOOL} ${P_LINK_FLAGS}\n")
     file(CONFIGURE OUTPUT ${options} CONTENT "${content}" @ONLY)
 
@@ -425,10 +435,14 @@ function(dc_add_riscv_program NAME)
         get_filename_component(source ${source} ABSOLUTE)
         get_filename_component(source_name ${source} NAME)
         set(obj ${base}.objs/${n}_${source_name}.o)
+        set(lang_flags)
+        if(source MATCHES "\\.cpp$")
+            set(lang_flags ${DC_RISCV_CXX_FLAGS})
+        endif()
         add_custom_command(
             OUTPUT ${obj}
-            COMMAND ${RISCV_CC_BIN} ${source_arch} ${P_FLAGS} -MD -MF ${obj}.d -c -o ${obj}
-                    ${source}
+            COMMAND ${RISCV_CC_BIN} ${source_arch} ${lang_flags} ${P_FLAGS} -MD -MF ${obj}.d
+                    -c -o ${obj} ${source}
             DEPENDS ${source} ${options}
             DEPFILE ${obj}.d
             COMMENT "RISC-V: compiling ${source_name} of ${NAME}"

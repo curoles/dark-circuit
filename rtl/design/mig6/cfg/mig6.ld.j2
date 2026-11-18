@@ -8,6 +8,8 @@
  * and .data are read from RAM. Code written to RAM at run time can not run.
  * Code starts at the reset address, with .text.start (_start of crt0.S) or .text.init
  * (_start of the standard riscv-tests environment) first.
+ * Global constructors of C++ (.init_array, .ctors) are refused: crt0.S calls main without
+ * running them, so the link fails instead of an object staying uninitialized.
  */
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
@@ -42,5 +44,12 @@ SECTIONS
         __bss_end = .;
     } > RAM
 
+    .init_array : {
+        KEEP(*(.init_array .init_array.* .ctors .ctors.*))
+    } > RAM
+
     __stack_top = ORIGIN(RAM) + LENGTH(RAM);
 }
+
+ASSERT(SIZEOF(.init_array) == 0,
+       "a global constructor, crt0.S does not run it: make it constexpr or init it in main")

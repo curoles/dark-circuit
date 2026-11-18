@@ -80,3 +80,7 @@ mig6_program_test(mhartid SOURCES mhartid.c)
 # Every standard CSR read by the assembler's name and by mig6_csr.h's address (from
 # cfg/mig6_csr.yaml) gives the same value, inside its valid bits.
 mig6_program_test(csr_names SOURCES csr_names.c)
+
+# C++ on Mig6 (bare metal, no global constructors): a template dot product, at compile time
+# and on the core, must agree.
+mig6_program_test(cpp_basics SOURCES cpp_basics.cpp)

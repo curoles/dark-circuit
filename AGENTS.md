@@ -496,6 +496,12 @@ document intent and stop the simulation in the cycle a rule breaks.
   take the device's base address (the same code for every Mig); its comment says how the
   hardware works and what software must do, its functions keep those rules
   (`drivers/timer.h`, kb `sw/riscv/drivers/design`).
+- Program for a Mig (a test, a kernel): new code in C++ (`.cpp`), bare metal C++20
+  (`DC_RISCV_CXX_FLAGS` of `cmake/riscv.cmake`): no exceptions, RTTI, heap or global
+  constructors (the design's linker script refuses them, crt0.S does not run them),
+  `extern "C" int main()`, C headers inside `extern "C"`; core CSRs only through the
+  generated wrappers (`sw/riscv/mig6_csr_ops.h`, `csr_<name>_read/write/set/clear`), no
+  CSR instruction written by hand (`test/design/mig6/cpp_basics.cpp`).
 - RISC-V encodings and CSR addresses: `tools/riscv_opcodes.sh` regenerates
   `rtl/lib/riscv/riscv_instr_pkg.sv` and `riscv_csr_pkg.sv`.
 - Generated files start with "THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!":
