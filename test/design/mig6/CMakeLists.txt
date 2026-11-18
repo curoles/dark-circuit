@@ -54,9 +54,10 @@ cmake_language(CALL dc_add_${SIM}_build design_mig6_sim TOP TbMig6 TB tb/tb_mig6
 
 # mig6_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...] [ARGS <arg>...])
 #
-# A C program on every PE of TbMig6: crt0, semihosting and Mig6's exit (the hart's ID in a2,
-# mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6.ld, sw/riscv's headers
-# (mig6_csr.h) on the include path; the test passes when every hart exits with 0 (TbMig6).
+# A C or C++ program on every PE of TbMig6: crt0, semihosting, tprintf and Mig6's exit (the
+# hart's ID in a2, mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6.ld,
+# sw/riscv's headers (mig6_csr_ops.h, tprintf.h) on the include path; the test passes when
+# every hart exits with 0 (TbMig6).
 function(mig6_program_test NAME)
     cmake_parse_arguments(P "" "ARCH" "SOURCES;FLAGS;ARGS" ${ARGN})
     if(NOT P_ARCH)
@@ -65,9 +66,11 @@ function(mig6_program_test NAME)
     set(prog design_mig6_${NAME})
     dc_add_riscv_program(${prog}
                          SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
+                                 ${SW}/tprintf/tprintf.c
                                  ${CMAKE_CURRENT_SOURCE_DIR}/mig6_exit.c ${P_SOURCES}
                          ARCH ${P_ARCH}
-                         FLAGS -O2 -ffreestanding -I${SW} -I${SW}/semihosting ${P_FLAGS}
+                         FLAGS -O2 -ffreestanding -I${SW} -I${SW}/semihosting -I${SW}/tprintf
+                               ${P_FLAGS}
                          LINK_FLAGS -T ${SW}/mig6.ld)
     cmake_language(CALL dc_add_${SIM}_run ${prog} BUILD design_mig6_sim
                    ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex ${P_ARGS})
@@ -87,3 +90,7 @@ mig6_program_test(cpp_basics SOURCES cpp_basics.cpp)
 
 # The C++ CSR header (mig6::csr::<name>): read, write, set, clear and fields of a few CSRs.
 mig6_program_test(csr_ops SOURCES csr_ops.cpp)
+
+# tprintf (sw/riscv/tprintf): tsnprintf's text for integers, strings, %p, truncation and %a
+# of float bits must be the expected one.
+mig6_program_test(tprintf_check SOURCES tprintf_check.cpp)

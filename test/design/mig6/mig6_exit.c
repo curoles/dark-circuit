@@ -18,7 +18,7 @@ _Noreturn void semihost_exit(int status)
 {
     uint32_t args[2] = {SEMIHOST_STOPPED_APP_EXIT, (uint32_t)status};   // reason, status
     register uint32_t a0 __asm__("a0") = SEMIHOST_EXIT_EXTENDED;
-    register uint32_t *a1 __asm__("a1") = args;
+    register uint32_t* a1 __asm__("a1") = args;
 
     __asm__ volatile(
         ".option push\n"

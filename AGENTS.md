@@ -175,6 +175,9 @@ This file has the rules that are not in README.md.
   parts and the signals between them (plain ASCII: - | + > < ^ v, within the line limit);
   a small one may sit beside a generate loop or a tricky connection. Diagrams of structure,
   not timing (no WaveDrom). A diagram is code: change it with the code it shows.
+- C and C++: `*` and `&` stay with the type, `char* line`, `const T& x`, so one declarator
+  per declaration (`char* a, b` would declare one pointer); a reference to an array keeps
+  its parentheses, `const T (&a)[N]`. Old code is converted when it is touched anyway.
 
 ## Terminology
 

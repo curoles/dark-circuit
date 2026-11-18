@@ -1,5 +1,5 @@
 // The C++ CSR header (sw/riscv/mig6_csr_ops.hpp) on every PE of TbMig6: read, write, set,
-// clear and the fields of a few CSRs, through mig6::csr::<name>; prints "csr ops: hart <n>"
+// clear and the fields of a few CSRs, through mig6::csr::<name>; prints "csr ops: hart <n> ok"
 // and exits with 0 when every check holds, else prints the line of the first that fails and
 // exits with 1.
 //
@@ -9,55 +9,13 @@
 #include <stdint.h>
 
 #include "mig6_csr_ops.hpp"
-#include "semihosting.h"
+#include "tprintf.h"
 
 using namespace mig6::csr;
 
 namespace {
 
 constexpr uint32_t mesh_x = 2;      // Mig6NocPkg::MESH_X: PEs in a row
-
-// Appends the decimal digits of v at line[i]; returns the index after them.
-int put_dec(char *line, int i, uint32_t v)
-{
-    char digits[11];
-    int  n = 0;
-
-    do {
-        digits[n++] = static_cast<char>('0' + v % 10);
-        v /= 10;
-    } while (v != 0);
-    while (n > 0)
-        line[i++] = digits[--n];
-    return i;
-}
-
-// Appends the text s at line[i]; returns the index after it.
-int put_str(char *line, int i, const char *s)
-{
-    while (*s != '\0')
-        line[i++] = *s++;
-    return i;
-}
-
-// Prints "csr ops: hart <n> ok", or "csr ops: hart <n> failed at line <line>".
-void say(int line_failed)
-{
-    char line[64];
-    int  i = 0;
-
-    i = put_str(line, i, "csr ops: hart ");
-    i = put_dec(line, i, mhartid::read());
-    if (line_failed == 0) {
-        i = put_str(line, i, " ok");
-    } else {
-        i = put_str(line, i, " failed at line ");
-        i = put_dec(line, i, static_cast<uint32_t>(line_failed));
-    }
-    i = put_str(line, i, "\n");
-    line[i] = '\0';
-    semihost_write0(line);
-}
 
 // The checks; the line of the first that fails, 0 when all hold.
 int check()
@@ -113,6 +71,10 @@ extern "C" int main()
 {
     const int line = check();
 
-    say(line);
-    return (line == 0) ? 0 : 1;
+    if (line != 0) {
+        tprintf("csr ops: hart %u failed at line %d\n", mhartid::read(), line);
+        return 1;
+    }
+    tprintf("csr ops: hart %u ok\n", mhartid::read());
+    return 0;
 }

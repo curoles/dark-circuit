@@ -17,34 +17,14 @@
 #include <stdint.h>
 
 #include "mig6_csr_ops.h"
-#include "semihosting.h"
+#include "tprintf.h"
 
 static int checked;
 
 /* Prints "csr <name>: <what> <a> <b>" and returns 1, for main to exit with. */
-static int fail(const char *name, const char *what, uint32_t a, uint32_t b)
+static int fail(const char* name, const char* what, uint32_t a, uint32_t b)
 {
-    static const char hex[] = "0123456789abcdef";
-    char line[80];
-    int  i = 0;
-
-    for (const char *s = "csr "; *s != '\0'; s++)
-        line[i++] = *s;
-    for (; *name != '\0'; name++)
-        line[i++] = *name;
-    line[i++] = ':';
-    line[i++] = ' ';
-    for (; *what != '\0'; what++)
-        line[i++] = *what;
-    for (int k = 0; k < 2; k++) {
-        uint32_t v = (k == 0) ? a : b;
-        line[i++] = ' ';
-        for (int d = 28; d >= 0; d -= 4)
-            line[i++] = hex[(v >> d) & 0xf];
-    }
-    line[i++] = '\n';
-    line[i] = '\0';
-    semihost_write0(line);
+    tprintf("csr %s: %s %08x %08x\n", name, what, a, b);
     return 1;
 }
 
