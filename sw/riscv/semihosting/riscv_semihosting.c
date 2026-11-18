@@ -305,6 +305,27 @@ __attribute__((weak)) _Noreturn void semihost_exit(int status)
     __builtin_unreachable();
 }
 
+/**
+ * @brief Centiseconds since the program started (SYS_CLOCK), -1 on failure.
+ *
+ * The host's clock: real time on QEMU; a simulator's testbench may count its own
+ * (TbMig6: clocks, +clocks_per_cs).
+ */
+long semihost_clock(void)
+{
+    return semihost_exec(SEMIHOST_CLOCK, NULL);   // the parameter register must be 0
+}
+
+/**
+ * @brief Monotonic "now" in milliseconds for timeouts: SYS_CLOCK, 10 ms a tick.
+ *
+ * Weak so a platform can take its time from elsewhere without touching the programs.
+ */
+__attribute__((weak)) uint32_t semihost_now_ms(void)
+{
+    return (uint32_t)semihost_clock() * 10u;
+}
+
 struct __attribute__((__packed__)) semihost_get_cmdline_args {
     field_t buf; ///< a pointer to a buffer of at least the size specified in word two
     field_t len; ///< the length of the buffer in bytes

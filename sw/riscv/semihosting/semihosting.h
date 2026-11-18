@@ -11,6 +11,8 @@
  */
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -215,6 +217,23 @@ __attribute__((noreturn)) void semihost_exit(int status);
  * @return error code, 0 if the call is successful
  */
 long semihost_get_cmdline(char* buf, long len);
+
+/**
+ * @brief Centiseconds since the program started (SYS_CLOCK).
+ *
+ * The host's clock: real time on QEMU; a simulator's testbench may count its own.
+ *
+ * @return centiseconds, -1 on failure
+ */
+long semihost_clock(void);
+
+/**
+ * @brief Monotonic "now" in milliseconds for timeouts (semihost_timeout.hpp).
+ *
+ * The default is SYS_CLOCK, 10 ms a tick; weak, so a platform can take its time from
+ * elsewhere without touching the programs.
+ */
+uint32_t semihost_now_ms(void);
 
 #ifdef __cplusplus
 } // extern "C"

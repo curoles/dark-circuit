@@ -11,6 +11,8 @@
  *   fails; when every hart ID 0 to N_PES - 1 has exited, the run passes;
  * - +max_cycles=<n> (default 100000) clocks without that end fail the run, naming the harts
  *   that have not exited.
+ * Simulated time for SYS_CLOCK (the programs' timeouts): a centisecond is +clocks_per_cs=<n>
+ * clocks (default 100: a second of 10000 clocks).
  * Every failure goes through fail(): failing tells the debuggers to print what is left in
  * their line buffers, then $fatal stops the run (Verilator runs no final block after a
  * $fatal).
@@ -27,6 +29,7 @@ module TbMig6;
     logic                    rst_n;
     integer                  cycle;         // rising edges out of reset
     integer                  max_cycles;
+    integer                  clocks_per_cs; // SYS_CLOCK: clocks of a centisecond
     logic        [N_PES-1:0] exited;        // exited[h]: hart h has exited with status 0
     logic                    failing;       // a failure is being reported
     wire         [N_PES-1:0] halt;
@@ -110,5 +113,9 @@ module TbMig6;
         failing = 1'b0;
         if (!$value$plusargs("max_cycles=%d", max_cycles))
             max_cycles = 100000;
+        if (!$value$plusargs("clocks_per_cs=%d", clocks_per_cs))
+            clocks_per_cs = 100;
+        if (clocks_per_cs < 1)
+            $fatal(1, "Mig6: +clocks_per_cs=%0d, it must be 1 or more", clocks_per_cs);
     end
 endmodule

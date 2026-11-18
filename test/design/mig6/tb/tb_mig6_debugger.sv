@@ -5,6 +5,10 @@
  * spec); any other halt fails the run. The operation is a0, its argument a1 (read through the
  * debug port, strings and argument blocks from the PE's memory):
  * - SYS_WRITEC, SYS_WRITE0: the characters go into the PE's line buffer, the core resumes;
+ * - SYS_CLOCK: centiseconds since the start in a0, written through the debug port, the core
+ *   resumes. Simulated time, the testbench's: TbMig6.cycle / TbMig6.clocks_per_cs (a
+ *   centisecond of +clocks_per_cs clocks, so that a program's timeouts in milliseconds are
+ *   a few thousand clocks here and real time on QEMU);
  * - SYS_EXIT, SYS_EXIT_EXTENDED: the program ends with a status, the core stays halted. A
  *   status other than 0 fails the run at once, whatever the other PEs do. Status 0: the
  *   hart's ID is a2 (Mig6's exit, test/design/mig6/mig6_exit.c, puts mhartid there; the
@@ -42,18 +46,21 @@ module TbMig6Debugger import Mig6Pkg::*; #(
     // Semihosting operations (RISC-V semihosting, from the Arm semihosting spec).
     localparam word_t SYS_WRITEC        = 32'h03;
     localparam word_t SYS_WRITE0        = 32'h04;
+    localparam word_t SYS_CLOCK         = 32'h10;
     localparam word_t SYS_EXIT          = 32'h18;
     localparam word_t SYS_EXIT_EXTENDED = 32'h20;
 
     // Fields of dbg_req driven by the tasks.
     reg_id_t reg_id;
+    logic    reg_wr;
+    word_t   reg_wdata;
     logic    resume;
     word_t   halt_pc;                   // byte address of the EBREAK that halted the core
     string   line;                      // the PE's output since its last newline
 
     assign dbg_req = '{reg_id:      reg_id,
-                       reg_wr:      1'b0,
-                       reg_wdata:   '0,
+                       reg_wr:      reg_wr,
+                       reg_wdata:   reg_wdata,
                        resume:      resume,
                        ebreak_halt: 1'b1};
     assign halt_pc = {dbg_rsp.halt_pc, {IADDR_START{1'b0}}};
@@ -94,6 +101,16 @@ module TbMig6Debugger import Mig6Pkg::*; #(
         value = dbg_rsp.reg_rdata;
     endtask
 
+    // Write value into register r through the debug port while halted: on the next rising
+    // edge.
+    task automatic write_reg(input reg_id_t r, input word_t value);
+        reg_id    = r;
+        reg_wdata = value;
+        reg_wr    = 1'b1;
+        @(posedge clk); #1;
+        reg_wr    = 1'b0;
+    endtask
+
     // resume=1 for one clock; the core must run after it.
     task automatic resume_core();
         resume = 1'b1;
@@ -131,6 +148,8 @@ module TbMig6Debugger import Mig6Pkg::*; #(
                     a = a + 1;
                 end
             end
+            SYS_CLOCK:                  // centiseconds in a0: the testbench's clocks
+                write_reg(RiscvPkg::REG_A0, word_t'(TbMig6.cycle / TbMig6.clocks_per_cs));
             SYS_EXIT: begin             // on RV32 arg is the reason, no status
                 exited = 1'b1;
                 status = (arg == ADP_STOPPED_APPLICATION_EXIT) ? 0 : 1;
@@ -158,8 +177,10 @@ module TbMig6Debugger import Mig6Pkg::*; #(
 
     initial begin
         logic exited;
-        reg_id = '0;
-        resume = 1'b0;
+        reg_id    = '0;
+        reg_wr    = 1'b0;
+        reg_wdata = '0;
+        resume    = 1'b0;
         line   = "";
         exited = 1'b0;
         @(posedge rst_n);

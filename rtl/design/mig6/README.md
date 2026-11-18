@@ -240,6 +240,12 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   how many harts there are; the ID must be one of them, must not have exited before, and must
   be the HART_ID of the PE that exited. When every hart has exited, the run passes.
 - **`+max_cycles`** without that end fails the run, naming the harts that have not exited.
+- **Timeouts inside a program**, so that it can say what it waited for: `semihost::Timeout`
+  (sw/riscv/semihosting/semihost_timeout.hpp) on the semihosting clock, SYS_CLOCK. The
+  testbench answers with simulated time, a centisecond of `+clocks_per_cs` clocks (default
+  100), so a timeout in milliseconds is a few thousand clocks here and real time on QEMU.
+  Each reading halts the core for the debugger; a loop whose cycles are measured takes its
+  deadline from the `cycle` CSR instead (the barrier).
 - **Printing:** a line buffer per PE, so that the lines of PEs running at once never mix,
   however a program prints (a character a call, a string a call). Every line gets the hart's
   prefix, one PE or many:
@@ -272,7 +278,7 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    edge (done 2026-11-18: Mig6PeGrid and Mig6, TbMig6 runs Mig6, every program's output
    unchanged); a program where every hart writes its ID to shared memory and arrives at a
    barrier (done 2026-11-18: test design_mig6_barrier, every hart sees every ID after it;
-   the barrier takes 52 to 86 cycles, the PE next to the memory first; programs' -march
+   the barrier takes 50 to 88 cycles, the PE next to the memory first; programs' -march
    rv32ima).
 7. The layer on four PEs, outputs checked, cycles against one Mig3; the testbench preloads
    each PE's weights and inputs into its local memory.

@@ -107,3 +107,7 @@ mig6_program_test(pma_check SOURCES pma_check.cpp)
 # A barrier on the shared memory (an amoadd on a counter, loads until every hart arrived):
 # after it every hart sees the stamps every hart stored before it.
 mig6_program_test(barrier SOURCES barrier.cpp)
+
+# The semihosting timeout (semihost::Timeout on SYS_CLOCK, the testbench's simulated time):
+# a true condition returns at once, a false one gives up after its milliseconds.
+mig6_program_test(timeout_check SOURCES timeout_check.cpp)
