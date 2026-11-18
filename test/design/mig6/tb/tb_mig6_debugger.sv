@@ -15,8 +15,8 @@
  * program prints (a character a call, a string a call). A newline prints the line with the
  * hart's prefix, "[hart <HART_ID>] "; what is left is printed at the exit, and when the run
  * fails (TbMig6.failing), before the failure's message. Every failure goes through
- * TbMig6.fail(). Memory is read with peek() of the PE's memory (TbMig6.g_pe[PE].u_pe), all
- * in mem_byte().
+ * TbMig6.fail(). Memory is read with peek() of the PE's local memory
+ * (TbMig6.u_mig6.u_grid.g_pe[PE].u_pe), all in mem_byte().
  *
  * TbMig6 instantiates one a PE.
  *
@@ -24,7 +24,7 @@
  * @copyright 2026 Igor Lesik, MIT License
  */
 module TbMig6Debugger import Mig6Pkg::*; #(
-    parameter        PE      = 0,       // the PE: TbMig6.g_pe[PE]
+    parameter        PE      = 0,       // the PE: Mig6PeGrid's g_pe[PE]
     parameter word_t HART_ID = '0       // its hart's ID: the prefix of its lines
 )(
     input  wire      clk,
@@ -61,7 +61,7 @@ module TbMig6Debugger import Mig6Pkg::*; #(
     // The only access to the PE's memory: byte at address a (its AW low bits).
     /* verilator lint_off UNUSEDSIGNAL */
     function automatic logic [7:0] mem_byte(input word_t a);
-        return TbMig6.g_pe[PE].u_pe.peek(a[AW-1:0]);
+        return TbMig6.u_mig6.u_grid.g_pe[PE].u_pe.peek(a[AW-1:0]);
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
 

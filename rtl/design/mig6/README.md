@@ -143,6 +143,21 @@ AtomicUnit and a RAM.
   through it as packets, answers come back.
 - **The same program on every PE** (SPMD): each finds its part from `mhartid`, the RISC-V
   hart ID, a parameter of the PE (Mig3 reads 0 today).
+- **Address decode by the memory map:** the region's target (`pma_of`, see The memory map)
+  sends an access to the local memory or to the network interface.
+
+The modules around it:
+
+```
+  Mig6 (the top, for simulation):
+    Mig6PeGrid: PE p = Mig6Pe g_pe[p].u_pe, node (p % MESH_X, p / MESH_X)
+                Mig6Noc: the two meshes
+         || the edge link
+    the shared memory: Mig6MemNetIf --> AtomicUnit --> SimLatencyRAM
+```
+
+Mig6PeGrid computes each PE's hart ID and node, so a PE and its node always agree; what sits
+at the grid's edge (one shared memory now) is the top's.
 
 ## Memory: why no coherence and no L2 yet
 
@@ -254,7 +269,9 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    (done 2026-11-16: test design_mig6_net_if); then the 2 x 2 meshes with four stand-ins
    (done 2026-11-17: Mig6Noc, test design_mig6_noc, a shared counter's adds atomic).
 6. Mig6Pe with the network interface; Mig6: four PEs, Mig6Noc, the shared memory at the
-   edge; a program where every hart writes its ID to shared memory and arrives at a barrier.
+   edge (done 2026-11-18: Mig6PeGrid and Mig6, TbMig6 runs Mig6, every program's output
+   unchanged); a program where every hart writes its ID to shared memory and arrives at a
+   barrier.
 7. The layer on four PEs, outputs checked, cycles against one Mig3; the testbench preloads
    each PE's weights and inputs into its local memory.
 8. A DMA in each PE (the library's DmaSifive, sharing the network interface through a

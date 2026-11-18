@@ -27,3 +27,5 @@ mig6_pe.sv
 mig6_pe_net_if.sv
 mig6_mem_net_if.sv
 mig6_noc.sv
+mig6_pe_grid.sv
+mig6.sv

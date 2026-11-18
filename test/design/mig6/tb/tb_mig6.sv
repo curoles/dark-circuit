@@ -1,12 +1,10 @@
 /* Testbench of Mig6's PEs running a program, every PE the same program (SPMD).
  *
- * N_PES PEs (Mig6Pe), the 2 x 2 grid of the plan, PE p with HART_ID p at node
- * (p % MESH_X, p / MESH_X) (Mig6NocPkg); for now without a network, each alone with its
- * local memory. Loads +hex=<file> into every PE's memory,
- * releases reset and runs until every hart has exited. Each PE's debugger (TbMig6Debugger)
- * serves its semihosting calls and prints its PE's output a line at a time, each line with
- * the hart's prefix, "[hart <n>] ", so that lines of PEs running at once never mix. The end
- * of a run:
+ * Mig6 (u_mig6): its N_PES PEs, PE p with HART_ID p (Mig6PeGrid), and the shared memory.
+ * Loads +hex=<file> into every PE's local memory, releases reset and runs until every hart
+ * has exited. Each PE's debugger (TbMig6Debugger) serves its semihosting calls and prints
+ * its PE's output a line at a time, each line with the hart's prefix, "[hart <n>] ", so that
+ * lines of PEs running at once never mix. The end of a run:
  * - an exit with a status other than 0 fails the run at once, whatever the other harts do;
  * - an exit with status 0 reports the hart's ID (hart_exited()): it must be below N_PES,
  *   not have exited before, and be the HART_ID of the PE that exited (PE p: p), else the run
@@ -23,41 +21,37 @@
 module TbMig6;
     import Mig6Pkg::*;
 
-    localparam N_PES = 4;               // PEs, PE p has HART_ID p
+    localparam N_PES = Mig6NocPkg::N_PES;   // PEs, PE p has HART_ID p
 
-    logic             clk;
-    logic             rst_n;
-    integer           cycle;            // rising edges out of reset
-    integer           max_cycles;
-    logic [N_PES-1:0] exited;           // exited[h]: hart h has exited with status 0
-    logic             failing;          // a failure is being reported
+    logic                    clk;
+    logic                    rst_n;
+    integer                  cycle;         // rising edges out of reset
+    integer                  max_cycles;
+    logic        [N_PES-1:0] exited;        // exited[h]: hart h has exited with status 0
+    logic                    failing;       // a failure is being reported
+    wire         [N_PES-1:0] halt;
+    dbg_req_t    [N_PES-1:0] dbg_req;
+    dbg_rsp_t    [N_PES-1:0] dbg_rsp;
+    // The retire trace and the pipeline view: not used by this testbench yet.
+    /* verilator lint_off UNUSEDSIGNAL */
+    retire_t     [N_PES-1:0] retire;
+    pipe_trace_t [N_PES-1:0] pipe_trace;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
+    Mig6 u_mig6(.clk, .rst_n, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
+
     for (genvar p = 0; p < N_PES; p++) begin : g_pe
-        wire         halt;
-        dbg_req_t    dbg_req;
-        dbg_rsp_t    dbg_rsp;
-        // The retire trace and the pipeline view: not used by this testbench yet.
-        /* verilator lint_off UNUSEDSIGNAL */
-        retire_t     retire;
-        pipe_trace_t pipe_trace;
-        /* verilator lint_on UNUSEDSIGNAL */
-
-        Mig6Pe #(.HART_ID(word_t'(p)),
-                 .MY_PE_GRID_X(Mig6NocPkg::X_WIDTH'(p % Mig6NocPkg::MESH_X)),
-                 .MY_PE_GRID_Y(Mig6NocPkg::Y_WIDTH'(p / Mig6NocPkg::MESH_X))) u_pe(
-            .clk, .rst_n, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
-
         TbMig6Debugger #(.PE(p), .HART_ID(word_t'(p))) u_debugger(
-            .clk, .rst_n, .halt, .dbg_rsp, .dbg_req);
+            .clk, .rst_n, .halt(halt[p]), .dbg_rsp(dbg_rsp[p]), .dbg_req(dbg_req[p]));
 
         initial begin
             string hex;
             if (!$value$plusargs("hex=%s", hex))
                 $fatal(1, "Mig6: plusarg +hex=<file> is missing");
-            if (u_pe.load(hex) != 1)
+            if (u_mig6.u_grid.g_pe[p].u_pe.load(hex) != 1)
                 $fatal(1, "Mig6: PE %0d: load() of %s returned 0", p, hex);
         end
     end
