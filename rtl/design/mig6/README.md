@@ -271,7 +271,9 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
 6. Mig6Pe with the network interface; Mig6: four PEs, Mig6Noc, the shared memory at the
    edge (done 2026-11-18: Mig6PeGrid and Mig6, TbMig6 runs Mig6, every program's output
    unchanged); a program where every hart writes its ID to shared memory and arrives at a
-   barrier.
+   barrier (done 2026-11-18: test design_mig6_barrier, every hart sees every ID after it;
+   the barrier takes 52 to 86 cycles, the PE next to the memory first; programs' -march
+   rv32ima).
 7. The layer on four PEs, outputs checked, cycles against one Mig3; the testbench preloads
    each PE's weights and inputs into its local memory.
 8. A DMA in each PE (the library's DmaSifive, sharing the network interface through a

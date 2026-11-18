@@ -3,7 +3,7 @@ set(MIG6 ${DARK_CIRCUIT_RTL_DESIGN}/mig6)
 set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 
 # Mig6 is a prototype (rtl/design/mig6/README.md): its core (Mig6Core, a copy of Mig3's), the
-# PE (Mig6Pe: the core and its local memory) and programs on the PEs of TbMig6.
+# network, and programs on the PEs of Mig6 (TbMig6).
 
 # Files generated from cfg/mig6_config.yaml, from cfg/mig6_csr.yaml (the core CSRs:
 # Mig6CsrPkg, sw/riscv/mig6/mig6_csr*.h) and from cfg/mig6_pma.yaml (the memory map: Mig6PmaPkg,
@@ -59,11 +59,14 @@ cmake_language(CALL dc_add_${SIM}_build design_mig6_sim TOP TbMig6 TB tb/tb_mig6
 # A C or C++ program on every PE of TbMig6: crt0, semihosting, tprintf and Mig6's exit (the
 # hart's ID in a2, mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6/mig6.ld,
 # sw/riscv on the include path (mig6/mig6_csr_ops.h, tprintf.h); the test passes when
-# every hart exits with 0 (TbMig6).
+# every hart exits with 0 (TbMig6). ARCH is -march of the program, default rv32ima: the
+# core has A, and C atomics (__atomic_*) become AMOs. The compiler makes LR/SC loops of the
+# others (compare-and-swap, a byte's add), allowed only in the local memory
+# (Mig6Atomic: a_lr_sc_reservable).
 function(mig6_program_test NAME)
     cmake_parse_arguments(P "" "ARCH" "SOURCES;FLAGS;ARGS" ${ARGN})
     if(NOT P_ARCH)
-        set(P_ARCH rv32im)
+        set(P_ARCH rv32ima)
     endif()
     set(prog design_mig6_${NAME})
     dc_add_riscv_program(${prog}
@@ -100,3 +103,7 @@ mig6_program_test(tprintf_check SOURCES tprintf_check.cpp)
 # The C++ memory map (mig6::pma): its regions and pma_of when compiled, pointers into the
 # shared memory, a stack variable in the local memory.
 mig6_program_test(pma_check SOURCES pma_check.cpp)
+
+# A barrier on the shared memory (an amoadd on a counter, loads until every hart arrived):
+# after it every hart sees the stamps every hart stored before it.
+mig6_program_test(barrier SOURCES barrier.cpp)
