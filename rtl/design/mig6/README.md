@@ -290,9 +290,13 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
 - **Other PEs' local memories** as address windows over the NoC (the same protocol): when
   chained layers need to pass data from PE to PE.
 - **LR/SC on the shared memory:** a reservation lives in a core, so another PE's store to
-  the reserved word does not end it, and an SC would succeed when it must fail; the shared
-  region is not reservable until that is settled (an exclusive monitor at the memory,
-  Zacas' compare-and-swap AMO, or an access fault).
+  the reserved word does not end it, and an SC would succeed when it must fail. Decided
+  (2026-11-18), in two steps. Now: the shared region is not reservable, and an LR or SC
+  outside a reservable region stops the run (Mig6Atomic: `a_lr_sc_reservable`; later an
+  access fault). Soon: LR/SC done at the shared memory, a reservation per PE in its network
+  interface that any store to the word ends, the SC's answer success or failure. AMOs
+  already cover barriers, counters, flags and locks; LR/SC adds compare-and-swap. In a
+  PE's local memory LR/SC syncs nothing (one hart, no interrupts), but it works.
 - **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
 
 ## References

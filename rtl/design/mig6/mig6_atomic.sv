@@ -19,6 +19,12 @@
  * misaligned LR or SC traps (Mig6Lsu, Mig6Control): it reserves nothing, and its trap
  * ends the reservation.
  *
+ * The reservation sees only this hart, so LR/SC are only for a region the memory map
+ * (Mig6PmaPkg) makes reservable: a PE's local memory. On the shared memory another PE's
+ * store would not end it; an LR or SC that completes outside a reservable region stops the
+ * run (a_lr_sc_reservable; later an access fault, LR/SC at the shared memory after that:
+ * rtl/design/mig6/README.md, Open questions).
+ *
  *   dec.atomic, rs1_data --> +----------------------+ --> cancel  (Mig6Lsu: no store)
  *   done, trap, MRET ------> | reservation: valid,  | --> rd_data (SC: 0 ok, 1 fail)
  *                            | word address         |
@@ -37,7 +43,8 @@ module Mig6Atomic import Mig6Pkg::*; (
     input  wire      rst_n,         // synchronous reset, active low
     input  wire      valid,         // instruction in EX is valid
     input  wire      done,          // it completes in this cycle
-    // Of dec only atomic and sys.mret are used, of rs1_data the word address, of trap valid.
+    // Of dec only atomic and sys.mret are used, of rs1_data the word address (all of it in
+    // a_lr_sc_reservable), of trap valid.
     /* verilator lint_off UNUSEDSIGNAL */
     input  decoded_t dec,
     input  word_t    rs1_data,      // address of LR and SC (imm is 0)
@@ -83,5 +90,8 @@ module Mig6Atomic import Mig6Pkg::*; (
     `DC_ASSERT_NEXT(a_lr_reserves, resv_take, resv_valid && resv_addr == $past(addr))
     // After an SC, a trap or MRET nothing is reserved.
     `DC_ASSERT_NEXT(a_reservation_ends, resv_end, !resv_valid)
+    // LR/SC only where the memory map allows them: this hart's reservation sees no other.
+    `DC_ASSERT(a_lr_sc_reservable, !(done && (dec.atomic.lr || dec.atomic.sc)
+                                     && !Mig6PmaPkg::pma_of(rs1_data).reservable))
 
 endmodule
