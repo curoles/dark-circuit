@@ -34,6 +34,53 @@ def c_hex(value, width=32):
     return f"0x{value:0{(width + 3) // 4}x}"
 
 
+def render_outputs(values, generate, config, root, check, tool="config_gen", trim=False):
+    """Render every {template, output} of generate with values; returns the exit code.
+
+    Templates are relative to the directory of the YAML file config, outputs to root. A
+    file is written only when its content changes; with check nothing is written and the
+    result is 1 when an output is missing or differs. tool names the script, in the
+    generated note and in messages (csr_gen.py renders its CSR model the same way). trim:
+    a line with only a block tag ({% ... %}) leaves nothing in the output (Jinja's
+    trim_blocks and lstrip_blocks); the configuration templates are written without it."""
+    config_dir = os.path.dirname(os.path.abspath(config))
+    config_name = os.path.relpath(os.path.abspath(config), root)
+
+    env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader(config_dir),
+        undefined=jinja2.StrictUndefined,  # unknown variable in a template is an error
+        keep_trailing_newline=True,
+        trim_blocks=trim,
+        lstrip_blocks=trim,
+    )
+    env.filters["sv_hex"] = sv_hex
+    env.filters["c_hex"] = c_hex
+
+    stale = []
+    for item in generate:
+        template, output = item["template"], item["output"]
+        note = f"Generated from {config_name} and {template} by tools/{tool}.py"
+        text = env.get_template(template).render(values, generated_note=note)
+        path = os.path.join(root, output)
+        old = None
+        if os.path.exists(path):
+            with open(path) as f:
+                old = f.read()
+        if old == text:
+            continue
+        if check:
+            stale.append(output)
+        else:
+            with open(path, "w") as f:
+                f.write(text)
+            print(f"{tool}: wrote {output}")
+
+    if stale:
+        print(f"{tool}: out of date, run `make config`: " + ", ".join(stale), file=sys.stderr)
+        return 1
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -46,40 +93,7 @@ def main():
     with open(args.config) as f:
         config = yaml.safe_load(f)
     generate = config.pop("generate", [])
-    config_dir = os.path.dirname(os.path.abspath(args.config))
-    config_name = os.path.relpath(os.path.abspath(args.config), args.root)
-
-    env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(config_dir),
-        undefined=jinja2.StrictUndefined,  # unknown variable in a template is an error
-        keep_trailing_newline=True,
-    )
-    env.filters["sv_hex"] = sv_hex
-    env.filters["c_hex"] = c_hex
-
-    stale = []
-    for item in generate:
-        template, output = item["template"], item["output"]
-        note = f"Generated from {config_name} and {template} by tools/config_gen.py"
-        text = env.get_template(template).render(config, generated_note=note)
-        path = os.path.join(args.root, output)
-        old = None
-        if os.path.exists(path):
-            with open(path) as f:
-                old = f.read()
-        if old == text:
-            continue
-        if args.check:
-            stale.append(output)
-        else:
-            with open(path, "w") as f:
-                f.write(text)
-            print(f"config_gen: wrote {output}")
-
-    if stale:
-        print("config_gen: out of date, run `make config`: " + ", ".join(stale), file=sys.stderr)
-        return 1
-    return 0
+    return render_outputs(config, generate, args.config, args.root, args.check)
 
 
 if __name__ == "__main__":

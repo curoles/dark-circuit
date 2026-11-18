@@ -18,22 +18,26 @@ if(DARK_CIRCUIT_PYTHON)
     endif()
 endif()
 
-# dc_add_config_check(<name> CONFIG <config.yaml>)
+# dc_add_config_check(<name> CONFIG <config.yaml> [TOOL <script>])
 #
-# Add CTest test <name>.config that runs tools/config_gen.py --check: it fails when
-# a file generated from <config.yaml> is missing or out of date, then run `make config`.
+# Add CTest test <name>.config that runs tools/<script>.py --check (config_gen by default,
+# csr_gen for a design's core CSRs): it fails when a file generated from <config.yaml> is
+# missing or out of date, then run `make config`.
 # Labels: config and labels of dc_test_labels(). Does nothing if Python is not used.
 function(dc_add_config_check NAME)
     if(NOT DARK_CIRCUIT_PYTHON)
         return()
     endif()
-    cmake_parse_arguments(C "" "CONFIG" "" ${ARGN})
+    cmake_parse_arguments(C "" "CONFIG;TOOL" "" ${ARGN})
     if(NOT C_CONFIG)
         message(FATAL_ERROR "Config check ${NAME}: CONFIG is required")
     endif()
+    if(NOT C_TOOL)
+        set(C_TOOL config_gen)
+    endif()
     set(test ${NAME}.config)
     add_test(NAME ${test}
-        COMMAND ${PYTHON3_BIN} ${PROJECT_SOURCE_DIR}/tools/config_gen.py
+        COMMAND ${PYTHON3_BIN} ${PROJECT_SOURCE_DIR}/tools/${C_TOOL}.py
                 --root ${PROJECT_SOURCE_DIR} ${C_CONFIG} --check)
     dc_test_labels(labels)
     set_tests_properties(${test} PROPERTIES LABELS "config;${labels}")

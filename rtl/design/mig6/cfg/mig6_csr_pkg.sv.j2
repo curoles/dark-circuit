@@ -1,0 +1,92 @@
+// THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+// {{ generated_note }}
+//
+// Mig6's core CSRs (AGENTS.md, Terminology), as cfg/mig6_csr.yaml describes them. Per CSR:
+// <NAME>_ADDR its address, <NAME>_RESET its value after reset, <NAME>_VALID its bits (the
+// others read 0), <NAME>_SW_WRITE the bits software writes, <NAME>_CONST the bits that are
+// always their reset value, and <name>_t, a packed struct of its fields (zero_<hi>_<lo>:
+// bits that read 0). A view (another CSR, or some of its fields, at a second address) has
+// its address, valid and SW_WRITE bits. csr_state_t holds every CSR a design keeps or wires
+// (not all constant); csr_read gives the value of the CSR at an address from it, and
+// whether one is there; csr_write_merge gives a CSR's value after software writes wdata.
+package Mig6CsrPkg;
+
+    // Every CSR's constants; a design uses some.
+    /* verilator lint_off UNUSEDPARAM */
+{% for g in groups %}
+
+    // ---- {{ g.name }} ----
+    {% for c in g.csrs %}
+
+    // {{ c.title }}
+    localparam logic [11:0] {{ c.NAME }}_ADDR     = {{ c.addr | sv_hex(12) }};
+        {% if not c.view %}
+    localparam logic [31:0] {{ c.NAME }}_RESET    = {{ c.reset | sv_hex(32) }};
+        {% endif %}
+    localparam logic [31:0] {{ c.NAME }}_VALID    = {{ c.valid | sv_hex(32) }};
+    localparam logic [31:0] {{ c.NAME }}_SW_WRITE = {{ c.sw_write | sv_hex(32) }};
+        {% if not c.view %}
+    localparam logic [31:0] {{ c.NAME }}_CONST    = {{ c.const | sv_hex(32) }};
+        {% endif %}
+        {% if c.fields %}
+    typedef struct packed {
+            {% for m in c.members %}
+                {% if m.field %}
+        {{ "%-12s" | format(m.decl) }} {{ "%-10s" | format(m.name ~ ";") }} // {{ m.field.note }}
+                {% else %}
+        {{ "%-12s" | format(m.decl) }} {{ m.name }};
+                {% endif %}
+            {% endfor %}
+    } {{ c.name }}_t;
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+
+    /* verilator lint_on UNUSEDPARAM */
+
+    // The CSRs a design keeps in flops or wires from signals: every field not constant.
+    typedef struct packed {
+{% for c in state %}
+        {{ "%-12s" | format(c.name ~ "_t") }} {{ c.name }};
+{% endfor %}
+    } csr_state_t;
+
+    // A CSR read: whether a CSR is at the address, and its value (0 when none is).
+    typedef struct packed {
+        logic        exists;
+        logic [31:0] value;
+    } csr_value_t;
+
+    // The value of the CSR at addr: its fields from s, its constant bits, 0 elsewhere.
+    function automatic csr_value_t csr_read(logic [11:0] addr, csr_state_t s);
+        csr_value_t r;
+
+        r.exists = 1'b1;
+        case (addr)
+{% for c in csrs %}
+            {{ "%-16s" | format(c.NAME ~ "_ADDR:") }} r.value = {{ c.read }};
+{% endfor %}
+            default: begin
+                r.exists = 1'b0;
+                r.value  = '0;
+            end
+        endcase
+        return r;
+    endfunction
+
+    // The value of the CSR at addr after software writes wdata over old: its SW_WRITE bits
+    // from wdata, the others kept (all of them for a CSR without rw bits, or none at addr).
+    function automatic logic [31:0] csr_write_merge(logic [11:0] addr, logic [31:0] old,
+                                                    logic [31:0] wdata);
+        logic [31:0] mask;
+
+        case (addr)
+{% for c in csrs if c.sw_write %}
+            {{ "%-16s" | format(c.NAME ~ "_ADDR:") }} mask = {{ c.NAME }}_SW_WRITE;
+{% endfor %}
+            default:         mask = '0;
+        endcase
+        return (old & ~mask) | (wdata & mask);
+    endfunction
+
+endpackage

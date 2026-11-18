@@ -53,9 +53,9 @@ groups:
 
   - name: machine_info
     csrs:
-      - {name: mvendorid, addr: 0xF11, desc: vendor ID, not implemented (0)}
-      - {name: marchid,   addr: 0xF12, desc: architecture ID, not implemented (0)}
-      - {name: mimpid,    addr: 0xF13, desc: implementation ID, not implemented (0)}
+      - {name: mvendorid, addr: 0xF11, desc: "vendor ID, not implemented (0)"}
+      - {name: marchid,   addr: 0xF12, desc: "architecture ID, not implemented (0)"}
+      - {name: mimpid,    addr: 0xF13, desc: "implementation ID, not implemented (0)"}
       - name: mhartid
         addr: 0xF14
         desc: the hart's ID, one per PE
@@ -89,7 +89,7 @@ groups:
         desc: trap vector, direct mode only (mode bits 1:0 read 0)
         fields:
           - {name: base, bits: [31, 2], reset: 0, sw: rw, hw: none}
-      - {name: mstatush, addr: 0x310, desc: upper half of mstatus, nothing in it (0)}
+      - {name: mstatush, addr: 0x310, desc: "upper half of mstatus, nothing in it (0)"}
 
   - name: machine_trap_handling
     csrs:
@@ -141,3 +141,8 @@ groups:
         desc: minstret, high half
         fields:
           - {name: value, bits: [31, 0], reset: 0, sw: rw, hw: write}
+
+# Generated files: template in this directory -> output relative to repository root.
+generate:
+  - { template: mig6_csr_pkg.sv.j2, output: rtl/design/mig6/mig6_csr_pkg.sv }
+  - { template: mig6_csr.h.j2,      output: sw/riscv/mig6_csr.h }

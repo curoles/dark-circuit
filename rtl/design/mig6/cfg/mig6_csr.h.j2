@@ -1,0 +1,66 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Mig6's core CSRs for programs and tests, as rtl/design/mig6/cfg/mig6_csr.yaml describes
+ * them. First plain numbers, also usable in assembly (.S) and in inline asm. Per CSR:
+ * MIG6_CSR_<NAME> its address, _RESET its value after reset, _VALID its bits (the others
+ * read 0), _SW_WRITE the bits software writes; per field _<FIELD>_SHIFT its lowest bit,
+ * _<FIELD>_MASK its bits in place, _<FIELD>_RESET its value after reset (not for a field
+ * that is a hardware signal). A view (another CSR, or some of its fields, at a second
+ * address) has its address, _VALID and _SW_WRITE. Then, for C only, a union per CSR,
+ * Mig6Csr<Name>: val, the whole value, or its fields by name:
+ *     Mig6CsrMstatus mstatus;
+ *     mstatus.val = MIG6_CSR_MSTATUS_RESET;
+ *     mstatus.mie = 1;
+ */
+#pragma once
+{% for g in groups %}
+
+/* ---- {{ g.name }} ---- */
+    {% for c in g.csrs %}
+
+/* {{ c.title }} */
+#define MIG6_CSR_{{ c.NAME }} {{ "0x%03x" | format(c.addr) }}
+        {% if not c.view %}
+#define MIG6_CSR_{{ c.NAME }}_RESET {{ c.reset | c_hex }}
+        {% endif %}
+#define MIG6_CSR_{{ c.NAME }}_VALID {{ c.valid | c_hex }}
+#define MIG6_CSR_{{ c.NAME }}_SW_WRITE {{ c.sw_write | c_hex }}
+        {% for f in c.fields %}
+#define MIG6_CSR_{{ c.NAME }}_{{ f.NAME }}_SHIFT {{ f.lo }}
+#define MIG6_CSR_{{ c.NAME }}_{{ f.NAME }}_MASK {{ f.mask | c_hex }}
+            {% if f.reset is not none %}
+#define MIG6_CSR_{{ c.NAME }}_{{ f.NAME }}_RESET {{ f.reset }}
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+{% endfor %}
+
+#ifndef __ASSEMBLER__
+#include <stdint.h>
+
+/* A union per CSR: val, or its fields, bit 0 first (RISC-V's ABI places bit-fields from the
+ * lowest bit); zero_<hi>_<lo>: bits that read 0. A view of a whole CSR is its type. */
+{% for g in groups %}
+    {% for c in g.csrs if not (c.view and not c.pack) %}
+
+/* {{ c.title }} */
+typedef union Mig6Csr{{ c.Cname }} {
+    uint32_t val;
+        {% if c.c_members %}
+    struct {
+            {% for m in c.c_members %}
+        uint32_t {{ "%-11s" | format(m.name) }}: {{ m.width }};
+            {% endfor %}
+    };
+        {% endif %}
+} Mig6Csr{{ c.Cname }};
+    {% endfor %}
+{% endfor %}
+
+/* Views of whole CSRs. */
+{% for c in views if not c.pack %}
+typedef Mig6Csr{{ c.target.Cname }} Mig6Csr{{ c.Cname }};
+{% endfor %}
+
+#endif /* __ASSEMBLER__ */
