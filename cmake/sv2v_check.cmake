@@ -4,9 +4,11 @@
 #       -D INCLUDE=<dir> -P sv2v_check.cmake -- <file>...
 # sv2v converts <file>... with top module TOP into OUT, `include files are found in
 # INCLUDE; then Verilator elaborates OUT
-# (--lint-only, warnings are not errors): sv2v does not fail when a module is missing,
-# it can not know where modules come from. Fails (cmake exit code not 0) when either
-# step fails. Without VERILATOR only sv2v runs. See dc_add_sv2v_check() in sv2v.cmake.
+# (--lint-only, no lint or style warnings: they would be about sv2v's own output, as 1'sb0
+# for '0, and the sources are linted with -Wall where they are simulated): sv2v does not
+# fail when a module is missing, it can not know where modules come from. Fails (cmake
+# exit code not 0) when either step fails. Without VERILATOR only sv2v runs. See
+# dc_add_sv2v_check() in sv2v.cmake.
 
 set(files)
 set(after_separator FALSE)
@@ -35,7 +37,8 @@ endif()
 
 if(VERILATOR)
     execute_process(
-        COMMAND ${VERILATOR} --lint-only -Wno-fatal --top-module ${TOP} ${OUT}
+        COMMAND ${VERILATOR} --lint-only -Wno-fatal -Wno-lint -Wno-style --top-module ${TOP}
+                ${OUT}
         RESULT_VARIABLE result
         OUTPUT_VARIABLE output
         ERROR_VARIABLE  output
