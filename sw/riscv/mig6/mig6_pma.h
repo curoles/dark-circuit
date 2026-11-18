@@ -25,3 +25,12 @@
 #define MIG6_PMA_DEVICES_IO 1
 #define MIG6_PMA_DEVICES_ATOMICS 0
 #define MIG6_PMA_DEVICES_RESERVABLE 0
+
+/* shared: the shared memory at the mesh's edge, one copy that all PEs share (target: net) */
+#define MIG6_PMA_SHARED_BASE 0x80000000
+#define MIG6_PMA_SHARED_SIZE 0x00100000
+#define MIG6_PMA_SHARED_ADDR_WIDTH 20
+#define MIG6_PMA_SHARED_CACHEABLE 0
+#define MIG6_PMA_SHARED_IO 0
+#define MIG6_PMA_SHARED_ATOMICS 1
+#define MIG6_PMA_SHARED_RESERVABLE 0

@@ -158,17 +158,50 @@ writes it. Mig6 keeps one copy of everything, for now:
 The price: a shared access is a round trip over the network, so programs touch shared memory
 deliberately and rarely. An L2 would cache a large slow memory; here the shared memory is a
 simulated RAM and the local memories are the fast level, so there is nothing for it to do.
-If shared data is ever cached for speed, coherence comes back as a choice: by software with
-Zicbom (cbo.clean, cbo.inval, already in Mig3) or a directory protocol (MSI/MESI).
 
-## The address map, for now
+### Ways to cache shared data, case by case
 
-- **Local memory** at 0, the same addresses in every PE (one binary for all), as Mig3's
-  memory (64 KiB).
-- **Shared memory** in an uncached window. A first idea: a part of Mig3's I/O region
-  (`0x0C000000`, uncached already) decoded to the network interface, so that Mig3 needs no
-  new region; to check with atomics (Mig3's devices take no AMOs, the shared memory must).
-- **Other PEs' local memories** over the NoC: not needed by the first target; later.
+Data that many reads use and few writes change (written in one phase, read over and over in
+the next) is worth a fast copy. Two ways, both meant to be used, each where it fits:
+
+- **Copy it into local memory:** read the shared data once (memcpy now, the PE's DMA later)
+  into the local memory, which is private and cached as always; no coherence question at
+  all. PULP's and Snitch's way (a DMA into a local scratchpad), and the plan of the DMA
+  chunk.
+- **A cached alias of the shared memory:** the same memory as a second region of the map,
+  `cacheable: yes` (as MIPS's kseg0 beside kseg1). Mig6's D-cache writes through and does
+  not allocate on stores, so no dirty line can overwrite another PE's words; only stale
+  reads remain, and software removes them: `cbo.inval` of the range after the barrier that
+  ends the writing phase (the bulk-synchronous way, as GPUs' non-coherent L1 caches). Flags
+  and counters only by AMOs (they never hit) or through the uncached region: a load that
+  spins on a cached copy would spin forever. One alias per address within a phase: a store
+  through the uncached region does not update a copy cached through the other.
+
+For now only the uncached region exists; the alias is one more row of the map when a
+measured case needs it. Should shared data ever stay cached without such rules, coherence
+comes back as a choice: a directory protocol (MSI/MESI).
+
+## The memory map, for now
+
+`cfg/mig6_pma.yaml`, PMA-style (physical memory attributes, as the RISC-V privileged spec
+names them): every region with the properties hardware asks, each by name, so that no part
+decides by "is it I/O?". `tools/pma_gen.py` checks the map (no overlaps, sizes powers of 2,
+bases multiples of their sizes, an io region not cacheable) and generates Mig6PmaPkg
+(`pma_of(addr)` for the caches, Mig6Pe and its assertions), `sw/riscv/mig6/mig6_pma.h` and
+`mig6_pma.hpp` for programs, and the linker script `mig6.ld`.
+
+- **local** at `0x00000000`, 64 KiB: a PE's local memory, code and data, the same addresses
+  in every PE (one binary for all); cacheable; reservable (LR/SC: the core's own
+  reservation, one hart); no AMOs (no AtomicUnit in front of it).
+- **devices** at `0x0C000000`, 64 MiB: no devices in a PE yet; io, never cached.
+- **shared** at `0x80000000` (where RISC-V platforms put main memory), 1 MiB: the shared
+  memory at the mesh's edge, through the PE's network interface; never cached (one copy);
+  AMOs (the AtomicUnit in front of it); not reservable yet (see Open questions).
+- **Other PEs' local memories** over the NoC: not needed by the first target; later, as more
+  regions with target net.
+
+An access outside every region stops the run (Mig6Pe: `a_in_region`; later an access
+fault).
 
 ## The layer on four PEs
 
@@ -239,8 +272,10 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   from several destinations may also need IDs.
 - **Other PEs' local memories** as address windows over the NoC (the same protocol): when
   chained layers need to pass data from PE to PE.
-- **The shared memory's window** and atomics through it (see the address map).
-- **Configuration:** a Mig6 configuration (YAML, as Mig3's) once the shape settles.
+- **LR/SC on the shared memory:** a reservation lives in a core, so another PE's store to
+  the reserved word does not end it, and an SC would succeed when it must fail; the shared
+  region is not reservable until that is settled (an exclusive monitor at the memory,
+  Zacas' compare-and-swap AMO, or an access fault).
 - **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
 
 ## References

@@ -33,8 +33,20 @@ regions:
     atomics: no
     reservable: no
 
+  - name: shared
+    base: 0x80000000        # where RISC-V platforms put main memory
+    size: 0x00100000        # 1 MiB: the shared RAM, no mirroring
+    desc: the shared memory at the mesh's edge, one copy that all PEs share
+    # Mig6Pe: a_no_net, until its network interface is wired
+    target: net
+    cacheable: no           # one copy, no coherence (README: ways to cache shared data)
+    io: no
+    atomics: yes            # the AtomicUnit in front of the shared RAM: the barrier
+    reservable: no          # LR/SC across PEs: not yet (README, open questions)
+
 # Generated files: template in this directory -> output relative to repository root.
 generate:
   - { template: mig6_pma_pkg.sv.j2, output: rtl/design/mig6/mig6_pma_pkg.sv }
   - { template: mig6_pma.h.j2,      output: sw/riscv/mig6/mig6_pma.h }
   - { template: mig6.ld.j2,         output: sw/riscv/mig6/mig6.ld }
+  - { template: mig6_pma.hpp.j2,    output: sw/riscv/mig6/mig6_pma.hpp }

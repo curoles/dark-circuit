@@ -44,6 +44,14 @@ package Mig6PmaPkg;
     // hit, cacheable, io, atomics, reservable, target
     localparam pma_t        DEVICES_PMA        =
         pma_t'({1'b1, 1'b0, 1'b1, 1'b0, 1'b0, TARGET_DEVICES});
+
+    // shared: the shared memory at the mesh's edge, one copy that all PEs share
+    localparam logic [31:0] SHARED_BASE       = 32'h8000_0000;
+    localparam logic [31:0] SHARED_SIZE       = 32'h0010_0000;
+    localparam int          SHARED_ADDR_WIDTH = 20;
+    // hit, cacheable, io, atomics, reservable, target
+    localparam pma_t        SHARED_PMA        =
+        pma_t'({1'b1, 1'b0, 1'b0, 1'b1, 1'b0, TARGET_NET});
     /* verilator lint_on UNUSEDPARAM */
 
     // The attributes of the region that holds addr, all 0 (hit 0) when none does. A region
@@ -54,6 +62,8 @@ package Mig6PmaPkg;
             return LOCAL_PMA;
         if (addr[31:26] == 6'h03)
             return DEVICES_PMA;
+        if (addr[31:20] == 12'h800)
+            return SHARED_PMA;
         return '0;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */

@@ -96,3 +96,7 @@ mig6_program_test(csr_ops SOURCES csr_ops.cpp)
 # tprintf (sw/riscv/tprintf): tsnprintf's text for integers, strings, %p, truncation and %a
 # of float bits must be the expected one.
 mig6_program_test(tprintf_check SOURCES tprintf_check.cpp)
+
+# The C++ memory map (mig6::pma): its regions and pma_of when compiled, pointers into the
+# shared memory, a stack variable in the local memory.
+mig6_program_test(pma_check SOURCES pma_check.cpp)

@@ -13,7 +13,8 @@
  *
  * Checked by assertions, with the regions' attributes: every access is in a region
  * (a_in_region; later an access fault); none goes to the devices' region, as a PE has no
- * devices yet (a_no_devices); no AMO goes to a region without atomics, as no AtomicUnit is
+ * devices yet (a_no_devices), nor to the shared memory, as the PE's network interface is
+ * not wired yet (a_no_net); no AMO goes to a region without atomics, as no AtomicUnit is
  * in front of the local memory (a_atomics_allowed; LR/SC are the core's own).
  *
  *   Mig6Core --mem_req--> u_local_mem (SimLatencyRAM)
@@ -73,11 +74,12 @@ module Mig6Pe import Mig6Pkg::*; #(
         .req_wdata(mem_req.wdata), .req_wstrb(mem_req.wstrb),
         .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data));
 
-    // The memory map: every access in a region; no devices in a PE yet; AMOs only where the
-    // region has atomics (none in front of the local memory yet).
+    // The memory map: every access in a region; no devices in a PE yet, no network interface
+    // yet; AMOs only where the region has atomics (none in front of the local memory yet).
     assign mem_pma = Mig6PmaPkg::pma_of(mem_req.addr);
     `DC_ASSERT(a_in_region, !(mem_req.valid && !mem_pma.hit))
     `DC_ASSERT(a_no_devices, !(mem_req.valid && mem_pma.target == Mig6PmaPkg::TARGET_DEVICES))
+    `DC_ASSERT(a_no_net, !(mem_req.valid && mem_pma.target == Mig6PmaPkg::TARGET_NET))
     `DC_ASSERT(a_atomics_allowed,
                !(mem_req.valid && AtomicPkg::is_atomic(mem_req.atop) && !mem_pma.atomics))
 
