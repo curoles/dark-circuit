@@ -1,0 +1,34 @@
+# Mig6's memory map, PMA-style (physical memory attributes, as the RISC-V privileged spec
+# names them): every region with the properties hardware asks about, each by name, so no
+# part decides by "is it I/O?".
+#
+# A region: name, base (a byte address, a multiple of size), size (bytes, a power of 2),
+# desc, target and the attributes:
+#   cacheable   the core's caches may hold it
+#   io          accesses have side effects: never speculated, merged or repeated
+#   atomics     AMOs allowed (an AtomicUnit at the target does them)
+#   reservable  LR/SC allowed (a reservation works for it)
+#   target      where a PE sends the access: local (its local memory), net (its network
+#               interface: the shared memory), devices (none in Mig6 yet)
+# Addresses in no region are an error (an access fault, later).
+
+regions:
+  - name: local
+    base: 0x00000000
+    size: 0x00010000        # 64 KiB
+    desc: the PE's local memory, code and data, private to its core
+    target: local
+    cacheable: yes
+    io: no
+    atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_no_atomic)
+    reservable: yes         # LR/SC: the core's own reservation, one hart
+
+  - name: io
+    base: 0x0C000000
+    size: 0x04000000        # 64 MiB
+    desc: "devices, none in Mig6 yet (Mig6Pe: a_no_io)"
+    target: devices
+    cacheable: no
+    io: yes
+    atomics: no
+    reservable: no
