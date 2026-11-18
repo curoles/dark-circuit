@@ -33,7 +33,7 @@ module TbMig6Debugger import Mig6Pkg::*; #(
     input  dbg_rsp_t dbg_rsp,
     output dbg_req_t dbg_req
 );
-    localparam AW = MIG6_CFG.mem_addr_width;
+    localparam AW = Mig6PmaPkg::LOCAL_ADDR_WIDTH;    // the local memory: 1 << AW bytes
 
     // Semihosting call: EBREAK between the entry and the exit no-op.
     localparam insn_t SEMIHOST_ENTRY = 32'h01f0_1013;   // slli x0, x0, 0x1f

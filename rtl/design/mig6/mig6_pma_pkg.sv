@@ -37,7 +37,7 @@ package Mig6PmaPkg;
     localparam pma_t        LOCAL_PMA        =
         pma_t'({1'b1, 1'b1, 1'b0, 1'b0, 1'b1, TARGET_LOCAL});
 
-    // devices: devices, none in Mig6 yet (Mig6Pe: a_no_io)
+    // devices: devices, none in Mig6 yet (Mig6Pe: a_no_devices)
     localparam logic [31:0] DEVICES_BASE       = 32'h0c00_0000;
     localparam logic [31:0] DEVICES_SIZE       = 32'h0400_0000;
     localparam int          DEVICES_ADDR_WIDTH = 26;

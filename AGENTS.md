@@ -503,7 +503,7 @@ document intent and stop the simulation in the cycle a rule breaks.
   (`DC_RISCV_CXX_FLAGS` of `cmake/riscv.cmake`): no exceptions, RTTI, heap or global
   constructors (the design's linker script refuses them, crt0.S does not run them),
   `extern "C" int main()`, C headers inside `extern "C"`; core CSRs only through the
-  generated wrappers (`sw/riscv/mig6_csr_ops.h`, `csr_<name>_read/write/set/clear`), no
+  generated wrappers (`sw/riscv/mig6/mig6_csr_ops.h`, `csr_<name>_read/write/set/clear`), no
   CSR instruction written by hand (`test/design/mig6/cpp_basics.cpp`).
 - RISC-V encodings and CSR addresses: `tools/riscv_opcodes.sh` regenerates
   `rtl/lib/riscv/riscv_instr_pkg.sv` and `riscv_csr_pkg.sv`.

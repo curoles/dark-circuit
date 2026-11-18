@@ -1,5 +1,5 @@
 /* Reads every standard CSR of Mig6 twice, by the assembler's name and by csr_<name>_read()
- * (sw/riscv/mig6_csr_ops.h: its address from rtl/design/mig6/cfg/mig6_csr.yaml), on every
+ * (sw/riscv/mig6/mig6_csr_ops.h: its address from rtl/design/mig6/cfg/mig6_csr.yaml), on every
  * PE of TbMig6; exits with 1 at the first CSR whose two reads differ, or whose value has a
  * bit outside its MIG6_CSR_<NAME>_VALID, else with 0.
  *
@@ -16,7 +16,7 @@
  */
 #include <stdint.h>
 
-#include "mig6_csr_ops.h"
+#include "mig6/mig6_csr_ops.h"
 #include "tprintf.h"
 
 static int checked;

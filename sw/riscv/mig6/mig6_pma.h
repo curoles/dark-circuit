@@ -17,7 +17,7 @@
 #define MIG6_PMA_LOCAL_ATOMICS 0
 #define MIG6_PMA_LOCAL_RESERVABLE 1
 
-/* devices: devices, none in Mig6 yet (Mig6Pe: a_no_io) (target: devices) */
+/* devices: devices, none in Mig6 yet (Mig6Pe: a_no_devices) (target: devices) */
 #define MIG6_PMA_DEVICES_BASE 0x0c000000
 #define MIG6_PMA_DEVICES_SIZE 0x04000000
 #define MIG6_PMA_DEVICES_ADDR_WIDTH 26

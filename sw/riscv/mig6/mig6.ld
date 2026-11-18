@@ -1,13 +1,12 @@
 /* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
- * Generated from rtl/design/mig6/cfg/mig6_config.yaml and mig6.ld.j2 by tools/config_gen.py
+ * Generated from rtl/design/mig6/cfg/mig6_pma.yaml and mig6.ld.j2 by tools/pma_gen.py
  *
- * Linker script of programs for Mig6 RISC-V CPU (Mig3Cpu).
- *
- * Mig3Cpu loads the same image into instruction ROM and data RAM, both at
- * address 0: code is fetched from ROM, loads and stores go to RAM, so .rodata
- * and .data are read from RAM. Code written to RAM at run time can not run.
- * Code starts at the reset address, with .text.start (_start of crt0.S) or .text.init
- * (_start of the standard riscv-tests environment) first.
+ * Linker script of programs for a Mig6 PE: code and data in its local memory, the region
+ * local of the memory map (rtl/design/mig6/cfg/mig6_pma.yaml), code first, where the core
+ * starts (Mig6Pe asserts that its reset address is the region's base). The testbench loads
+ * the image into every PE's local memory; the caches are in front of it. Code starts with
+ * .text.start (_start of crt0.S) or .text.init (_start of the standard riscv-tests
+ * environment); the stack starts at the region's end.
  * Global constructors of C++ (.init_array, .ctors) are refused: crt0.S calls main without
  * running them, so the link fails instead of an object staying uninitialized.
  */

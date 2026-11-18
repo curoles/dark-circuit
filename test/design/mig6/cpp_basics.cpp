@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 
-#include "mig6_csr_ops.hpp"
+#include "mig6/mig6_csr_ops.hpp"
 #include "tprintf.h"
 
 namespace kernel {

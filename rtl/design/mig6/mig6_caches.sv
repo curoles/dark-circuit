@@ -25,9 +25,10 @@
  * the library caches: exactly its bytes, address and size), so the pipeline sees the memory's
  * own
  * timing, but for a fetch and a load or store that want memory in the same clock (tests that
- * count cycles). A load or store of the I/O region (CFG.io_base, 1 << CFG.io_addr_width
- * bytes) is never cached (req_nocache: looked up, never a hit or a fill); code is never
- * fetched from it. invalidate is 0:
+ * count cycles). A load or store of a region that is not cacheable (Mig6PmaPkg, from
+ * cfg/mig6_pma.yaml: the devices' region) is never cached (req_nocache: looked up, never a
+ * hit or a fill); code is never fetched from it. An address in no region is cached, as
+ * before the memory map (Mig6Pe asserts that every access is in a region). invalidate is 0:
  * Mig6 has no FENCE.I; a store to an address the I-cache
  * holds is not seen by a later fetch that hits (self-modifying code is not supported).
  *
@@ -60,16 +61,19 @@ module Mig6Caches import Mig6Pkg::*; #(
     input  mem_rsp_t  mem_rsp
 );
     `DC_STATIC_ASSERT(a_line_words, LINE_WORDS == 1 || LINE_WORDS == 2)
-    `DC_STATIC_ASSERT(a_io_aligned, CFG.io_base % (1 << CFG.io_addr_width) == 0)
 
-    // A load or store of the I/O region is never cached: a device's register is read and
-    // written where it is, every time (a PLIC claim is a read). req_nocache acts in the
-    // D-cache's lookup, through a register: the address compare is not on the path to
-    // req_ready and EX's stall.
+    // A load or store of a region that is not cacheable is never cached: a device's register
+    // is read and written where it is, every time (a PLIC claim is a read); the shared
+    // memory has one copy. req_nocache acts in the D-cache's lookup, through a register: the
+    // address decode is not on the path to req_ready and EX's stall.
     // @kb: rtl/design/mig3/io_region
-    logic d_io;         // the data request is in the I/O region
-    assign d_io =
-        dcache_req.addr[WIDTH-1:CFG.io_addr_width] == CFG.io_base[WIDTH-1:CFG.io_addr_width];
+    // Of the region's attributes only hit and cacheable are read here.
+    /* verilator lint_off UNUSEDSIGNAL */
+    Mig6PmaPkg::pma_t d_pma;    // the data request's region
+    /* verilator lint_on UNUSEDSIGNAL */
+    logic             d_io;     // ... is not cacheable
+    assign d_pma = Mig6PmaPkg::pma_of({dcache_req.addr, {DADDR_START{1'b0}}});  // a byte address
+    assign d_io  = d_pma.hit && !d_pma.cacheable;
 
     // The caches' memory sides, to the arbiter: byte addresses, a line's (offset 0) or an
     // uncached request's own, with its size.

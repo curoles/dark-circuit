@@ -1,4 +1,4 @@
-// The C++ CSR header (sw/riscv/mig6_csr_ops.hpp) on every PE of TbMig6: read, write, set,
+// The C++ CSR header (sw/riscv/mig6/mig6_csr_ops.hpp) on every PE of TbMig6: read, write, set,
 // clear and the fields of a few CSRs, through mig6::csr::<name>; prints "csr ops: hart <n> ok"
 // and exits with 0 when every check holds, else prints the line of the first that fails and
 // exits with 1.
@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#include "mig6_csr_ops.hpp"
+#include "mig6/mig6_csr_ops.hpp"
 #include "tprintf.h"
 
 using namespace mig6::csr;

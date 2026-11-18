@@ -6,8 +6,8 @@ set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 # PE (Mig6Pe: the core and its local memory) and programs on the PEs of TbMig6.
 
 # Files generated from cfg/mig6_config.yaml, from cfg/mig6_csr.yaml (the core CSRs:
-# Mig6CsrPkg, sw/riscv/mig6_csr*.h) and from cfg/mig6_pma.yaml (the memory map: Mig6PmaPkg,
-# sw/riscv/mig6_pma.h) are up to date.
+# Mig6CsrPkg, sw/riscv/mig6/mig6_csr*.h) and from cfg/mig6_pma.yaml (the memory map: Mig6PmaPkg,
+# sw/riscv/mig6/mig6_pma.h) are up to date.
 dc_add_config_check(design_mig6 CONFIG ${MIG6}/cfg/mig6_config.yaml)
 dc_add_config_check(design_mig6_csr CONFIG ${MIG6}/cfg/mig6_csr.yaml TOOL csr_gen)
 dc_add_config_check(design_mig6_pma CONFIG ${MIG6}/cfg/mig6_pma.yaml TOOL pma_gen)
@@ -57,8 +57,8 @@ cmake_language(CALL dc_add_${SIM}_build design_mig6_sim TOP TbMig6 TB tb/tb_mig6
 # mig6_program_test(<name> SOURCES <file>... [ARCH <march>] [FLAGS <flag>...] [ARGS <arg>...])
 #
 # A C or C++ program on every PE of TbMig6: crt0, semihosting, tprintf and Mig6's exit (the
-# hart's ID in a2, mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6.ld,
-# sw/riscv's headers (mig6_csr_ops.h, tprintf.h) on the include path; the test passes when
+# hart's ID in a2, mig6_exit.c) with the program's SOURCES, linked by sw/riscv/mig6/mig6.ld,
+# sw/riscv on the include path (mig6/mig6_csr_ops.h, tprintf.h); the test passes when
 # every hart exits with 0 (TbMig6).
 function(mig6_program_test NAME)
     cmake_parse_arguments(P "" "ARCH" "SOURCES;FLAGS;ARGS" ${ARGN})
@@ -73,7 +73,7 @@ function(mig6_program_test NAME)
                          ARCH ${P_ARCH}
                          FLAGS -O2 -ffreestanding -I${SW} -I${SW}/semihosting -I${SW}/tprintf
                                ${P_FLAGS}
-                         LINK_FLAGS -T ${SW}/mig6.ld)
+                         LINK_FLAGS -T ${SW}/mig6/mig6.ld)
     cmake_language(CALL dc_add_${SIM}_run ${prog} BUILD design_mig6_sim
                    ARGS +hex=${CMAKE_CURRENT_BINARY_DIR}/${prog}.hex ${P_ARGS})
 endfunction()
