@@ -1,0 +1,2 @@
+# Python's bytecode caches (tools/csr_gen.py imports tools/config_gen.py).
+__pycache__/

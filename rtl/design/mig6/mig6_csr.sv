@@ -10,6 +10,16 @@
  * CSR (address bits 11:10 are 3, as the spec says): nothing is written, and Mig6Control
  * makes it an illegal-instruction trap.
  *
+ * Mig6CsrPkg, generated from cfg/mig6_csr.yaml (tools/csr_gen.py), has the facts of every
+ * CSR: its address, reset value, bits and the bits software writes, and a struct of its
+ * fields. Here the flops (the fields that are not constant) and the special behavior
+ * (counting, traps, MRET, flags) stay by hand; the package's csr_read gives a CSR's value
+ * from them (csr_state_t; constant bits from the YAML, the others 0), and csr_write_merge
+ * keeps a write to the bits software writes (w, seen as any CSR's struct).
+ *
+ *   flops, meip, HART_ID --> state --> csr_read (addr) --> old, exists
+ *   old, src, funct3 --> new_value --> csr_write_merge (addr) --> w --> the flops
+ *
  * The CSRs:
  * - mcycle, minstret: 64-bit counters, also read as cycle, instret and time (time is
  *   cycle, Mig6 has no real-time clock). mcycle counts every clock after reset, minstret
@@ -51,7 +61,7 @@
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
+module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
     parameter word_t HART_ID = '0   // the hart's ID: mhartid
 )(
     input  wire      clk,
@@ -73,9 +83,13 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
     output funct3_t  frm,        // rounding mode for FRM_DYN (any value: the FPU checks)
     input  wire      vxsat_set   // the instruction in EX saturated (P): sets vxsat
 );
-    // misa: XLEN 32, extensions I, M and A (LR/SC and the AMOs).
-    localparam word_t MISA = {MISA_MXL_32, {(WIDTH-2){1'b0}}} | (word_t'(1) << MISA_EXT_I) |
-                             (word_t'(1) << MISA_EXT_M) | (word_t'(1) << MISA_EXT_A);
+    // Reset values of the flops, from the YAML (Mig6CsrPkg).
+    localparam mstatus_t R_MSTATUS = MSTATUS_RESET;
+    localparam mie_t     R_MIE     = MIE_RESET;
+    localparam mtvec_t   R_MTVEC   = MTVEC_RESET;
+    localparam mepc_t    R_MEPC    = MEPC_RESET;
+    localparam fcsr_t    R_FCSR    = FCSR_RESET;
+    localparam vxsat_t   R_VXSAT   = VXSAT_RESET;
 
     logic [11:0] addr;          // CSR address (immediate of the CSR instruction)
     assign addr = dec.imm[11:0];
@@ -93,16 +107,21 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
     funct3_t       frm_q;     // fcsr.frm
     FpPkg::flags_t fflags;    // fcsr.fflags
     logic          vxsat;     // P's saturation flag
-    word_t  mstatus;
 
-    logic  imm_form;    // CSRRWI, CSRRSI, CSRRCI
-    logic  writes;      // the instruction writes the CSR
-    logic  exists;      // the CSR at addr exists
-    logic  read_only;   // addr marks the CSR read-only
-    word_t old;         // value of the CSR before the instruction
-    word_t src;         // operand: rs1, or the immediate of the I forms
-    word_t new_value;   // value written to the CSR
-    logic  we;          // the CSR is written at the end of this cycle
+    logic       imm_form;   // CSRRWI, CSRRSI, CSRRCI
+    logic       writes;     // the instruction writes the CSR
+    logic       read_only;  // addr marks the CSR read-only
+    csr_state_t state;      // every CSR's fields that are not constant
+    csr_value_t read;       // the CSR at addr: exists, its value
+    word_t      old;        // value of the CSR before the instruction
+    word_t      src;        // operand: rs1, or the immediate of the I forms
+    word_t      new_value;  // value the instruction writes
+    // A write as any CSR's struct; each flop reads its own field.
+    /* verilator lint_off UNUSEDSIGNAL */
+    csr_word_t  w;          // new_value in the bits software writes, the others kept
+    /* verilator lint_on UNUSEDSIGNAL */
+    logic       we;         // the CSR is written at the end of this cycle
+    logic       mret;       // MRET completes
 
     assign imm_form  = dec.funct3 == F3_CSRRWI || dec.funct3 == F3_CSRRSI ||
                        dec.funct3 == F3_CSRRCI;
@@ -111,42 +130,35 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
     assign writes    = dec.funct3 == F3_CSRRW || dec.funct3 == F3_CSRRWI || dec.rs1 != '0;
     assign read_only = csr_read_only(addr);
 
-    // mstatus: MPP = M (only machine mode), MPIE, MIE; other bits 0.
-    assign mstatus = (word_t'(PRIV_M) << MSTATUS_MPP) | (word_t'(mstatus_mpie) << MSTATUS_MPIE) |
-                     (word_t'(mstatus_mie) << MSTATUS_MIE);
-
-    // Read: the old value of the CSR at addr.
+    // Read: every CSR's fields from the flops and signals, the one at addr by csr_read.
     always_comb begin
-        exists = 1'b1;
-        case (addr)
-            CSR_CYCLE, CSR_TIME, CSR_MCYCLE:        old = mcycle.lo;
-            CSR_CYCLEH, CSR_TIMEH, CSR_MCYCLEH:     old = mcycle.hi;
-            CSR_INSTRET, CSR_MINSTRET:              old = minstret.lo;
-            CSR_INSTRETH, CSR_MINSTRETH:            old = minstret.hi;
-            CSR_MSCRATCH:                           old = mscratch;
-            CSR_MSTATUS:                            old = mstatus;
-            CSR_MTVEC:                              old = {mtvec, {IADDR_START{1'b0}}};
-            CSR_MEPC:                               old = {mepc, {IADDR_START{1'b0}}};
-            CSR_MCAUSE:                             old = mcause;
-            CSR_MTVAL:                              old = mtval;
-            CSR_MSTATUSH:                           old = '0;
-            CSR_MIE:                                old = word_t'(mie_meie) << IRQ_MACHINE_EXTERNAL;
-            CSR_MIP:                                old = word_t'(meip) << IRQ_MACHINE_EXTERNAL;
-            CSR_MISA:                               old = MISA;
-            CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID: old = '0;
-            CSR_MHARTID:                            old = HART_ID;
-            CSR_FFLAGS:                             old = word_t'(fflags);
-            CSR_FRM:                                old = word_t'(frm_q);
-            CSR_FCSR:                               old = word_t'({frm_q, fflags});
-            CSR_VXSAT:                              old = word_t'(vxsat);
-            default: begin                          old = '0; exists = 1'b0; end
-        endcase
+        state                 = '0;
+        state.fcsr.frm        = frm_q;
+        state.fcsr.fflags     = fflags;
+        state.vxsat.sat       = vxsat;
+        state.mhartid.id      = HART_ID;
+        state.mstatus.mie     = mstatus_mie;
+        state.mstatus.mpie    = mstatus_mpie;
+        state.mie.meie        = mie_meie;
+        state.mtvec.base      = mtvec;
+        state.mscratch.value  = mscratch;
+        state.mepc.pc         = mepc;
+        state.mcause.value    = mcause;
+        state.mtval.value     = mtval;
+        state.mip.meip        = meip;
+        state.mcycle.value    = mcycle.lo;
+        state.mcycleh.value   = mcycle.hi;
+        state.minstret.value  = minstret.lo;
+        state.minstreth.value = minstret.hi;
     end
 
+    assign read    = csr_read(addr, state);
+    assign old     = read.value;
     assign rdata   = old;
-    assign illegal = valid && dec.sys.csr && (!exists || (writes && read_only));
+    assign illegal = valid && dec.sys.csr && (!read.exists || (writes && read_only));
 
-    // Write: the new value, at the end of the cycle when the instruction completes.
+    // Write: the new value, at the end of the cycle when the instruction completes, in the
+    // bits software writes.
     always_comb
         case (dec.funct3)
             F3_CSRRS, F3_CSRRSI: new_value = old | src;
@@ -154,95 +166,88 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
             default:             new_value = src;       // CSRRW, CSRRWI
         endcase
 
+    assign w    = csr_write_merge(addr, old, new_value);
     // done=1 means valid and not illegal.
-    assign we = done && dec.sys.csr && writes;
-
-    // Bits of new_value: MIE and MPIE of mstatus, the address of mtvec and mepc.
-    logic   new_mie;
-    logic   new_mpie;
-    iaddr_t new_iaddr;      // new value of mtvec, mepc without bits 1:0
-    logic   mret;           // MRET completes
-    assign new_mie   = new_value[MSTATUS_MIE];
-    assign new_mpie  = new_value[MSTATUS_MPIE];
-    assign new_iaddr = new_value[WIDTH-1:IADDR_START];
-    assign mret      = done && dec.sys.mret;
+    assign we   = done && dec.sys.csr && writes;
+    assign mret = done && dec.sys.mret;
 
     // Counters.
     always_ff @(posedge clk)
-        if (!rst_n)                         mcycle <= '0;
-        else if (we && addr == CSR_MCYCLE)  mcycle.lo <= new_value;
-        else if (we && addr == CSR_MCYCLEH) mcycle.hi <= new_value;
-        else                                mcycle <= mcycle + 1'b1;
+        if (!rst_n)                          mcycle <= {MCYCLEH_RESET, MCYCLE_RESET};
+        else if (we && addr == MCYCLE_ADDR)  mcycle.lo <= w.mcycle.value;
+        else if (we && addr == MCYCLEH_ADDR) mcycle.hi <= w.mcycleh.value;
+        else                                 mcycle <= mcycle + 1'b1;
 
     always_ff @(posedge clk)
-        if (!rst_n)                           minstret <= '0;
-        else if (we && addr == CSR_MINSTRET)  minstret.lo <= new_value;
-        else if (we && addr == CSR_MINSTRETH) minstret.hi <= new_value;
-        else if (done)                        minstret <= minstret + 1'b1;
+        if (!rst_n)                            minstret <= {MINSTRETH_RESET, MINSTRET_RESET};
+        else if (we && addr == MINSTRET_ADDR)  minstret.lo <= w.minstret.value;
+        else if (we && addr == MINSTRETH_ADDR) minstret.hi <= w.minstreth.value;
+        else if (done)                         minstret <= minstret + 1'b1;
 
     // mscratch.
     always_ff @(posedge clk)
-        if (!rst_n)                          mscratch <= '0;
-        else if (we && addr == CSR_MSCRATCH) mscratch <= new_value;
+        if (!rst_n)                           mscratch <= MSCRATCH_RESET;
+        else if (we && addr == MSCRATCH_ADDR) mscratch <= w.mscratch.value;
 
     // mstatus: a trapping instruction writes no CSR, so trap, MRET and CSR writes never
     // meet.
     always_ff @(posedge clk)
         if (!rst_n) begin
-            mstatus_mie  <= 1'b0;
-            mstatus_mpie <= 1'b0;
+            mstatus_mie  <= R_MSTATUS.mie;
+            mstatus_mpie <= R_MSTATUS.mpie;
         end else if (trap.valid) begin
             mstatus_mpie <= mstatus_mie;
             mstatus_mie  <= 1'b0;
         end else if (mret) begin
             mstatus_mie  <= mstatus_mpie;
             mstatus_mpie <= 1'b1;
-        end else if (we && addr == CSR_MSTATUS) begin
-            mstatus_mie  <= new_mie;
-            mstatus_mpie <= new_mpie;
+        end else if (we && addr == MSTATUS_ADDR) begin
+            mstatus_mie  <= w.mstatus.mie;
+            mstatus_mpie <= w.mstatus.mpie;
         end
 
     // mepc, mcause, mtval: set by a trap, or written by CSR instructions.
     always_ff @(posedge clk)
         if (!rst_n) begin
-            mepc   <= '0;
-            mcause <= '0;
-            mtval  <= '0;
+            mepc   <= R_MEPC.pc;
+            mcause <= MCAUSE_RESET;
+            mtval  <= MTVAL_RESET;
         end else if (trap.valid) begin
             mepc   <= pc;
             mcause <= {trap.irq, {(WIDTH-1-$bits(excp_code_t)){1'b0}}, trap.cause};
             mtval  <= trap.tval;
-        end else if (we && addr == CSR_MEPC)
-            mepc   <= new_iaddr;
-        else if (we && addr == CSR_MCAUSE)
-            mcause <= new_value;
-        else if (we && addr == CSR_MTVAL)
-            mtval  <= new_value;
+        end else if (we && addr == MEPC_ADDR)
+            mepc   <= w.mepc.pc;
+        else if (we && addr == MCAUSE_ADDR)
+            mcause <= w.mcause.value;
+        else if (we && addr == MTVAL_ADDR)
+            mtval  <= w.mtval.value;
 
     // mie: MEIE; the other interrupts do not exist. mip: MEIP is meip, read-only.
     always_ff @(posedge clk)
-        if (!rst_n)                     mie_meie <= 1'b0;
-        else if (we && addr == CSR_MIE) mie_meie <= new_value[IRQ_MACHINE_EXTERNAL];
+        if (!rst_n)                      mie_meie <= R_MIE.meie;
+        else if (we && addr == MIE_ADDR) mie_meie <= w.mie.meie;
 
     // mtvec.
     always_ff @(posedge clk)
-        if (!rst_n)                       mtvec <= '0;
-        else if (we && addr == CSR_MTVEC) mtvec <= new_iaddr;
+        if (!rst_n)                        mtvec <= R_MTVEC.base;
+        else if (we && addr == MTVEC_ADDR) mtvec <= w.mtvec.base;
 
     // @kb: rtl/design/mig3/fp_decode
-    // fcsr: frm and fflags, also written alone (frm, fflags); an F instruction that completes
-    // ORs its flags into fflags (it is no CSR instruction: the two never meet).
+    // fcsr: frm and fflags, also written alone (frm, fflags: views packed from bit 0); an F
+    // instruction that completes ORs its flags into fflags (it is no CSR instruction: the
+    // two never meet).
     always_ff @(posedge clk)
         if (!rst_n) begin
-            frm_q  <= '0;
-            fflags <= '0;
-        end else if (we && addr == CSR_FCSR) begin
-            frm_q  <= new_value[FCSR_FRM +: $bits(funct3_t)];
-            fflags <= new_value[FCSR_FRM-1:0];
-        end else if (we && addr == CSR_FRM)
-            frm_q  <= new_value[$bits(funct3_t)-1:0];
-        else if (we && addr == CSR_FFLAGS)
-            fflags <= new_value[FCSR_FRM-1:0];
+            frm_q  <= R_FCSR.frm;
+            fflags <= R_FCSR.fflags;
+        end else if (we && addr == FCSR_ADDR) begin
+            frm_q  <= w.fcsr.frm;
+            fflags <= w.fcsr.fflags;
+        end else if (we && addr == FRM_ADDR)
+            frm_q  <= w.raw[$bits(frm_q)-1:0];
+        else if (we && addr == FFLAGS_ADDR)
+            fflags <= w.raw[$bits(fflags)-1:0];
         else if (done && dec.fp.en)
             fflags <= fflags | fp_flags;
 
@@ -250,8 +255,8 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, RiscvCsrPkg::*; #(
     // vxsat: bit 0; an instruction that saturated sets it when it completes (a P
     // instruction, no CSR instruction: the two never meet).
     always_ff @(posedge clk)
-        if (!rst_n)                        vxsat <= 1'b0;
-        else if (we && addr == CSR_VXSAT)  vxsat <= new_value[0];
+        if (!rst_n)                        vxsat <= R_VXSAT.sat;
+        else if (we && addr == VXSAT_ADDR) vxsat <= w.vxsat.sat;
         else if (done && vxsat_set)        vxsat <= 1'b1;
 
     assign frm       = frm_q;

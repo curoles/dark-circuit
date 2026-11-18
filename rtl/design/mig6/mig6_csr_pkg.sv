@@ -298,6 +298,27 @@ package Mig6CsrPkg;
         minstreth_t  minstreth;
     } csr_state_t;
 
+    // A CSR's 32 bits seen as any CSR's struct: w.mstatus.mie, w.raw.
+    typedef union packed {
+        logic [31:0] raw;
+        fcsr_t       fcsr;
+        vxsat_t      vxsat;
+        mhartid_t    mhartid;
+        mstatus_t    mstatus;
+        misa_t       misa;
+        mie_t        mie;
+        mtvec_t      mtvec;
+        mscratch_t   mscratch;
+        mepc_t       mepc;
+        mcause_t     mcause;
+        mtval_t      mtval;
+        mip_t        mip;
+        mcycle_t     mcycle;
+        minstret_t   minstret;
+        mcycleh_t    mcycleh;
+        minstreth_t  minstreth;
+    } csr_word_t;
+
     // A CSR read: whether a CSR is at the address, and its value (0 when none is).
     typedef struct packed {
         logic        exists;

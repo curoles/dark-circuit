@@ -51,6 +51,14 @@ package Mig6CsrPkg;
 {% endfor %}
     } csr_state_t;
 
+    // A CSR's 32 bits seen as any CSR's struct: w.mstatus.mie, w.raw.
+    typedef union packed {
+        logic [31:0] raw;
+{% for c in csrs if c.fields %}
+        {{ "%-12s" | format(c.name ~ "_t") }} {{ c.name }};
+{% endfor %}
+    } csr_word_t;
+
     // A CSR read: whether a CSR is at the address, and its value (0 when none is).
     typedef struct packed {
         logic        exists;
