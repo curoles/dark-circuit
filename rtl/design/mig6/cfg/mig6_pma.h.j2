@@ -1,0 +1,20 @@
+/* THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+ * {{ generated_note }}
+ *
+ * Mig6's memory map for programs and tests, as rtl/design/mig6/cfg/mig6_pma.yaml describes
+ * it (PMA-style: physical memory attributes); plain numbers, also usable in assembly (.S).
+ * Per region: MIG6_PMA_<NAME>_BASE, _SIZE, _ADDR_WIDTH (the low address bits inside it), and
+ * its attributes, 1 or 0: _CACHEABLE, _IO, _ATOMICS, _RESERVABLE.
+ */
+#pragma once
+{% for r in regions %}
+
+/* {{ r.name }}: {{ r.desc }} (target: {{ r.target }}) */
+#define MIG6_PMA_{{ r.NAME }}_BASE {{ r.base | c_hex }}
+#define MIG6_PMA_{{ r.NAME }}_SIZE {{ r.size | c_hex }}
+#define MIG6_PMA_{{ r.NAME }}_ADDR_WIDTH {{ r.addr_width }}
+#define MIG6_PMA_{{ r.NAME }}_CACHEABLE {{ r.cacheable | int }}
+#define MIG6_PMA_{{ r.NAME }}_IO {{ r.io | int }}
+#define MIG6_PMA_{{ r.NAME }}_ATOMICS {{ r.atomics | int }}
+#define MIG6_PMA_{{ r.NAME }}_RESERVABLE {{ r.reservable | int }}
+{% endfor %}

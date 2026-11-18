@@ -10,7 +10,7 @@
 #   make test_blocks - configure if needed, build and run tests of blocks
 #   make run R=<name regex> L=<label regex> - configure if needed, build and run selected tests
 #   make list    - list tests with their labels
-#   make config  - generate files from design configurations and core CSR descriptions
+#   make config  - generate files from design configurations, core CSRs and memory maps
 #   make kb      - check the knowledge base kb/: records, links to the code; CATALOG.md
 #   make catalog - generate CATALOG.md, the catalog of rtl/lib
 #   make mutants [M=<filter>] [SIM=icarus] - run the mutants of the tests (kb records)
@@ -54,9 +54,11 @@ CONFIGURED := $(if $(CMAKE_ARGS),cmake,$(BUILD_DIR)/CMakeCache.txt)
 CTEST := ctest --test-dir $(BUILD_DIR) --output-on-failure --no-tests=error -j $(shell nproc) $(if $(V),-V)
 
 # Design configurations: every rtl/design/<design>/cfg/<design>_config.yaml; core CSR
-# descriptions: every rtl/design/<design>/cfg/<design>_csr.yaml (tools/csr_gen.py).
+# descriptions: every rtl/design/<design>/cfg/<design>_csr.yaml (tools/csr_gen.py); memory
+# maps: every rtl/design/<design>/cfg/<design>_pma.yaml (tools/pma_gen.py).
 CONFIGS := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_config.yaml)
 CSRS    := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_csr.yaml)
+PMAS    := $(wildcard $(SOURCE_DIR)/rtl/design/*/cfg/*_pma.yaml)
 
 # Plain `make` without a target shows help.
 .DEFAULT_GOAL := help
@@ -114,14 +116,17 @@ SYNTH_TECHS := sky130
 doc: $(CONFIGURED)
 	cmake --build $(BUILD_DIR) --target doc
 
-# Generate files from design configurations and core CSR descriptions, run after a change
-# in cfg/.
+# Generate files from design configurations, core CSR descriptions and memory maps, run
+# after a change in cfg/.
 config:
 	@for cfg in $(CONFIGS); do \
 	    python3 $(SOURCE_DIR)/tools/config_gen.py --root $(SOURCE_DIR) $$cfg || exit 1; \
 	done
 	@for csr in $(CSRS); do \
 	    python3 $(SOURCE_DIR)/tools/csr_gen.py --root $(SOURCE_DIR) $$csr || exit 1; \
+	done
+	@for pma in $(PMAS); do \
+	    python3 $(SOURCE_DIR)/tools/pma_gen.py --root $(SOURCE_DIR) $$pma || exit 1; \
 	done
 
 # Check the knowledge base kb/ (kb/README.md): records, anchors in the code, @kb: tags; run

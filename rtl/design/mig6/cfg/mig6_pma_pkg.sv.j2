@@ -1,0 +1,55 @@
+// THIS FILE IS GENERATED, DO NOT EDIT MANUALLY!
+// {{ generated_note }}
+//
+// Mig6's memory map, as cfg/mig6_pma.yaml describes it (PMA-style: physical memory
+// attributes). Per region: <NAME>_BASE, <NAME>_SIZE, <NAME>_ADDR_WIDTH (the low address bits
+// inside it) and <NAME>_PMA, its attributes (pma_t). pma_of(addr) gives the attributes of
+// the region that holds addr (hit 1), or all 0 when none does; a region decodes by its top
+// address bits, a base being a multiple of its size. The parts ask the attributes by name:
+// the caches cacheable, a PE target, the assertions atomics and io.
+package Mig6PmaPkg;
+
+    // Where a PE sends an access.
+    typedef enum logic [1:0] {
+{% for t in targets %}
+        TARGET_{{ t.NAME }}{{ "," if not loop.last }}
+{% endfor %}
+    } target_e;
+
+    // A region's attributes.
+    typedef struct packed {
+        logic    hit;           // a region holds the address
+        logic    cacheable;     // the core's caches may hold it
+        logic    io;            // side effects: never speculated, merged or repeated
+        logic    atomics;       // AMOs allowed
+        logic    reservable;    // LR/SC allowed
+        target_e target;        // where a PE sends the access
+    } pma_t;
+
+    // Every region's constants; a part uses some.
+    /* verilator lint_off UNUSEDPARAM */
+{% for r in regions %}
+
+    // {{ r.name }}: {{ r.desc }}
+    localparam logic [31:0] {{ r.NAME }}_BASE       = {{ r.base | sv_hex(32) }};
+    localparam logic [31:0] {{ r.NAME }}_SIZE       = {{ r.size | sv_hex(32) }};
+    localparam int          {{ r.NAME }}_ADDR_WIDTH = {{ r.addr_width }};
+    // hit, cacheable, io, atomics, reservable, target
+    localparam pma_t        {{ r.NAME }}_PMA        =
+        pma_t'({1'b1, {{ r.bits }}, TARGET_{{ r.TARGET }}});
+{% endfor %}
+    /* verilator lint_on UNUSEDPARAM */
+
+    // The attributes of the region that holds addr, all 0 (hit 0) when none does. A region
+    // decodes by its top address bits: the bits inside the smallest region are not read.
+    /* verilator lint_off UNUSEDSIGNAL */
+    function automatic pma_t pma_of(logic [31:0] addr);
+{% for r in regions %}
+        if (addr[31:{{ r.addr_width }}] == {{ r.top | sv_hex(32 - r.addr_width) }})
+            return {{ r.NAME }}_PMA;
+{% endfor %}
+        return '0;
+    endfunction
+    /* verilator lint_on UNUSEDSIGNAL */
+
+endpackage

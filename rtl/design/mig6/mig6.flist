@@ -1,5 +1,6 @@
 mig6_config_pkg.sv
 mig6_csr_pkg.sv
+mig6_pma_pkg.sv
 mig6_pkg.sv
 mig6_noc_pkg.sv
 mig6_pipe_reg.sv

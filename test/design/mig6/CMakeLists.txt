@@ -5,10 +5,12 @@ set(SW   ${PROJECT_SOURCE_DIR}/sw/riscv)
 # Mig6 is a prototype (rtl/design/mig6/README.md): its core (Mig6Core, a copy of Mig3's), the
 # PE (Mig6Pe: the core and its local memory) and programs on the PEs of TbMig6.
 
-# Files generated from cfg/mig6_config.yaml, and from cfg/mig6_csr.yaml (the core CSRs:
-# Mig6CsrPkg, sw/riscv/mig6_csr.h), are up to date.
+# Files generated from cfg/mig6_config.yaml, from cfg/mig6_csr.yaml (the core CSRs:
+# Mig6CsrPkg, sw/riscv/mig6_csr*.h) and from cfg/mig6_pma.yaml (the memory map: Mig6PmaPkg,
+# sw/riscv/mig6_pma.h) are up to date.
 dc_add_config_check(design_mig6 CONFIG ${MIG6}/cfg/mig6_config.yaml)
 dc_add_config_check(design_mig6_csr CONFIG ${MIG6}/cfg/mig6_csr.yaml TOOL csr_gen)
+dc_add_config_check(design_mig6_pma CONFIG ${MIG6}/cfg/mig6_pma.yaml TOOL pma_gen)
 
 # Hardware files of Mig6Core: struct versions of the library, built from generic gates, the
 # fp32 and packed blocks (one version: hybrid), RISC-V formats and encodings.

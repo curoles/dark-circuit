@@ -23,7 +23,7 @@ regions:
     atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_no_atomic)
     reservable: yes         # LR/SC: the core's own reservation, one hart
 
-  - name: io
+  - name: devices
     base: 0x0C000000
     size: 0x04000000        # 64 MiB
     desc: "devices, none in Mig6 yet (Mig6Pe: a_no_io)"
@@ -32,3 +32,8 @@ regions:
     io: yes
     atomics: no
     reservable: no
+
+# Generated files: template in this directory -> output relative to repository root.
+generate:
+  - { template: mig6_pma_pkg.sv.j2, output: rtl/design/mig6/mig6_pma_pkg.sv }
+  - { template: mig6_pma.h.j2,      output: sw/riscv/mig6_pma.h }
