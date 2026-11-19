@@ -1,0 +1,52 @@
+type: decision
+title: The caches pass exclusive requests (LR, SC) to memory as atomics; no acknowledged stores yet
+date: 2026-11-18
+question: >
+  The library's request channel gets req_excl (an exclusive LR or SC, AXI's ARLOCK/AWLOCK)
+  and req_rsp (the request wants an answer; kb rtl/lib/block/answered_writes). What does a
+  read-write cache (CacheControl) do with an exclusive request, and with a plain store that
+  wants an answer?
+decision: >
+  (a') An exclusive request is done at memory, where the reservation is, exactly like an
+  atomic ("far"): never a hit, an SC's bytes never merged into a line, to memory as asked
+  (its address and size) with mem_req_excl, answered by memory (an LR with the line, an SC
+  with its status), the answer not written, a line it hits dropped when memory takes it. An
+  SC is served as a load miss (memory answers it), not as a store. A plain store that wants
+  an answer is not supported yet: a_rsp_kinds asserts req_rsp == (!req_we || req_excl);
+  when fences need acknowledged stores they will merge into the line and wait for the
+  acknowledgement (CVA6's write-through cache), inside CacheControl only. mem_req_rsp: an
+  uncached request's own, else the lookup's load miss.
+why: >
+  As others do for memory without coherence: ARM sends LDREX/STREX to non-cacheable memory
+  as AXI exclusive accesses to a monitor at the interconnect or memory controller; PULP's
+  axi_riscv_lrsc keeps reservations in front of a memory; CVA6's write-through cache sends
+  AMOs and LR/SC to memory and invalidates the line. An SC that fails at memory must not
+  have merged its bytes into a cached line. The atomic path exists and is tested, so the
+  change is small. The choice is internal to CacheControl (the ports and the channel's
+  contract are the same either way), so refining it later touches one block and its tests,
+  not its users (the user's concern after the posted-writes contract proved costly).
+rejected:
+  - choice: (a) Every request that wants an answer but a load as an atomic, plain stores too
+    why_not: An acknowledged store would drop its line instead of merging, a behavior that
+      would cost every store its merge once fences ask for acknowledgements; better loud
+      (an assertion) until it is done right.
+  - choice: (b) A behavior per kind (LR a no-cache load without drop, an acknowledged store
+      merged then answered)
+    why_not: Three new behaviors in CacheControl, behave and struct, for cases Mig6 does not
+      reach (its LR/SC go to the non-cacheable shared region, where nothing hits).
+evidence: >
+  2026-11-18: SkewedCache's test sends LRs and SCs (one in 16 requests, to cached lines):
+  never a hit, to memory as asked with mem_req_excl and mem_req_rsp, answered by memory,
+  their line dropped; it checks mem_req_rsp and mem_req_excl for every request (the
+  DirectCache and SetAssocCache tests check that memory is asked for an answer exactly for
+  a read); all three caches (behave and struct) and the read-only ones pass on Verilator
+  and Icarus, the Mig2 (108 tests), Mig3 (149) and Mig6 (14) suites unchanged. Mutants: all
+  23 of SkewedCache's record caught, two new (an SC done as a store, merged into its line;
+  an exclusive request not far, so an LR may hit).
+code:
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#look_far
+  - rtl/lib/block/cache/cache_control/behave/cache_control.sv#a_rsp_kinds
+  - test/block/cache/skewed_cache/tb_skewed_cache.sv#n_sc_drop
+relies_on:
+  - rtl/lib/block/answered_writes
+  - rtl/lib/block/cache/atomic
