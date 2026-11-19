@@ -18,7 +18,9 @@ decision: >
   with req_rsp only to a target that answers it. Requesters that want no write answered tie
   req_rsp = !we (Mig3Cpu, Mig6Pe today). No parameter for it (user): one behavior to test.
   First chunk: ReqDemux and ReqMux; second: AtomicUnit (its own read asks for an answer,
-  its write does not: mem_req_rsp); the caches and their arbiter follow.
+  its write does not: mem_req_rsp); third: the read-write caches (CacheControl: exclusive
+  requests as atomics, no acknowledged plain store yet, kb rtl/lib/block/cache/exclusive);
+  the caches' arbiter follows.
 why: >
   Real buses answer writes (AXI's B response, TileLink's AccessAck, OBI, Wishbone); posted
   writes were a simplification that held while stores reached one memory on one path. One

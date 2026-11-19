@@ -3,10 +3,11 @@
  *
  * Same ports, parameters and behavior as the behave version (see there). The request taken is
  * a DffEn (accept) for the line address and, unless READ_ONLY, one for the fields of a store
- * (we, wdata, wstrb).
+ * (we, excl, wdata, wstrb).
  *   look        = DffSyncRst(accept OR held OR replay)     look_ok = look AND ~replay
- *   store       = look_ok AND look_we          load = look_ok AND ~look_we
- *   load_hit    = load AND hit                 load_miss = load AND ~hit (atomic: below)
+ *   asks        = ~look_we OR look_excl        (a load or an SC: memory or the line answers)
+ *   store       = look_ok AND ~asks            load = look_ok AND asks
+ *   load_hit    = load AND hit                 load_miss = load AND ~hit (far: below)
  *   look_req    = store OR load_miss           held = look_req AND ~mem_req_ready
  *   served      = load_miss AND mem_req_ready  waiting = DffSyncRst(served OR
  *                                                         (waiting AND ~mem_rsp_valid))
@@ -30,11 +31,13 @@
  *   request (DffEn); the lookup's memory address has look_offset AND look_nocache, its
  *   size a Mux2 of SETS_OFFSET and look_size; miss_taken = served AND ~look_exact;
  *   wait_nocache a DffEn of look_exact on served
- * Atomic (see the behave version): look_atop a DffEn with the store (g_store), look_atomic
- *   = OrReduce(look_atop[5:4]), look_exact = look_nocache OR look_atomic (in place of
- *   look_nocache above); load_hit = load AND hit AND ~look_atomic, load_miss = load AND
- *   (~hit OR look_atomic); drop = served AND look_atomic AND hit; mem_req_atop a Mux2 of
- *   look_atop and req_atop on unc_pass
+ * Atomic and exclusive (see the behave version): look_atop and look_excl DffEn with the
+ *   store (g_store), look_far = OrReduce(look_atop[5:4], look_excl), look_exact =
+ *   look_nocache OR look_far (in place of look_nocache above); load_hit = load AND hit AND
+ *   ~look_far, load_miss = load AND (~hit OR look_far); drop = served AND look_far AND hit;
+ *   mem_req_atop and mem_req_excl a Mux2 of the lookup's and the request's on unc_pass
+ * Answers: mem_req_rsp = Mux2(load_miss, req_rsp, unc_pass); an uncached request waits for
+ *   its answer when it has req_rsp (in place of ~mem_req_we)
  * CBO (see the behave version): look_cmo a DffEn with the store, look_drops = look_cmo[1],
  *   look_cbo = OrReduce(look_cmo); cbo_drop = store AND look_drops (one more input of the
  *   NorReduce of req_ready); store_write AND ~look_cbo; drop = the atomic's OR (cbo_drop AND
@@ -73,8 +76,10 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     input  wire [STRB_WIDTH-1:0] req_wstrb,     // store: the bytes to write
     input  atop_t                req_atop,      // ATOP_NONE, or an atomic operation (a load)
     input  cmo_t                 req_cmo,       // CMO_NONE, or a CBO (a store, no strobes)
+    input  wire                  req_excl,      // exclusive: LR (a load) or SC (a store)
     /* verilator lint_on UNUSEDSIGNAL */
-    output wire                  rsp_valid,     // rsp_data is the line a load asked for
+    input  wire                  req_rsp,       // wants an answer: a load, an atomic, LR, SC
+    output wire                  rsp_valid,     // rsp_data: a load's line, an SC's status
     output wire [DATA_WIDTH-1:0] rsp_data,
 
     // Memory side: requests (a channel), answers to reads
@@ -87,6 +92,8 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     output wire [STRB_WIDTH-1:0] mem_req_wstrb, // write: the bytes to write
     output atop_t                mem_req_atop,  // an atomic's operation, else ATOP_NONE
     output cmo_t                 mem_req_cmo,   // a CBO's operation, else CMO_NONE
+    output wire                  mem_req_rsp,   // wants an answer
+    output wire                  mem_req_excl,  // exclusive (LR, SC)
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data,
 
@@ -101,13 +108,13 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     output wire                  miss_taken,    // memory takes a load miss's read: the victim
     output wire [DATA_WIDTH-1:0] ram_wr_line,   // what a data RAM write writes: refill or merged
     output wire [DATA_WIDTH-1:0] merged,        // the hit line with the store's bytes
-    output wire                  drop,          // an atomic's or a CBO's line hits: clear it
+    output wire                  drop,          // a far request's or a CBO's line hits: clear it
     input  wire                  hit,         // a way hits the lookup
     input  wire                  fill_conflict, // the request is at the place the refill writes
     input  wire [DATA_WIDTH-1:0] hit_line       // the line of the way that hits
 );
     localparam LINE_WIDTH  = ADDR_WIDTH - SETS_OFFSET;      // address bits above the offset
-    localparam STORE_WIDTH = 1 + DATA_WIDTH + STRB_WIDTH + $bits(atop_t) + $bits(cmo_t);
+    localparam STORE_WIDTH = 2 + DATA_WIDTH + STRB_WIDTH + $bits(atop_t) + $bits(cmo_t);
                                                             // the fields of a store kept
 
     `DC_STATIC_ASSERT(a_size_fits, SETS_OFFSET <= 7)
@@ -120,6 +127,9 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     wire [LINE_WIDTH-1:0] req_line;     // the request's address without the offset
     wire                  look_we;
     wire                  look_we_n;
+    wire                  look_excl;    // the lookup is exclusive (LR, SC)
+    wire                  asks;         // it wants an answer: a load or an SC
+    wire                  asks_n;
     wire                  hit_n;
     wire                  store;        // a store is looked up
     wire                  load;         // a load is looked up
@@ -141,14 +151,13 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     wire                  unc_start;    // memory takes an uncached read
     wire                  unc_next;
     wire                  unc_rsp;      // memory answers the uncached read
-    wire                  mem_we_n;
     wire                  rsp_mem;      // the answer is memory's line
     wire                  look_nocache; // the lookup's request may not be cached
-    wire                  look_atomic;  // ... is atomic
-    wire                  atomic_n;
-    wire                  look_exact;   // ... goes to memory as asked: no cache, or atomic
+    wire                  look_far;     // ... is done at memory: atomic or exclusive
+    wire                  far_n;
+    wire                  look_exact;   // ... goes to memory as asked: no cache, or far
     wire                  exact_n;
-    wire                  miss_cond;    // a load misses: no hit, or atomic
+    wire                  miss_cond;    // a load misses: no hit, or far
     wire [SETS_OFFSET-1:0] look_offset; // its offset and size: memory gets them as asked
     wire [2:0]            look_size;
     wire [SETS_OFFSET-1:0] look_mem_offset; // the lookup's: its own, or 0 for a line
@@ -160,7 +169,7 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     wire                  look_drops;   // the lookup is a CBO inval or flush
     wire                  cbo_drop;     // ... looked up as a store: no request taken now
     wire                  cbo_drop_now; // ... that hits, taken by memory: drop its line
-    wire                  atomic_drop;  // an atomic that hits, its read taken: drop its line
+    wire                  far_drop;     // a far request that hits, taken: drop its line
 
     // A cached request is taken when the lookup is done and no uncached read waits; an
     // uncached one passes to memory while idle and is taken when memory takes it.
@@ -189,20 +198,24 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     DffEn #(SETS_OFFSET + 4) u_dff_en_nocache(
         .clk, .en(accept), .in({req_addr[SETS_OFFSET-1:0], req_size, req_nocache}),
         .out({look_offset, look_size, look_nocache}));
-    Or2   #(1) u_or2_exact (.in1(look_nocache), .in2(look_atomic), .out(look_exact));
+    Or2   #(1) u_or2_exact (.in1(look_nocache), .in2(look_far), .out(look_exact));
     Inv   #(1) u_inv_exact (.in(look_exact), .out(exact_n));
-    Inv   #(1) u_inv_atomic(.in(look_atomic), .out(atomic_n));
+    Inv   #(1) u_inv_far   (.in(look_far), .out(far_n));
 
-    // Lookup. An atomic never hits: its line, if there, is dropped when memory takes its read.
+    // Lookup. A far request never hits: its line, if there, is dropped when memory takes it.
+    // An SC is served as a load miss: memory answers it.
     // @kb: rtl/lib/block/cache/atomic
+    // @kb: rtl/lib/block/cache/exclusive
     Inv  #(1) u_inv_hit       (.in(hit), .out(hit_n));
     Inv  #(1) u_inv_we        (.in(look_we), .out(look_we_n));
+    Or2  #(1) u_or2_asks      (.in1(look_we_n), .in2(look_excl), .out(asks));
     Inv  #(1) u_inv_replay    (.in(replay), .out(replay_n));
     And2 #(1) u_and2_look_ok  (.in1(look), .in2(replay_n), .out(look_ok));
-    And2 #(1) u_and2_store    (.in1(look_ok), .in2(look_we), .out(store));
-    And2 #(1) u_and2_load     (.in1(look_ok), .in2(look_we_n), .out(load));
-    And3 #(1) u_and3_load_hit (.in1(load), .in2(hit), .in3(atomic_n), .out(load_hit));
-    Or2  #(1) u_or2_miss_cond (.in1(hit_n), .in2(look_atomic), .out(miss_cond));
+    Inv  #(1) u_inv_asks      (.in(asks), .out(asks_n));
+    And2 #(1) u_and2_load     (.in1(look_ok), .in2(asks), .out(load));
+    And2 #(1) u_and2_store    (.in1(look_ok), .in2(asks_n), .out(store));
+    And3 #(1) u_and3_load_hit (.in1(load), .in2(hit), .in3(far_n), .out(load_hit));
+    Or2  #(1) u_or2_miss_cond (.in1(hit_n), .in2(look_far), .out(miss_cond));
     And2 #(1) u_and2_load_miss(.in1(load), .in2(miss_cond), .out(load_miss));
 
     // Memory request: a store always, a load when it misses (from the lookup's registers), an
@@ -222,21 +235,28 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
                                        .sel(unc_pass), .out(mem_req_addr));
     Mux2 #(3) u_mux2_mem_size(.in0(look_mem_size), .in1(req_size), .sel(unc_pass),
                               .out(mem_req_size));
+    Mux2 #(1) u_mux2_mem_rsp (.in0(load_miss), .in1(req_rsp), .sel(unc_pass), .out(mem_req_rsp));
 
     // See the behave version.
-    `DC_ASSERT(a_unc_exact, !(unc_pass || (accept && (req_nocache || is_atomic(req_atop)))) ||
+    `DC_ASSERT(a_unc_exact, !(unc_pass || (accept && (req_nocache || is_atomic(req_atop) ||
+                                                      req_excl))) ||
         (int'(req_size) <= SETS_OFFSET &&
          (req_addr & ((ADDR_WIDTH'(1) << req_size) - ADDR_WIDTH'(1))) == '0))
     `DC_ASSERT(a_atomic_load, !(req_valid && is_atomic(req_atop) && req_we))
+    `DC_ASSERT(a_excl_plain, !(req_valid && req_excl && (is_atomic(req_atop) ||
+                                                        req_cmo != CMO_NONE)))
+    // @kb: rtl/lib/block/answered_writes
+    `DC_ASSERT(a_rsp_kinds, !req_valid || req_rsp == (!req_we || req_excl))
 
-    // The logic only stores, atomics and CBOs need; a read-only cache has none of it. Both
-    // branches drive look_we, look_atomic, look_drops, store_write, merged, ram_wr_line and
-    // the fields of a memory write (mem_req_we, mem_req_wdata, mem_req_wstrb), mem_req_atop
-    // and mem_req_cmo.
+    // The logic only stores, atomics, CBOs and exclusive requests need; a read-only cache has
+    // none of it. Both branches drive look_we, look_far, look_excl, look_drops, store_write,
+    // merged, ram_wr_line and the fields of a memory write (mem_req_we, mem_req_wdata,
+    // mem_req_wstrb), mem_req_atop, mem_req_cmo and mem_req_excl.
     // @kb: rtl/lib/block/cache/read_only
     if (READ_ONLY) begin: g_read_only
         assign look_we     = 1'b0;
-        assign look_atomic = 1'b0;
+        assign look_far    = 1'b0;
+        assign look_excl   = 1'b0;
         assign look_drops  = 1'b0;
         assign store_write = 1'b0;
         assign merged      = '0;
@@ -247,8 +267,9 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
         assign mem_req_wstrb = '0;
         assign mem_req_atop  = ATOP_NONE;
         assign mem_req_cmo   = CMO_NONE;
+        assign mem_req_excl  = 1'b0;
     end else begin: g_store
-        wire [STORE_WIDTH-1:0] look_store;      // {we, wdata, wstrb, atop, cmo} of the lookup
+        wire [STORE_WIDTH-1:0] look_store;      // {we, excl, wdata, wstrb, atop, cmo} kept
         wire [DATA_WIDTH-1:0]  look_wdata;
         wire [STRB_WIDTH-1:0]  look_wstrb;
         // Only its kind (bits [5:4]) is read here; all of it goes to memory in look_store.
@@ -260,21 +281,22 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
         wire                   cbo_n;
         wire                   hit_taken;       // a store that hits, taken by memory
 
-        // The fields of the store, atomic or CBO taken, kept for its lookup.
+        // The fields of the store, atomic, CBO or exclusive request taken, kept for its
+        // lookup.
         DffEn #(STORE_WIDTH) u_dff_en_store(
-            .clk, .en(accept), .in({req_we, req_wdata, req_wstrb, req_atop, req_cmo}),
-            .out(look_store));
-        assign {look_we, look_wdata, look_wstrb, look_atop, look_cmo} = look_store;
-        OrReduce #(2) u_or_reduce_atomic(.in(look_atop[5:4]), .out(look_atomic));
+            .clk, .en(accept),
+            .in({req_we, req_excl, req_wdata, req_wstrb, req_atop, req_cmo}), .out(look_store));
+        assign {look_we, look_excl, look_wdata, look_wstrb, look_atop, look_cmo} = look_store;
+        OrReduce #(3) u_or_reduce_far(.in({look_atop[5:4], look_excl}), .out(look_far));
         OrReduce #(2) u_or_reduce_cbo(.in(look_cmo), .out(look_cbo));
         assign look_drops = look_cmo[1];                // CMO_INVAL, CMO_FLUSH
 
-        // A memory write, an atomic's operand, a CBO: an uncached request's as it comes, else
-        // the lookup's.
+        // A memory write, an atomic's operand, a CBO, an exclusive request: an uncached
+        // request's as it comes, else the lookup's.
         Mux2 #(STORE_WIDTH) u_mux2_mem_store(
-            .in0(look_store), .in1({req_we, req_wdata, req_wstrb, req_atop, req_cmo}),
-            .sel(unc_pass), .out({mem_req_we, mem_req_wdata, mem_req_wstrb, mem_req_atop,
-                                  mem_req_cmo}));
+            .in0(look_store), .in1({req_we, req_excl, req_wdata, req_wstrb, req_atop, req_cmo}),
+            .sel(unc_pass), .out({mem_req_we, mem_req_excl, mem_req_wdata, mem_req_wstrb,
+                                  mem_req_atop, mem_req_cmo}));
 
         // Store: the bytes of its strobes into the line, written when memory takes the store
         // (a CBO writes none).
@@ -293,15 +315,15 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
                                                                        req_wstrb != '0)))
     end
 
-    // Load miss served from the clock memory takes its read until the answer comes. An
-    // atomic drops the line it hits then; an inval or flush when memory takes it.
+    // Load miss served from the clock memory takes it until the answer comes. A far request
+    // drops the line it hits then; an inval or flush when memory takes it.
     And2 #(1) u_and2_served    (.in1(load_miss), .in2(mem_req_ready), .out(served));
     And2 #(1) u_and2_miss_taken(.in1(served), .in2(exact_n), .out(miss_taken));
-    And3 #(1) u_and3_atomic_drop(.in1(served), .in2(look_atomic), .in3(hit), .out(atomic_drop));
+    And3 #(1) u_and3_far_drop  (.in1(served), .in2(look_far), .in3(hit), .out(far_drop));
     And2 #(1) u_and2_cbo_drop  (.in1(store), .in2(look_drops), .out(cbo_drop));
     And3 #(1) u_and3_cbo_drop_now(.in1(cbo_drop), .in2(hit), .in3(mem_req_ready),
                                   .out(cbo_drop_now));
-    Or2  #(1) u_or2_drop       (.in1(atomic_drop), .in2(cbo_drop_now), .out(drop));
+    Or2  #(1) u_or2_drop       (.in1(far_drop), .in2(cbo_drop_now), .out(drop));
     Inv  #(1) u_inv_rsp        (.in(mem_rsp_valid), .out(mem_rsp_n));
     And2 #(1) u_and2_kept      (.in1(waiting), .in2(mem_rsp_n), .out(waiting_kept));
     Or2  #(1) u_or2_wait       (.in1(served), .in2(waiting_kept), .out(waiting_next));
@@ -328,13 +350,13 @@ module CacheControl import AtomicPkg::*, CachePkg::*; #(
     // follow the CPU side, which may withdraw (kb rtl/lib/block/cache/uncached).
     `DC_ASSERT_NEXT(a_look_req_held, look_req && !mem_req_ready,
                     look_req && $stable(mem_req_addr) && $stable(mem_req_we) &&
-                    $stable(mem_req_atop) && $stable(mem_req_cmo) &&
+                    $stable(mem_req_atop) && $stable(mem_req_cmo) && $stable(mem_req_excl) &&
                     ((!mem_req_we && !is_atomic(mem_req_atop)) ||
                      ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
 
-    // Uncached read served from the clock memory takes it until the answer comes.
-    Inv  #(1) u_inv_mem_we    (.in(mem_req_we), .out(mem_we_n));
-    And3 #(1) u_and3_unc_start(.in1(unc_pass), .in2(mem_req_ready), .in3(mem_we_n),
+    // Uncached request that wants an answer, served from the clock memory takes it until
+    // the answer comes.
+    And3 #(1) u_and3_unc_start(.in1(unc_pass), .in2(mem_req_ready), .in3(req_rsp),
                                .out(unc_start));
     Or2  #(1) u_or2_unc_wait  (.in1(unc_start), .in2(unc_busy), .out(unc_next));
     DffSyncRst #(.WIDTH(1)) u_dff_sync_rst_unc_wait(.clk, .rst_n, .in(unc_next),

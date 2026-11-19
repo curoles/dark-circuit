@@ -88,6 +88,12 @@ module Mig3Caches import Mig3Pkg::*; #(
     line_strb_t       d_mem_wstrb;
     AtomicPkg::atop_t d_mem_atop;
     CachePkg::cmo_t   d_mem_cmo;
+    // The D-cache's memory side: wants an answer, exclusive; the arbiter takes them next
+    // (until then it counts answers by !we, the same while no request is exclusive).
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire              d_mem_rsp;
+    wire              d_mem_excl;
+    /* verilator lint_on UNUSEDSIGNAL */
     logic             d_mem_rsp_valid;
     line_t            d_mem_rsp_data;
     // The caches' CPU sides, lines.
@@ -117,12 +123,13 @@ module Mig3Caches import Mig3Pkg::*; #(
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
         .req_nocache(d_io), .req_atop(dcache_req.atop),
-        .req_cmo(dcache_req.cmo),
+        .req_cmo(dcache_req.cmo), .req_excl(1'b0), .req_rsp(!dcache_req.we),
         .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
         .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb), .mem_req_size(d_mem_size),
         .mem_req_atop(d_mem_atop), .mem_req_cmo(d_mem_cmo),
+        .mem_req_rsp(d_mem_rsp), .mem_req_excl(d_mem_excl),
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
     // A fetch gets the line (fetch selects its word, after a register: kb

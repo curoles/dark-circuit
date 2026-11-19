@@ -70,20 +70,20 @@ mutants:
         new: ".en(served), .in(1'b0),"
     tests: [block_skewed_cache_struct]
     expect: caught
-  - name: an atomic may hit
+  - name: a far request (atomic, exclusive) may hit
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "assign load_hit  = look_ok && !look_we && hit && !look_atomic;"
-        new: "assign load_hit  = look_ok && !look_we && hit;"
+        old: "assign load_hit  = look_ok && asks && hit && !look_far;"
+        new: "assign load_hit  = look_ok && asks && hit;"
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "assign load_miss = look_ok && !look_we && (!hit || look_atomic);"
-        new: "assign load_miss = look_ok && !look_we && !hit;"
+        old: "assign load_miss = look_ok && asks && (!hit || look_far);"
+        new: "assign load_miss = look_ok && asks && !hit;"
     expect: caught
-  - name: an atomic keeps the line it hits
+  - name: a far request (atomic, exclusive) keeps the line it hits
     edits:
       - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
-        old: "(served && look_atomic && hit)"
-        new: "(served && look_atomic && hit && 1'b0)"
+        old: "(served && look_far && hit)"
+        new: "(served && look_far && hit && 1'b0)"
     expect: caught
   - name: a request taken while an inval or flush is looked up (no bubble)
     edits:
@@ -110,10 +110,10 @@ mutants:
         old: "assign mem_req_atop  = unc_pass ? req_atop  : look_atop;"
         new: "assign mem_req_atop  = unc_pass ? req_atop  : ATOP_NONE;"
     expect: caught
-  - name: an atomic that hits is neither a hit nor a miss (struct)
+  - name: a far request that hits is neither a hit nor a miss (struct)
     edits:
       - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
-        old: ".in2(look_atomic), .out(miss_cond)"
+        old: ".in2(look_far), .out(miss_cond)"
         new: ".in2(1'b0), .out(miss_cond)"
     tests: [block_skewed_cache_struct]
     expect: caught
@@ -151,4 +151,17 @@ mutants:
         old: ".in0(CachePkg::CMO_NONE), .in1(d_cmo), .sel(side),"
         new: ".in0(d_cmo), .in1(CachePkg::CMO_NONE), .sel(side),"
     tests: [block_insn_data_cache_arbiter_struct]
+    expect: caught
+  - name: an SC done as a store, merged into the line it hits (2026-11-18)
+    edits:
+      - file: rtl/lib/block/cache/cache_control/behave/cache_control.sv
+        old: "assign asks      = !look_we || look_excl;"
+        new: "assign asks      = !look_we;"
+    expect: caught
+  - name: an exclusive request is not far, so an LR may hit (struct, 2026-11-18)
+    edits:
+      - file: rtl/lib/block/cache/cache_control/struct/cache_control.sv
+        old: ".in({look_atop[5:4], look_excl}), .out(look_far)"
+        new: ".in({look_atop[5:4], 1'b0}), .out(look_far)"
+    tests: [block_skewed_cache_struct]
     expect: caught

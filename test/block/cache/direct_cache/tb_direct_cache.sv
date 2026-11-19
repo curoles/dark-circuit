@@ -89,6 +89,8 @@ module TbDirectCacheCheck #(
     AtomicPkg::atop_t mem_req_atop;
     CachePkg::cmo_t   mem_req_cmo;
     /* verilator lint_on UNUSEDSIGNAL */
+    wire   mem_req_rsp;     // no exclusive requests here: exactly for a read
+    wire   mem_req_excl;
     logic  mem_rsp_valid;
     data_t mem_rsp_data;
 
@@ -153,10 +155,11 @@ module TbDirectCacheCheck #(
         .req_valid, .req_ready, .req_uncached_dbg_bypass,
         .req_we, .req_addr, .req_wdata, .req_wstrb,
         .req_size, .req_nocache(1'b0), .req_atop(AtomicPkg::ATOP_NONE),
-        .req_cmo(CachePkg::CMO_NONE), .rsp_valid,
+        .req_cmo(CachePkg::CMO_NONE), .req_excl(1'b0), .req_rsp(!req_we), .rsp_valid,
         .rsp_data,
         .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_wdata,
-        .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_req_cmo, .mem_rsp_valid,
+        .mem_req_wstrb, .mem_req_size, .mem_req_atop, .mem_req_cmo, .mem_req_rsp,
+        .mem_req_excl, .mem_rsp_valid,
         .mem_rsp_data);
 
     // The address of the line of a: offset 0.
@@ -247,6 +250,9 @@ module TbDirectCacheCheck #(
             $fatal(1, "DirectCache %0d: ready %b mem_req %b rsp %b %h, expected %b %b %b %h",
                    SETS_OFFSET, req_ready, mem_req_valid, rsp_valid, rsp_data, exp_ready(),
                    exp_mem_valid(), exp_rsp, exp_data);
+        if (mem_req_valid && (mem_req_rsp !== !mem_req_we || mem_req_excl !== 1'b0))
+            $fatal(1, "DirectCache %0d: mem_req we %b rsp %b excl %b", SETS_OFFSET,
+                   mem_req_we, mem_req_rsp, mem_req_excl);
         if (exp_unc_pass() &&
             (mem_req_we !== req_we || mem_req_addr !== req_addr || mem_req_size !== req_size ||
              (req_we && (mem_req_wdata !== req_wdata || mem_req_wstrb !== req_wstrb))))

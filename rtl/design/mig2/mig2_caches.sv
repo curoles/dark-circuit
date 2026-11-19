@@ -62,6 +62,12 @@ module Mig2Caches import Mig2Pkg::*; #(
     strb_t            d_mem_wstrb;
     AtomicPkg::atop_t d_mem_atop;
     CachePkg::cmo_t   d_mem_cmo;
+    // The D-cache's memory side: wants an answer, exclusive; the arbiter takes them next
+    // (until then it counts answers by !we, the same while no request is exclusive).
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire              d_mem_rsp;
+    wire              d_mem_excl;
+    /* verilator lint_on UNUSEDSIGNAL */
     // The memory port's CBOs: none yet (Mig2 sends none).
     /* verilator lint_off UNUSEDSIGNAL */
     CachePkg::cmo_t   mem_cmo;
@@ -96,12 +102,13 @@ module Mig2Caches import Mig2Pkg::*; #(
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, {DADDR_START{1'b0}}}),
         .req_wdata(dcache_req.wdata), .req_wstrb(dcache_req.wstrb), .req_size(3'd2),
         .req_nocache(1'b0), .req_atop(AtomicPkg::ATOP_NONE),
-        .req_cmo(CachePkg::CMO_NONE),
+        .req_cmo(CachePkg::CMO_NONE), .req_excl(1'b0), .req_rsp(!dcache_req.we),
         .rsp_valid(dcache_rsp.valid), .rsp_data(dcache_rsp.data),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
         .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb), .mem_req_size(d_mem_size),
         .mem_req_atop(d_mem_atop), .mem_req_cmo(d_mem_cmo),
+        .mem_req_rsp(d_mem_rsp), .mem_req_excl(d_mem_excl),
         .mem_rsp_valid(d_mem_rsp_valid), .mem_rsp_data(d_mem_rsp_data));
 
     // @kb: rtl/design/mig2/single_memory
