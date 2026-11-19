@@ -88,11 +88,13 @@ module Mig3Caches import Mig3Pkg::*; #(
     line_strb_t       d_mem_wstrb;
     AtomicPkg::atop_t d_mem_atop;
     CachePkg::cmo_t   d_mem_cmo;
-    // The D-cache's memory side: wants an answer, exclusive; the arbiter takes them next
-    // (until then it counts answers by !we, the same while no request is exclusive).
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire              d_mem_rsp;
+    wire              d_mem_rsp;         // the D-cache's: wants an answer, exclusive
     wire              d_mem_excl;
+    // The arbiter's: no field of mem_req_t carries them yet (no request is exclusive,
+    // only a read wants an answer: mem_req.we says it).
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire              mem_rsp_ask;
+    wire              mem_excl;
     /* verilator lint_on UNUSEDSIGNAL */
     logic             d_mem_rsp_valid;
     line_t            d_mem_rsp_data;
@@ -175,12 +177,14 @@ module Mig3Caches import Mig3Pkg::*; #(
         .dcache_req_addr(d_mem_addr), .dcache_req_wdata(d_mem_wdata),
         .dcache_req_wstrb(d_mem_wstrb), .dcache_req_size(d_mem_size),
         .dcache_req_atop(d_mem_atop), .dcache_req_cmo(d_mem_cmo),
+        .dcache_req_rsp(d_mem_rsp), .dcache_req_excl(d_mem_excl),
         .dcache_rsp_valid(d_mem_rsp_valid),
         .dcache_rsp_data(d_mem_rsp_data),
         .mem_req_valid(mem_req.valid), .mem_req_ready(mem_rsp.ready), .mem_req_we(mem_req.we),
         .mem_req_addr(mem_req.addr), .mem_req_wdata(mem_req.wdata),
         .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_req.size),
         .mem_req_atop(mem_req.atop), .mem_req_cmo(mem_req.cmo),
+        .mem_req_rsp(mem_rsp_ask), .mem_req_excl(mem_excl),
         .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 

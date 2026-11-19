@@ -5,7 +5,9 @@
  * decided by prio (two CmpEq), else by POLICY (generate: a constant side, or round-robin with
  * a flip-flop of the side served last, which only round-robin has); muxes select the side
  * presented, held while memory does not take it (two flip-flops: the hold and its side); a
- * Fifo keeps the sides of the reads in memory. Each side's request first goes through a
+ * Fifo keeps the sides of the requests memory answers (mem_req_rsp: a Mux2 of 1 for a fetch
+ * and the data cache's rsp; mem_req_excl an And2 of the side and its excl). Each side's
+ * request first goes through a
  * FlowThroughBufferT (see the behave version: the cut of the ready paths).
  *
  * @author    Igor Lesik
@@ -40,6 +42,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     input  wire [2:0]            dcache_req_size,   // 1 << size bytes (AXI AxSIZE)
     input  atop_t                dcache_req_atop,   // ATOP_NONE, or an atomic (a read)
     input  cmo_t                 dcache_req_cmo,    // CMO_NONE, or a CBO (a write)
+    input  wire                  dcache_req_rsp,    // wants an answer (a read, an SC)
+    input  wire                  dcache_req_excl,   // exclusive: LR (a read) or SC (a write)
     input  wire [DATA_WIDTH-1:0] dcache_req_wdata,
     input  wire [STRB_WIDTH-1:0] dcache_req_wstrb,
     output wire                  dcache_rsp_valid,
@@ -54,7 +58,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     output atop_t                mem_req_atop,      // the data cache's; ATOP_NONE for the
     output cmo_t                 mem_req_cmo,       // the data cache's; CMO_NONE for the
                                                     // instruction cache's
-                                                    // instruction cache
+    output wire                  mem_req_rsp,       // the data cache's; 1 for a fetch
+    output wire                  mem_req_excl,      // the data cache's; 0 for a fetch
     output wire [DATA_WIDTH-1:0] mem_req_wdata,     // write: the line
     output wire [STRB_WIDTH-1:0] mem_req_wstrb,     // write: the bytes to write
     input  wire                  mem_rsp_valid,
@@ -67,10 +72,10 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     // A side is a bit: 0 the instruction cache, 1 the data cache.
     wire hold_q;        // the request presented in the clock before was not taken: it stays
     wire side_q;        // its side
-    wire full;          // the queue of reads in memory: no room for one more
+    wire full;          // the queue of answers memory owes: no room for one more
     wire full_n;
     wire empty;
-    wire owner;         // the side of the oldest read in memory: its answer goes there
+    wire owner;         // the side of the oldest one: its answer goes there
     wire owner_n;
     wire prio_d;        // prio says the data cache
     wire prio_i;        // prio says the instruction cache
@@ -78,7 +83,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     wire policy_d;      // POLICY says the data cache
     wire policy_by_i;   // POLICY says the data cache and prio does not say the instruction one
     wire tie_d;         // the data cache wins a tie
-    wire write_or_room; // the data cache's request can go: a write, or room for a read
+    wire posted_or_room; // the data cache's request can go: posted, or room for an answer
+    wire d_rsp_n;
     wire i_ok;          // the instruction cache asks, and its read can go
     wire d_ok;          // the data cache asks, and its request can go
     wire both;
@@ -88,8 +94,7 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     wire ready_n;
     wire not_taken;
     wire taken;         // memory takes the request
-    wire we_n;
-    wire taken_read;
+    wire taken_rsp;     // memory takes a request it will answer
     // Status the arbiter does not need.
     /* verilator lint_off UNUSEDSIGNAL */
     wire [PENDING_WIDTH:0] count;
@@ -100,8 +105,9 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     // Each side's request goes through a flow-through buffer: the cache's ready comes from a
     // flop (its buffer is empty), never from memory's ready or the other cache's valid.
     localparam I_REQ_WIDTH = ADDR_WIDTH + 3;    // {addr, size}
-    localparam D_REQ_WIDTH = 1 + ADDR_WIDTH + 3 + $bits(atop_t) + $bits(cmo_t) + DATA_WIDTH +
-                             STRB_WIDTH;        // {we, addr, size, atop, cmo, wdata, wstrb}
+    localparam D_REQ_WIDTH = 3 + ADDR_WIDTH + 3 + $bits(atop_t) + $bits(cmo_t) + DATA_WIDTH +
+                             STRB_WIDTH;        // {we, rsp, excl, addr, size, atop, cmo, wdata,
+                                                //  wstrb}
     typedef logic [I_REQ_WIDTH-1:0] i_req_t;
     typedef logic [D_REQ_WIDTH-1:0] d_req_t;
 
@@ -112,6 +118,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     wire                  d_valid;      // the data cache's request, behind its buffer
     wire                  d_ready;
     wire                  d_we;
+    wire                  d_rsp;
+    wire                  d_excl;
     wire [ADDR_WIDTH-1:0] d_addr;
     wire [2:0]            d_size;
     atop_t                d_atop;
@@ -128,10 +136,11 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     FlowThroughBufferT #(.T(d_req_t)) u_dcache_flow(
         .clk, .rst_n,
         .in_valid(dcache_req_valid), .in_ready(dcache_req_ready),
-        .in_data({dcache_req_we, dcache_req_addr, dcache_req_size, dcache_req_atop, dcache_req_cmo,
-                  dcache_req_wdata, dcache_req_wstrb}),
+        .in_data({dcache_req_we, dcache_req_rsp, dcache_req_excl, dcache_req_addr,
+                  dcache_req_size, dcache_req_atop, dcache_req_cmo, dcache_req_wdata,
+                  dcache_req_wstrb}),
         .out_valid(d_valid), .out_ready(d_ready),
-        .out_data({d_we, d_addr, d_size, d_atop, d_cmo, d_wdata, d_wstrb}));
+        .out_data({d_we, d_rsp, d_excl, d_addr, d_size, d_atop, d_cmo, d_wdata, d_wstrb}));
 
     // @kb: rtl/lib/block/cache/insn_data_cache_arbiter/design
     // The tie: prio first (PRIO_DATA and PRIO_INSN never hold together), else POLICY. The
@@ -156,11 +165,12 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     And2 #(1) u_and2_policy(.in1(prio_i_n), .in2(policy_d), .out(policy_by_i));
     Or2  #(1) u_or2_tie    (.in1(prio_d), .in2(policy_by_i), .out(tie_d));
 
-    // A read goes only while the queue has room.
+    // A request that wants an answer goes only while the queue has room.
     Inv  #(1) u_inv_full   (.in(full), .out(full_n));
     And2 #(1) u_and2_i_ok  (.in1(i_valid), .in2(full_n), .out(i_ok));
-    Or2  #(1) u_or2_d_room (.in1(d_we), .in2(full_n), .out(write_or_room));
-    And2 #(1) u_and2_d_ok  (.in1(d_valid), .in2(write_or_room), .out(d_ok));
+    Inv  #(1) u_inv_d_rsp  (.in(d_rsp), .out(d_rsp_n));
+    Or2  #(1) u_or2_d_room (.in1(d_rsp_n), .in2(full_n), .out(posted_or_room));
+    And2 #(1) u_and2_d_ok  (.in1(d_valid), .in2(posted_or_room), .out(d_ok));
 
     // The side: the held one, else the tie's winner when both ask, else the one that asks.
     And2 #(1) u_and2_both  (.in1(i_ok), .in2(d_ok), .out(both));
@@ -179,6 +189,10 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     // @kb: rtl/lib/block/cache/cbo
     Mux2 #($bits(cmo_t)) u_mux2_cmo(.in0(CachePkg::CMO_NONE), .in1(d_cmo), .sel(side),
                                     .out(mem_req_cmo));
+    // @kb: rtl/lib/block/answered_writes
+    Mux2 #(1) u_mux2_rsp   (.in0(1'b1), .in1(d_rsp), .sel(side), .out(mem_req_rsp));
+    // @kb: rtl/lib/block/cache/exclusive
+    And2 #(1) u_and2_excl  (.in1(side), .in2(d_excl), .out(mem_req_excl));
     assign mem_req_wdata = d_wdata;             // a write, an atomic: the data cache's
     assign mem_req_wstrb = d_wstrb;
 
@@ -196,11 +210,10 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     DffSyncRst #(.WIDTH(1), .RST_VAL(1'b0)) u_dff_sync_rst_side(
         .clk, .rst_n, .in(side), .out(side_q));
 
-    // Sides of the reads in memory, oldest first (the we of the side presented).
-    Inv  #(1) u_inv_we     (.in(mem_req_we), .out(we_n));
-    And2 #(1) u_and2_read  (.in1(taken), .in2(we_n), .out(taken_read));
+    // Sides of the answers memory owes, oldest first (the rsp of the side presented).
+    And2 #(1) u_and2_ask   (.in1(taken), .in2(mem_req_rsp), .out(taken_rsp));
     Fifo #(.ADDR_WIDTH(PENDING_WIDTH), .DATA_WIDTH(1)) u_fifo(
-        .clk, .rst_n, .write(taken_read), .data_in(side), .read(mem_rsp_valid),
+        .clk, .rst_n, .write(taken_rsp), .data_in(side), .read(mem_rsp_valid),
         .data_out(owner), .empty, .full, .count, .almost_full, .almost_empty);
 
     Inv  #(1) u_inv_owner  (.in(owner), .out(owner_n));
@@ -214,7 +227,8 @@ module InsnDataCacheArbiter import CachePkg::*, AtomicPkg::*; #(
     // its operand).
     `DC_ASSERT_NEXT(a_mem_req_held, mem_req_valid && !mem_req_ready,
                     mem_req_valid && $stable(mem_req_we) && $stable(mem_req_addr) &&
-                    $stable(mem_req_atop) && $stable(mem_req_cmo) &&
+                    $stable(mem_req_atop) && $stable(mem_req_cmo) && $stable(mem_req_rsp) &&
+                    $stable(mem_req_excl) &&
                     ((!mem_req_we && !is_atomic(mem_req_atop)) ||
                      ($stable(mem_req_wdata) && $stable(mem_req_wstrb))))
 

@@ -165,3 +165,10 @@ mutants:
         new: ".in({look_atop[5:4], 1'b0}), .out(look_far)"
     tests: [block_skewed_cache_struct]
     expect: caught
+  - name: the arbiter queues the sides of reads again, not of the requests with rsp (2026-11-19)
+    edits:
+      - file: rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv
+        old: ".write(taken && mem_req_rsp),"
+        new: ".write(taken && !mem_req_we),"
+    tests: [block_insn_data_cache_arbiter_behave]
+    expect: caught

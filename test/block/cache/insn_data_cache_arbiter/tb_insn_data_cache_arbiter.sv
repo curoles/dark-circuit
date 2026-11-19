@@ -7,7 +7,10 @@
  * size of a request (here the low 3 bits of its address) must come to memory with it, and
  * the atop of a data read (here bits 8..3 of its address; a write's and an instruction
  * read's ATOP_NONE), and the cmo of a data write (here bits 4..3 of its address; a read's
- * and an instruction read's CMO_NONE).
+ * and an instruction read's CMO_NONE), and whether a data request is exclusive (here bit 9
+ * of its address; an instruction read's 0) and wants an answer (a read, an exclusive
+ * write: an SC; an instruction read always). Answered requests count, not reads: a posted
+ * write goes while the queue is full, an SC waits like a read and gets its answer.
  * Memory takes requests when ready (random) and answers reads in order, 1 to 6 clocks after
  * taking them; prio is random. The model has the arbiter's two flow-through buffers: a
  * cache's request is taken when its buffer is empty and goes on from there (in the same
@@ -19,12 +22,14 @@
  *   POLICY's when both may go (round-robin: not the side taken last), else the one that
  *   may go (a read only with fewer than 1 << PENDING_WIDTH reads in memory);
  * - a request presented and not taken is still presented, unchanged;
- * - an answer goes to the side of the oldest read in memory, and only then.
+ * - memory gets mem_req_rsp and mem_req_excl of the side presented;
+ * - an answer goes to the side of the oldest request memory owes an answer, and only then.
  * Runs with POLICY round-robin (PENDING_WIDTH 1), data first (1) and instruction first (2);
  * 20000 clocks on Verilator, 2000 on Icarus. In the end every case must have happened: ties
  * decided by each prio and by POLICY, a held request, a full queue that stops a read while a
- * write goes, answers to both sides, a request that flowed through its buffer and one that
- * waited in it, on both sides. Stops at the first mismatch with $fatal.
+ * posted write goes, answers to both sides, an SC taken, a request that flowed through its
+ * buffer and one that waited in it, on both sides. Stops at the first mismatch with
+ * $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -66,6 +71,8 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
     logic [SW-1:0] d_wstrb;
     atop_t         d_atop;     // a read's atop: its address's bits 8..3 here
     cmo_t          d_cmo;      // a write's cmo: its address's bits 4..3 here
+    wire           d_excl;     // exclusive: its address's bit 9 here
+    wire           d_rsp;      // wants an answer: a read, an exclusive write (SC)
     wire           d_rsp_valid;
     wire  [DW-1:0] d_rsp_data;
     // Memory
@@ -76,6 +83,8 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
     wire  [2:0]    m_size;     // a request's size: its address's low bits here
     atop_t         m_atop;
     cmo_t          m_cmo;
+    wire           m_rsp;
+    wire           m_excl;
     wire  [DW-1:0] m_wdata;
     wire  [SW-1:0] m_wstrb;
     logic          m_rsp_valid;
@@ -90,16 +99,19 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         .dcache_req_valid(d_valid), .dcache_req_ready(d_ready), .dcache_req_we(d_we),
         .dcache_req_addr(d_addr), .dcache_req_wdata(d_wdata), .dcache_req_wstrb(d_wstrb),
         .dcache_req_size(d_addr[2:0]), .dcache_req_atop(d_atop),
-        .dcache_req_cmo(d_cmo),
+        .dcache_req_cmo(d_cmo), .dcache_req_rsp(d_rsp), .dcache_req_excl(d_excl),
         .dcache_rsp_valid(d_rsp_valid), .dcache_rsp_data(d_rsp_data),
         .mem_req_valid(m_valid), .mem_req_ready(m_ready), .mem_req_we(m_we),
         .mem_req_addr(m_addr), .mem_req_wdata(m_wdata), .mem_req_wstrb(m_wstrb),
         .mem_req_size(m_size), .mem_req_atop(m_atop), .mem_req_cmo(m_cmo),
+        .mem_req_rsp(m_rsp), .mem_req_excl(m_excl),
         .mem_rsp_valid(m_rsp_valid),
         .mem_rsp_data(m_rsp_data));
 
     assign d_atop = d_we ? ATOP_NONE : d_addr[8:3];
     assign d_cmo  = d_we ? d_addr[4:3] : CMO_NONE;
+    assign d_excl = d_addr[9];
+    assign d_rsp  = rsp_of(d_we, d_addr[9]);
 
     // Model queues: reads a cache waits for (addresses), reads in memory (address, side,
     // the clock its answer may come).
@@ -130,13 +142,14 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
     logic          held;        // the request presented in the clock before was not taken
     logic          h_side;      // that request
     logic          h_we;
+    logic          h_rsp;       // memory owes it an answer
     logic [AW-1:0] h_addr;
     logic [DW-1:0] h_wdata;
     logic [SW-1:0] h_wstrb;
     logic          side;        // the side presented now
     logic          i_take, d_take, m_take, ci_take, cd_take, ci_ok, cd_ok, rsp, rsp_d, exp_valid;
     integer        n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d;
-    integer        n_flow_i, n_flow_d, n_wait_i, n_wait_d;
+    integer        n_flow_i, n_flow_d, n_wait_i, n_wait_d, n_sc;
     // Random word, only some of its bits are used.
     /* verilator lint_off UNUSEDSIGNAL */
     logic [31:0]   rnd;
@@ -145,6 +158,11 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
     // The line memory has at an address.
     function automatic logic [DW-1:0] line_of(input logic [AW-1:0] a);
         return {~a, a};
+    endfunction
+
+    // A data request wants an answer: a read, or an exclusive write (an SC).
+    function automatic logic rsp_of(input logic we, input logic excl);
+        return !we || excl;
     endfunction
 
     // Who takes memory in a tie: prio, else POLICY.
@@ -171,7 +189,7 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         cd_wdata = db_full ? db_wdata : d_wdata;
         cd_wstrb = db_full ? db_wstrb : d_wstrb;
         ci_ok    = ci_valid && (mt - mh) < CAP;
-        cd_ok    = cd_valid && (cd_we || (mt - mh) < CAP);
+        cd_ok    = cd_valid && (!rsp_of(cd_we, cd_addr[9]) || (mt - mh) < CAP);
         if (held)                side = h_side;
         else if (ci_ok && cd_ok) side = tie_side(prio, last);
         else                     side = cd_ok ? SIDE_D : SIDE_I;
@@ -196,6 +214,10 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         if (m_valid && m_cmo !== ((side == SIDE_D && m_we) ? m_addr[4:3] : CMO_NONE))
             $fatal(1, "InsnDataCacheArbiter %0d: mem_req_cmo %b of side %b, %h",
                    POLICY, m_cmo, side, m_addr);
+        if (m_valid && (m_rsp !== ((side == SIDE_D) ? rsp_of(m_we, m_addr[9]) : 1'b1) ||
+                        m_excl !== (side == SIDE_D && m_addr[9])))
+            $fatal(1, "InsnDataCacheArbiter %0d: mem_req_rsp %b excl %b of side %b, we %b %h",
+                   POLICY, m_rsp, m_excl, side, m_we, m_addr);
         if (held && (m_valid !== 1'b1 || m_we !== h_we || m_addr !== h_addr ||
                      (h_we && (m_wdata !== h_wdata || m_wstrb !== h_wstrb))))
             $fatal(1, "Arbiter %0d: the request held changed: valid=%b we=%b %h, was we=%b %h",
@@ -210,8 +232,10 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         end
         if (held)
             n_held = n_held + 1;
-        if ((mt - mh) == CAP && cd_take && cd_we && ci_valid)
+        if ((mt - mh) == CAP && cd_take && !rsp_of(cd_we, cd_addr[9]) && ci_valid)
             n_full = n_full + 1;
+        if (cd_take && cd_we && rsp_of(cd_we, cd_addr[9]))
+            n_sc = n_sc + 1;
         if (i_take && ci_take)  n_flow_i = n_flow_i + 1;
         if (i_take && !ci_take) n_wait_i = n_wait_i + 1;
         if (d_take && cd_take)  n_flow_d = n_flow_d + 1;
@@ -231,6 +255,7 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         held    = m_valid && !m_ready;
         h_side  = side;
         h_we    = m_we;
+        h_rsp   = m_rsp;
         h_addr  = m_addr;
         h_wdata = m_wdata;
         h_wstrb = m_wstrb;
@@ -278,14 +303,14 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         end
         if (d_take) begin
             d_valid = 1'b0;
-            if (!d_we) begin
+            if (d_rsp) begin
                 dq[dt % Q] = d_addr;
                 dt = dt + 1;
             end
         end
         if (m_take) begin
             last = side;
-            if (!h_we) begin
+            if (h_rsp) begin
                 rnd = $random(seed);
                 mq_addr[mt % Q] = h_addr;
                 mq_side[mt % Q] = side;
@@ -320,12 +345,12 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         seed = 1 + POLICY + 8 * PENDING_WIDTH;
         {ih, it, dh, dt, mh, mt} = '0;
         {n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d} = '0;
-        {n_flow_i, n_flow_d, n_wait_i, n_wait_d} = '0;
+        {n_flow_i, n_flow_d, n_wait_i, n_wait_d, n_sc} = '0;
         now = 0;
         last = SIDE_D;          // the arbiter after reset: the instruction cache first
         held = 1'b0;
         h_side = SIDE_I;
-        {h_we, h_addr, h_wdata, h_wstrb} = '0;
+        {h_we, h_rsp, h_addr, h_wdata, h_wstrb} = '0;
         {ib_full, db_full} = '0;
         {ib_addr, db_we, db_addr, db_wdata, db_wstrb} = '0;
         rst_n = 1'b0;
@@ -343,11 +368,11 @@ module TbInsnDataCacheArbiterCheck import CachePkg::*, AtomicPkg::*; #(
         end
         if (n_prio_d == 0 || n_prio_i == 0 || n_policy == 0 || n_held == 0 || n_full == 0 ||
             n_rsp_i == 0 || n_rsp_d == 0 || n_flow_i == 0 || n_flow_d == 0 || n_wait_i == 0 ||
-            n_wait_d == 0)
+            n_wait_d == 0 || n_sc == 0)
             $fatal(1, {"Arbiter %0d: a case did not happen: prio %0d %0d policy %0d held %0d ",
-                       "full %0d rsp %0d %0d flow %0d %0d wait %0d %0d"},
+                       "full %0d rsp %0d %0d flow %0d %0d wait %0d %0d sc %0d"},
                    POLICY, n_prio_d, n_prio_i, n_policy, n_held, n_full, n_rsp_i, n_rsp_d,
-                   n_flow_i, n_flow_d, n_wait_i, n_wait_d);
+                   n_flow_i, n_flow_d, n_wait_i, n_wait_d, n_sc);
         done = 1'b1;
     end
 endmodule

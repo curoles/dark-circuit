@@ -20,7 +20,8 @@ decision: >
   First chunk: ReqDemux and ReqMux; second: AtomicUnit (its own read asks for an answer,
   its write does not: mem_req_rsp); third: the read-write caches (CacheControl: exclusive
   requests as atomics, no acknowledged plain store yet, kb rtl/lib/block/cache/exclusive);
-  the caches' arbiter follows.
+  fourth: their arbiter (InsnDataCacheArbiter: the data cache's rsp and excl, the queue of
+  answers by rsp; a fetch always wants one).
 why: >
   Real buses answer writes (AXI's B response, TileLink's AccessAck, OBI, Wishbone); posted
   writes were a simplification that held while stores reached one memory on one path. One
@@ -49,10 +50,16 @@ evidence: >
   adds writes that want an answer (its memory answers what comes with mem_req_rsp) and
   passes on Verilator and Icarus; Mig3 (149) and Mig6 (14) unchanged; all 9 mutants caught,
   two new (an answered write passing uncounted; the atomic's read asking for no answer).
+  2026-11-19: the read-write caches (kb rtl/lib/block/cache/exclusive) and their arbiter
+  count by rsp; the arbiter's test sends exclusive data requests (an SC wants an answer, a
+  posted write goes while the queue of answers is full) and checks mem_req_rsp and
+  mem_req_excl; it passes on Verilator and Icarus, Mig2 (108), Mig3 (149) and Mig6 (14)
+  unchanged; one new mutant (the queue by !we again) caught.
 code:
   - rtl/lib/block/req_demux/behave/req_demux.sv#req_rsp
   - rtl/lib/block/req_mux/behave/req_mux.sv#tgt_req_rsp
   - rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv#mem_req_rsp
+  - rtl/lib/block/cache/insn_data_cache_arbiter/behave/insn_data_cache_arbiter.sv#mem_req_rsp
 relies_on:
   - rtl/lib/block/req_demux/design
   - rtl/lib/block/req_mux/design
