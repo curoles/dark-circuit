@@ -95,19 +95,18 @@ def replace(src, path, old, new):
 
 def refresh(root, src):
     """The scratch copy: the repository as it is, without .git (the build does not read it;
-    its build directories are outside it). rsync compares contents (-c), not times, and the
-    files it copies (all the first time, then those the last mutant changed) get a fresh
-    time, so that the build sees them: comparing times, every file touched once would be
-    copied and touched again on each refresh, and the build would rebuild everything."""
+    its build directories are outside it). rsync compares contents (-c), not times, and
+    keeps no times (-rlpD: -a without -t, -o, -g): the files it copies (all the first time,
+    then those the last mutant changed) get the time of the copy, so that the build sees
+    them, and a file whose contents are already right keeps its time. With -a a file that
+    an earlier refresh restored got the repository's older time back (rsync sets the time
+    of an equal file), older than a binary built with that mutant: the build kept the
+    mutant's binary, and a later run of its test ran the mutant (2026-11-18)."""
     os.makedirs(src, exist_ok=True)
-    code, out = run(["rsync", "-a", "-c", "--delete", "--exclude=/.git", "--out-format=%i %n",
-                     root + "/", src + "/"])
+    code, out = run(["rsync", "-rlpD", "-c", "--delete", "--exclude=/.git", root + "/",
+                     src + "/"])
     if code:
         sys.exit("rsync failed:\n" + out)
-    for line in out.splitlines():
-        item, _, path = line.partition(" ")
-        if item.startswith(">f"):       # a file received
-            os.utime(os.path.join(src, path))
 
 
 def apply(src, m):

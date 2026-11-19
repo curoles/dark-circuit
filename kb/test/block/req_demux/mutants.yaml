@@ -6,14 +6,14 @@ mutants:
   - name: behave, a request to another target does not wait for the answers
     edits:
       - file: rtl/lib/block/req_demux/behave/req_demux.sv
-        old: "assign blocked    = (busy && other) || (pending == MAX && !req_we);"
-        new: "assign blocked    = (busy && other && 1'b0) || (pending == MAX && !req_we);"
+        old: "assign blocked   = (busy && other) || (pending == MAX && req_rsp);"
+        new: "assign blocked   = (busy && other && 1'b0) || (pending == MAX && req_rsp);"
     expect: model
-  - name: behave, a read does not wait for a full count
+  - name: behave, a request that wants an answer does not wait for a full count
     edits:
       - file: rtl/lib/block/req_demux/behave/req_demux.sv
-        old: "assign blocked    = (busy && other) || (pending == MAX && !req_we);"
-        new: "assign blocked    = (busy && other) || (pending == MAX && !req_we && 1'b0);"
+        old: "assign blocked   = (busy && other) || (pending == MAX && req_rsp);"
+        new: "assign blocked   = (busy && other) || (pending == MAX && req_rsp && 1'b0);"
     expect: model
   - name: behave, the answer of the selected target, not the owner's
     edits:

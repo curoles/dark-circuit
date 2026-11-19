@@ -64,6 +64,13 @@ evidence: >
   times: a file the tool touched has a time of its own, and comparing times copied,
   touched and rebuilt it again on every refresh (25-30 s a mutant when the first refresh
   copied many files); with -c SignalClockSync's 5 mutants take 2.4-5.5 s each.
+  2026-11-18: rsync keeps no times (-rlpD, not -a), so a copied file has the time of the
+  copy and no touch is needed. With -a, rsync set the repository's older time on a file
+  whose contents were already right, among them one an earlier refresh had restored: older
+  than the binary built with that mutant, so the build kept it and a later run of the test
+  ran the mutant (seen as "the tests fail unmutated" on a second run in the same scratch;
+  within a run it could make a mutant look caught). Two runs of ReqMux's 5 mutants in one
+  scratch: both pass their baseline, all caught.
 code:
   - tools/mutate.py#verdict
   - tools/kb_check.py#check_mutants

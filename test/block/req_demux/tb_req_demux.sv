@@ -1,18 +1,19 @@
 /* Test of ReqDemux, behave or struct version.
  *
  * The testbench is the initiator and the targets. The initiator offers random requests
- * (nothing, a read or a write; mostly the target before, a random one in a quarter) and
- * holds one that is not taken. Each target is ready in 70 % of the clocks and answers its
- * reads in order, each 1 to 2 << PENDING_WIDTH clocks after it took it (so reads pile up to
- * the full count), with a token (a number per read, unique). A model of the demux (reads pending,
- * their target) gives in every clock tgt_req_valid (only the selected target, only when the
- * request does not wait: another target while reads wait, or a read while 1 << PENDING_WIDTH
- * wait), req_ready, and every answer: the token of the oldest read not answered, in the
- * order the reads were taken. 3000 clocks on Verilator, 400 on Icarus; 2 targets with up to
- * 2 reads waiting, 3 targets with up to 4. Every case must happen (checks named cover): a
- * request to another target that waits, a read that waits for a full count, reads to the
- * same target while one waits, a write taken, a request taken by every target. Checks named
- * model and cover. Stops at the first failure.
+ * (nothing, one that wants an answer, req_rsp=1, or a posted write; mostly the target
+ * before, a random one in a quarter) and holds one that is not taken. Each target is ready
+ * in 70 % of the clocks and answers the requests that want an answer in order, each 1 to
+ * 2 << PENDING_WIDTH clocks after it took it (so they pile up to the full count), with a
+ * token (a number per request, unique). A model of the demux (answers pending, their
+ * target) gives in every clock tgt_req_valid (only the selected target, only when the
+ * request does not wait: another target while answers wait, or one that wants an answer
+ * while 1 << PENDING_WIDTH wait), req_ready, and every answer: the token of the oldest
+ * request not answered, in the order they were taken. 3000 clocks on Verilator, 400 on
+ * Icarus; 2 targets with up to 2 answers waiting, 3 targets with up to 4. Every case must
+ * happen (checks named cover): a request to another target that waits, one that waits for a
+ * full count, answered requests to the same target while one waits, a posted write taken, a
+ * request taken by every target. Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -39,7 +40,7 @@ module TbReqDemuxCheck #(
 
     logic                          req_valid;
     wire                           req_ready;
-    logic                          req_we;
+    logic                          req_rsp;
     logic [N_TARGETS-1:0]          req_sel;
     wire                           rsp_valid;
     wire  [RW-1:0]                 rsp_data;
@@ -50,7 +51,7 @@ module TbReqDemuxCheck #(
     integer                        seed;
 
     ReqDemux #(.N_TARGETS(N_TARGETS), .RSP_WIDTH(RW), .PENDING_WIDTH(PENDING_WIDTH)) u_req_demux(
-        .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_sel, .rsp_valid, .rsp_data,
+        .clk, .rst_n, .req_valid, .req_ready, .req_rsp, .req_sel, .rsp_valid, .rsp_data,
         .tgt_req_valid, .tgt_req_ready, .tgt_rsp_valid, .tgt_rsp_data);
 
     // The targets: reads taken and not answered, a circular queue each (flat: target t's
@@ -65,11 +66,11 @@ module TbReqDemuxCheck #(
     int pend;
     logic [N_TARGETS-1:0] owner;
     int tok_next, cyc;
-    logic seen_other_wait, seen_full_wait, seen_same, seen_write;
+    logic seen_other_wait, seen_full_wait, seen_same, seen_posted;
     logic [N_TARGETS-1:0] seen_taken;
 
     function automatic logic blocked();
-        return (pend > 0 && (req_sel & ~owner) != '0) || (pend == MAX && !req_we);
+        return (pend > 0 && (req_sel & ~owner) != '0) || (pend == MAX && req_rsp);
     endfunction
 
     function automatic int target_of(input logic [N_TARGETS-1:0] s);
@@ -82,7 +83,7 @@ module TbReqDemuxCheck #(
     // Mostly the target of the request before (reads pile up), now and then another.
     task automatic new_request();
         req_valid = ($random(seed) % 4) != 0;
-        req_we    = ($random(seed) % 3) == 0;
+        req_rsp   = ($random(seed) % 3) != 0;
         if (req_sel == '0 || ({$random(seed)} % 4) == 0)
             req_sel = N_TARGETS'(1) << ({$random(seed)} % N_TARGETS);
     endtask
@@ -93,7 +94,7 @@ module TbReqDemuxCheck #(
         logic [RW-1:0]   d;
         done = 1'b0;
         seed = N_TARGETS * 16 + PENDING_WIDTH;
-        {seen_other_wait, seen_full_wait, seen_same, seen_write} = '0;
+        {seen_other_wait, seen_full_wait, seen_same, seen_posted} = '0;
         seen_taken = '0;
         for (int i = 0; i < N_TARGETS; i++) begin
             t_head[i] = 0;
@@ -119,9 +120,9 @@ module TbReqDemuxCheck #(
             if (tgt_req_valid !== ((req_valid && !blocked()) ? req_sel : '0) ||
                 req_ready !== (!blocked() && (tgt_req_ready & req_sel) != '0))
                 `DC_TEST_FAIL(model, $sformatf({
-                    "ReqDemux %0d targets: tgt_req_valid %b ready %b, valid %b sel %b we %b, ",
+                    "ReqDemux %0d targets: tgt_req_valid %b ready %b, valid %b sel %b rsp %b, ",
                     "pending %0d owner %b"}, N_TARGETS, tgt_req_valid, req_ready, req_valid,
-                    req_sel, req_we, pend, owner))
+                    req_sel, req_rsp, pend, owner))
             exp_rsp = tgt_rsp_valid != '0;
             if (rsp_valid !== exp_rsp || (exp_rsp && rsp_data !== RW'(e_tok[e_head % ED])))
                 `DC_TEST_FAIL(model, $sformatf("ReqDemux %0d targets: rsp %b %h, expected %b %h",
@@ -130,12 +131,12 @@ module TbReqDemuxCheck #(
             t     = target_of(req_sel);
             if (req_valid && pend > 0 && (req_sel & ~owner) != '0)
                 seen_other_wait = 1'b1;
-            if (req_valid && pend == MAX && !req_we && (req_sel & ~owner) == '0)
+            if (req_valid && pend == MAX && req_rsp && (req_sel & ~owner) == '0)
                 seen_full_wait = 1'b1;
-            if (taken && !req_we && pend > 0)
+            if (taken && req_rsp && pend > 0)
                 seen_same = 1'b1;
-            if (taken && req_we)
-                seen_write = 1'b1;
+            if (taken && !req_rsp)
+                seen_posted = 1'b1;
             if (taken)
                 seen_taken[t] = 1'b1;
             // The model at the edge.
@@ -143,7 +144,7 @@ module TbReqDemuxCheck #(
                 e_head = e_head + 1;
                 pend   = pend - 1;
             end
-            if (taken && !req_we) begin
+            if (taken && req_rsp) begin
                 e_tok[e_tail % ED] = tok_next;
                 e_tail = e_tail + 1;
                 t_tok[t * QD + t_tail[t] % QD] = tok_next;
@@ -172,11 +173,11 @@ module TbReqDemuxCheck #(
             for (int i = 0; i < N_TARGETS; i++)
                 tgt_req_ready[i] = ({$random(seed)} % 10) < 7;
         end
-        if (!seen_other_wait || !seen_full_wait || !seen_same || !seen_write ||
+        if (!seen_other_wait || !seen_full_wait || !seen_same || !seen_posted ||
             seen_taken !== '1)
             `DC_TEST_FAIL(cover, $sformatf({
-                "ReqDemux %0d targets: other wait %b full wait %b same %b write %b taken %b"},
-                N_TARGETS, seen_other_wait, seen_full_wait, seen_same, seen_write, seen_taken))
+                "ReqDemux %0d targets: other wait %b full wait %b same %b posted %b taken %b"},
+                N_TARGETS, seen_other_wait, seen_full_wait, seen_same, seen_posted, seen_taken))
         done = 1'b1;
     end
 endmodule

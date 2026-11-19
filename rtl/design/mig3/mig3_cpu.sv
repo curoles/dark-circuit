@@ -77,7 +77,8 @@ module Mig3Cpu import Mig3Pkg::*; #(
     localparam DMA_N            = CFG.dma.channels;
     localparam DMA_ADDR_WIDTH   = DmaSifivePkg::CHAN_BITS + ((DMA_N > 1) ? $clog2(DMA_N) : 0);
     localparam DMA_SRC_LAST     = CFG.dma.source + 2 * DMA_N - 1;   // its last PLIC source
-    // A memory request's fields but we, for ReqMux: address, size, atop, cmo, data, strobes.
+    // A memory request's fields but we and rsp, for ReqMux: address, size, atop, cmo, data,
+    // strobes.
     localparam FIELDS = WIDTH + $bits(size_t) + $bits(AtomicPkg::atop_t) +
                         $bits(CachePkg::cmo_t) + $bits(line_t) + $bits(line_strb_t);
     localparam AtomicPkg::atop_t NO_ATOP = AtomicPkg::ATOP_NONE;
@@ -113,6 +114,10 @@ module Mig3Cpu import Mig3Pkg::*; #(
     wire      au_valid;         // behind ReqMux: AtomicUnit's requests
     wire      au_ready;
     wire      au_we;
+    // Wants an answer: !au_we while no write is answered; AtomicUnit takes it next.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire      au_rsp;
+    /* verilator lint_on UNUSEDSIGNAL */
     wire [FIELDS-1:0] au_fields;
     word_t    au_addr;
     size_t    au_size;
@@ -187,7 +192,7 @@ module Mig3Cpu import Mig3Pkg::*; #(
 
     ReqDemux #(.N_TARGETS(5), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
-        .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_we(mem_req.we),
+        .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(!mem_req.we),
         .req_sel({sel_dma, sel_uart, sel_timer, sel_plic, sel_mem}), .rsp_valid(mem_rsp.valid),
         .rsp_data(mem_rsp.data),
         .tgt_req_valid({dma_valid, uart_valid, timer_valid, plic_valid, mem_valid}),
@@ -203,14 +208,14 @@ module Mig3Cpu import Mig3Pkg::*; #(
         u_req_mux(
             .clk, .rst_n,
             .req_valid({dma_mem_valid, mem_valid}), .req_ready({dma_mem_ready, mem_ready}),
-            .req_we({dma_mem_we, mem_req.we}),
+            .req_we({dma_mem_we, mem_req.we}), .req_rsp({!dma_mem_we, !mem_req.we}),
             .req_fields({{dma_mem_addr, dma_mem_size, NO_ATOP, NO_CMO, dma_mem_wdata,
                           dma_mem_wstrb},
                          {mem_req.addr, mem_req.size, mem_req.atop, mem_req.cmo,
                           mem_req.wdata, mem_req.wstrb}}),
             .rsp_valid({dma_mem_rsp_valid, mem_rsp_valid}), .rsp_data(mem_rsp_data),
             .tgt_req_valid(au_valid), .tgt_req_ready(au_ready), .tgt_req_we(au_we),
-            .tgt_req_fields(au_fields), .tgt_rsp_valid(au_rsp_valid),
+            .tgt_req_rsp(au_rsp), .tgt_req_fields(au_fields), .tgt_rsp_valid(au_rsp_valid),
             .tgt_rsp_data(au_rsp_data));
     assign {au_addr, au_size, au_atop, au_cmo, au_wdata, au_wstrb} = au_fields;
 

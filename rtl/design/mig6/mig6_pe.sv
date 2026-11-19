@@ -97,7 +97,7 @@ module Mig6Pe import Mig6Pkg::*; #(
 
     ReqDemux #(.N_TARGETS(2), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
-        .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_we(mem_req.we),
+        .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(!mem_req.we),
         .req_sel(sel), .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data),
         .tgt_req_valid(tgt_valid), .tgt_req_ready(tgt_ready), .tgt_rsp_valid(tgt_rsp_valid),
         .tgt_rsp_data({{LINE_WORDS{net_rsp_data}}, local_rsp_data}));

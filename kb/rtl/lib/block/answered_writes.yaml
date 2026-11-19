@@ -1,0 +1,50 @@
+type: decision
+title: On the library's request channel a request says whether it wants an answer (req_rsp)
+date: 2026-11-18
+question: >
+  The library's request channel answered reads and posted writes: we=1 meant "no answer",
+  and every block that keeps answers in order (ReqDemux, ReqMux, the caches, their arbiter,
+  AtomicUnit) counted them by !we. An AMO already broke the pairing (it writes but is
+  answered, so it travels as we=0), and Mig6's far LR/SC needs an SC that writes and is
+  answered (success or failure); fences across destinations and write errors will need
+  acknowledged writes too. Keep writes posted, or let writes be answered, and at what cost?
+decision: >
+  A request carries req_rsp, "this request wants an answer": 1 for a read, an AMO and a
+  write that asks for one (an exclusive write, later a write a fence waits for), 0 for a
+  posted write. The blocks between a requester and the block that answers count and order
+  answers by req_rsp instead of !we, and pass it on with the request (ReqMux: tgt_req_rsp);
+  we keeps its one meaning, the direction. ReqDemux, which routes only valid and ready, sees
+  req_rsp alone. Targets that never answer a write do not change: a requester sends a write
+  with req_rsp only to a target that answers it. Requesters that want no write answered tie
+  req_rsp = !we (Mig3Cpu, Mig6Pe today). No parameter for it (user): one behavior to test.
+  First chunk: ReqDemux and ReqMux; AtomicUnit, the caches and their arbiter follow.
+why: >
+  Real buses answer writes (AXI's B response, TileLink's AccessAck, OBI, Wishbone); posted
+  writes were a simplification that held while stores reached one memory on one path. One
+  bit with one meaning removes the special cases (an AMO as a "read", an SC as an "AMO") and
+  makes an SC an ordinary exclusive write with an answer, as AXI's. Only the blocks that
+  count answers change, by a line each; the targets and most requesters stay as they are
+  (user: change only the blocks that really respond on a write).
+rejected:
+  - choice: Keep writes posted; an SC travels as we=0 with the exclusive field, as an AMO
+    why_not: Works without touching the blocks' counting, but keeps "we" meaning two things
+      and leaves acknowledged writes (fences, errors) for a larger change later.
+  - choice: Answered when !we || excl, the rule in every counting block
+    why_not: A special case per new kind of answered write, in every block.
+  - choice: Every request answered, every target acknowledging writes
+    why_not: Every target and requester changes for answers nobody waits for yet.
+  - choice: A parameter WR_RSP to build blocks with or without answered writes
+    why_not: Two variants of each block to test; a requester that wants none ties the bit.
+evidence: >
+  2026-11-18: ReqDemux and ReqMux (behave and struct) count req_rsp; their tests offer
+  answered and posted requests (ReqMux: reads, posted writes and writes that want an answer,
+  every kind from every requester) and pass on Verilator and Icarus; the Mig3 (149 tests) and
+  Mig6 (14) suites pass unchanged with req_rsp = !we. Mutants: all 5 of ReqDemux's and 5 of
+  ReqMux's caught, one new (a write that wants an answer counted as posted: "write out of
+  order"; kb test/block/req_mux/mutants).
+code:
+  - rtl/lib/block/req_demux/behave/req_demux.sv#req_rsp
+  - rtl/lib/block/req_mux/behave/req_mux.sv#tgt_req_rsp
+relies_on:
+  - rtl/lib/block/req_demux/design
+  - rtl/lib/block/req_mux/design

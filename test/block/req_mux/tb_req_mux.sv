@@ -1,19 +1,20 @@
 /* Test of ReqMux, behave or struct version.
  *
- * The testbench is every requester and the target. Each requester offers random reads and
- * writes, each with a token in its fields (its number and a sequence number), and holds an
- * offer until it is taken. The target is ready in 60 % of the clocks and answers each read
- * with its token, 1 to 6 clocks after taking it (one in eight 10 to 19: reads pile up), in
- * order. Model: per requester the tokens of
- * its reads not answered yet and of its writes not at the target yet, in its order. Every
- * clock: an offer to the target that waits stays the same; a write the target takes is the
- * next write of its requester; an answer goes to exactly one requester, the one whose oldest
- * read it answers, with that token; a requester's ready only with its valid. At the end
- * every read is answered and every write arrived. Configurations: 3 requesters with 2 reads
- * waiting at most, 2 with 4, 1 with 2; 400 requests a requester on Verilator, 80 on Icarus.
- * Every case must happen (checks named cover): two requesters offering at once, an offer the
- * target does not take at once, a read waiting for a full FIFO, reads and writes of every
- * requester. Checks named model and cover. Stops at the first failure.
+ * The testbench is every requester and the target. Each requester offers random reads,
+ * posted writes (req_rsp=0) and writes that want an answer (req_rsp=1), each with a token in
+ * its fields (its number and a sequence number), and holds an offer until it is taken. The
+ * target is ready in 60 % of the clocks and answers each request with req_rsp with its
+ * token, 1 to 6 clocks after taking it (one in eight 10 to 19: answers pile up), in order.
+ * Model: per requester the tokens of its requests not answered yet and of its posted writes
+ * not at the target yet, in its order. Every clock: an offer to the target that waits stays
+ * the same; a posted write the target takes is the next one of its requester; an answer goes
+ * to exactly one requester, the one whose oldest request it answers, with that token; a
+ * requester's ready only with its valid. At the end every request is answered and every
+ * posted write arrived. Configurations: 3 requesters with 2 answers waiting at most, 2 with
+ * 4, 1 with 2; 400 requests a requester on Verilator, 80 on Icarus. Every case must happen
+ * (checks named cover): two requesters offering at once, an offer the target does not take
+ * at once, a request waiting for a full FIFO, every kind of request from every requester.
+ * Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -39,32 +40,34 @@ module TbReqMuxCheck #(
     logic [N-1:0]         req_valid;
     wire  [N-1:0]         req_ready;
     logic [N-1:0]         req_we;
+    logic [N-1:0]         req_rsp;
     logic [N-1:0][31:0]   req_fields;
     wire  [N-1:0]         rsp_valid;
     wire  [31:0]          rsp_data;
     wire                  tgt_req_valid;
     logic                 tgt_req_ready;
     wire                  tgt_req_we;
+    wire                  tgt_req_rsp;
     wire  [31:0]          tgt_req_fields;
     logic                 tgt_rsp_valid;
     logic [31:0]          tgt_rsp_data;
 
-    logic [31:0]          rd_q [N][QD];     // tokens of reads not answered, in order
+    logic [31:0]          rd_q [N][QD];     // tokens of requests not answered, in order
     int                   rd_head [N], rd_tail [N];
-    logic [31:0]          wr_q [N][QD];     // tokens of writes not at the target, in order
+    logic [31:0]          wr_q [N][QD];     // tokens of posted writes not at the target
     int                   wr_head [N], wr_tail [N];
     logic [31:0]          ans [$];          // the target's answers due, in order
     int                   due [$];
     int                   cycle;
     integer               seed;
     bit                   seen_two, seen_wait, seen_full;
-    logic [N-1:0]         seen_read, seen_write;
+    logic [N-1:0]         seen_read, seen_write, seen_ack;
 
     ReqMux #(.N_REQ(N), .REQ_WIDTH(32), .RSP_WIDTH(32), .PENDING_WIDTH(PENDING_WIDTH))
         u_req_mux(
-            .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_fields, .rsp_valid, .rsp_data,
-            .tgt_req_valid, .tgt_req_ready, .tgt_req_we, .tgt_req_fields, .tgt_rsp_valid,
-            .tgt_rsp_data);
+            .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_rsp, .req_fields, .rsp_valid,
+            .rsp_data, .tgt_req_valid, .tgt_req_ready, .tgt_req_we, .tgt_req_rsp,
+            .tgt_req_fields, .tgt_rsp_valid, .tgt_rsp_data);
 
     initial begin
         int   sent [N];
@@ -72,13 +75,15 @@ module TbReqMuxCheck #(
         logic [N-1:0] taken;                // requests taken at the coming edge
         logic prev_wait;
         logic prev_we;
+        logic prev_rsp;
         logic [31:0] prev_fields;
         done = 1'b0;
         seed = 31 * N + PENDING_WIDTH;
         {seen_two, seen_wait, seen_full} = '0;
-        {seen_read, seen_write} = '0;
+        {seen_read, seen_write, seen_ack} = '0;
         req_valid     = '0;
         req_we        = '0;
+        req_rsp       = '0;
         req_fields    = '0;
         tgt_req_ready = 1'b0;
         tgt_rsp_valid = 1'b0;
@@ -86,6 +91,7 @@ module TbReqMuxCheck #(
         cycle         = 0;
         prev_wait     = 1'b0;
         prev_we       = 1'b0;
+        prev_rsp      = 1'b0;
         prev_fields   = '0;
         taken         = '0;
         for (int i = 0; i < N; i++) begin
@@ -104,7 +110,11 @@ module TbReqMuxCheck #(
             for (int i = 0; i < N; i++)
                 if (!req_valid[i] && sent[i] < N_OPS && $unsigned($random(seed)) % 2 == 0) begin
                     req_valid[i]  = 1'b1;
-                    req_we[i]     = $random(seed) % 2 == 0;
+                    case ($unsigned($random(seed)) % 3)
+                        0:       {req_we[i], req_rsp[i]} = 2'b01;    // a read
+                        1:       {req_we[i], req_rsp[i]} = 2'b10;    // a posted write
+                        default: {req_we[i], req_rsp[i]} = 2'b11;    // answered write
+                    endcase
                     req_fields[i] = {8'(i), 16'(sent[i]), 8'($random(seed))};
                     sent[i]++;
                 end
@@ -114,7 +124,7 @@ module TbReqMuxCheck #(
             #1;
             // Checks of this clock.
             if (prev_wait && (!tgt_req_valid || tgt_req_we !== prev_we ||
-                              tgt_req_fields !== prev_fields))
+                              tgt_req_rsp !== prev_rsp || tgt_req_fields !== prev_fields))
                 `DC_TEST_FAIL(model, $sformatf("ReqMux %0d: a waiting offer changed", N))
             if ((req_ready & ~req_valid) != '0)
                 `DC_TEST_FAIL(model, $sformatf("ReqMux %0d: ready %b without valid %b", N,
@@ -124,6 +134,7 @@ module TbReqMuxCheck #(
             prev_wait   = tgt_req_valid && !tgt_req_ready;
             if (prev_wait)                                   seen_wait = 1'b1;
             prev_we     = tgt_req_we;
+            prev_rsp    = tgt_req_rsp;
             prev_fields = tgt_req_fields;
             if (tgt_rsp_valid) begin
                 if (!$onehot(rsp_valid))
@@ -142,20 +153,22 @@ module TbReqMuxCheck #(
             taken = req_valid & req_ready;
             for (int i = 0; i < N; i++)
                 if (taken[i]) begin
-                    if (req_we[i]) begin
+                    if (!req_rsp[i]) begin
                         wr_q[i][wr_tail[i] % QD] = req_fields[i];
                         wr_tail[i]++;
                         seen_write[i] = 1'b1;
                     end else begin
                         rd_q[i][rd_tail[i] % QD] = req_fields[i];
                         rd_tail[i]++;
-                        seen_read[i] = 1'b1;
+                        if (req_we[i]) seen_ack[i]  = 1'b1;
+                        else           seen_read[i] = 1'b1;
                     end
                 end
             if (tgt_req_valid && tgt_req_ready) begin
                 r = int'(tgt_req_fields[31:24]);
-                if (tgt_req_we) begin
-                    if (wr_head[r] == wr_tail[r] || tgt_req_fields !== wr_q[r][wr_head[r] % QD])
+                if (!tgt_req_rsp) begin
+                    if (!tgt_req_we || wr_head[r] == wr_tail[r] ||
+                        tgt_req_fields !== wr_q[r][wr_head[r] % QD])
                         `DC_TEST_FAIL(model, $sformatf("ReqMux %0d: write %h out of order", N,
                                                        tgt_req_fields))
                     wr_head[r]++;
@@ -184,10 +197,10 @@ module TbReqMuxCheck #(
         tgt_req_ready = 1'b0;
         tgt_rsp_valid = 1'b0;
         if ((N > 1 && !seen_two) || !seen_wait || !seen_full || seen_read != '1 ||
-            seen_write != '1)
-            `DC_TEST_FAIL(cover, $sformatf("ReqMux %0d: two %b wait %b full %b read %b write %b",
-                                           N, seen_two, seen_wait, seen_full, seen_read,
-                                           seen_write))
+            seen_write != '1 || seen_ack != '1)
+            `DC_TEST_FAIL(cover, $sformatf(
+                "ReqMux %0d: two %b wait %b full %b read %b write %b answered write %b", N,
+                seen_two, seen_wait, seen_full, seen_read, seen_write, seen_ack))
         done = 1'b1;
     end
 endmodule
