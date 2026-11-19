@@ -1,17 +1,20 @@
 /* Test of AtomicUnit, behave or struct version.
  *
  * The testbench is the requester and the memory. The requester offers random requests
- * (nothing, a read or a write of a line, or an atomic operation of every kind on a word of a
- * line) and holds one that is not taken. The memory is ready in 70 % of the clocks, writes
- * at the clock it takes a write, and answers each read with the line as it was then, 1 to 4
- * clocks later, in order. Model: an ideal memory changed at the clock the unit takes a
- * request (a write: its bytes; an atomic: its word gets op(old, operand), computed here
- * without Alu2), and the answers expected in order (a read: the line; an atomic: the line
- * before). Every answer is compared, and at the end the memory with the ideal one. 3000
- * clocks on Verilator, 400 on Icarus; beats of 64 bits with words of 32, of 32 with 32, of
- * 64 with 64. Every case must happen (checks named cover): each of the 9 operations, an
- * atomic request waiting for the answers of reads, a read and a write passing. Checks named
- * model and cover. Stops at the first failure.
+ * (nothing, a read, a posted write (req_rsp=0) or a write that wants an answer (req_rsp=1)
+ * of a line, or an atomic operation of every kind on a word of a line) and holds one that
+ * is not taken. The memory is ready in 70 % of the clocks, writes at the clock it takes a
+ * write, and answers each request that comes with mem_req_rsp, 1 to 4 clocks later, in
+ * order: a read with the line as it was then, a write with the line after it. Model: an
+ * ideal memory changed at the clock the unit takes a request (a write: its bytes; an
+ * atomic: its word gets op(old, operand), computed here without Alu2), and the answers
+ * expected in order (a read: the line; a write with req_rsp: the line after it; an atomic:
+ * the line before). Every answer is compared, and at the end the memory with the ideal
+ * one. 3000 clocks on Verilator, 400 on Icarus; beats of 64 bits with words of 32, of 32
+ * with 32, of 64 with 64. Every case must happen (checks named cover): each of the 9
+ * operations, an atomic request waiting for the answers of reads, a read, a posted write
+ * and a write that wants an answer passing. Checks named model and cover. Stops at the
+ * first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -48,6 +51,7 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
     logic            req_valid;
     wire             req_ready;
     logic            req_we;
+    logic            req_rsp;
     logic [AW-1:0]   req_addr;
     logic [2:0]      req_size;
     atop_t           req_atop;
@@ -58,6 +62,7 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
     wire             mem_req_valid;
     logic            mem_req_ready;
     wire             mem_req_we;
+    wire             mem_req_rsp;
     wire  [AW-1:0]   mem_req_addr;
     wire  [2:0]      mem_req_size;
     wire  [DATA_WIDTH-1:0] mem_req_wdata;
@@ -67,10 +72,10 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
     integer          seed;
 
     AtomicUnit #(.ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .ATOM_WIDTH(ATOM_WIDTH)) u_atomic_unit(
-        .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop,
-        .req_wdata, .req_wstrb, .rsp_valid, .rsp_data, .mem_req_valid, .mem_req_ready,
-        .mem_req_we, .mem_req_addr, .mem_req_size, .mem_req_wdata, .mem_req_wstrb,
-        .mem_rsp_valid, .mem_rsp_data);
+        .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_rsp, .req_addr, .req_size,
+        .req_atop, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data, .mem_req_valid,
+        .mem_req_ready, .mem_req_we, .mem_req_rsp, .mem_req_addr, .mem_req_size,
+        .mem_req_wdata, .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data);
 
     line_t mem   [LINES];       // the memory
     line_t ideal [LINES];       // the model
@@ -81,7 +86,7 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
     int    ex_head, ex_tail;
     int    cyc;
     logic [8:0] seen_op;        // each operation, in the order of ops
-    logic  seen_wait, seen_read, seen_write;
+    logic  seen_wait, seen_read, seen_write, seen_ack;
 
     atop_t ops [9];
 
@@ -116,7 +121,7 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
         return l;
     endfunction
 
-    // Reads that passed and are not answered, in the model.
+    // Requests that passed and are not answered, in the model.
     function automatic int pass_pending();
         return ex_tail - ex_head;
     endfunction
@@ -131,9 +136,11 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
         req_size  = 3'(LINE_OFF);
         req_atop  = ATOP_NONE;
         req_we    = k == 1 || k == 2;
+        req_rsp   = k != 1;                 // 1: a posted write, 2: one that wants an answer
         if (k >= 5) begin                   // an atomic operation on a word
             lane      = {$random(seed)} % LANES;
             req_we    = 1'b0;
+            req_rsp   = 1'b1;
             req_atop  = ops[{$random(seed)} % 9];
             req_addr  = req_addr | AW'(lane << ATOM_OFFSET);
             req_size  = 3'(ATOM_OFFSET);
@@ -160,7 +167,7 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
         ex_tail = 0;
         cyc = 0;
         seen_op = '0;
-        {seen_wait, seen_read, seen_write} = '0;
+        {seen_wait, seen_read, seen_write, seen_ack} = '0;
         mem_req_ready = 1'b0;
         mem_rsp_valid = 1'b0;
         mem_rsp_data  = '0;
@@ -198,7 +205,12 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
                         seen_op[i] = 1'b1;
             end else if (taken && req_we) begin
                 ideal[l] = merge(ideal[l], req_wdata, req_wstrb);
-                seen_write = 1'b1;
+                if (req_rsp) begin
+                    ex[ex_tail % ED] = ideal[l];
+                    ex_tail = ex_tail + 1;
+                    seen_ack = 1'b1;
+                end else
+                    seen_write = 1'b1;
             end else if (taken) begin
                 ex[ex_tail % ED] = ideal[l];
                 ex_tail = ex_tail + 1;
@@ -212,9 +224,12 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
                 `DC_TEST_FAIL(model, $sformatf({
                     "AtomicUnit %0d/%0d: mem_req %h not aligned to size %0d"},
                     DATA_WIDTH, ATOM_WIDTH, mem_req_addr, mem_req_size))
+            if (mem_take && !mem_req_we && !mem_req_rsp)
+                `DC_TEST_FAIL(model, $sformatf("AtomicUnit %0d/%0d: a read without req_rsp",
+                    DATA_WIDTH, ATOM_WIDTH))
             if (mem_take && mem_req_we)
                 mem[l] = merge(mem[l], mem_req_wdata, mem_req_wstrb);
-            else if (mem_take) begin
+            if (mem_take && mem_req_rsp) begin
                 rq_data[rq_tail % QD] = mem[l];
                 rq_due[rq_tail % QD]  = cyc + 1 + {$random(seed)} % 4;
                 rq_tail = rq_tail + 1;
@@ -242,9 +257,10 @@ module TbAtomicUnitCheck import AtomicPkg::*; #(
             if (mem[k] !== ideal[k])
                 `DC_TEST_FAIL(model, $sformatf("AtomicUnit %0d/%0d: line %0d is %h, expected %h",
                     DATA_WIDTH, ATOM_WIDTH, k, mem[k], ideal[k]))
-        if (seen_op !== '1 || !seen_wait || !seen_read || !seen_write)
-            `DC_TEST_FAIL(cover, $sformatf("AtomicUnit %0d/%0d: ops %b wait %b read %b write %b",
-                DATA_WIDTH, ATOM_WIDTH, seen_op, seen_wait, seen_read, seen_write))
+        if (seen_op !== '1 || !seen_wait || !seen_read || !seen_write || !seen_ack)
+            `DC_TEST_FAIL(cover, $sformatf(
+                "AtomicUnit %0d/%0d: ops %b wait %b read %b write %b answered write %b",
+                DATA_WIDTH, ATOM_WIDTH, seen_op, seen_wait, seen_read, seen_write, seen_ack))
         done = 1'b1;
     end
 endmodule

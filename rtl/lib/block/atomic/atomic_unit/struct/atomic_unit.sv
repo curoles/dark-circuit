@@ -5,10 +5,11 @@
  *   atomic        = OrReduce(req_atop[5:4])            pend_zero = NorReduce(pending)
  *   take_atomic   = idle AND req_valid AND atomic AND pend_zero
  *   req_ready     = idle AND Mux2(mem_req_ready, pend_zero, atomic)
- *   pass_read     = idle AND req_valid AND ~atomic AND ~req_we AND mem_req_ready
+ *   pass_ask      = idle AND req_valid AND ~atomic AND req_rsp AND mem_req_ready
  *   mem_req_*     = Mux2(the atomic's registers or new word, the request's, idle);
- *                   valid = (idle AND req_valid AND ~atomic) OR read OR write
- *   pending       = Counter: up on pass_read, down on an answer outside wait_rsp
+ *                   valid = (idle AND req_valid AND ~atomic) OR read OR write;
+ *                   rsp = Mux2(read, req_rsp, idle)
+ *   pending       = Counter: up on pass_ask, down on an answer outside wait_rsp
  *   addr, atop, operand: DffEn on take_atomic (operand: MuxN of the request's lanes)
  *   old word      = MuxN of the answer's lanes by the atomic's lane; Alu2's controls a MuxN
  *                   of the eight ctrl_of constants by atop[2:0]; new word Mux2(Alu2,
@@ -25,7 +26,7 @@ module AtomicUnit import AtomicPkg::*; #(
     parameter  ADDR_WIDTH    = 32,                  // byte address
     parameter  DATA_WIDTH    = 64,                  // a beat (a line): ATOM_WIDTH * 2**n
     parameter  ATOM_WIDTH    = 32,                  // bits of an atomic operation's word
-    parameter  PENDING_WIDTH = 2,                   // up to 1 << PENDING_WIDTH reads in the memory
+    parameter  PENDING_WIDTH = 2,                   // up to 1 << PENDING_WIDTH answers wait
     localparam STRB_WIDTH    = DATA_WIDTH / 8
 )(
     input  wire                  clk,
@@ -35,18 +36,20 @@ module AtomicUnit import AtomicPkg::*; #(
     input  wire                  req_valid,
     output wire                  req_ready,
     input  wire                  req_we,            // 1 write, 0 read (atomic: 0)
+    input  wire                  req_rsp,           // wants an answer (atomic: 1)
     input  wire [ADDR_WIDTH-1:0] req_addr,
     input  wire [2:0]            req_size,          // 1 << req_size bytes
     input  atop_t                req_atop,          // ATOP_NONE, or the atomic operation
     input  wire [DATA_WIDTH-1:0] req_wdata,         // write data, an atomic's operand
     input  wire [STRB_WIDTH-1:0] req_wstrb,
-    output wire                  rsp_valid,         // the answer to a read (atomic: old)
+    output wire                  rsp_valid,         // an answer (atomic: the old word)
     output wire [DATA_WIDTH-1:0] rsp_data,
 
     // Memory side
     output wire                  mem_req_valid,
     input  wire                  mem_req_ready,
     output wire                  mem_req_we,
+    output wire                  mem_req_rsp,
     output wire [ADDR_WIDTH-1:0] mem_req_addr,
     output wire [2:0]            mem_req_size,
     output wire [DATA_WIDTH-1:0] mem_req_wdata,
@@ -67,21 +70,20 @@ module AtomicUnit import AtomicPkg::*; #(
     wire [3:0]             state, state_next;
     wire                   atomic;      // the request is atomic
     wire                   atomic_n;
-    wire                   we_n;
-    wire                   pend_zero;   // no read that passed waits for its answer
+    wire                   pend_zero;   // no request that passed waits for its answer
     wire                   take_atomic;
     wire                   pass_req;    // an ordinary request is offered: it passes
-    wire                   pass_read;   // a read passes to the memory now
+    wire                   pass_ask;    // a request that wants an answer passes now
     wire                   ready_sel;
     wire                   ready_n, rsp_n;
     wire                   take_n;
     wire                   wait_n;
     wire                   read_taken;  // the memory takes the atomic's read
     wire                   write_taken; // ... its write
-    wire                   rsp_other;   // an answer of a read that passed
+    wire                   rsp_other;   // an answer of a request that passed
     wire                   count_en;
     wire                   answer;      // the atomic's answer comes (wait_rsp)
-    wire [PENDING_WIDTH:0] pending;     // reads that passed, not answered
+    wire [PENDING_WIDTH:0] pending;     // requests that passed, not answered
     wire                   is_swap;
     wire [ADDR_WIDTH-1:0]  addr_q;      // the atomic request
     atop_t                 atop_q;
@@ -101,11 +103,10 @@ module AtomicUnit import AtomicPkg::*; #(
     // @kb: rtl/lib/block/atomic/design
     OrReduce  #(2) u_or_reduce_atomic(.in(req_atop[5:4]), .out(atomic));
     Inv       #(1) u_inv_atomic(.in(atomic), .out(atomic_n));
-    Inv       #(1) u_inv_we    (.in(req_we), .out(we_n));
     NorReduce #(PENDING_WIDTH + 1) u_nor_reduce_pend(.in(pending), .out(pend_zero));
     AndReduce #(4) u_and_reduce_take(.in({idle, req_valid, atomic, pend_zero}), .out(take_atomic));
     And3      #(1) u_and3_pass_req(.in1(idle), .in2(req_valid), .in3(atomic_n), .out(pass_req));
-    AndReduce #(3) u_and_reduce_pass_read(.in({pass_req, we_n, mem_req_ready}), .out(pass_read));
+    AndReduce #(3) u_and_reduce_pass_ask(.in({pass_req, req_rsp, mem_req_ready}), .out(pass_ask));
     Mux2      #(1) u_mux2_ready(.in0(mem_req_ready), .in1(pend_zero), .sel(atomic),
                                 .out(ready_sel));
     And2      #(1) u_and2_ready(.in1(idle), .in2(ready_sel), .out(req_ready));
@@ -129,6 +130,7 @@ module AtomicUnit import AtomicPkg::*; #(
     // The memory sees the requests that pass, else the atomic's read and write.
     Or3  #(1) u_or3_mem_valid(.in1(pass_req), .in2(read), .in3(write), .out(mem_req_valid));
     Mux2 #(1)          u_mux2_we  (.in0(write), .in1(req_we), .sel(idle), .out(mem_req_we));
+    Mux2 #(1)          u_mux2_rsp (.in0(read), .in1(req_rsp), .sel(idle), .out(mem_req_rsp));
     Mux2 #(ADDR_WIDTH) u_mux2_addr(.in0(addr_q), .in1(req_addr), .sel(idle), .out(mem_req_addr));
     Mux2 #(3)          u_mux2_size(.in0(3'(ATOM_OFFSET)), .in1(req_size), .sel(idle),
                                    .out(mem_req_size));
@@ -141,12 +143,12 @@ module AtomicUnit import AtomicPkg::*; #(
     assign rsp_valid = mem_rsp_valid;
     assign rsp_data  = mem_rsp_data;
 
-    // Reads that passed and wait for their answers.
+    // Requests that passed and wait for their answers.
     Inv     #(1) u_inv_wait(.in(wait_rsp), .out(wait_n));
     And2    #(1) u_and2_rsp_other(.in1(mem_rsp_valid), .in2(wait_n), .out(rsp_other));
-    Xor2    #(1) u_xor2_count_en (.in1(pass_read), .in2(rsp_other), .out(count_en));
+    Xor2    #(1) u_xor2_count_en (.in1(pass_ask), .in2(rsp_other), .out(count_en));
     Counter #(.WIDTH(PENDING_WIDTH + 1)) u_counter_pending(
-        .clk, .rst_n, .load(1'b0), .in({(PENDING_WIDTH + 1){1'b0}}), .up_down(pass_read),
+        .clk, .rst_n, .load(1'b0), .in({(PENDING_WIDTH + 1){1'b0}}), .up_down(pass_ask),
         .count_en, .out(pending), .co(count_co));
 
     // The lanes: the operand of the request, the old word of the answer, the write's bytes.
@@ -185,11 +187,11 @@ module AtomicUnit import AtomicPkg::*; #(
 
     // See the behave version.
     `DC_ASSERT(a_atomic_word, !(req_valid && atomic) ||
-        (int'(req_size) == ATOM_OFFSET && !req_we &&
+        (int'(req_size) == ATOM_OFFSET && !req_we && req_rsp &&
          (req_addr & ADDR_WIDTH'(ATOM_BYTES - 1)) == '0 &&
          (req_atop[5:4] == 2'b10 || req_atop == ATOP_SWAP) && req_atop[3] == 1'b0))
     `DC_ASSERT(a_answer_expected, !mem_rsp_valid || !pend_zero || wait_rsp)
-    `DC_ASSERT(a_pending_no_overflow, !(pass_read && pending == '1))
+    `DC_ASSERT(a_pending_no_overflow, !(pass_ask && pending == '1))
     `DC_ASSERT(a_one_hot_state, $onehot(state))
 
 endmodule

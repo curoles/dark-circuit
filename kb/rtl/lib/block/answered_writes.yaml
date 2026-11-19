@@ -17,7 +17,8 @@ decision: >
   req_rsp alone. Targets that never answer a write do not change: a requester sends a write
   with req_rsp only to a target that answers it. Requesters that want no write answered tie
   req_rsp = !we (Mig3Cpu, Mig6Pe today). No parameter for it (user): one behavior to test.
-  First chunk: ReqDemux and ReqMux; AtomicUnit, the caches and their arbiter follow.
+  First chunk: ReqDemux and ReqMux; second: AtomicUnit (its own read asks for an answer,
+  its write does not: mem_req_rsp); the caches and their arbiter follow.
 why: >
   Real buses answer writes (AXI's B response, TileLink's AccessAck, OBI, Wishbone); posted
   writes were a simplification that held while stores reached one memory on one path. One
@@ -42,9 +43,14 @@ evidence: >
   Mig6 (14) suites pass unchanged with req_rsp = !we. Mutants: all 5 of ReqDemux's and 5 of
   ReqMux's caught, one new (a write that wants an answer counted as posted: "write out of
   order"; kb test/block/req_mux/mutants).
+  2026-11-18: AtomicUnit (behave and struct) counts req_rsp and passes mem_req_rsp; its test
+  adds writes that want an answer (its memory answers what comes with mem_req_rsp) and
+  passes on Verilator and Icarus; Mig3 (149) and Mig6 (14) unchanged; all 9 mutants caught,
+  two new (an answered write passing uncounted; the atomic's read asking for no answer).
 code:
   - rtl/lib/block/req_demux/behave/req_demux.sv#req_rsp
   - rtl/lib/block/req_mux/behave/req_mux.sv#tgt_req_rsp
+  - rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv#mem_req_rsp
 relies_on:
   - rtl/lib/block/req_demux/design
   - rtl/lib/block/req_mux/design

@@ -2,17 +2,20 @@
  * rtl/lib/block/atomic/design).
  *
  * Between a requester (the memory side of caches, an arbiter) and a memory, on the library's
- * request channel: requests on valid/ready, a read answered by rsp_valid one or more clocks
- * after the memory took it, in order (no ready), a write without an answer. A request with
- * req_atop == ATOP_NONE (AtomicPkg) passes straight to the memory, its answer straight back.
+ * request channel: requests on valid/ready, one with req_rsp=1 (a read, an atomic, a write
+ * that asks for an answer) answered by rsp_valid one or more clocks after the memory took
+ * it, in order (no ready), one with req_rsp=0 (a posted write) without an answer (kb
+ * rtl/lib/block/answered_writes). A request with req_atop == ATOP_NONE (AtomicPkg) passes
+ * straight to the memory, req_rsp with it, its answer straight back.
  * An atomic one (an AtomicLoad or AtomicSwap) is a word of ATOM_WIDTH bits at its aligned
  * address (req_size of ATOM_WIDTH, the operand in that word's lane of req_wdata): the unit
  * takes it into its registers, reads the word from the memory (READ), passes the memory's
  * answer on as the answer (the old word: WAIT), writes op(old, operand) (WRITE) and is idle
  * again; Alu2 does the operation (CLR is ANDN, SET is OR, the min and max of Zbb), a swap
  * writes the operand. Nothing else is taken meanwhile, so the operation is atomic for every
- * requester behind the unit. An atomic request is taken only when no read that passed is
- * waiting for its answer, so the answers stay in order (pending counts them).
+ * requester behind the unit. The atomic's read asks the memory for an answer, its write
+ * does not (mem_req_rsp). An atomic request is taken only when no request that passed waits
+ * for its answer, so the answers stay in order (pending counts them).
  *
  *   req ---> ATOP_NONE: straight on --------------------------------------> mem_req
  *        \-> atomic: registers --> READ --> WAIT (answer: old) --> WRITE --> mem_req
@@ -29,7 +32,7 @@ module AtomicUnit import AtomicPkg::*; #(
     parameter  ADDR_WIDTH    = 32,                  // byte address
     parameter  DATA_WIDTH    = 64,                  // a beat (a line): ATOM_WIDTH * 2**n
     parameter  ATOM_WIDTH    = 32,                  // bits of an atomic operation's word
-    parameter  PENDING_WIDTH = 2,                   // up to 1 << PENDING_WIDTH reads in the memory
+    parameter  PENDING_WIDTH = 2,                   // up to 1 << PENDING_WIDTH answers wait
     localparam STRB_WIDTH    = DATA_WIDTH / 8
 )(
     input  wire                  clk,
@@ -39,18 +42,20 @@ module AtomicUnit import AtomicPkg::*; #(
     input  wire                  req_valid,
     output wire                  req_ready,
     input  wire                  req_we,            // 1 write, 0 read (atomic: 0)
+    input  wire                  req_rsp,           // wants an answer (atomic: 1)
     input  wire [ADDR_WIDTH-1:0] req_addr,
     input  wire [2:0]            req_size,          // 1 << req_size bytes
     input  atop_t                req_atop,          // ATOP_NONE, or the atomic operation
     input  wire [DATA_WIDTH-1:0] req_wdata,         // write data, an atomic's operand
     input  wire [STRB_WIDTH-1:0] req_wstrb,
-    output wire                  rsp_valid,         // the answer to a read (atomic: old)
+    output wire                  rsp_valid,         // an answer (atomic: the old word)
     output wire [DATA_WIDTH-1:0] rsp_data,
 
     // Memory side
     output wire                  mem_req_valid,
     input  wire                  mem_req_ready,
     output wire                  mem_req_we,
+    output wire                  mem_req_rsp,
     output wire [ADDR_WIDTH-1:0] mem_req_addr,
     output wire [2:0]            mem_req_size,
     output wire [DATA_WIDTH-1:0] mem_req_wdata,
@@ -78,10 +83,10 @@ module AtomicUnit import AtomicPkg::*; #(
     atop_t                  atop_q;
     logic [ATOM_WIDTH-1:0]  operand_q;
     logic [ATOM_WIDTH-1:0]  new_q;      // op(old, operand), written in WRITE
-    logic [PENDING_WIDTH:0] pending;    // reads that passed, not answered
+    logic [PENDING_WIDTH:0] pending;    // requests that passed, not answered
     logic                   atomic;     // the request is atomic
     logic                   take_atomic;
-    logic                   pass_read;  // a read passes to the memory now
+    logic                   pass_ask;   // a request that wants an answer passes now
     logic [LANE_BITS-1:0]   lane;       // the atomic's word in the beat
     logic [STRB_WIDTH-1:0]  lane_strb;  // its bytes
     logic [ATOM_WIDTH-1:0]  old_word;   // its old value, in the memory's answer
@@ -115,12 +120,13 @@ module AtomicUnit import AtomicPkg::*; #(
     assign atomic      = is_atomic(req_atop);
     assign take_atomic = state == IDLE && req_valid && atomic && pending == '0;
     assign req_ready   = state == IDLE && (atomic ? pending == '0 : mem_req_ready);
-    assign pass_read   = state == IDLE && req_valid && !atomic && !req_we && mem_req_ready;
+    assign pass_ask    = state == IDLE && req_valid && !atomic && req_rsp && mem_req_ready;
 
     // The memory sees the requests that pass, else the atomic's read and write.
     assign mem_req_valid = (state == IDLE && req_valid && !atomic) || state == READ ||
                            state == WRITE;
     assign mem_req_we    = (state == IDLE) ? req_we : state == WRITE;
+    assign mem_req_rsp   = (state == IDLE) ? req_rsp : state == READ;
     assign mem_req_addr  = (state == IDLE) ? req_addr : addr_q;
     assign mem_req_size  = (state == IDLE) ? req_size : 3'(ATOM_OFFSET);
     assign mem_req_wdata = (state == IDLE) ? req_wdata : {LANES{new_q}};
@@ -165,23 +171,24 @@ module AtomicUnit import AtomicPkg::*; #(
         if (state == WAIT && mem_rsp_valid)
             new_q <= new_word;
 
-    // Reads that passed and wait for their answers (in WAIT the answer is the atomic's).
+    // Requests that passed and wait for their answers (in WAIT the answer is the atomic's).
     always_ff @(posedge clk)
         if (!rst_n)
             pending <= '0;
-        else if (pass_read && !(mem_rsp_valid && state != WAIT))
+        else if (pass_ask && !(mem_rsp_valid && state != WAIT))
             pending <= pending + 1'b1;
-        else if (!pass_read && mem_rsp_valid && state != WAIT)
+        else if (!pass_ask && mem_rsp_valid && state != WAIT)
             pending <= pending - 1'b1;
 
     // An atomic request is a word of ATOM_WIDTH at its aligned address, one of the
-    // operations of AtomicPkg (no AtomicStore or AtomicCompare yet), a read.
+    // operations of AtomicPkg (no AtomicStore or AtomicCompare yet), a read that wants its
+    // answer.
     `DC_ASSERT(a_atomic_word, !(req_valid && atomic) ||
-        (int'(req_size) == ATOM_OFFSET && !req_we &&
+        (int'(req_size) == ATOM_OFFSET && !req_we && req_rsp &&
          (req_addr & ADDR_WIDTH'(ATOM_BYTES - 1)) == '0 &&
          (req_atop[5:4] == 2'b10 || req_atop == ATOP_SWAP) && req_atop[3] == 1'b0))
-    // An answer comes only for a read that passed or the atomic's read.
+    // An answer comes only for a request that passed with req_rsp or the atomic's read.
     `DC_ASSERT(a_answer_expected, !mem_rsp_valid || pending != '0 || state == WAIT)
-    `DC_ASSERT(a_pending_no_overflow, !(pass_read && pending == '1))
+    `DC_ASSERT(a_pending_no_overflow, !(pass_ask && pending == '1))
 
 endmodule

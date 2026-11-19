@@ -45,3 +45,13 @@ mutants:
         old: ".in(addr_q[ATOM_OFFSET +: LANE_BITS]), .en(1'b1), .out(lane_one));"
         new: ".in(addr_q[ATOM_OFFSET +: LANE_BITS]), .en(1'b0), .out(lane_one));"
     expect: model
+  - name: a write that wants an answer passes uncounted, as a posted one (2026-11-18)
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/behave/atomic_unit.sv
+        old: "!atomic && req_rsp && mem_req_ready;"
+        new: "!atomic && req_rsp && !req_we && mem_req_ready;"
+  - name: struct, the atomic's read asks the memory for no answer (2026-11-18)
+    edits:
+      - file: rtl/lib/block/atomic/atomic_unit/struct/atomic_unit.sv
+        old: ".in0(read), .in1(req_rsp), .sel(idle), .out(mem_req_rsp)"
+        new: ".in0(1'b0), .in1(req_rsp), .sel(idle), .out(mem_req_rsp)"

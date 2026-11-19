@@ -63,6 +63,10 @@ module TbMig6NocCheck #(
     logic                  ram_valid;
     logic                  ram_ready;
     logic                  ram_we;
+    // The RAM answers reads only: no write that wants an answer reaches it.
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic                  ram_rsp;
+    /* verilator lint_on UNUSEDSIGNAL */
     // The RAM takes words with strobes in its window: the size and the address's other bits
     // are not read.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -130,11 +134,12 @@ module TbMig6NocCheck #(
     AtomicUnit #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .ATOM_WIDTH(DATA_WIDTH),
                  .PENDING_WIDTH(2)) u_atomic_unit(
         .clk, .rst_n,
-        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_addr(au_addr),
-        .req_size(au_size), .req_atop(au_atop), .req_wdata(au_wdata), .req_wstrb(au_wstrb),
-        .rsp_valid(au_rsp_valid), .rsp_data(au_rsp_data),
+        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_rsp(!au_we),
+        .req_addr(au_addr), .req_size(au_size), .req_atop(au_atop), .req_wdata(au_wdata),
+        .req_wstrb(au_wstrb), .rsp_valid(au_rsp_valid), .rsp_data(au_rsp_data),
         .mem_req_valid(ram_valid), .mem_req_ready(ram_ready), .mem_req_we(ram_we),
-        .mem_req_addr(ram_addr), .mem_req_size(ram_size), .mem_req_wdata(ram_wdata),
+        .mem_req_rsp(ram_rsp), .mem_req_addr(ram_addr), .mem_req_size(ram_size),
+        .mem_req_wdata(ram_wdata),
         .mem_req_wstrb(ram_wstrb), .mem_rsp_valid(ram_rsp_valid),
         .mem_rsp_data(ram_rsp_data));
 

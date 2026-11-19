@@ -114,10 +114,7 @@ module Mig3Cpu import Mig3Pkg::*; #(
     wire      au_valid;         // behind ReqMux: AtomicUnit's requests
     wire      au_ready;
     wire      au_we;
-    // Wants an answer: !au_we while no write is answered; AtomicUnit takes it next.
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire      au_rsp;
-    /* verilator lint_on UNUSEDSIGNAL */
+    wire      au_rsp;           // wants an answer: !au_we, no write is answered here
     wire [FIELDS-1:0] au_fields;
     word_t    au_addr;
     size_t    au_size;
@@ -133,6 +130,10 @@ module Mig3Cpu import Mig3Pkg::*; #(
     wire      ram_valid;        // behind AtomicUnit: the RAM's
     wire      ram_ready;
     wire      ram_we;
+    // The RAM answers reads only: no write that wants an answer reaches it.
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire      ram_rsp;
+    /* verilator lint_on UNUSEDSIGNAL */
     // Not fully used: address bits above MEM_ADDR_WIDTH, the offset and the size (the
     // RAM moves lines with strobes).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -224,12 +225,13 @@ module Mig3Cpu import Mig3Pkg::*; #(
     AtomicUnit #(.ADDR_WIDTH(WIDTH), .DATA_WIDTH($bits(line_t)), .ATOM_WIDTH(WIDTH),
                  .PENDING_WIDTH(1)) u_atomic_unit(
         .clk, .rst_n,
-        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we),
+        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_rsp(au_rsp),
         .req_addr(au_addr), .req_size(au_size), .req_atop(au_atop),
         .req_wdata(au_wdata), .req_wstrb(au_wstrb),
         .rsp_valid(au_rsp_valid), .rsp_data(au_rsp_data),
         .mem_req_valid(ram_valid), .mem_req_ready(ram_ready), .mem_req_we(ram_we),
-        .mem_req_addr(ram_addr), .mem_req_size(ram_size), .mem_req_wdata(ram_wdata),
+        .mem_req_rsp(ram_rsp), .mem_req_addr(ram_addr), .mem_req_size(ram_size),
+        .mem_req_wdata(ram_wdata),
         .mem_req_wstrb(ram_wstrb), .mem_rsp_valid(ram_rsp_valid),
         .mem_rsp_data(ram_rsp_data));
 
