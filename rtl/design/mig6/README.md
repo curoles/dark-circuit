@@ -60,10 +60,10 @@ cores, DMA engines and future engines all speak. No custom messages between PEs:
 simple at first and scale badly (more packet kinds, special cases in every network
 interface, new ways to deadlock, a programming model that does not carry over).
 
-- **Requests,** from a PE to the shared memory: read, write, atomic, with the address, the
-  operation, and the data and strobes of a write.
-- **Answers,** from the shared memory back to the PE: the data of a read, the old value of
-  an atomic.
+- **Requests,** from a PE to the shared memory: read, write, atomic, LR and SC, with the
+  address, the operation, and the data and strobes of a write.
+- **Answers,** from the shared memory back to the PE: the data of a read or an LR, the old
+  value of an atomic, the status of an SC.
 - **PEs talk only to the shared memory,** for now. Reading or writing another PE's local
   memory would be the same protocol with another destination (an address window), not a new
   kind of packet; it may come when chained layers pass data from PE to PE.
@@ -87,22 +87,27 @@ library once the format settles, after the layer runs. A message's head is the l
 ```
   requests, 48-bit flits:
     head    | dest 4 | op 3 | src 4 | size 3 | addr 32 | cmo 2 |
-    WRITE   | zero 12 | data 32 | strb 4 |       (body)
+    WRITE   | zero 12 | data 32 | strb 4 |       (body; an SC's the same)
     ATOMIC  | zero 10 | operand 32 | atop 6 |   (body)
 
   answers, 39-bit flits:
     DATA    | dest 4 | op 3 | data 32 |
+    ACK     | dest 4 | op 3 | status 32 |       (an SC's)
 ```
 
 - **A word at a time:** a request reads or writes up to a word (32 bits, 4 strobes). Lines
   would be new opcodes of more flits, when a cache needs them.
-- **One or two flits:** READ and CBO are a head alone, WRITE and ATOMIC a head and a body.
-  An answer is one flit: the word of a READ, the old word of an ATOMIC.
+- **One or two flits:** READ, LR and CBO are a head alone, WRITE, SC and ATOMIC a head and
+  a body. An answer is one flit: the word of a READ or an LR, the old word of an ATOMIC
+  (DATA), an SC's status (ACK: RISC-V's SC result, 0 success, 1 failure, what the core
+  writes to rd; as AXI answers a write on B, OKAY or EXOKAY).
+- **LR and SC are opcodes,** the exclusive READ and WRITE (the request channel's
+  `req_excl`): the head has no bit left for a flag (48 of 48).
 - **No IDs:** an answer goes to the request's `src`. A PE's requests and answers stay in
   order, so a PE matches answers to requests by counting. This holds while a PE talks to one
   destination (see Open questions).
-- **An opcode list per network,** 3 bits each: requests READ, WRITE, ATOMIC, CBO; answers
-  DATA, and ACK, not sent yet (no acknowledgements of writes). The free codes are room for
+- **An opcode list per network,** 3 bits each: requests READ, WRITE, ATOMIC, CBO, LR, SC;
+  answers DATA and ACK (an SC's; later acknowledged writes). The free codes are room for
   lines and error answers.
 
 ### The network interfaces, for now
@@ -119,8 +124,13 @@ AtomicUnit and a RAM.
   word or less come).
 - **Mig6MemNetIf** buffers request flits (the credits it gives), passes a request on to
   AtomicUnit and the RAM with its body, and drops CBOs (nothing caches the shared memory).
-  Answers have no ready, so a READ or an ATOMIC is taken only when its answer has a place:
-  at most D owed (a FIFO of their sources, a FIFO of answers waiting for a credit).
+  Answers have no ready, so a request that is answered is taken only when its answer has a
+  place: at most D owed (a FIFO of their sources, a FIFO of answers waiting for a credit).
+- **The exclusive monitor** is in Mig6MemNetIf, where every request to the shared memory
+  passes with its source: a reservation per PE (a word). An LR reserves; any write, atomic
+  or successful SC of the word ends every reservation of it; an SC is decided when no
+  answer is in the memory, so its ACK, made there, goes behind the answers before it (kb
+  rtl/design/mig6/far_lr_sc).
 - **Backpressure is the credits:** while D answers are owed, Mig6MemNetIf takes no
   request, returns no credit, and the wait spreads back router by router until a PE's Mig6PeNetIf
   holds `req_ready` low. Answers drain on their own network, so it ends.
@@ -299,12 +309,15 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   chained layers need to pass data from PE to PE.
 - **LR/SC on the shared memory:** a reservation lives in a core, so another PE's store to
   the reserved word does not end it, and an SC would succeed when it must fail. Decided
-  (2026-11-18), in two steps. Now: the shared region is not reservable, and an LR or SC
+  (2026-11-18), in two steps. First: the shared region is not reservable, and an LR or SC
   outside a reservable region stops the run (Mig6Atomic: `a_lr_sc_reservable`; later an
-  access fault). Soon: LR/SC done at the shared memory, a reservation per PE in its network
-  interface that any store to the word ends, the SC's answer success or failure. AMOs
-  already cover barriers, counters, flags and locks; LR/SC adds compare-and-swap. In a
-  PE's local memory LR/SC syncs nothing (one hart, no interrupts), but it works.
+  access fault). Then LR/SC done at the shared memory: the library's channels carry
+  `req_excl` and `req_rsp` (kb rtl/lib/block/answered_writes, rtl/lib/block/cache/exclusive),
+  the network LR and SC with Mig6MemNetIf's monitor (done 2026-11-19, tested with stand-in
+  cores: kb rtl/design/mig6/far_lr_sc); left, the core sending them for the shared region
+  (reservable then). AMOs already cover barriers, counters, flags and locks; LR/SC adds
+  compare-and-swap. In a PE's local memory LR/SC syncs nothing (one hart, no interrupts),
+  but it works.
 - **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
 
 ## References

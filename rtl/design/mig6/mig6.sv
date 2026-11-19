@@ -46,6 +46,7 @@ module Mig6 import Mig6Pkg::*; #(
     logic                      au_valid;
     logic                      au_ready;
     logic                      au_we;
+    logic                      au_rsp;
     logic [AW-1:0]             au_addr;
     logic [ZW-1:0]             au_size;
     AtomicPkg::atop_t          au_atop;
@@ -80,7 +81,8 @@ module Mig6 import Mig6Pkg::*; #(
         .noc_req_fwd(mem_req_fwd), .noc_req_bwd(mem_req_bwd),
         .noc_rsp_fwd(mem_rsp_fwd), .noc_rsp_bwd(mem_rsp_bwd),
         .mem_req_valid(au_valid), .mem_req_ready(au_ready), .mem_req_we(au_we),
-        .mem_req_addr(au_addr), .mem_req_size(au_size), .mem_req_atop(au_atop),
+        .mem_req_rsp(au_rsp), .mem_req_addr(au_addr), .mem_req_size(au_size),
+        .mem_req_atop(au_atop),
         .mem_req_wdata(au_wdata), .mem_req_wstrb(au_wstrb),
         .mem_rsp_valid(au_rsp_valid), .mem_rsp_data(au_rsp_data));
 
@@ -89,7 +91,7 @@ module Mig6 import Mig6Pkg::*; #(
     AtomicUnit #(.ADDR_WIDTH(AW), .DATA_WIDTH(DW), .ATOM_WIDTH(DW), .PENDING_WIDTH(2))
         u_atomic_unit(
         .clk, .rst_n,
-        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_rsp(!au_we),
+        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_rsp(au_rsp),
         .req_addr(au_addr), .req_size(au_size), .req_atop(au_atop), .req_wdata(au_wdata),
         .req_wstrb(au_wstrb), .rsp_valid(au_rsp_valid), .rsp_data(au_rsp_data),
         .mem_req_valid(ram_valid), .mem_req_ready(ram_ready), .mem_req_we(ram_we),

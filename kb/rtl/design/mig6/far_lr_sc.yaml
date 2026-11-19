@@ -1,0 +1,62 @@
+type: decision
+title: Mig6's LR/SC on the shared memory are done at the memory, by an exclusive monitor
+date: 2026-11-19
+question: >
+  A core's LR/SC reservation sees only its own hart, so on Mig6's shared memory another PE's
+  store would not end it and an SC could succeed when it must fail (for now
+  a_lr_sc_reservable stops such a run). How do LR and SC work on the shared memory, so that
+  PEs can do compare-and-swap there, with any kind of core?
+decision: >
+  Far LR/SC, an exclusive monitor as AXI's at a memory, in the shared memory's network
+  interface (Mig6MemNetIf), which sees every request and its source PE. The request channel
+  says exclusive with req_excl (kb rtl/lib/block/cache/exclusive) and wants an answer with
+  req_rsp (kb rtl/lib/block/answered_writes); on the NoC LR and SC are opcodes (REQ_LR a
+  head as a READ, REQ_SC a head and a WRITE body: the head has no bit left for a flag). A
+  reservation per PE, valid and a word: an LR reserves its word when the memory takes it;
+  any WRITE, ATOMIC or successful SC of a word ends every reservation of it, the writer's
+  own too; an SC is decided at the front with its body when no answer is in the memory
+  (src FIFO empty, as AtomicUnit waits with an atomic), succeeds as a WRITE to the memory
+  or fails and goes nowhere; either way its answer is RSP_ACK with the status in data,
+  RISC-V's SC result (SC_SUCCESS 0, SC_FAIL 1), put into the answer FIFO behind the answers
+  before it, and its PE's reservation ends. User: (b) the AXI way, any core can use it; the
+  SC's answer (a), ACK with the status, as AXI answers a write on B (OKAY, EXOKAY).
+why: >
+  The monitor must sit where every write to the shared memory passes, and know who asked:
+  the network interface is that place (all PEs' requests, in the order the memory takes
+  them, each with its src). As ARM's global exclusive monitors at an interconnect or memory
+  controller and PULP's axi_riscv_lrsc in front of a memory. Deciding an SC only with no
+  answer in the memory keeps the answers in order without IDs: its ACK, made here, goes
+  behind every answer before it. Ending a reservation on the writer's own store is allowed
+  (a constrained LR/SC loop has no store) and needs no per-PE compare of the writer.
+  The ACK's status is what an SC writes to rd, so the core takes the answer as it comes.
+rejected:
+  - choice: LR/SC in the core only (the reservation of Mig6Atomic)
+    why_not: It sees no other PE's store; on the shared memory an SC could succeed wrongly.
+  - choice: An excl flag in the request head
+    why_not: The head is full (48 of 48 bits); a wider request network for one bit.
+  - choice: The SC's status as RSP_DATA
+    why_not: DATA would mean read data for READ, LR and ATOMIC but a status for SC, and
+      RSP_ACK, reserved for answered writes, would stay unused.
+  - choice: An SC decided while answers are in the memory, its ACK ordered by a tag
+    why_not: Tags in the src FIFO and the answer path for an SC that rarely waits.
+evidence: >
+  2026-11-19: TbMig6NetIf (one stand-in through both network interfaces, without a mesh):
+  LRs and SCs in the stand-in's window checked against its model of the reservation (an SC
+  that succeeds and one that fails, an SC waiting for answers in the memory), and LR/SC
+  increments of a word alone. TbMig6Noc (four stand-ins on the 2 x 2 meshes): LR/SC loops
+  of every PE on one shared word; the word ends at every PE's increments, none lost, and
+  SCs fail under contention (reservations ended by other PEs' writes): 120 increments, 50
+  SCs failed; window SCs 44 to 64 ok, 104 to 107 failed per PE, every status as modeled.
+  Negative, in a scratch copy: a monitor that ends only the writer's own reservation makes
+  no SC fail and loses increments (the word 79, expected 120: caught). The Mig6 suite (14
+  tests) passes.
+code:
+  - rtl/design/mig6/mig6_mem_net_if.sv#resv_valid
+  - rtl/design/mig6/mig6_mem_net_if.sv#sc_ready
+  - rtl/design/mig6/mig6_noc_pkg.sv#REQ_SC
+  - rtl/design/mig6/mig6_noc_pkg.sv#SC_FAIL
+  - test/design/mig6/tb/tb_mig6_noc.sv#lrsc_fails
+relies_on:
+  - rtl/lib/block/answered_writes
+  - rtl/lib/block/cache/exclusive
+  - rtl/lib/block/atomic/design

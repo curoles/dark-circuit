@@ -10,7 +10,11 @@
  * credits, four PEs competing for one memory. Each also adds 1 to one shared counter
  * N_COUNTER times; the old counts the adds get back, over all PEs, must be 0, 1, ..., every
  * add's once (atomic under contention, the barrier's mechanism), and the counter must end at
- * the number of adds. The RAM answers after a random latency and is not always ready. Every
+ * the number of adds. Each also increments one other shared word N_LRSC times with LR/SC
+ * loops (an LR, an SC of its answer + 1, again until the SC succeeds): the word must end at
+ * every PE's N_LRSC (an SC that succeeded on a word another PE wrote since its LR would lose
+ * an increment), and SCs must have failed (contention, the monitor's reservations ended by
+ * other PEs' writes). The RAM answers after a random latency and is not always ready. Every
  * case must happen by the end: the stand-ins' (each opcode, req_ready low), Mig6MemNetIf
  * owing D answers. Checks before the end of a clock (the falling edge). Stops at the first
  * mismatch with $fatal; Mig6Noc stops at a flit out by a tied-off edge.
@@ -24,7 +28,8 @@ module TbMig6NocCheck #(
     parameter LINK_DELAY    = 1,        // clocks of a link between two routers
     parameter PENDING_WIDTH = 2,        // Mig6MemNetIf owes D = 1 << PENDING_WIDTH at most
     parameter N_REQS        = 2000,     // random requests per stand-in after its fixed start
-    parameter N_COUNTER     = 50        // of them: adds to the shared counter, per stand-in
+    parameter N_COUNTER     = 50,       // of them: adds to the shared counter, per stand-in
+    parameter N_LRSC        = 30        // LR/SC increments of the shared word, per stand-in
 )(
     input  wire  clk,
     output logic done
@@ -37,6 +42,7 @@ module TbMig6NocCheck #(
     localparam WORDS        = 16;       // a stand-in's window
     localparam COUNTER_ADDR = 'h400;    // the shared counter, past the windows
     localparam N_ADDS       = N_PES * N_COUNTER;
+    localparam LRSC_ADDR    = 'h500;    // the LR/SC word, past the counter
 
     logic                          rst_n;
     req_link_fwd_t [N_PES-1:0]     pe_req_fwd;
@@ -49,10 +55,12 @@ module TbMig6NocCheck #(
     link_bwd_t                     mem_rsp_bwd;
     logic          [N_PES-1:0]     merged;          // stand-in p's counts are in all_olds
     logic          [31:0]          all_olds [$];    // the old counts of every counter add
+    integer                        lrsc_fails;      // LR/SC loops' SCs that failed, all PEs
     // Mig6MemNetIf to AtomicUnit, AtomicUnit to the RAM
     logic                  au_valid;
     logic                  au_ready;
     logic                  au_we;
+    logic                  au_rsp;
     logic [ADDR_WIDTH-1:0] au_addr;
     logic [SIZE_WIDTH-1:0] au_size;
     atop_t                 au_atop;
@@ -88,6 +96,8 @@ module TbMig6NocCheck #(
         logic [SIZE_WIDTH-1:0] req_size;
         atop_t                 req_atop;
         CachePkg::cmo_t        req_cmo;
+        logic                  req_excl;
+        logic                  req_rsp;
         logic [DATA_WIDTH-1:0] req_wdata;
         logic [STRB_WIDTH-1:0] req_wstrb;
         logic                  rsp_valid;
@@ -96,16 +106,18 @@ module TbMig6NocCheck #(
 
         TbMig6StandIn #(.ID(p), .SEED(1000 + 7 * p), .BASE(4 * WORDS * p), .WORDS(WORDS),
                         .N_REQS(N_REQS), .N_COUNTER(N_COUNTER),
-                        .COUNTER_ADDR(COUNTER_ADDR)) u_stand_in(
+                        .COUNTER_ADDR(COUNTER_ADDR), .N_LRSC(N_LRSC),
+                        .LRSC_ADDR(LRSC_ADDR)) u_stand_in(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
-            .req_wdata, .req_wstrb, .rsp_valid, .rsp_data, .done(stand_in_done));
+            .req_excl, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
+            .done(stand_in_done));
 
         Mig6PeNetIf #(.MY_PE_GRID_X(X_WIDTH'(p % MESH_X)), .MY_PE_GRID_Y(Y_WIDTH'(p / MESH_X)),
                       .BUF_DEPTH(BUF_DEPTH)) u_pe_net_if(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
-            .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
+            .req_excl, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
             .noc_req_fwd(pe_req_fwd[p]), .noc_req_bwd(pe_req_bwd[p]),
             .noc_rsp_fwd(pe_rsp_fwd[p]), .noc_rsp_bwd(pe_rsp_bwd[p]));
 
@@ -114,6 +126,7 @@ module TbMig6NocCheck #(
             merged[p] = 1'b0;
             wait (stand_in_done);
             foreach (u_stand_in.counter_olds[i]) all_olds.push_back(u_stand_in.counter_olds[i]);
+            lrsc_fails = lrsc_fails + u_stand_in.n_lrsc_fail;
             merged[p] = 1'b1;
         end
     end
@@ -127,14 +140,15 @@ module TbMig6NocCheck #(
         .noc_req_fwd(mem_req_fwd), .noc_req_bwd(mem_req_bwd),
         .noc_rsp_fwd(mem_rsp_fwd), .noc_rsp_bwd(mem_rsp_bwd),
         .mem_req_valid(au_valid), .mem_req_ready(au_ready), .mem_req_we(au_we),
-        .mem_req_addr(au_addr), .mem_req_size(au_size), .mem_req_atop(au_atop),
+        .mem_req_rsp(au_rsp), .mem_req_addr(au_addr), .mem_req_size(au_size),
+        .mem_req_atop(au_atop),
         .mem_req_wdata(au_wdata), .mem_req_wstrb(au_wstrb),
         .mem_rsp_valid(au_rsp_valid), .mem_rsp_data(au_rsp_data));
 
     AtomicUnit #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .ATOM_WIDTH(DATA_WIDTH),
                  .PENDING_WIDTH(2)) u_atomic_unit(
         .clk, .rst_n,
-        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_rsp(!au_we),
+        .req_valid(au_valid), .req_ready(au_ready), .req_we(au_we), .req_rsp(au_rsp),
         .req_addr(au_addr), .req_size(au_size), .req_atop(au_atop), .req_wdata(au_wdata),
         .req_wstrb(au_wstrb), .rsp_valid(au_rsp_valid), .rsp_data(au_rsp_data),
         .mem_req_valid(ram_valid), .mem_req_ready(ram_ready), .mem_req_we(ram_we),
@@ -155,6 +169,7 @@ module TbMig6NocCheck #(
     integer      n_owed_d;              // clocks with D answers owed
     integer      cycle;
     logic [31:0] count0;                // the counter before the first add
+    logic [31:0] lrsc0;                 // the LR/SC word before the first increment
     logic [31:0] k;
     logic        seen [N_ADDS];         // an old count got back: count0 + its index
 
@@ -162,8 +177,10 @@ module TbMig6NocCheck #(
         done     = 1'b0;
         n_owed_d = 0;
         cycle    = 0;
+        lrsc_fails = 0;
         wait (rst_n);
         count0 = u_ram.read_word(RAM_AW'(COUNTER_ADDR));
+        lrsc0  = u_ram.read_word(RAM_AW'(LRSC_ADDR));
         while (merged != '1) begin
             @(negedge clk);
             cycle = cycle + 1;
@@ -183,8 +200,15 @@ module TbMig6NocCheck #(
         if (u_ram.read_word(RAM_AW'(COUNTER_ADDR)) != count0 + N_ADDS)
             $fatal(1, "Mig6 NoC: the counter is %0d, expected %0d",
                    u_ram.read_word(RAM_AW'(COUNTER_ADDR)), count0 + N_ADDS);
+        // Every LR/SC increment of every PE, none lost; some SCs failed on the way.
+        if (u_ram.read_word(RAM_AW'(LRSC_ADDR)) != lrsc0 + N_PES * N_LRSC)
+            $fatal(1, "Mig6 NoC: the LR/SC word is %0d, expected %0d",
+                   u_ram.read_word(RAM_AW'(LRSC_ADDR)), lrsc0 + N_PES * N_LRSC);
+        if (N_LRSC > 0 && lrsc_fails == 0)
+            $fatal(1, "Mig6 NoC: no LR/SC loop's SC failed (no contention seen)");
         $display("Mig6 NoC: %0d clocks, %0d counter adds, clocks with D owed %0d", cycle,
                  N_ADDS, n_owed_d);
+        $display("Mig6 NoC: %0d LR/SC increments, %0d SCs failed", N_PES * N_LRSC, lrsc_fails);
         if (n_owed_d == 0)
             $fatal(1, "Mig6 NoC: a case never happened (D owed is 0)");
         done = 1'b1;
@@ -198,7 +222,7 @@ module TbMig6Noc;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
     TbMig6NocCheck #(.BUF_DEPTH(4), .LINK_DELAY(1), .PENDING_WIDTH(2), .N_REQS(2000),
-                     .N_COUNTER(50)) u_check(.clk, .done);
+                     .N_COUNTER(50), .N_LRSC(30)) u_check(.clk, .done);
 
     initial begin
         wait (done);

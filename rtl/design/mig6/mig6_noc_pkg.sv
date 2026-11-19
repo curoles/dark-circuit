@@ -9,17 +9,23 @@
  *
  *   head     | dest_x 2 | dest_y 2 | op 3 | src_x 2 | src_y 2 | size 3 | addr 32 | cmo 2 |
  *   WRITE    | zero 12 | data 32 | strb 4 |             the body: a second flit, the tail
+ *   SC       | zero 12 | data 32 | strb 4 |             the same body as a WRITE
  *   ATOMIC   | zero 10 | operand 32 | atop 6 |
  *
  * Answer network, 39-bit flit data, one flit:
  *
- *   DATA     | dest_x 2 | dest_y 2 | op 3 | data 32 |
- *   ACK      | dest_x 2 | dest_y 2 | op 3 | zero 32 |        not sent yet
+ *   DATA     | dest_x 2 | dest_y 2 | op 3 | data 32 |       a READ's, an LR's, an ATOMIC's
+ *   ACK      | dest_x 2 | dest_y 2 | op 3 | status 32 |     an SC's (later acknowledged writes)
  *
- * READ and CBO are a head alone, WRITE and ATOMIC a head and a body. An answer goes to its
- * request's src_x, src_y. A PE's requests and their answers stay in order (a network per
- * class, one VC, XY routes), so no message carries an ID. size is AXI's (1 << size bytes),
- * atop AXI's AWATOP (AtomicPkg), cmo CMO_NONE but in a CBO (CachePkg).
+ * READ, LR and CBO are a head alone, WRITE, SC and ATOMIC a head and a body. LR and SC are
+ * the exclusive READ and WRITE (the request channel's req_excl; the head has no bit left
+ * for a flag): the shared memory keeps a reservation per PE, src, and an SC writes only
+ * while its PE's holds; its ACK's status is RISC-V's SC result (SC_SUCCESS 0, SC_FAIL 1),
+ * so a core writes it to rd as it comes; as AXI answers a write on B with OKAY or EXOKAY,
+ * a read with data on R. An answer goes to its request's src_x, src_y. A PE's requests and
+ * their answers stay in order (a network per class, one VC, XY routes), so no message
+ * carries an ID. size is AXI's (1 << size bytes), atop AXI's AWATOP (AtomicPkg), cmo
+ * CMO_NONE but in a CBO (CachePkg).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -58,13 +64,19 @@ package Mig6NocPkg;
         REQ_READ   = 3'd0,  // read size bytes at addr; answer DATA
         REQ_WRITE  = 3'd1,  // write the body's data with its strb; no answer
         REQ_ATOMIC = 3'd2,  // the body's atop with its operand at addr; answer DATA, the old word
-        REQ_CBO    = 3'd3   // the cmo on the line of addr; no answer
+        REQ_CBO    = 3'd3,  // the cmo on the line of addr; no answer
+        REQ_LR     = 3'd4,  // read as a READ, reserve the word of addr for src; answer DATA
+        REQ_SC     = 3'd5   // write as a WRITE while src's reservation holds; answer ACK
     } req_op_e;
 
     typedef enum logic [2:0] {
-        RSP_DATA = 3'd0,    // the word of a READ, the old word of an ATOMIC
-        RSP_ACK  = 3'd1     // not sent yet (no acknowledgements of writes)
+        RSP_DATA = 3'd0,    // the word of a READ or an LR, the old word of an ATOMIC
+        RSP_ACK  = 3'd1     // a write's: data is its status (an SC's: SC_SUCCESS, SC_FAIL)
     } rsp_op_e;
+
+    // The status of an SC in its ACK: RISC-V's SC result, what the core writes to rd.
+    localparam logic [DATA_WIDTH-1:0] SC_SUCCESS = DATA_WIDTH'(0);
+    localparam logic [DATA_WIDTH-1:0] SC_FAIL    = DATA_WIDTH'(1);
 
     // A request's head, the first flit: the route to the shared memory, then req_rest_t.
     typedef struct packed {
@@ -96,7 +108,7 @@ package Mig6NocPkg;
     // An answer, one flit: the route back to the request's src_x, src_y, then rsp_rest_t.
     typedef struct packed {
         rsp_op_e               op;
-        logic [DATA_WIDTH-1:0] data;    // DATA: the word; ACK: 0
+        logic [DATA_WIDTH-1:0] data;    // DATA: the word; ACK: the status
     } rsp_rest_t;
 
     localparam RSP_DATA_WIDTH = X_WIDTH + Y_WIDTH + $bits(rsp_rest_t);  // 39
@@ -110,9 +122,14 @@ package Mig6NocPkg;
     typedef `DC_NOC_LINK_FWD_T(VC_WIDTH, RSP_DATA_WIDTH) rsp_link_fwd_t;
     typedef `DC_NOC_LINK_BWD_T(VC_WIDTH)                 link_bwd_t;   // both networks
 
-    // A request with a body (WRITE, ATOMIC) is two flits, the others one.
+    // A request with a body (WRITE, SC, ATOMIC) is two flits, the others one.
     function automatic logic req_has_body(req_op_e op);
-        return op == REQ_WRITE || op == REQ_ATOMIC;
+        return op == REQ_WRITE || op == REQ_SC || op == REQ_ATOMIC;
+    endfunction
+
+    // A request that gets an answer: all but a WRITE and a CBO.
+    function automatic logic req_answered(req_op_e op);
+        return op != REQ_WRITE && op != REQ_CBO;
     endfunction
 
 endpackage

@@ -131,7 +131,8 @@ module Mig6Pe import Mig6Pkg::*; #(
         .clk, .rst_n,
         .req_valid(tgt_valid[NET]), .req_ready(tgt_ready[NET]), .req_we(mem_req.we),
         .req_addr(mem_req.addr), .req_size(mem_req.size), .req_atop(mem_req.atop),
-        .req_cmo(mem_req.cmo), .req_wdata(net_wdata), .req_wstrb(net_wstrb),
+        .req_cmo(mem_req.cmo), .req_excl(1'b0), .req_rsp(!mem_req.we),
+        .req_wdata(net_wdata), .req_wstrb(net_wstrb),
         .rsp_valid(tgt_rsp_valid[NET]), .rsp_data(net_rsp_data),
         .noc_req_fwd, .noc_req_bwd, .noc_rsp_fwd, .noc_rsp_bwd);
 
