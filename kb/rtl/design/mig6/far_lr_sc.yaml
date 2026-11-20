@@ -51,7 +51,7 @@ evidence: >
   no SC fail and loses increments (the word 79, expected 120: caught). The Mig6 suite (14
   tests) passes.
 code:
-  - rtl/design/mig6/mig6_mem_net_if.sv#resv_valid
+  - rtl/design/mig6/mig6_mem_net_if.sv#u_monitor
   - rtl/design/mig6/mig6_mem_net_if.sv#sc_ready
   - rtl/design/mig6/mig6_noc_pkg.sv#REQ_SC
   - rtl/design/mig6/mig6_noc_pkg.sv#SC_FAIL

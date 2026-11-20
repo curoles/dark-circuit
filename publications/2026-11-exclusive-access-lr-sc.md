@@ -3,10 +3,10 @@
 *November 2026. Igor Lesik. Code: [dark-circuit](../README.md), an open library of hardware
 blocks and the small RISC-V cores built from them.*
 
-RISC-V has two ways to change a word in memory safely when others may change it too. An AMO
-(`amoadd.w`, `amoswap.w`, ...) does the read, the operation and the write as one indivisible
-step; my earlier note showed how my cores send it to a block next to the memory. The other
-way is a pair of instructions, LR and SC, load-reserved and store-conditional:
+A RISC-V core has two ways to change a word in memory safely when other cores may change it
+too. An AMO (`amoadd.w`, `amoswap.w`, ...) does the read, the operation and the write as one
+indivisible step; my earlier note showed how my cores send it to a block next to the memory.
+The other way is a pair of instructions, LR and SC, load-reserved and store-conditional:
 
 ```
 retry:
@@ -20,9 +20,10 @@ AMOs cover counters, flags, locks and barriers. LR/SC cover everything else that
 a word, decide, and write: compare-and-swap, lock-free queues, any read-modify-write that no
 single AMO does. C compilers turn `__atomic_compare_exchange` into exactly this loop.
 
-This note is about where the reservation lives. In a core alone, the answer is easy. In
-Mig6, a prototype of four small RISC-V cores on a network on chip sharing one memory, the
-easy answer is wrong, and making it right touched more of the library than I expected.
+This note is about where the reservation (reserve the right to modify) lives. In a core
+alone, the answer is easy. In Mig6, a prototype of four small RISC-V cores on a network on
+chip sharing one memory, the easy answer is wrong, and making it right touched more of the
+library than I expected.
 
 ## 1. What LR/SC promise
 
@@ -35,13 +36,13 @@ So whoever keeps the reservation must see every write to the word, from everyone
 
 ## 2. The reservation in the core, and where it breaks
 
-My cores keep it in the core: one reservation, a valid bit and a word address, set by an LR,
-checked by an SC, ended by an SC, a trap or MRET. That is the whole of LR/SC in the core:
-the LR is a load and the SC a store for the rest of the pipeline.
+My cores keep it (before the change) in the core: one reservation, a valid bit and a word
+address, set by an LR, checked by an SC, ended by an SC, a trap or MRET. That is the whole
+of LR/SC in the core: the LR is a load and the SC a store for the rest of the pipeline.
 
-It is correct while the core is alone: nobody else writes. Mig6 is not alone. Its four PEs
-each have their own core and local memory, and they share one memory at the edge of the
-mesh:
+It is correct while the core is alone: nobody else writes. A Mig6 core is not alone: there
+are four PEs, each with its own core and local memory, and they share one memory at the edge
+of the mesh:
 
 ```
 clock   PE 0               PE 1
@@ -79,7 +80,11 @@ a time, each with its source PE.
 
 ## 4. The monitor
 
-One reservation per PE: a valid bit and a word address. Four rules:
+One reservation per PE: a valid bit and a word address. The reservations live in a small
+library block, ExclusiveMonitor, next to the block that does the atomics; the network
+interface calls it as the memory takes requests, and keeps the order of the answers itself.
+The block knows nothing about networks, so an L2 cache or an AXI bridge can use it the same
+way, with a cache line instead of a word as the reservation's size. Four rules:
 
 - **An LR reserves.** It goes to the memory as an ordinary read; when the memory takes it,
   its PE's reservation becomes valid for its word. A second LR replaces the first.
@@ -97,7 +102,30 @@ One reservation per PE: a valid bit and a word address. Four rules:
            <-- answer: status 1
 ```
 
-One detail kept me honest about order. Answers on Mig6's network carry no IDs: a PE's
+How a reservation is kept, in flip-flops and comparators:
+
+- **Stored:** per PE, a valid bit and the word's address without its byte offset, bits 31
+  to 2 of the LR's address (a set, in the block's terms: the bytes one reservation
+  covers). Four PEs: four times 31 flip-flops. The LR writes its PE's pair in the clock
+  the memory takes it.
+- **Compared with every write:** one 30-bit equality per PE, all four at once, between
+  the write's address (bits 31 to 2) and that PE's stored word. Where they are equal, the
+  valid bit clears at the clock edge. No history is kept: a reservation ends at the
+  moment of the write, so the SC later needs no record of what happened in between.
+- **Compared with an SC:** its PE's pair is picked by the SC's source, and one more
+  equality checks its word: valid and equal is success.
+
+```
+  LR  0x8000_0040 from PE 0:  word[0] = 0x2000_0010, valid[0] = 1
+  SB  0x8000_0042 from PE 1:  0x2000_0010 == word[0], valid[0] = 0
+  SW  0x8000_0044 from PE 1:  0x2000_0011 != word[0], no change
+```
+
+A byte store anywhere in the reserved word ends the reservation, since the offset is not
+compared; a store to the next word does not. The bits compared are the reservation's
+size, a parameter of the block: a word here, a cache line where a cache keeps lines.
+
+One detail is the order of the answers. Answers on Mig6's network carry no IDs: a PE's
 answers come back in the order of its requests. Reads and atomics are answered by the
 memory; an SC's status is made by the monitor itself. If the monitor answered an SC while
 an earlier read was still in the memory, the SC's answer could overtake the read's. So an
@@ -179,8 +207,10 @@ the four cores does compare-and-swap with `__atomic_compare_exchange`, checked a
 same count done with `amoadd`.
 
 The knowledge base has the reasoning behind each step, with the options not taken:
-[the monitor](../kb/rtl/design/mig6/far_lr_sc.yaml),
+[far LR/SC in Mig6](../kb/rtl/design/mig6/far_lr_sc.yaml),
+[the monitor block](../kb/rtl/lib/block/atomic/exclusive_monitor/design.yaml),
 [answered writes](../kb/rtl/lib/block/answered_writes.yaml),
 [exclusive requests in the caches](../kb/rtl/lib/block/cache/exclusive.yaml).
-The code: `rtl/design/mig6/mig6_mem_net_if.sv` (the monitor), `mig6_noc_pkg.sv` (the
-messages), `test/design/mig6/tb/tb_mig6_noc.sv` (the four-PE test).
+The code: `rtl/lib/block/atomic/exclusive_monitor` (the reservations),
+`rtl/design/mig6/mig6_mem_net_if.sv` (where it is called, the SC's answer),
+`mig6_noc_pkg.sv` (the messages), `test/design/mig6/tb/tb_mig6_noc.sv` (the four-PE test).

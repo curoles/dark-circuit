@@ -483,13 +483,13 @@ block:
     versions: [behave, struct]
     path: rtl/lib/block/req_demux
     test: test/block/req_demux
-    kb: [rtl/lib/block/req_demux/design]
+    kb: [rtl/lib/block/answered_writes, rtl/lib/block/req_demux/design]
   ReqMux:
     what: "Request multiplexer: N_REQ request channels to one target, round-robin, the answers back to their requesters in order"
     versions: [behave, struct]
     path: rtl/lib/block/req_mux
     test: test/block/req_mux
-    kb: [rtl/lib/block/req_mux/design]
+    kb: [rtl/lib/block/answered_writes, rtl/lib/block/req_mux/design]
   ReturnAddressStack:
     what: "Return-address stack: predicts where a return goes"
     versions: [behave, struct]
@@ -587,7 +587,13 @@ block:
       versions: [behave, struct]
       path: rtl/lib/block/atomic/atomic_unit
       test: test/block/atomic/atomic_unit
-      kb: [rtl/lib/block/atomic/design]
+      kb: [rtl/lib/block/answered_writes, rtl/lib/block/atomic/design]
+    ExclusiveMonitor:
+      what: "Exclusive monitor: the reservations of LR/SC (AXI's exclusive accesses) where every write to a memory passes, one per agent (a core, a PE)"
+      versions: [behave]
+      path: rtl/lib/block/atomic/exclusive_monitor
+      test: test/block/atomic/exclusive_monitor
+      kb: [rtl/lib/block/atomic/exclusive_monitor/design]
   branch_counter:
     BranchCounterPkg:
       kind: package
@@ -598,7 +604,7 @@ block:
       what: "Control of a read-write cache (write-through): the part DirectCache, SetAssocCache and SkewedCache share"
       versions: [behave, struct]
       path: rtl/lib/block/cache/cache_control
-      kb: [rtl/lib/block/cache/atomic, rtl/lib/block/cache/cache_control/refill_take, rtl/lib/block/cache/cache_control/replay, rtl/lib/block/cache/cbo, rtl/lib/block/cache/read_only, rtl/lib/block/cache/uncached, rtl/lib/block/cache/variant_parameter]
+      kb: [rtl/lib/block/cache/atomic, rtl/lib/block/cache/cache_control/refill_take, rtl/lib/block/cache/cache_control/replay, rtl/lib/block/cache/cbo, rtl/lib/block/cache/exclusive, rtl/lib/block/cache/read_only, rtl/lib/block/cache/uncached, rtl/lib/block/cache/variant_parameter]
     CacheDataRam:
       what: "Data of a cache, one line per set"
       versions: [behave, struct]
@@ -636,7 +642,7 @@ block:
       versions: [behave, struct]
       path: rtl/lib/block/cache/insn_data_cache_arbiter
       test: test/block/cache/insn_data_cache_arbiter
-      kb: [rtl/lib/block/cache/atomic, rtl/lib/block/cache/insn_data_cache_arbiter/design, rtl/lib/block/flow_through_buffer/design]
+      kb: [rtl/lib/block/answered_writes, rtl/lib/block/cache/atomic, rtl/lib/block/cache/insn_data_cache_arbiter/design, rtl/lib/block/flow_through_buffer/design]
     SetAssocCache:
       what: "Set-associative read-write cache (a data cache), write-through"
       versions: [behave, struct]

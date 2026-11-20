@@ -64,6 +64,7 @@
 -F tick_gen/behave/tick_gen.flist
 -F plic/plic.flist
 -F atomic/atomic_unit/behave/atomic_unit.flist
+-F atomic/exclusive_monitor/behave/exclusive_monitor.flist
 -F dma/dma_mover/behave/dma_mover.flist
 -F dma/dma_channel/behave/dma_channel.flist
 -F dma/dma_engine/dma_engine.flist

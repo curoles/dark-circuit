@@ -1,0 +1,53 @@
+type: decision
+title: ExclusiveMonitor keeps the reservations of LR/SC where every write to a memory passes
+date: 2026-11-19
+question: >
+  Mig6's far LR/SC (kb rtl/design/mig6/far_lr_sc) kept the reservations inside Mig6MemNetIf,
+  mixed with its buffering, credits and order of answers. Where does that state belong, and
+  with what interface, so that other memories (an L2, an AXI bridge, the next cores) can use
+  it and its rules are tested on their own?
+decision: >
+  A library block next to AtomicUnit, rtl/lib/block/atomic/exclusive_monitor:
+  ExclusiveMonitor #(N_AGENTS, ADDR_WIDTH, RESV_OFFSET), a reservation per agent (valid and
+  a set of 1 << RESV_OFFSET bytes: a word, or a cache line). Its user calls it where every
+  request passes, in the order the memory takes them: reserve (an LR taken: the agent's
+  reservation becomes its set, replacing any other), write (any write taken, a successful
+  SC too: every reservation of its set ends, the writer's own too), sc_ok (combinational:
+  the agent's reservation is valid and of the SC's set), sc_done (the SC decided: the
+  agent's reservation ends). In one clock the ends come first, then the reservation. The
+  block only remembers; the user keeps the order of requests and answers and makes the SC's
+  answer. Behavioral for now; a struct version later. Mig6MemNetIf uses it (u_monitor).
+why: >
+  The same kind of block as AtomicUnit: a helper in front of a memory that any memory can
+  use, with no bus in it (the user wires reserve, write and the SC to its own channel, as
+  AXI's exclusive monitors sit at a slave or an interconnect, PULP's axi_riscv_lrsc in front
+  of a memory). Its rules get a test of their own with a reference model and counted cases,
+  instead of only through four stand-in cores on a mesh. RESV_OFFSET is the reservation
+  set's size (the RISC-V spec leaves it to the implementation): a word for Mig6's uncached
+  shared memory, a line where a cache keeps lines. User: the exclusive-access logic in a
+  module of its own (a hunch, 2026-11-19), option (a) of three: the library.
+rejected:
+  - choice: A Mig6-local module, moved to the library later
+    why_not: The move would be one more step deferred (as Mig6NocPkg's), and its test would
+      still run only through the network.
+  - choice: Keep the reservations inside Mig6MemNetIf
+    why_not: The rules stay tangled with buffering and credits, and no other memory can use
+      them.
+  - choice: The monitor decides and answers SCs itself (a channel in, a channel out)
+    why_not: When an SC may be decided depends on the user's order of answers (Mig6MemNetIf
+      decides only with nothing in the memory); a monitor that only remembers fits any
+      user.
+evidence: >
+  2026-11-19: TbExclusiveMonitor (4 agents with words, 3 agents with lines of 16 bytes,
+  20000 clocks on Verilator, 2000 on Icarus) checks sc_ok in every clock against a model and
+  counts the cases: an SC that succeeds (also with other offset bits than its LR's), one
+  that fails after another agent's write, after its own successful SC, after its failed SC,
+  with its reservation of another set, an LR and a write of its set in one clock. Mig6's
+  network tests pass unchanged with Mig6MemNetIf using the block.
+code:
+  - rtl/lib/block/atomic/exclusive_monitor/behave/exclusive_monitor.sv#sc_ok
+  - rtl/design/mig6/mig6_mem_net_if.sv#u_monitor
+  - test/block/atomic/exclusive_monitor/tb_exclusive_monitor.sv#n_same_clock
+relies_on:
+  - rtl/design/mig6/far_lr_sc
+  - rtl/lib/block/atomic/design

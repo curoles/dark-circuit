@@ -1,0 +1,29 @@
+type: mutants
+title: Mutants of the ExclusiveMonitor test
+date: 2026-11-19
+tests: [block_exclusive_monitor_behave]
+mutants:
+  - name: a write ends only reservations of other sets, not its own
+    edits:
+      - file: rtl/lib/block/atomic/exclusive_monitor/behave/exclusive_monitor.sv
+        old: "else if ((write && set[a] == write_addr[ADDR_WIDTH-1:RESV_OFFSET]) ||"
+        new: "else if ((write && set[a] != write_addr[ADDR_WIDTH-1:RESV_OFFSET]) ||"
+    expect: model
+  - name: a decided SC keeps its agent's reservation
+    edits:
+      - file: rtl/lib/block/atomic/exclusive_monitor/behave/exclusive_monitor.sv
+        old: "(sc_done && int'(sc_agent) == a))"
+        new: "(sc_done && int'(sc_agent) == a && 1'b0))"
+    expect: model
+  - name: sc_ok ignores the set (any reservation of the agent will do)
+    edits:
+      - file: rtl/lib/block/atomic/exclusive_monitor/behave/exclusive_monitor.sv
+        old: "assign sc_ok = valid[sc_agent] && set[sc_agent] == sc_addr[ADDR_WIDTH-1:RESV_OFFSET];"
+        new: "assign sc_ok = valid[sc_agent] && (set[sc_agent] == sc_addr[ADDR_WIDTH-1:RESV_OFFSET] || 1'b1);"
+    expect: model
+  - name: the reservation before the ends (an LR with a write of its set is lost)
+    edits:
+      - file: rtl/lib/block/atomic/exclusive_monitor/behave/exclusive_monitor.sv
+        old: "if (reserve && int'(reserve_agent) == a)"
+        new: "if (reserve && int'(reserve_agent) == a && !(write && reserve_addr[ADDR_WIDTH-1:RESV_OFFSET] == write_addr[ADDR_WIDTH-1:RESV_OFFSET]))"
+    expect: model

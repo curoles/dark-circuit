@@ -340,6 +340,9 @@ Icarus means Icarus 13, the version the project uses.
   (`qec/qec_pkg.sv`: `stab_row`, `stab_col`).
 - Icarus fails an assertion (v2009_enum.c, compare_value_eequal) on an enum's `.name()`;
   print the value, `int'(t)`.
+- Icarus rejects an enum variable assigned a `?:` of two of its values ("This assignment
+  requires an explicit cast"); Verilator takes it. Use an if/else, or cast the whole,
+  `why_e'(c ? A : B)` (`test/block/atomic/exclusive_monitor`).
 
 ## Valid/ready channels
 

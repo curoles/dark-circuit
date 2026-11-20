@@ -20,20 +20,20 @@
  * of its request (the src FIFO: the answers come in order) as one flit while the answer
  * network's local input has a credit (a count from BUF_DEPTH).
  *
- * The exclusive monitor (kb rtl/design/mig6/far_lr_sc), as AXI's at a memory: a
- * reservation per PE (its src: PE y * MESH_X + x), valid and the address of a word. An LR
- * goes to the memory as a READ and reserves its word for its PE when the memory takes it.
- * Any WRITE, ATOMIC or successful SC to a word ends every reservation of that word, the
- * writer's own too (the spec allows it: a constrained LR/SC loop has no store). An SC is
- * decided at the front, with its body, when no answer is in the memory (src FIFO empty, as
- * AtomicUnit waits with an atomic): its PE's reservation holds (valid, same word) or not.
- * It succeeds: the memory takes it as a WRITE (no answer from there); it fails: it goes
- * nowhere. Either way its ACK, the status, goes into the answer FIFO behind every answer
- * before it, and its PE's reservation ends.
+ * LR and SC (kb rtl/design/mig6/far_lr_sc): the reservations are the library's
+ * ExclusiveMonitor's, one per PE (its src: PE y * MESH_X + x), a word each; this block
+ * calls it as the memory takes requests. An LR goes to the memory as a READ and reserves its
+ * word when the memory takes it; a WRITE, an ATOMIC or a successful SC the memory takes is a
+ * write for the monitor (every reservation of its word ends). An SC is decided at the front,
+ * with its body, when no answer is in the memory (src FIFO empty, as AtomicUnit waits with
+ * an atomic): it succeeds when the monitor says so (sc_ok), and the memory takes it as a
+ * WRITE (no answer from there); it fails and goes nowhere. Either way its ACK, the status,
+ * goes into the answer FIFO behind every answer before it, and the monitor ends its PE's
+ * reservation (sc_done).
  *
  *   request network --> buffer --> head_q (a head with a body) --> mem_req (owed < D)
  *                         \-- credit back as a flit leaves      \-> src FIFO (READ, LR, ATOMIC)
- *                                         monitor: LR reserves, writes and SC end
+ *                                 u_monitor: LR reserves, writes and SC end
  *   mem_rsp --> answer FIFO {route: src FIFO's oldest, RSP_DATA, data} --> answer network
  *   SC decided --> answer FIFO {route: its src, RSP_ACK, SC_SUCCESS or SC_FAIL}
  *
@@ -74,7 +74,7 @@ module Mig6MemNetIf import Mig6NocPkg::*; #(
     localparam BUF_ADDR_WIDTH = (BUF_DEPTH > 1) ? $clog2(BUF_DEPTH) : 1;
     localparam CREDIT_WIDTH   = $clog2(BUF_DEPTH + 1);
     localparam D              = 1 << PENDING_WIDTH;
-    localparam WORD_START     = $clog2(STRB_WIDTH);         // a word's address bits start here
+    localparam WORD_START     = $clog2(STRB_WIDTH);         // a word: 1 << WORD_START bytes
     localparam PE_WIDTH       = (N_PES > 1) ? $clog2(N_PES) : 1;
 
     `DC_STATIC_ASSERT(a_sizes, BUF_DEPTH >= 1 && PENDING_WIDTH >= 1)
@@ -83,8 +83,6 @@ module Mig6MemNetIf import Mig6NocPkg::*; #(
         logic [X_WIDTH-1:0] x;
         logic [Y_WIDTH-1:0] y;
     } node_t;
-
-    typedef logic [ADDR_WIDTH-1:WORD_START] word_addr_t;
 
     // Bits not read: a flit's vc (one VC), a head's route (here), the bodies' zero bits, a
     // head's cmo (a CBO is dropped).
@@ -118,16 +116,13 @@ module Mig6MemNetIf import Mig6NocPkg::*; #(
     logic                     rsp_empty;
     logic                     send;         // an answer flit goes out
     logic [CREDIT_WIDTH-1:0]  credits_q;    // free slots of the router's buffer
-    // The exclusive monitor
-    logic [N_PES-1:0]         resv_valid;   // PE p's reservation holds
-    word_addr_t               resv_addr [N_PES];    // ... of this word
+    // LR and SC
     logic [PE_WIDTH-1:0]      cur_pe;       // the request's PE
-    word_addr_t               cur_word;     // its word
     logic                     sc_ready;     // an SC at the front may be decided now
-    logic                     sc_ok;        // its PE's reservation holds
+    logic                     sc_ok;        // its PE's reservation holds (the monitor)
     logic                     sc_fail;      // a failing SC is decided: it goes nowhere
     logic                     sc_ack;       // an SC is decided: its ACK goes into the FIFO
-    logic                     writes;       // the memory takes a write of cur_word
+    logic                     writes;       // the memory takes a write
     logic                     reserves;     // the memory takes an LR
     // Status the counts make unnecessary (full is only checked).
     /* verilator lint_off UNUSEDSIGNAL */
@@ -165,9 +160,7 @@ module Mig6MemNetIf import Mig6NocPkg::*; #(
     // The SC at the front, with its body, when no answer is in the memory.
     // @kb: rtl/design/mig6/far_lr_sc
     assign cur_pe   = PE_WIDTH'(cur.src_y * MESH_X + cur.src_x);
-    assign cur_word = cur.addr[ADDR_WIDTH-1:WORD_START];
     assign sc_ready = whole && cur.op == REQ_SC && src_empty && room;
-    assign sc_ok    = resv_valid[cur_pe] && resv_addr[cur_pe] == cur_word;
     assign sc_fail  = sc_ready && !sc_ok;
 
     assign capture = !buf_empty && !have_head_q && req_has_body(cur.op);
@@ -201,24 +194,18 @@ module Mig6MemNetIf import Mig6NocPkg::*; #(
                          : mem_req_we             ? write_body.data : '0;
     assign mem_req_wstrb = mem_req_we ? write_body.strb : '0;
 
-    // The monitor: a write of a word ends every reservation of it; a decided SC its PE's; an
-    // LR the memory takes reserves its word for its PE.
+    // The reservations: an LR the memory takes reserves its word for its PE; a write the
+    // memory takes ends every reservation of its word; a decided SC its PE's.
+    // @kb: rtl/lib/block/atomic/exclusive_monitor/design
     assign writes   = taken && (cur.op == REQ_WRITE || cur.op == REQ_ATOMIC || cur.op == REQ_SC);
     assign reserves = taken && cur.op == REQ_LR;
 
-    always_ff @(posedge clk)
-        if (!rst_n)
-            resv_valid <= '0;
-        else
-            for (int p = 0; p < N_PES; p++)
-                if (reserves && int'(cur_pe) == p)
-                    resv_valid[p] <= 1'b1;
-                else if ((writes && resv_addr[p] == cur_word) || (sc_ack && int'(cur_pe) == p))
-                    resv_valid[p] <= 1'b0;
-
-    always_ff @(posedge clk)
-        if (reserves)
-            resv_addr[cur_pe] <= cur_word;
+    ExclusiveMonitor #(.N_AGENTS(N_PES), .ADDR_WIDTH(ADDR_WIDTH), .RESV_OFFSET(WORD_START))
+        u_monitor(
+        .clk, .rst_n,
+        .reserve(reserves), .reserve_agent(cur_pe), .reserve_addr(cur.addr),
+        .write(writes), .write_addr(cur.addr),
+        .sc_agent(cur_pe), .sc_addr(cur.addr), .sc_ok, .sc_done(sc_ack));
 
     // Where each answer the memory owes goes, in the order of the requests.
     FifoT #(.T(node_t), .ADDR_WIDTH(PENDING_WIDTH)) u_src_fifo(
