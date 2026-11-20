@@ -40,9 +40,6 @@
  *   instruction that rounds by an invalid frm is illegal: the FPU's part); an F
  *   instruction that completes ORs its flags (fp_flags) into fflags. misa.F and
  *   mstatus.FS stay 0 (Zfinx: no FP registers to save), so fcsr is always accessible.
- * - vxsat (P, packed SIMD): the saturation flag in bit 0, the other bits 0; set when an
- *   instruction that saturated completes (vxsat_set), written by CSR instructions.
- *   mstatus.VS is not implemented (P does not require it): vxsat is always accessible.
  *
  * Interrupts. csr.irq = MEIP && MEIE && MIE: an interrupt is pending and enabled; from
  * flops and meip only, so Mig6Control takes it on the instruction after a CSR write or
@@ -57,7 +54,7 @@
  * Mig6Core instantiates it in EX, for the instruction in EX. From Mig6Control: done (the
  * instruction completes) and trap (it faults). To Mig6Control: illegal, and csr (mtvec
  * and mepc: where traps and MRET go). rdata is rd's value (rd_src RD_CSR). From the FPU:
- * fp_flags; to it: frm. From the packed unit (P): vxsat_set.
+ * fp_flags; to it: frm.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -83,8 +80,7 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
     output wire      illegal,    // CSR does not exist, or write to a read-only CSR
     output csr_t     csr,        // mtvec and mepc, for traps and MRET
     input  FpPkg::flags_t fp_flags,    // the flags of the F instruction in EX (Zfinx)
-    output funct3_t  frm,        // rounding mode for FRM_DYN (any value: the FPU checks)
-    input  wire      vxsat_set   // the instruction in EX saturated (P): sets vxsat
+    output funct3_t  frm         // rounding mode for FRM_DYN (any value: the FPU checks)
 );
     // Reset values of the flops, from the YAML (Mig6CsrPkg).
     localparam mstatus_t R_MSTATUS = MSTATUS_RESET;
@@ -92,7 +88,6 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
     localparam mtvec_t   R_MTVEC   = MTVEC_RESET;
     localparam mepc_t    R_MEPC    = MEPC_RESET;
     localparam fcsr_t    R_FCSR    = FCSR_RESET;
-    localparam vxsat_t   R_VXSAT   = VXSAT_RESET;
 
     logic [11:0] addr;          // CSR address (immediate of the CSR instruction)
     assign addr = dec.imm[11:0];
@@ -109,7 +104,6 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
     word_t  mtval;
     funct3_t       frm_q;     // fcsr.frm
     FpPkg::flags_t fflags;    // fcsr.fflags
-    logic          vxsat;     // P's saturation flag
 
     logic       imm_form;   // CSRRWI, CSRRSI, CSRRCI
     logic       writes;     // the instruction writes the CSR
@@ -138,7 +132,6 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
         state                 = '0;
         state.fcsr.frm        = frm_q;
         state.fcsr.fflags     = fflags;
-        state.vxsat.sat       = vxsat;
         state.mhartid.id      = HART_ID;
         state.mnodeid.x       = MY_PE_GRID_X;
         state.mnodeid.y       = MY_PE_GRID_Y;
@@ -255,14 +248,6 @@ module Mig6Csr import Mig6Pkg::*, RiscvPkg::*, Mig6CsrPkg::*; #(
             fflags <= w.raw[$bits(fflags)-1:0];
         else if (done && dec.fp.en)
             fflags <= fflags | fp_flags;
-
-    // @kb: rtl/design/mig3/p_profile
-    // vxsat: bit 0; an instruction that saturated sets it when it completes (a P
-    // instruction, no CSR instruction: the two never meet).
-    always_ff @(posedge clk)
-        if (!rst_n)                        vxsat <= R_VXSAT.sat;
-        else if (we && addr == VXSAT_ADDR) vxsat <= w.vxsat.sat;
-        else if (done && vxsat_set)        vxsat <= 1'b1;
 
     assign frm       = frm_q;
     assign csr.mtvec = mtvec;

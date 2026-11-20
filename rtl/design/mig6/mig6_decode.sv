@@ -14,10 +14,8 @@
  * rtl/design/mig3/cbo); an F instruction (Zfinx: on the x registers) its FPU unit and
  * operation in dec.fp, rs3 for the R4 forms, rd_src RD_FP; FLW, FSW, FMV.X.W and FMV.W.X
  * are not in Zfinx, and a reserved rm field (101, 110) is illegal (kb
- * rtl/design/mig3/fp_decode); a packed instruction (P, a draft) its operation in dec.pk
- * for Mig6Packed, rd_src RD_PACKED (kb rtl/design/mig3/packed_unit); a packed multiply its
- * operation and signs in dec.pmul for Mig6PackedMul, rd_src RD_PMUL (kb
- * rtl/design/mig3/packed_mul).
+ * rtl/design/mig3/fp_decode). No P (packed SIMD): Mig3 has its subset, Mig6 left it out
+ * (kb rtl/design/mig6/no_p); its encodings are illegal here.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -47,24 +45,6 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
             ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND:       kind_enc = KIND_OP;
             ANDN, ORN, XNOR, MIN, MINU, MAX, MAXU, ROL, ROR:        kind_enc = KIND_OP;  // Zbb
             SH1ADD, SH2ADD, SH3ADD:                                 kind_enc = KIND_OP;  // Zba
-            PADD_B, PADD_H, PSUB_B, PSUB_H:                         kind_enc = KIND_PACKED;  // P
-            PSADD_B, PSADD_H, PSADDU_B, PSADDU_H:                   kind_enc = KIND_PACKED;  // P
-            PSSUB_B, PSSUB_H, PSSUBU_B, PSSUBU_H:                   kind_enc = KIND_PACKED;  // P
-            PMIN_B, PMIN_H, PMINU_B, PMINU_H:                       kind_enc = KIND_PACKED;  // P
-            PMAX_B, PMAX_H, PMAXU_B, PMAXU_H:                       kind_enc = KIND_PACKED;  // P
-            PSLLI_B, PSLLI_H, PSRLI_B, PSRLI_H, PSRAI_B, PSRAI_H:   kind_enc = KIND_PACKED;  // P
-            PSLL_BS, PSLL_HS, PSRL_BS, PSRL_HS, PSRA_BS, PSRA_HS:   kind_enc = KIND_PACKED;  // P
-            PMUL_H_B00, PMUL_H_B01, PMUL_H_B11:                     kind_enc = KIND_PMUL;  // P
-            PMULU_H_B00, PMULU_H_B01, PMULU_H_B11:                  kind_enc = KIND_PMUL;  // P
-            PMULSU_H_B00, PMULSU_H_B11:                             kind_enc = KIND_PMUL;  // P
-            PM4ADD_B, PM4ADDU_B, PM4ADDSU_B:                        kind_enc = KIND_PMUL;  // P
-            PM2ADD_H, PM2ADDU_H, PM2ADDSU_H:                        kind_enc = KIND_PMUL;  // P
-            PM4ADDA_B, PM4ADDAU_B, PM4ADDASU_B:                     kind_enc = KIND_PMUL;  // P
-            PM2ADDA_H, PM2ADDAU_H, PM2ADDASU_H:                     kind_enc = KIND_PMUL;  // P
-            PMULH_H, PMULHU_H, PMULHSU_H:                           kind_enc = KIND_PMUL;  // P
-            PMULHR_H, PMULHRU_H, PMULHRSU_H:                        kind_enc = KIND_PMUL;  // P
-            PMULQ_H, PMULQR_H:                                      kind_enc = KIND_PMUL;  // P
-            PLI_B, PLI_H, PLUI_H:                                   kind_enc = KIND_PLI;  // P
             FENCE:                                                  kind_enc = KIND_FENCE;
             ECALL:                                                  kind_enc = KIND_ECALL;
             EBREAK:                                                 kind_enc = KIND_EBREAK;
@@ -121,7 +101,6 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
             LR_W[6:0]:            imm = '0;                 // AMO: the address is rs1
             CBO_INVAL[6:0]:       imm = '0;                 // MISC-MEM: a CBO's address
                                                             // is rs1 (FENCE: no imm)
-            PLI_H[6:0]:           imm = imm_op_imm_32_of(insn);  // OP-IMM-32 (P)
             default:              imm = imm_i_of(insn);     // JALR, loads, OP-IMM
         endcase
 
@@ -138,30 +117,10 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
     always_comb
         case (f.r.opcode)
             LUI[6:0], AUIPC[6:0], JAL[6:0]:                      {hz1, hz2} = 2'b00;
-            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0], PADD_B[6:0], PSLL_BS[6:0],
+            BEQ[6:0], SW[6:0], ADD[6:0], LR_W[6:0], FADD_S[6:0],
             FMADD_S[6:0], FMSUB_S[6:0], FNMSUB_S[6:0], FNMADD_S[6:0]: {hz1, hz2} = 2'b11;
             default:                                             {hz1, hz2} = 2'b10;
         endcase
-
-    // @kb: rtl/design/mig3/pli
-    // OP-IMM-32's immediate (P), by fixed bits, not by kind: the shifts' immediate field
-    // (imm_i_of: its low bits are the amount), or the packed load immediates' value, every
-    // lane the same (bit 28 tells them from the shifts, bit 26 PLI.B, bit 30 PLUI.H): PLI.B
-    // the byte at bits 23:16; PLI.H the 10-bit signed value, imm[8:0] at bits 24:16 and
-    // imm[9] at bit 15, sign-extended; PLUI.H the halfword's top 10 bits, imm[15:7] at
-    // bits 23:15 and imm[6] at bit 24.
-    function automatic word_t imm_op_imm_32_of(insn_t w);
-        logic [15:0] h;
-        if (w[28] != PLI_H[28])
-            return imm_i_of(w);
-        if (w[26] == PLI_B[26])
-            return {4{w[23:16]}};
-        if (w[30] == PLUI_H[30])
-            h = {w[23:15], w[24], 6'b0};
-        else
-            h = {{6{w[15]}}, w[15], w[24:16]};
-        return {2{h}};
-    endfunction
 
     // Controls of an M instruction from its funct3.
     function automatic muldiv_ctrl_t muldiv_of(funct3_t f3);
@@ -301,84 +260,6 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
         endcase
     endfunction
 
-    // @kb: rtl/design/mig3/packed_unit
-    // @kb: rtl/design/mig3/packed_mul
-    // A packed multiply's operation and signs (P), by the encodings; 0 for other kinds.
-    // The fields in pmul_ctrl_t's order: en, mode, a_signed, b_signed, acc, res, round.
-    function automatic pmul_ctrl_t pmul_of(insn_t w);
-        casez (w)
-            PMUL_H_B00:   return '{1'b1, PackedPkg::MUL_B00,   1'b1, 1'b1, 1'b0, PMR_BYTES, 1'b0};
-            PMUL_H_B01:   return '{1'b1, PackedPkg::MUL_B01,   1'b1, 1'b1, 1'b0, PMR_BYTES, 1'b0};
-            PMUL_H_B11:   return '{1'b1, PackedPkg::MUL_B11,   1'b1, 1'b1, 1'b0, PMR_BYTES, 1'b0};
-            PMULU_H_B00:  return '{1'b1, PackedPkg::MUL_B00,   1'b0, 1'b0, 1'b0, PMR_BYTES, 1'b0};
-            PMULU_H_B01:  return '{1'b1, PackedPkg::MUL_B01,   1'b0, 1'b0, 1'b0, PMR_BYTES, 1'b0};
-            PMULU_H_B11:  return '{1'b1, PackedPkg::MUL_B11,   1'b0, 1'b0, 1'b0, PMR_BYTES, 1'b0};
-            PMULSU_H_B00: return '{1'b1, PackedPkg::MUL_B00,   1'b1, 1'b0, 1'b0, PMR_BYTES, 1'b0};
-            PMULSU_H_B11: return '{1'b1, PackedPkg::MUL_B11,   1'b1, 1'b0, 1'b0, PMR_BYTES, 1'b0};
-            PM4ADD_B:     return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b1, 1'b0, PMR_DOT,   1'b0};
-            PM4ADDU_B:    return '{1'b1, PackedPkg::MUL_DOT_B, 1'b0, 1'b0, 1'b0, PMR_DOT,   1'b0};
-            PM4ADDSU_B:   return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b0, 1'b0, PMR_DOT,   1'b0};
-            PM2ADD_H:     return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b1, 1'b0, PMR_DOT,   1'b0};
-            PM2ADDU_H:    return '{1'b1, PackedPkg::MUL_DOT_H, 1'b0, 1'b0, 1'b0, PMR_DOT,   1'b0};
-            PM2ADDSU_H:   return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b0, 1'b0, PMR_DOT,   1'b0};
-            PM4ADDA_B:    return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b1, 1'b1, PMR_DOT,   1'b0};
-            PM4ADDAU_B:   return '{1'b1, PackedPkg::MUL_DOT_B, 1'b0, 1'b0, 1'b1, PMR_DOT,   1'b0};
-            PM4ADDASU_B:  return '{1'b1, PackedPkg::MUL_DOT_B, 1'b1, 1'b0, 1'b1, PMR_DOT,   1'b0};
-            PM2ADDA_H:    return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b1, 1'b1, PMR_DOT,   1'b0};
-            PM2ADDAU_H:   return '{1'b1, PackedPkg::MUL_DOT_H, 1'b0, 1'b0, 1'b1, PMR_DOT,   1'b0};
-            PM2ADDASU_H:  return '{1'b1, PackedPkg::MUL_DOT_H, 1'b1, 1'b0, 1'b1, PMR_DOT,   1'b0};
-            PMULH_H:      return '{1'b1, PackedPkg::MUL_16,    1'b1, 1'b1, 1'b0, PMR_HIGH,  1'b0};
-            PMULHU_H:     return '{1'b1, PackedPkg::MUL_16,    1'b0, 1'b0, 1'b0, PMR_HIGH,  1'b0};
-            PMULHSU_H:    return '{1'b1, PackedPkg::MUL_16,    1'b1, 1'b0, 1'b0, PMR_HIGH,  1'b0};
-            PMULHR_H:     return '{1'b1, PackedPkg::MUL_16,    1'b1, 1'b1, 1'b0, PMR_HIGH,  1'b1};
-            PMULHRU_H:    return '{1'b1, PackedPkg::MUL_16,    1'b0, 1'b0, 1'b0, PMR_HIGH,  1'b1};
-            PMULHRSU_H:   return '{1'b1, PackedPkg::MUL_16,    1'b1, 1'b0, 1'b0, PMR_HIGH,  1'b1};
-            PMULQ_H:      return '{1'b1, PackedPkg::MUL_16,    1'b1, 1'b1, 1'b0, PMR_Q15,   1'b0};
-            PMULQR_H:     return '{1'b1, PackedPkg::MUL_16,    1'b1, 1'b1, 1'b0, PMR_Q15,   1'b1};
-            default:      return '0;
-        endcase
-    endfunction
-
-    // A packed instruction's operation (P), by the encodings; 0 for other kinds. The
-    // fields in pk_ctrl_t's order: op, sub, max, is_unsigned, left, amt_rs2, lane.
-    function automatic pk_ctrl_t pk_of(insn_t w);
-        casez (w)
-            PADD_B:   return '{PK_ADD,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PADD_H:   return '{PK_ADD,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSUB_B:   return '{PK_ADD,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSUB_H:   return '{PK_ADD,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSADD_B:  return '{PK_SAT,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSADD_H:  return '{PK_SAT,     1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSADDU_B: return '{PK_SAT,     1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSADDU_H: return '{PK_SAT,     1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSSUB_B:  return '{PK_SAT,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSSUB_H:  return '{PK_SAT,     1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSSUBU_B: return '{PK_SAT,     1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSSUBU_H: return '{PK_SAT,     1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PMIN_B:   return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PMIN_H:   return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PMINU_B:  return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PMINU_H:  return '{PK_MIN_MAX, 1'b1, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PMAX_B:   return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PMAX_H:   return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PMAXU_B:  return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PMAXU_H:  return '{PK_MIN_MAX, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSLLI_B:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_8};
-            PSLLI_H:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b0, PackedPkg::LANE_16};
-            PSRLI_B:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSRLI_H:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSRAI_B:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_8};
-            PSRAI_H:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PackedPkg::LANE_16};
-            PSLL_BS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_8};
-            PSLL_HS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b1, 1'b1, PackedPkg::LANE_16};
-            PSRL_BS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_8};
-            PSRL_HS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b1, 1'b0, 1'b1, PackedPkg::LANE_16};
-            PSRA_BS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_8};
-            PSRA_HS:  return '{PK_SHIFT,   1'b0, 1'b0, 1'b0, 1'b0, 1'b1, PackedPkg::LANE_16};
-            default:  return '0;
-        endcase
-    endfunction
-
     // Link register of the return-address hints of JAL/JALR: x1 (ra) or x5 (t0). A JAL or
     // JALR that writes a link register is a call (it pushes the return-address stack), a JALR
     // that reads one is a return (it pops), both for a swap (a coroutine: pop, then push).
@@ -414,14 +295,9 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
         dec.sys      = '0;
         dec.muldiv   = '0;
         dec.fp       = '0;
-        dec.pk       = '0;
-        dec.pmul     = '0;
         dec.bitmanip = ComputeCoreBitmanipPkg::bm_op_e'('0);
         case (kind)
             KIND_LUI: begin
-                dec.rd_we = 1'b1;  dec.alu.a = A_ZERO;
-            end
-            KIND_PLI: begin     // the lanes' value is the immediate (OP-IMM-32's case)
                 dec.rd_we = 1'b1;  dec.alu.a = A_ZERO;
             end
             KIND_AUIPC: begin
@@ -485,16 +361,6 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
             KIND_BITMANIP: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_BITMANIP;  dec.uses_rs1 = 1'b1;
                 dec.bitmanip = bitmanip_of(insn);
-            end
-            KIND_PACKED: begin
-                dec.rd_we = 1'b1;  dec.rd_src = RD_PACKED;
-                dec.uses_rs1 = 1'b1;  dec.pk = pk_of(insn);
-                dec.uses_rs2 = dec.pk.op != PK_SHIFT || dec.pk.amt_rs2;  // not by an imm
-            end
-            KIND_PMUL: begin
-                dec.rd_we = 1'b1;  dec.rd_src = RD_PMUL;
-                dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.pmul = pmul_of(insn);
-                dec.uses_rs3 = dec.pmul.acc;  dec.rs3 = dec.rd;    // the accumulator
             end
             KIND_CSR: begin
                 dec.rd_we = 1'b1;  dec.rd_src = RD_CSR;  dec.uses_rs1 = csr_reg;

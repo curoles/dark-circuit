@@ -38,19 +38,6 @@ package Mig6CsrPkg;
         logic [4:0]  fflags;    // 4:0, sw rw, hw write, reset 0
     } fcsr_t;
 
-    // ---- unprivileged_p ----
-
-    // vxsat: saturation flag; an instruction that saturated sets it
-    localparam logic [11:0] VXSAT_ADDR     = 12'h009;
-    localparam logic [31:0] VXSAT_RESET    = 32'h0000_0000;
-    localparam logic [31:0] VXSAT_VALID    = 32'h0000_0001;
-    localparam logic [31:0] VXSAT_SW_WRITE = 32'h0000_0001;
-    localparam logic [31:0] VXSAT_CONST    = 32'h0000_0000;
-    typedef struct packed {
-        logic [30:0] zero_31_1;
-        logic        sat;       // 0, sw rw, hw write, reset 0
-    } vxsat_t;
-
     // ---- unprivileged_counters ----
 
     // cycle: mcycle (a view of mcycle)
@@ -146,7 +133,7 @@ package Mig6CsrPkg;
         logic [2:0]  zero_2_0;
     } mstatus_t;
 
-    // misa: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit)
+    // misa: RV32IMA; writes ignored (Zbb, Zfinx have no bit)
     localparam logic [11:0] MISA_ADDR     = 12'h301;
     localparam logic [31:0] MISA_RESET    = 32'h4000_1101;
     localparam logic [31:0] MISA_VALID    = 32'hc000_1101;
@@ -294,7 +281,6 @@ package Mig6CsrPkg;
     // The CSRs a design keeps in flops or wires from signals: every field not constant.
     typedef struct packed {
         fcsr_t       fcsr;
-        vxsat_t      vxsat;
         mhartid_t    mhartid;
         mnodeid_t    mnodeid;
         mstatus_t    mstatus;
@@ -315,7 +301,6 @@ package Mig6CsrPkg;
     typedef union packed {
         logic [31:0] raw;
         fcsr_t       fcsr;
-        vxsat_t      vxsat;
         mhartid_t    mhartid;
         mnodeid_t    mnodeid;
         mstatus_t    mstatus;
@@ -348,7 +333,6 @@ package Mig6CsrPkg;
             FFLAGS_ADDR:     r.value = 32'({s.fcsr.fflags});
             FRM_ADDR:        r.value = 32'({s.fcsr.frm});
             FCSR_ADDR:       r.value = s.fcsr & FCSR_VALID;
-            VXSAT_ADDR:      r.value = s.vxsat & VXSAT_VALID;
             CYCLE_ADDR:      r.value = s.mcycle & MCYCLE_VALID;
             TIME_ADDR:       r.value = s.mcycle & MCYCLE_VALID;
             INSTRET_ADDR:    r.value = s.minstret & MINSTRET_VALID;
@@ -393,7 +377,6 @@ package Mig6CsrPkg;
             FFLAGS_ADDR:     mask = FFLAGS_SW_WRITE;
             FRM_ADDR:        mask = FRM_SW_WRITE;
             FCSR_ADDR:       mask = FCSR_SW_WRITE;
-            VXSAT_ADDR:      mask = VXSAT_SW_WRITE;
             MSTATUS_ADDR:    mask = MSTATUS_SW_WRITE;
             MIE_ADDR:        mask = MIE_SW_WRITE;
             MTVEC_ADDR:      mask = MTVEC_SW_WRITE;

@@ -48,7 +48,6 @@ int main(void)
      * would not both read 0. None of them makes a trap: no interrupt comes (mie.MEIE
      * without mstatus.MIE, and no source), mtvec is used only by a trap. */
     csr_fcsr_write(0x75u);          /* frm 3, flags NV OF NX */
-    csr_vxsat_write(1u);
     csr_mie_write(MIG6_CSR_MIE_MEIE_MASK);
     csr_mtvec_write(0x00000100u);
     csr_mscratch_write(0x13579bdfu);
@@ -59,7 +58,6 @@ int main(void)
     CHECK(fflags,    MIG6_CSR_FFLAGS,    0);
     CHECK(frm,       MIG6_CSR_FRM,       0);
     CHECK(fcsr,      MIG6_CSR_FCSR,      0);
-    CHECK(vxsat,     MIG6_CSR_VXSAT,     0);
     CHECK(cycle,     MIG6_CSR_CYCLE,     1);
     CHECK(time,      MIG6_CSR_TIME,      1);
     CHECK(instret,   MIG6_CSR_INSTRET,   1);
@@ -84,8 +82,8 @@ int main(void)
     CHECK(minstret,  MIG6_CSR_MINSTRET,  1);
     CHECK(mcycleh,   MIG6_CSR_MCYCLEH,   0);
     CHECK(minstreth, MIG6_CSR_MINSTRETH, 0);
-    if (checked != 28)
-        return fail("count", "checked, expected", checked, 28);
+    if (checked != 27)
+        return fail("count", "checked, expected", checked, 27);
 
     /* The bit operations of mig6_csr_ops.h, on mscratch (0x13579bdf). */
     csr_mscratch_clear(0x0000ffffu);

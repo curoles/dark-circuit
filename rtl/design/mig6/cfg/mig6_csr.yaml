@@ -34,14 +34,6 @@ groups:
           - {name: fflags, bits: [4, 0], reset: 0, sw: rw, hw: write}  # NV DZ OF UF NX
           - {name: frm,    bits: [7, 5], reset: 0, sw: rw, hw: none}   # any value: the FPU checks
 
-  - name: unprivileged_p            # packed SIMD (P)
-    csrs:
-      - name: vxsat
-        addr: 0x009
-        desc: saturation flag; an instruction that saturated sets it
-        fields:
-          - {name: sat, bits: 0, reset: 0, sw: rw, hw: write}
-
   - name: unprivileged_counters     # Zicntr: read-only views of the machine counters
     csrs:
       - {name: cycle,    addr: 0xC00, desc: mcycle,  view: {of: mcycle}}
@@ -79,7 +71,7 @@ groups:
           - {name: mpp,  bits: [12, 11], reset: 3, sw: ro, hw: none}   # always machine mode
       - name: misa
         addr: 0x301
-        desc: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit)
+        desc: RV32IMA; writes ignored (Zbb, Zfinx have no bit)
         fields:
           - {name: a,   bits: 0,        reset: 1, sw: ro, hw: none}
           - {name: i,   bits: 8,        reset: 1, sw: ro, hw: none}

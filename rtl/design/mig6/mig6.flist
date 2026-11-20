@@ -18,8 +18,6 @@ mig6_load_data.sv
 mig6_csr.sv
 mig6_muldiv.sv
 mig6_fpu.sv
-mig6_packed.sv
-mig6_packed_mul.sv
 mig6_pipe.sv
 mig6_caches.sv
 mig6_core.sv

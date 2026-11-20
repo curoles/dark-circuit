@@ -63,23 +63,6 @@ namespace fcsr {
     inline void     clear(uint32_t bits) { csr_fcsr_clear(bits); }
 }   // namespace fcsr
 
-// ---- unprivileged_p ----
-
-// vxsat: saturation flag; an instruction that saturated sets it
-namespace vxsat {
-    constexpr uint32_t addr      = MIG6_CSR_VXSAT;
-    constexpr uint32_t reset     = MIG6_CSR_VXSAT_RESET;
-    constexpr uint32_t valid     = MIG6_CSR_VXSAT_VALID;
-    constexpr uint32_t sw_write  = MIG6_CSR_VXSAT_SW_WRITE;
-    constexpr uint32_t sat_mask  = MIG6_CSR_VXSAT_SAT_MASK;
-    constexpr uint32_t sat_shift = MIG6_CSR_VXSAT_SAT_SHIFT;
-    using fields = Mig6CsrVxsat;
-    inline uint32_t read()               { return csr_vxsat_read(); }
-    inline void     write(uint32_t v)    { csr_vxsat_write(v); }
-    inline void     set(uint32_t bits)   { csr_vxsat_set(bits); }
-    inline void     clear(uint32_t bits) { csr_vxsat_clear(bits); }
-}   // namespace vxsat
-
 // ---- unprivileged_counters ----
 
 // cycle: mcycle (a view of mcycle)
@@ -215,7 +198,7 @@ namespace mstatus {
     inline void     clear(uint32_t bits) { csr_mstatus_clear(bits); }
 }   // namespace mstatus
 
-// misa: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit)
+// misa: RV32IMA; writes ignored (Zbb, Zfinx have no bit)
 namespace misa {
     constexpr uint32_t addr      = MIG6_CSR_MISA;
     constexpr uint32_t reset     = MIG6_CSR_MISA_RESET;

@@ -39,17 +39,6 @@
 #define MIG6_CSR_FCSR_FRM_MASK 0x000000e0
 #define MIG6_CSR_FCSR_FRM_RESET 0
 
-/* ---- unprivileged_p ---- */
-
-/* vxsat: saturation flag; an instruction that saturated sets it */
-#define MIG6_CSR_VXSAT 0x009
-#define MIG6_CSR_VXSAT_RESET 0x00000000
-#define MIG6_CSR_VXSAT_VALID 0x00000001
-#define MIG6_CSR_VXSAT_SW_WRITE 0x00000001
-#define MIG6_CSR_VXSAT_SAT_SHIFT 0
-#define MIG6_CSR_VXSAT_SAT_MASK 0x00000001
-#define MIG6_CSR_VXSAT_SAT_RESET 0
-
 /* ---- unprivileged_counters ---- */
 
 /* cycle: mcycle (a view of mcycle) */
@@ -137,7 +126,7 @@
 #define MIG6_CSR_MSTATUS_MPP_MASK 0x00001800
 #define MIG6_CSR_MSTATUS_MPP_RESET 3
 
-/* misa: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit) */
+/* misa: RV32IMA; writes ignored (Zbb, Zfinx have no bit) */
 #define MIG6_CSR_MISA 0x301
 #define MIG6_CSR_MISA_RESET 0x40001101
 #define MIG6_CSR_MISA_VALID 0xc0001101
@@ -297,15 +286,6 @@ typedef union Mig6CsrFcsr {
     };
 } Mig6CsrFcsr;
 
-/* vxsat: saturation flag; an instruction that saturated sets it */
-typedef union Mig6CsrVxsat {
-    uint32_t val;
-    struct {
-        uint32_t sat        : 1;
-        uint32_t zero_31_1  : 31;
-    };
-} Mig6CsrVxsat;
-
 /* mvendorid: vendor ID, not implemented (0) */
 typedef union Mig6CsrMvendorid {
     uint32_t val;
@@ -362,7 +342,7 @@ typedef union Mig6CsrMstatus {
     };
 } Mig6CsrMstatus;
 
-/* misa: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit) */
+/* misa: RV32IMA; writes ignored (Zbb, Zfinx have no bit) */
 typedef union Mig6CsrMisa {
     uint32_t val;
     struct {

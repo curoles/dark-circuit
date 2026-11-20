@@ -89,31 +89,6 @@ static inline void csr_fcsr_clear(uint32_t bits)
     __asm__ volatile("csrc %0, %1" : : "i"(MIG6_CSR_FCSR), "r"(bits) : "memory");
 }
 
-/* ---- unprivileged_p ---- */
-
-/* vxsat: saturation flag; an instruction that saturated sets it */
-static inline uint32_t csr_vxsat_read(void)
-{
-    uint32_t v;
-    __asm__ volatile("csrr %0, %1" : "=r"(v) : "i"(MIG6_CSR_VXSAT));
-    return v;
-}
-
-static inline void csr_vxsat_write(uint32_t v)
-{
-    __asm__ volatile("csrw %0, %1" : : "i"(MIG6_CSR_VXSAT), "r"(v) : "memory");
-}
-
-static inline void csr_vxsat_set(uint32_t bits)
-{
-    __asm__ volatile("csrs %0, %1" : : "i"(MIG6_CSR_VXSAT), "r"(bits) : "memory");
-}
-
-static inline void csr_vxsat_clear(uint32_t bits)
-{
-    __asm__ volatile("csrc %0, %1" : : "i"(MIG6_CSR_VXSAT), "r"(bits) : "memory");
-}
-
 /* ---- unprivileged_counters ---- */
 
 /* cycle: mcycle (a view of mcycle) */
@@ -231,7 +206,7 @@ static inline void csr_mstatus_clear(uint32_t bits)
     __asm__ volatile("csrc %0, %1" : : "i"(MIG6_CSR_MSTATUS), "r"(bits) : "memory");
 }
 
-/* misa: RV32IMA; writes ignored (Zbb, Zfinx, P have no bit) */
+/* misa: RV32IMA; writes ignored (Zbb, Zfinx have no bit) */
 static inline uint32_t csr_misa_read(void)
 {
     uint32_t v;

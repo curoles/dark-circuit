@@ -13,10 +13,11 @@ dc_add_config_check(design_mig6_csr CONFIG ${MIG6}/cfg/mig6_csr.yaml TOOL csr_ge
 dc_add_config_check(design_mig6_pma CONFIG ${MIG6}/cfg/mig6_pma.yaml TOOL pma_gen)
 
 # Hardware files of Mig6Core: struct versions of the library, built from generic gates, the
-# fp32 and packed blocks (one version: hybrid), RISC-V formats and encodings.
+# fp32 blocks (one version: hybrid), RISC-V formats and encodings (no P: kb
+# rtl/design/mig6/no_p).
 set(SYNTH_FLISTS ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
                  ${LIB}/block/block_struct.flist ${LIB}/numeric/numeric_struct.flist
-                 ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
+                 ${LIB}/numeric/fp32/fp32.flist
                  ${LIB}/riscv/riscv.flist ${MIG6}/mig6.flist)
 
 # Mig6Core converts to Verilog-2005 with sv2v and elaborates.
@@ -30,7 +31,7 @@ dc_add_yosys_synth(design_mig6 TOP Mig6Core FLISTS ${SYNTH_FLISTS}
 # Simulation: behave versions of the library (fast to simulate).
 set(FLISTS ${LIB}/sim/sim.flist ${LIB}/gate/generic/gate_generic.flist ${LIB}/part/part.flist
            ${LIB}/block/block_behave.flist ${LIB}/numeric/numeric_behave.flist
-           ${LIB}/numeric/fp32/fp32.flist ${LIB}/numeric/packed/packed.flist
+           ${LIB}/numeric/fp32/fp32.flist
            ${LIB}/riscv/riscv.flist ${MIG6}/mig6.flist)
 
 # Network tests with stand-in cores (TbMig6StandIn) in place of the PEs; Verilator only, as

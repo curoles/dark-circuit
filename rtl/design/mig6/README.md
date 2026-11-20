@@ -9,14 +9,17 @@ Mig6 is the AI-chip line of the roadmap: built from Mig3 (not from Mig4 or Mig5)
 operating system, no MMU, physical addresses, RV32. It is not a commercial product: the only
 consideration is convenience for developing numeric and AI library blocks and for AI
 experiments. It gives a home to library blocks that have none yet: the network on chip
-(rtl/lib/block/noc), the far atomics (AtomicUnit), the DMA, the packed multiplier.
+(rtl/lib/block/noc), the far atomics (AtomicUnit), the DMA. Mig6's core is Mig3's without
+P (packed SIMD): the engine in each PE does the int8 work, P stays in Mig3 and returns on
+an RV64 core (kb rtl/design/mig6/no_p).
 
 ## The first target
 
 One workload defines the first milestone: the int8 fully connected layer of the int8 kernel
 (sw/riscv/kernels/int8_fc, publications/2026-11-int8-kernel.md), 64 inputs and 16
 outputs, run on four PEs at once, every output compared with the plain-C reference, the
-cycles compared with one Mig3: 9 220 cycles in plain C, 2 560 with P.
+cycles compared with one Mig3: 9 220 cycles in plain C (Mig6 has no P; Mig3's P version
+takes 2 560).
 
 ## The system, for now
 
@@ -233,7 +236,7 @@ fault).
 ## The layer on four PEs
 
 - **Split by outputs:** each PE computes 4 of the 16 outputs, from its 4 rows of the weights
-  and the whole input, with the P kernel of the article.
+  and the whole input, with the plain-C kernel (Mig6 has no P).
 - **Data, for now:** the testbench loads every PE's local memory (code, the input, its rows
   of the weights) before reset, as Mig3's tests load their memory. Fetching them over the
   NoC (loads or DMA) is a later step, and a comparison: data local against data fetched.

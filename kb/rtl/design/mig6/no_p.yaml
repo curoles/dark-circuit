@@ -1,0 +1,50 @@
+type: decision
+title: Mig6's core has no P; the engine in each PE does the int8 work
+date: 2026-11-19
+question: >
+  Mig6Core is a copy of Mig3's core, with Mig3's subset of the draft P extension (63
+  instructions, Mig6Packed and Mig6PackedMul). On RV32, P's 64-bit forms keep one value in
+  a register pair (up to four registers read, two written, against the core's two read
+  ports and one write port), and clang uses them for any 64-bit arithmetic once P is on, so
+  only a kernel's loop could be compiled with P, guarded by check_insns. Make P functional,
+  keep it so, or take it out of Mig6?
+decision: >
+  Take P out of Mig6 (user, 2026-11-19): Mig6Decode decodes no P encoding (they are
+  illegal), Mig6Packed and Mig6PackedMul leave mig6.flist, the core and Mig6Control lose
+  their packed results and the packed multiply's stall, Mig6Pkg its packed kinds, controls
+  and BUBBLE_PMUL, the CSR YAML vxsat (P's saturation flag), the build the packed flist.
+  The rs3 read (ID's rs2 port lent to EX) stays: the FPU's R4 forms use it. Mig3 keeps its
+  P subset and its measurements; P returns on an RV64 core (Mig4), where there are no
+  scalar register pairs. Mig6's int8 layer (the first target) runs the plain-C kernel on
+  each PE until the engine in a PE (chunk 9).
+why: >
+  Mig6 stays RV32 (the roadmap: no OS, no MMU, our convenience), so P's register pairs would
+  stay; and once each PE has an int8 matrix engine, P speeds up nothing Mig6 needs: its one
+  use today is the dot product (PM4ADDA.B), the element-wise work beside the engine
+  (activations, softmax, normalization) is planned as hardware blocks, and Mig3's subset
+  has no rounding multiplies for requantization. What it costs, measured on Mig3 (kb
+  rtl/design/mig3/p_profile, packed_unit, packed_mul; sky130): 413 011 um2 before P, 459 442
+  with it, about 46 400 um2 (+11 %; 32 000 of it the packed multiplier with its dot tree),
+  about 186 000 um2 for four PEs; the packed results on the core's forwarding path took its
+  last margin (5.4 ns without the packed unit, 5.5 ns with it). Without P, Mig6's -march has
+  nothing to guard.
+rejected:
+  - choice: Make P functional on RV32 (register pairs)
+    why_not: A 4-read 2-write register file (area, the 5.5 ns clock) or pair instructions
+      over several cycles (deep pipeline changes), for a draft still moving (P 0.6, clang's
+      experimental 0.21) on an RV32 core, when RV64 has no pairs.
+  - choice: Keep the subset, P only in kernel files with check_insns
+    why_not: Area and timing for a speedup the engine makes redundant, and a toolchain trap
+      to guard in every P file.
+  - choice: One custom instruction (a byte dot product) under a custom opcode
+    why_not: A non-standard ISA the engine would make redundant soon.
+evidence: >
+  2026-11-19: Mig6 without P passes its suite (15 tests: config, CSR and PMA checks, sv2v,
+  the network tests, nine programs); the programs' cycles are unchanged but csr_names
+  (one CSR fewer: 527 to 513 cycles). The areas above are Mig3's (Mig6Core is its copy).
+code:
+  - rtl/design/mig6/mig6_decode.sv#Mig6Decode
+  - rtl/design/mig6/mig6.flist
+  - rtl/design/mig6/cfg/mig6_csr.yaml
+relies_on:
+  - rtl/design/mig3/p_profile

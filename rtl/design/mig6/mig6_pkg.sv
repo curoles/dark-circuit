@@ -93,7 +93,6 @@ package Mig6Pkg;
         BUBBLE_LOAD_USE,    // the next instruction waits for load data
         BUBBLE_DIV,         // EX holds a division
         BUBBLE_FPU,         // EX holds an F instruction until its result (Mig6Fpu)
-        BUBBLE_PMUL,        // EX holds a packed multiply until its result (Mig6PackedMul)
         BUBBLE_IMEM,        // ID waits for the instruction from imem
         BUBBLE_DMEM,        // a load or store waits for dmem: to take it, or a load's word
         BUBBLE_WFI          // WFI in EX waits for an interrupt (sleeps)
@@ -337,10 +336,7 @@ package Mig6Pkg;
         KIND_SC,        // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
         KIND_AMO,       // AMO*.W (Zaamo): a load with an atop, done in front of memory
         KIND_CBO,       // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
-        KIND_FP,        // F on the x registers (Zfinx): the FPU, dec.fp
-        KIND_PACKED,    // packed SIMD (P, a draft): Mig6Packed, dec.pk
-        KIND_PMUL,      // packed multiplies (P): Mig6PackedMul, dec.pmul
-        KIND_PLI        // packed load immediates (P): rd = imm through Mig6Alu, as LUI
+        KIND_FP         // F on the x registers (Zfinx): the FPU, dec.fp
     } kind_e;
 
     // Source of the value written to rd.
@@ -352,9 +348,7 @@ package Mig6Pkg;
         RD_MULDIV,      // product or quotient/remainder: M instructions
         RD_BITMANIP,    // ComputeCoreBitmanip result: Zbb with one operand
         RD_ATOMIC,      // Mig6Atomic: SC's 0 (stored) or 1 (failed)
-        RD_FP,          // the FPU: an F instruction's result (Zfinx)
-        RD_PACKED,      // Mig6Packed: a packed instruction's result (P)
-        RD_PMUL         // Mig6PackedMul: a packed multiply's result (P)
+        RD_FP           // the FPU: an F instruction's result (Zfinx)
     } rd_src_e;
 
     // Decode -> parts: controls computed once in decode, one group per part; later
@@ -444,60 +438,20 @@ package Mig6Pkg;
         RiscvPkg::funct3_t rm;          // that field; RiscvPkg::FRM_DYN: frm's mode (EX)
     } fp_ctrl_t;
 
-    // Packed instructions (P, kb rtl/design/mig3/p_profile): Mig6Packed's operation on
-    // the lanes of rs1 and rs2.
-    typedef enum logic [1:0] {
-        PK_ADD,         // PackedAdd's sum, wrapping: PADD, PSUB
-        PK_SAT,         // PackedSaturate: PSADD, PSADDU, PSSUB, PSSUBU (they set vxsat)
-        PK_MIN_MAX,     // PackedMinMax by rs1 - rs2: PMIN, PMINU, PMAX, PMAXU
-        PK_SHIFT        // PackedShift: PSLL(I), PSRL(I), PSRA(I)
-    } pk_op_e;
-
-    typedef struct packed {
-        pk_op_e           op;          // the block whose result rd takes
-        logic             sub;         // rs1 - rs2 per lane, else +: PSUB, PSSUB(U), PMIN...
-        logic             max;         // PMAX, PMAXU: the larger, else the smaller
-        logic             is_unsigned; // unsigned lanes: PSADDU, PSSUBU, PMINU, PMAXU;
-                                       // logical shifts: PSLL(I), PSRL(I)
-        logic             left;        // PSLL(I): a left shift, else right
-        logic             amt_rs2;     // PSLL.BS ...: the amount is rs2[4:0], else the imm
-        PackedPkg::lane_e lane;        // .B, .BS: bytes; .H, .HS: halfwords
-    } pk_ctrl_t;
-
-    // A packed multiply's result (Mig6PackedMul).
-    typedef enum logic [1:0] {
-        PMR_BYTES,      // every lane's low half: the byte products (PMUL.H.B00 ...)
-        PMR_DOT,        // the dot products (PM4ADD.B, PM2ADD.H, their A forms)
-        PMR_HIGH,       // every lane's high half (PMULH.H, PMULHR.H ...)
-        PMR_Q15         // every lane's bits 30..15, saturated (PMULQ.H, PMULQR.H)
-    } pmul_res_e;
-
-    // Packed multiplies (P): Mig6PackedMul's PackedMul operation and the operands' signs.
-    typedef struct packed {
-        logic             en;          // a packed multiply (Mig6PackedMul)
-        PackedPkg::mul_e  mode;        // PackedMul's operation
-        logic             a_signed;    // rs1's lanes signed
-        logic             b_signed;    // rs2's lanes signed
-        logic             acc;         // PM4ADDA.B ...: rd added, read as rs3 (uses_rs3)
-        pmul_res_e        res;         // the result: low or high halves, Q15, dot
-        logic             round;       // PMULHR.H, PMULQR.H ...: rounded (2^15; Q15 2^14)
-    } pmul_ctrl_t;
-
     // Decode -> parts: the instruction taken apart, with the controls of every part.
     typedef struct packed {
         kind_e             kind;     // for testbenches and traces; parts read the controls
         reg_id_t           rd;
         reg_id_t           rs1;
         reg_id_t           rs2;
-        reg_id_t           rs3;      // the third operand: an R4's (FMADD.S ...), or rd
-                                     // (PM4ADDA.B ...)
+        reg_id_t           rs3;      // the third operand: an R4's (FMADD.S ...)
         logic              rd_we;    // writes rd (writes to x0 are dropped by the register file)
         rd_src_e           rd_src;   // value written to rd
         logic              uses_rs1; // reads rs1, exactly (the retire trace)
         logic              uses_rs2;
         logic              hz_rs1;   // may read rs1, by the opcode alone: the interlock
         logic              hz_rs2;   // (Mig6Control); never 0 when uses_rs* is 1
-        logic              uses_rs3; // reads rs3 in EX: R4 (Zfinx), PM4ADDA.B ... (P)
+        logic              uses_rs3; // reads rs3 in EX: R4 (Zfinx)
         alu_ctrl_t         alu;      // Mig6Alu
         br_ctrl_t          br;       // Mig6Branch
         mem_ctrl_t         mem;      // Mig6Lsu
@@ -505,8 +459,6 @@ package Mig6Pkg;
         sys_ctrl_t         sys;      // Mig6Control, Mig6Csr
         muldiv_ctrl_t      muldiv;   // Mig6MulDiv
         fp_ctrl_t          fp;       // the FPU (Zfinx)
-        pk_ctrl_t          pk;       // Mig6Packed (P)
-        pmul_ctrl_t        pmul;     // Mig6PackedMul (P)
         ComputeCoreBitmanipPkg::bm_op_e bitmanip;   // ComputeCoreBitmanip: the operation
         RiscvPkg::funct3_t funct3;   // operation within a part: ALU op, branch compare,
                                      // load/store size

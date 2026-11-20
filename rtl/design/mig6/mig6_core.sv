@@ -22,8 +22,8 @@
  * - Mig6Forward: results not yet in the register file, for ID;
  * - Mig6Pipe: the ID/EX and EX/MEM registers;
  * - Mig6Alu, Mig6Branch, Mig6Lsu (D-cache requests), Mig6Atomic (the reservation of LR/SC),
- *   Mig6Csr, Mig6MulDiv, Mig6Fpu (F on the x registers: Zfinx), Mig6Packed and
- *   Mig6PackedMul (packed SIMD: P) and the library block ComputeCoreBitmanip (Zbb with one
+ *   Mig6Csr, Mig6MulDiv, Mig6Fpu (F on the x registers: Zfinx) and the library block
+ *   ComputeCoreBitmanip (Zbb with one
  *   operand): the parts of EX;
  * - Mig6LoadData: the loaded value, in MEM/WB.
  *
@@ -135,12 +135,8 @@ module Mig6Core import Mig6Pkg::*; #(
     word_t        ex_fpu_result;    // result of an F instruction (Zfinx)
     FpPkg::flags_t ex_fpu_flags;    // its flags, for fflags
     logic         ex_fpu_stall;
-    word_t        ex_pmul_result;   // result of a packed multiply (Mig6PackedMul)
-    logic         ex_pmul_stall;
-    logic         ex_pmul_sat;      // a Q15 lane saturated: sets vxsat
     logic         ex_fpu_illegal;   // the F instruction can not be done: it traps
     logic         ex_fpu_rs3_read;  // the R4 in EX wants rs3 (not valid-gated)
-    logic         ex_pmul_rs3_read; // an accumulating packed multiply wants rd (as rs3)
     logic         ex_rs3_read;      // ... and is there: ID's rs2 port is lent to it
     RiscvPkg::funct3_t ex_frm;      // fcsr.frm: the FPU's mode for FRM_DYN
     logic         ex_lsu_valid;     // the load or store in EX may send its request
@@ -149,8 +145,6 @@ module Mig6Core import Mig6Pkg::*; #(
     logic         ex_far;           // the LR or SC in EX is done at the memory (Mig6Lsu)
     word_t        ex_atomic_rd_data; // SC: 0 stored, 1 failed
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
-    word_t        ex_packed_result;     // packed SIMD (Mig6Packed)
-    logic         ex_packed_sat;        // it saturated a lane: sets vxsat
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
     trap_t        ex_trap;          // instruction in EX faults: retires as a trap
@@ -201,7 +195,7 @@ module Mig6Core import Mig6Pkg::*; #(
         .id_ras_top, .ex_ras_target(id_ex_q.ras_target),
         .ex_fetch, .ex_insn, .ex_dec, .ex_redirected(id_ex_q.redirected),
         .ex_btb(id_ex_q.btb), .ex_addr(ex_alu_result), .ex_branch, .ex_lsu_misaligned,
-        .ex_csr_illegal, .ex_muldiv_stall, .ex_fpu_stall, .ex_fpu_illegal, .ex_pmul_stall,
+        .ex_csr_illegal, .ex_muldiv_stall, .ex_fpu_stall, .ex_fpu_illegal,
         .ex_dmem_wait, .mem_wait, .csr,
         .ebreak_halt(dbg_req.ebreak_halt),
         .resume(dbg_req.resume), .fetch_ctrl(if_ctrl), .pipe_ctrl, .btb_update, .btb_inval,
@@ -225,7 +219,7 @@ module Mig6Core import Mig6Pkg::*; #(
     // read means nothing then. Forwarding from EX is off meanwhile (EX holds the R4
     // itself); rs3's newest writer is in MEM/WB. The select comes from flops.
     // @kb: rtl/design/mig3/rs3_read
-    assign ex_rs3_read  = ex_fetch.valid && (ex_fpu_rs3_read || ex_pmul_rs3_read);
+    assign ex_rs3_read  = ex_fetch.valid && ex_fpu_rs3_read;
     assign id_rf_rs2    = ex_rs3_read ? ex_dec.rs3 : id_dec.rs2;
     assign id_fwd_ex_rd = ex_rs3_read ? '0 : ex_rd;
 
@@ -305,8 +299,7 @@ module Mig6Core import Mig6Pkg::*; #(
         u_mig6_csr(
         .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .pc(ex_fetch.pc), .meip, .trap(ex_trap), .rdata(ex_csr_rdata),
-        .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm),
-        .vxsat_set(ex_packed_sat || ex_pmul_sat));
+        .illegal(ex_csr_illegal), .csr, .fp_flags(ex_fpu_flags), .frm(ex_frm));
 
     // A division starts in the first cycle the instruction acts, when Control takes
     // interrupts, as the FPU's operations (not behind a load in MEM/WB: an interrupt
@@ -330,20 +323,8 @@ module Mig6Core import Mig6Pkg::*; #(
     // ID's instruction does not move while its rs2 port is lent to EX's R4.
     `DC_ASSERT(a_rs3_port_lent, !ex_rs3_read || pipe_ctrl.ex_stall || pipe_ctrl.ex_flush)
 
-    // Packed multiplies (P): started and held as the FPU's operations, 3 cycles in EX; the
-    // accumulating forms read rd first, through ID's rs2 port as an R4's rs3: 4 cycles.
-    Mig6PackedMul u_mig6_packed_mul(
-        .clk, .rst_n, .valid(ex_fetch.valid && !mem_wait && !ex_irq), .hold(mem_wait),
-        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data),
-        .rs3_data(id_rs2_data), .rs3_read(ex_pmul_rs3_read), .stall(ex_pmul_stall),
-        .result(ex_pmul_result), .sat(ex_pmul_sat));
-
     ComputeCoreBitmanip #(.WIDTH(WIDTH)) u_compute_core_bitmanip(
         .in(ex_rs1_data), .op(ex_dec.bitmanip), .out(ex_bitmanip_result));
-
-    Mig6Packed u_mig6_packed(
-        .dec(ex_dec), .rs1_data(ex_rs1_data), .rs2_data(ex_rs2_data), .result(ex_packed_result),
-        .sat(ex_packed_sat));
 
     // rd value: decode tells whether rd is written and where its value comes from.
     assign ex_rd_write = ex_done && ex_dec.rd_we && ex_dec.rd != '0;
@@ -355,9 +336,7 @@ module Mig6Core import Mig6Pkg::*; #(
             RD_CSR:      ex_rd_data = ex_csr_rdata;
             RD_MULDIV:   ex_rd_data = ex_muldiv_result;
             RD_FP:       ex_rd_data = ex_fpu_result;
-            RD_PMUL:     ex_rd_data = ex_pmul_result;
             RD_BITMANIP: ex_rd_data = ex_bitmanip_result;
-            RD_PACKED:   ex_rd_data = ex_packed_result;
             default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
         endcase
 
@@ -389,18 +368,17 @@ module Mig6Core import Mig6Pkg::*; #(
                           mem_wdata: ex_lsu_mem.wdata};
 
     // Bubble of EX/MEM: EX holds a bubble, which moves on with its reason, or EX waits for
-    // a division, an F instruction's or a packed multiply's result, an interrupt (WFI) or
+    // a division, an F instruction's result, an interrupt (WFI) or
     // the D-cache to take its request (EX/MEM keeps its load while it waits for its word:
     // no bubble goes in then).
     assign ex_bubble = ex_retire.valid ? BUBBLE_NONE :
                        !ex_fetch.valid ? ex_fetch.bubble :
                        ex_muldiv_stall ? BUBBLE_DIV :
                        ex_fpu_stall    ? BUBBLE_FPU :
-                       ex_pmul_stall   ? BUBBLE_PMUL :
                        ex_wfi_wait     ? BUBBLE_WFI : BUBBLE_DMEM;
 
     `DC_ASSERT(a_ex_bubble_why, ex_retire.valid || !ex_fetch.valid || ex_muldiv_stall ||
-                                ex_fpu_stall || ex_pmul_stall || ex_wfi_wait ||
+                                ex_fpu_stall || ex_wfi_wait ||
                                 ex_dmem_wait || mem_wait)
 
     // load: a load that sent its read (a misaligned one traps and reads nothing), or a far
