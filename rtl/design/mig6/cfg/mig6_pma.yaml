@@ -19,9 +19,9 @@ regions:
     size: 0x00010000        # 64 KiB
     desc: the PE's local memory, code and data, private to its core
     target: local
-    cacheable: yes
+    cacheable: no           # a scratchpad on the core's data port (kb rtl/design/mig6/scratchpad)
     io: no
-    atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_atomics_allowed)
+    atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_lmem_plain)
     reservable: yes         # LR/SC: the core's own reservation (Mig6Atomic), one hart
 
   - name: devices

@@ -129,8 +129,8 @@ package Mig6Pkg;
     // operand, the answer is the old word; it is done in front of the memory (Mig3Cpu,
     // kb rtl/lib/block/atomic/design). A CBO (Zicbom) is a write without strobes with its
     // cmo (CachePkg): the D-cache drops the line on an inval or flush and sends it on to
-    // memory (kb rtl/lib/block/cache/cbo). An LR or SC to memory that is reservable but not
-    // cached is exclusive (excl): done at the memory, an SC answered with its status (kb
+    // memory (kb rtl/lib/block/cache/cbo). An LR or SC to reservable memory behind the
+    // network is exclusive (excl): done at the memory, an SC answered with its status (kb
     // rtl/design/mig6/far_lr_sc); one to the local memory is the core's (Mig6Atomic).
     typedef struct packed {
         logic         valid;

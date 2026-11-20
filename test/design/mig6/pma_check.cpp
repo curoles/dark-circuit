@@ -24,8 +24,8 @@ static_assert(pma::shared::atomics && !pma::shared::cacheable && pma::shared::re
 static_assert(pma::shared::target == pma::target_t::net, "shared: through the network");
 static_assert(pma::pma_of(0x8000003cu).target == pma::target_t::net, "inside shared");
 static_assert(!pma::pma_of(0x80100000u).hit, "just past the shared memory: no region");
-static_assert(pma::pma_of(0x0000fffcu).cacheable && pma::pma_of(0x0000fffcu).reservable,
-              "the local memory's last word");
+static_assert(!pma::pma_of(0x0000fffcu).cacheable && pma::pma_of(0x0000fffcu).reservable,
+              "the local memory's last word: a scratchpad, LR/SC the core's own");
 static_assert(pma::pma_of(0x0c000000u).io && !pma::pma_of(0x0c000000u).cacheable, "devices");
 static_assert(!pma::pma_of(0x00010000u).hit, "just past the local memory: no region");
 

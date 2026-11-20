@@ -1,5 +1,6 @@
 /* Mig6 core: RISC-V RV32IM with Zicsr and Zicntr, synthesizable, with an instruction and a
- * data cache that share one memory port; the memory is outside.
+ * data cache that share one memory port, and a data port to the local memory (a
+ * scratchpad, answered as a cache hit is); the memories are outside.
  *
  * Instruction fetch and data access are valid/ready channels with the answers of reads
  * after them (imem_req_t, dmem_req_t, Mig6Pkg), to the caches (Mig6Caches), and from them to
@@ -70,6 +71,10 @@ module Mig6Core import Mig6Pkg::*; #(
     input  mem_rsp_t    mem_rsp,
     input  wire         uncached,          // every request bypasses the caches (Mig6Caches)
     input  wire         meip,              // machine external interrupt (a PLIC, Mig3Cpu)
+    // The local memory as a scratchpad: loads and stores to its region, taken in the clock
+    // they come, answered in the clock after (Mig6Caches).
+    output mem_req_t    lmem_req,
+    input  mem_rsp_t    lmem_rsp,
 
     // Retire trace, pipeline view and halt.
     output wire         halt,              // core halted at EBREAK, see dbg_req.ebreak_halt
@@ -182,7 +187,7 @@ module Mig6Core import Mig6Pkg::*; #(
     assign mem_prio = id_fetch.valid ? CachePkg::PRIO_NONE : CachePkg::PRIO_INSN;
     Mig6Caches #(.CFG(CFG)) u_caches(
         .clk, .rst_n, .uncached, .prio(mem_prio), .icache_req, .icache_rsp, .dcache_req,
-        .dcache_rsp, .mem_req, .mem_rsp);
+        .dcache_rsp, .mem_req, .mem_rsp, .lmem_req, .lmem_rsp);
 
     // IF
     Mig6Fetch #(.CFG(CFG)) u_mig6_fetch(

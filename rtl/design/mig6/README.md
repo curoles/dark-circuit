@@ -143,16 +143,23 @@ AtomicUnit and a RAM.
 
 ```
   Mig6Pe:
-    Mig3 core --> address decode --+--> local memory      (only this core uses it)
-                                   |
-                                   +--> network interface --> router (outside the PE)
-                                        (shared memory: uncached)
+    Mig3 core: data, local ---------------------+--> local memory (a scratchpad)
+               I-cache misses --> address  -----+    (fixed priority: the core's data first)
+               D-cache, far   --> decode   -----+--> network interface --> router
+                                                     (shared memory: uncached)
 ```
 
 - **One core a PE, for now.** A PE may later get a matrix engine or a second core without
   changing the grid.
-- **Local memory:** code and private data, only this core uses it; the core's caches sit in
-  front of it as in Mig3.
+- **Local memory, a scratchpad:** code and private data, private to the PE. The core's loads
+  and stores to it skip the D-cache: they go on a data port of their own, answered in the
+  clock after the request as a cache hit is, and no cache holds a copy, so the PE's DMA (and
+  later its engine) can write it with nothing going stale. Code still comes through the
+  I-cache, whose misses share the memory's port; the core's data wins it (ReqMux by fixed
+  priority, so the core's ready never depends on the address). The D-cache stays, for what
+  is far: regions behind the network that may be cached (none yet: the cached alias below,
+  when a measured case needs it). Arm's Cortex-M7 and Cortex-R5 pair TCMs and caches the
+  same way (kb rtl/design/mig6/scratchpad).
 - **Network interface:** the PE's door to the NoC; requests to the shared memory leave
   through it as packets, answers come back.
 - **The same program on every PE** (SPMD): each finds its part from `mhartid`, the RISC-V
@@ -178,7 +185,8 @@ at the grid's edge (one shared memory now) is the top's.
 Coherence is a problem of copies: it arises only when two places hold the same data and one
 writes it. Mig6 keeps one copy of everything, for now:
 
-- **Local memory is private.** Copies in the core's caches are never seen by another core.
+- **Local memory is private, and no cache holds it:** a scratchpad on the core's data
+  port (code is copied into the I-cache, read only, as code always is).
 - **Shared memory is never cached.** Every load and store to it goes through the NoC to the
   memory (Mig3's uncached requests); the only copy is there.
 - **Synchronization by atomics at the memory:** a barrier is an `amoadd` on a counter in
@@ -220,14 +228,14 @@ bases multiples of their sizes, an io region not cacheable) and generates Mig6Pm
 `mig6_pma.hpp` for programs, and the linker script `mig6.ld`.
 
 - **local** at `0x00000000`, 64 KiB: a PE's local memory, code and data, the same addresses
-  in every PE (one binary for all); cacheable; reservable (LR/SC: the core's own
-  reservation, one hart, until a PE's DMA writes it); no AMOs (no AtomicUnit in front of
-  it).
+  in every PE (one binary for all); not cacheable: a scratchpad on the core's data port;
+  reservable (LR/SC: the core's own reservation, one hart, until a PE's DMA writes it); no
+  AMOs (no AtomicUnit in front of it).
 - **devices** at `0x0C000000`, 64 MiB: no devices in a PE yet; io, never cached.
 - **shared** at `0x80000000` (where RISC-V platforms put main memory), 1 MiB: the shared
   memory at the mesh's edge, through the PE's network interface; never cached (one copy);
   AMOs (the AtomicUnit in front of it); reservable, LR/SC done at the memory by its
-  exclusive monitor (a region reservable but not cached: the core sends them far).
+  exclusive monitor (a reservable region behind the network: the core sends them far).
 - **Other PEs' local memories** over the NoC: not needed by the first target; later, as more
   regions with target net.
 
@@ -305,9 +313,19 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    kernel moved to sw/riscv/kernels/int8_fc with a rows version; P out of Mig6, kb
    rtl/design/mig6/no_p; test design_mig6_fc_layer, 3.7 times one PE; the data made by each
    hart in its local memory, not preloaded by the testbench).
-8. A DMA in each PE (the library's DmaSifive, sharing the network interface through a
-   `ReqMux`, as in Mig3Cpu): the weights in shared memory, each PE fetching its part; cycles
-   against the preloaded run.
+8. A DMA in each PE, so that the weights can start in shared memory and each PE fetches
+   its part; cycles against the run with local data. In steps:
+   a. The local memory as a scratchpad on the core's data port, the D-cache for far regions
+      only (done 2026-11-19: ReqMux by fixed priority, kb rtl/lib/block/req_mux/fixed_priority
+      and rtl/design/mig6/scratchpad; fc_layer's one PE 9 234 cycles instead of 9 314, its
+      misses gone).
+   b. The DMA (the library's DmaSifive, its registers in the PE's devices region, polled):
+      the PE's requesters and targets as a 2 x 2 crossbar of ReqDemux and ReqMux (core and
+      DMA, local memory and network interface), so the core works on local memory while the
+      DMA reads the network; local LR/SC by a monitor at the local memory's port, where the
+      core's and the DMA's writes meet.
+   c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
+      by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),
    number formats (OCP MX, FP8), softmax and normalization.
 
@@ -334,7 +352,6 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   memory LR/SC syncs nothing (one hart, no interrupts), but it works, by the core's own
   reservation; when a PE's DMA writes the local memory (chunk 8), that reservation goes:
   every LR/SC far, a monitor in front of the local memory too.
-- **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
 
 ## References
 

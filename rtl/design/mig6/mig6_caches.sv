@@ -1,5 +1,5 @@
 /* Mig6 caches: the instruction cache and the data cache, between the pipeline and the one
- * memory port of Mig6Core.
+ * memory port of Mig6Core, and the data port of the local memory (a scratchpad).
  *
  * Both are skewed-associative caches of the library (rtl/lib/block/cache), 2 ways of lines
  * of LINE_WORDS words (Mig6Pkg, cfg cache_line_words; both caches and the memory move lines
@@ -26,16 +26,32 @@
  * own
  * timing, but for a fetch and a load or store that want memory in the same clock (tests that
  * count cycles). A load or store of a region that is not cacheable (Mig6PmaPkg, from
- * cfg/mig6_pma.yaml: the devices' region) is never cached (req_nocache: looked up, never a
- * hit or a fill); code is never fetched from it. An address in no region is cached, as
- * before the memory map (Mig6Pe asserts that every access is in a region). invalidate is 0:
+ * cfg/mig6_pma.yaml: the devices and the shared memory) is never cached (req_nocache:
+ * looked up, never a hit or a fill); code is never fetched from the devices. An address
+ * in no region is cached, as before the memory map (Mig6Pe asserts that every access is in
+ * a region). invalidate is 0:
  * Mig6 has no FENCE.I; a store to an address the I-cache
  * holds is not seen by a later fetch that hits (self-modifying code is not supported).
+ *
+ * The local memory is a scratchpad (kb rtl/design/mig6/scratchpad): a load or store to its
+ * region (target local) leaves the D-cache out and goes on lmem, line-wide as the D-cache's
+ * CPU side gets it (a store's word in every word of the line, its strobes in its own),
+ * taken in the clock it comes and answered in the clock after, as a hit is; the answer's
+ * word is picked as the D-cache's. The region is not cacheable, so no cache holds it and
+ * another writer of the local memory (a DMA) is seen at once. A local request is taken only
+ * when the D-cache would take one: the pipeline's ready is the D-cache's alone and does not
+ * depend on the address, as before (Mig6Pe gives the core's data the local memory first,
+ * and it is always ready: a_lmem_taken; kb rtl/lib/block/req_mux/fixed_priority). One data
+ * request is in flight, so the answer is the one side's that gives one (a_one_answer). Code
+ * is fetched through the I-cache, which does not read cacheable; its misses go out on the
+ * memory port to the local memory.
  *
  *   icache_req (fetch) --> word in line --> SkewedCacheRdOnly u_icache --+
  *                      <-- line <--------                                +--> InsnDataCache-
  *   dcache_req (lsu) ----> word in line --> SkewedCache u_dcache --------+    Arbiter --> mem_req
  *                      <-- word of line <--                                   u_arbiter <-- mem_rsp
+ *                      \--- local: line --------------------------------------------> lmem_req
+ *                      <-- word of line <------------------------------------------- lmem_rsp
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -58,7 +74,10 @@ module Mig6Caches import Mig6Pkg::*; #(
 
     // Memory side: the memory port of Mig6Core, one line
     output mem_req_t  mem_req,
-    input  mem_rsp_t  mem_rsp
+    input  mem_rsp_t  mem_rsp,
+    // The local memory's data port (a scratchpad), one line: taken in the clock it comes
+    output mem_req_t  lmem_req,
+    input  mem_rsp_t  lmem_rsp
 );
     `DC_STATIC_ASSERT(a_line_words, LINE_WORDS == 1 || LINE_WORDS == 2)
 
@@ -67,13 +86,20 @@ module Mig6Caches import Mig6Pkg::*; #(
     // memory has one copy. req_nocache acts in the D-cache's lookup, through a register: the
     // address decode is not on the path to req_ready and EX's stall.
     // @kb: rtl/design/mig3/io_region
-    // Of the region's attributes only hit and cacheable are read here.
+    // Of the region's attributes only hit, cacheable and target are read here.
     /* verilator lint_off UNUSEDSIGNAL */
     Mig6PmaPkg::pma_t d_pma;    // the data request's region
     /* verilator lint_on UNUSEDSIGNAL */
     logic             d_io;     // ... is not cacheable
     assign d_pma = Mig6PmaPkg::pma_of({dcache_req.addr, {DADDR_START{1'b0}}});  // a byte address
     assign d_io  = d_pma.hit && !d_pma.cacheable;
+
+    // The local memory is a scratchpad on lmem: its data requests leave the D-cache out.
+    // @kb: rtl/design/mig6/scratchpad
+    logic             d_local;  // the data request's region is the local memory
+    logic             dc_valid; // the D-cache's answer
+    line_t            dc_line;
+    assign d_local = d_pma.hit && d_pma.target == Mig6PmaPkg::TARGET_LOCAL;
 
     // The caches' memory sides, to the arbiter: byte addresses, a line's (offset 0) or an
     // uncached request's own, with its size.
@@ -118,14 +144,14 @@ module Mig6Caches import Mig6Pkg::*; #(
     SkewedCache #(.ADDR_WIDTH(WIDTH), .SETS_WIDTH(CFG.dcache_sets_width),
                   .SETS_OFFSET(LINE_START)) u_dcache(
         .clk, .rst_n, .invalidate(1'b0),
-        .req_valid(dcache_req.valid), .req_ready(dcache_rsp.ready),
+        .req_valid(dcache_req.valid && !d_local), .req_ready(dcache_rsp.ready),
         .req_uncached_dbg_bypass(uncached),
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
         .req_nocache(d_io), .req_atop(dcache_req.atop),
         .req_cmo(dcache_req.cmo), .req_excl(dcache_req.excl),
         .req_rsp(!dcache_req.we || dcache_req.excl),
-        .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
+        .rsp_valid(dc_valid), .rsp_data(dc_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
         .mem_req_wdata(d_mem_wdata), .mem_req_wstrb(d_mem_wstrb), .mem_req_size(d_mem_size),
@@ -136,6 +162,25 @@ module Mig6Caches import Mig6Pkg::*; #(
     // A fetch gets the line (fetch selects its word, after a register: kb
     // rtl/design/mig3/fetch_line).
     assign icache_rsp.data = i_line;
+
+    // The scratchpad: a local request as the D-cache gets it (d_wdata, d_wstrb), taken when
+    // the D-cache would take one; a read wants an answer. No AMO and no exclusive request
+    // goes there (Mig6Pe: a_lmem_plain; LR/SC there are the core's own); a CBO writes no
+    // byte.
+    assign lmem_req.valid = dcache_req.valid && d_local && dcache_rsp.ready;
+    assign lmem_req.we    = dcache_req.we;
+    assign lmem_req.addr  = {dcache_req.addr, dcache_req.offset};
+    assign lmem_req.size  = dcache_req.size;
+    assign lmem_req.wdata = d_wdata;
+    assign lmem_req.wstrb = d_wstrb;
+    assign lmem_req.atop  = dcache_req.atop;
+    assign lmem_req.cmo   = dcache_req.cmo;
+    assign lmem_req.rsp   = !dcache_req.we;
+    assign lmem_req.excl  = dcache_req.excl;
+
+    // One data request in flight: the answer is the side's that gives one.
+    assign dcache_rsp.valid = dc_valid || lmem_rsp.valid;
+    assign d_line           = lmem_rsp.valid ? lmem_rsp.data : dc_line;
 
     // The data side is one word: a load takes its word of the line, a store writes its
     // word into every word of the line, with its strobes in its own.
@@ -187,5 +232,9 @@ module Mig6Caches import Mig6Pkg::*; #(
         .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 
+    // The scratchpad takes a request in the clock it comes (the pipeline's ready is the
+    // D-cache's); one answer at a time.
+    `DC_ASSERT(a_lmem_taken, !lmem_req.valid || lmem_rsp.ready)
+    `DC_ASSERT(a_one_answer, !(dc_valid && lmem_rsp.valid))
 
 endmodule

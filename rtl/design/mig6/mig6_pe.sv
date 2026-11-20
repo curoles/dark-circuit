@@ -2,9 +2,13 @@
  * network interface.
  *
  * A prototype (rtl/design/mig6/README.md). The local memory is the code and data of the
- * program, private to the core: a SimLatencyRAM behind the core's memory port (latency 1,
- * always ready), as Mig3Cpu's memory without its devices; the core's caches are in front of
- * it, so it is not a scratchpad (a memory without caches before it). The network interface
+ * program, private to the PE: a SimLatencyRAM (latency 1, always ready). It is a scratchpad
+ * for data (kb rtl/design/mig6/scratchpad): the core's loads and stores to it come on the
+ * core's data port (lmem), past the D-cache, answered in the clock after as a hit is; the
+ * I-cache's misses come on the core's memory port. A ReqMux by fixed priority puts the two
+ * in front of the memory, the core's data first, so a data request is taken in the clock it
+ * comes (Mig6Caches: a_lmem_taken; kb rtl/lib/block/req_mux/fixed_priority); the DMA will
+ * be the third. The network interface
  * (Mig6PeNetIf) takes the core's accesses to the shared memory onto the NoC: the PE's four
  * noc_* ports, joined by Mig6PeGrid to the meshes' local ports of the PE's node. HART_ID is
  * the hart's ID, what mhartid reads, one per PE; MY_PE_GRID_X and MY_PE_GRID_Y are the PE's
@@ -22,11 +26,15 @@
  *
  * Checked by assertions, with the regions' attributes: every access is in a region
  * (a_in_region; later an access fault); none goes to the devices' region, as a PE has no
- * devices yet (a_no_devices); no AMO goes to a region without atomics (a_atomics_allowed:
- * the local memory has no AtomicUnit in front of it; LR/SC are the core's own).
+ * devices yet (a_no_devices); no AMO goes to a region without atomics (a_atomics_allowed);
+ * the scratchpad gets no AMO and no exclusive request (a_lmem_plain: no AtomicUnit in front
+ * of the local memory; LR/SC are the core's own).
  *
- *   Mig6Core --mem_req--> pma_of: target --> ReqDemux --+--> u_local_mem (SimLatencyRAM)
- *            <--mem_rsp--------------------------------- |
+ *   Mig6Core --lmem_req (data, local)------------------------> u_local_mux 0 --+
+ *            <--lmem_rsp------------------------------------------               |
+ *            --mem_req--> pma_of: target --> ReqDemux --+--> local: u_local_mux 1 --+
+ *            <--mem_rsp--------------------------------- |      (fixed priority)    |
+ *                                                        |    u_local_mem (SimLatencyRAM)
  *                                                        +--> word pick --> u_net_if
  *                                                             <-- answer in every word
  *                                                        u_net_if <==> noc_req_*, noc_rsp_*
@@ -70,6 +78,12 @@ module Mig6Pe import Mig6Pkg::*; #(
 
     mem_req_t         mem_req;
     mem_rsp_t         mem_rsp;
+    // Of the scratchpad's requests the memory reads the line's address, data and strobes;
+    // the assertions the operation.
+    /* verilator lint_off UNUSEDSIGNAL */
+    mem_req_t         lmem_req;
+    /* verilator lint_on UNUSEDSIGNAL */
+    mem_rsp_t         lmem_rsp;
     // Of the region's attributes the cache's (cacheable) and the later ones (io, reservable)
     // are not read here.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -80,14 +94,33 @@ module Mig6Pe import Mig6Pkg::*; #(
     logic [1:0]       tgt_ready;
     logic [1:0]       tgt_rsp_valid;
     line_t            local_rsp_data;
+    // The local memory's ReqMux: 0 the core's data (the scratchpad), 1 the memory port's
+    // local requests (the I-cache's misses); a request's fields: the line's address in the
+    // memory, the line and its strobes.
+    localparam LM_FIELDS = MEM_ADDR_WIDTH - LINE_START + $bits(line_t) + $bits(line_strb_t);
+    logic [1:0][LM_FIELDS-1:0]            lm_fields;
+    wire  [1:0]                           lm_ready;
+    wire  [1:0]                           lm_rsp_valid;
+    wire                                  ram_valid;
+    wire                                  ram_ready;
+    wire                                  ram_we;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire                                  ram_rsp;    // the memory answers every read
+    /* verilator lint_on UNUSEDSIGNAL */
+    wire  [LM_FIELDS-1:0]                 ram_fields;
+    logic [MEM_ADDR_WIDTH-LINE_START-1:0] ram_line;   // the line's address in the memory
+    line_t                                ram_wdata;
+    line_strb_t                           ram_wstrb;
+    wire                                  ram_rsp_valid;
+    line_t                                ram_rsp_data;
     word_t            net_wdata;    // the word of the line the address names
     strb_t            net_wstrb;
     word_t            net_rsp_data;
 
     Mig6Core #(.CFG(CFG), .HART_ID(HART_ID), .MY_PE_GRID_X(8'(MY_PE_GRID_X)),
                .MY_PE_GRID_Y(8'(MY_PE_GRID_Y))) u_mig6_core(
-        .clk, .rst_n, .mem_req, .mem_rsp, .uncached(1'b0), .meip(1'b0), .halt, .retire,
-        .pipe_trace, .dbg_req, .dbg_rsp);
+        .clk, .rst_n, .mem_req, .mem_rsp, .uncached(1'b0), .meip(1'b0), .lmem_req,
+        .lmem_rsp, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
 
     // Where the request goes: its region's target (an access in no region, or to the
     // devices, stops the run below; it goes to the local memory meanwhile).
@@ -102,15 +135,37 @@ module Mig6Pe import Mig6Pkg::*; #(
         .tgt_req_valid(tgt_valid), .tgt_req_ready(tgt_ready), .tgt_rsp_valid(tgt_rsp_valid),
         .tgt_rsp_data({{LINE_WORDS{net_rsp_data}}, local_rsp_data}));
 
+    // The local memory's requesters, the core's data first: it is always ready, so a data
+    // request is taken in the clock it comes.
+    // @kb: rtl/design/mig6/scratchpad
+    assign lm_fields[0] = {lmem_req.addr[MEM_ADDR_WIDTH-1:LINE_START], lmem_req.wdata,
+                           lmem_req.wstrb};
+    assign lm_fields[1] = {mem_req.addr[MEM_ADDR_WIDTH-1:LINE_START], mem_req.wdata,
+                           mem_req.wstrb};
+    ReqMux #(.N_REQ(2), .REQ_WIDTH(LM_FIELDS), .RSP_WIDTH($bits(line_t)), .PENDING_WIDTH(1),
+             .FIXED_PRIO(1)) u_local_mux(
+        .clk, .rst_n,
+        .req_valid({tgt_valid[LOCAL], lmem_req.valid}), .req_ready(lm_ready),
+        .req_we({mem_req.we, lmem_req.we}), .req_rsp({mem_req.rsp, lmem_req.rsp}),
+        .req_fields(lm_fields), .rsp_valid(lm_rsp_valid), .rsp_data(local_rsp_data),
+        .tgt_req_valid(ram_valid), .tgt_req_ready(ram_ready), .tgt_req_we(ram_we),
+        .tgt_req_rsp(ram_rsp), .tgt_req_fields(ram_fields),
+        .tgt_rsp_valid(ram_rsp_valid), .tgt_rsp_data(ram_rsp_data));
+    assign {ram_line, ram_wdata, ram_wstrb} = ram_fields;
+    assign lmem_rsp.ready       = lm_ready[0];
+    assign lmem_rsp.valid       = lm_rsp_valid[0];
+    assign lmem_rsp.data        = local_rsp_data;
+    assign tgt_ready[LOCAL]     = lm_ready[1];
+    assign tgt_rsp_valid[LOCAL] = lm_rsp_valid[1];
+
     // The local memory, code and data; latency 1, always ready.
     SimLatencyRAM #(.DATA_SIZE(LINE_SIZE), .ADDR_WIDTH(MEM_ADDR_WIDTH),
                     .READY_PERCENT(100), .FAST_PERCENT(100), .FAST_MIN(1), .FAST_MAX(1),
                     .MAX_PENDING(1)) u_local_mem(
         .clk, .rst_n,
-        .req_valid(tgt_valid[LOCAL]), .req_ready(tgt_ready[LOCAL]), .req_we(mem_req.we),
-        .req_addr({mem_req.addr[MEM_ADDR_WIDTH-1:LINE_START], {LINE_START{1'b0}}}),
-        .req_wdata(mem_req.wdata), .req_wstrb(mem_req.wstrb),
-        .rsp_valid(tgt_rsp_valid[LOCAL]), .rsp_data(local_rsp_data));
+        .req_valid(ram_valid), .req_ready(ram_ready), .req_we(ram_we),
+        .req_addr({ram_line, {LINE_START{1'b0}}}), .req_wdata(ram_wdata),
+        .req_wstrb(ram_wstrb), .rsp_valid(ram_rsp_valid), .rsp_data(ram_rsp_data));
 
     // The network interface's word: the one of the line the address names (a store's word
     // is in every word, its strobes only in its own).
@@ -144,6 +199,9 @@ module Mig6Pe import Mig6Pkg::*; #(
                !(mem_req.valid && AtomicPkg::is_atomic(mem_req.atop) && !mem_pma.atomics))
     // An exclusive LR or SC goes to the network interface: the shared memory's monitor.
     `DC_ASSERT(a_excl_to_net, !(mem_req.valid && mem_req.excl && !sel[NET]))
+    // The scratchpad: plain loads and stores (a CBO writes no byte).
+    `DC_ASSERT(a_lmem_plain,
+               !(lmem_req.valid && (AtomicPkg::is_atomic(lmem_req.atop) || lmem_req.excl)))
 
     // Load the hex image into the local memory, returns 1 when it is loaded.
     function automatic int load(string hex);

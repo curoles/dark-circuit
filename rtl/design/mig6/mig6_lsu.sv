@@ -19,8 +19,8 @@
  * word is made in front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom)
  * is a store of no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache
  * block, so it is never misaligned; mem has its address and no masks (kb
- * rtl/design/mig3/cbo). An LR or SC to a region that is reservable but not cached
- * (Mig6PmaPkg: the shared memory) is far: an exclusive request (dmem_req.excl), done at
+ * rtl/design/mig3/cbo). An LR or SC to a reservable region behind the network
+ * (Mig6PmaPkg: target net, the shared memory) is far: an exclusive request (dmem_req.excl), done at
  * the memory, where every PE's writes pass; the SC is not cancelled here and its answer,
  * the status, is its rd (MEM/WB waits for it as for a load's word); mem shows its write
  * as asked (whether it was done comes back as rd). An LR or SC elsewhere (the local
@@ -87,14 +87,15 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     // @kb: rtl/design/mig3/cbo
     assign cbo   = store && dec.mem.cmo != CachePkg::CMO_NONE;
 
-    // LR/SC on memory that is reservable but not cached: done there. Of the region's
-    // attributes only these two are read.
+    // LR/SC on reservable memory behind the network: done there (the local memory's, a
+    // scratchpad, are the core's own). Of the region's attributes only these two are read.
     // @kb: rtl/design/mig6/far_lr_sc
     /* verilator lint_off UNUSEDSIGNAL */
     Mig6PmaPkg::pma_t pma;
     /* verilator lint_on UNUSEDSIGNAL */
     assign pma = Mig6PmaPkg::pma_of(addr);
-    assign far = (dec.atomic.lr || dec.atomic.sc) && pma.reservable && !pma.cacheable;
+    assign far = (dec.atomic.lr || dec.atomic.sc) && pma.reservable &&
+                 pma.target == Mig6PmaPkg::TARGET_NET;
 
     always_comb
         case (dec.funct3)

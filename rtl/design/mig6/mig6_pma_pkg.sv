@@ -35,7 +35,7 @@ package Mig6PmaPkg;
     localparam int          LOCAL_ADDR_WIDTH = 16;
     // hit, cacheable, io, atomics, reservable, target
     localparam pma_t        LOCAL_PMA        =
-        pma_t'({1'b1, 1'b1, 1'b0, 1'b0, 1'b1, TARGET_LOCAL});
+        pma_t'({1'b1, 1'b0, 1'b0, 1'b0, 1'b1, TARGET_LOCAL});
 
     // devices: devices, none in Mig6 yet (Mig6Pe: a_no_devices)
     localparam logic [31:0] DEVICES_BASE       = 32'h0c00_0000;

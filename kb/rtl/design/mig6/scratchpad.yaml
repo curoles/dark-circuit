@@ -1,0 +1,69 @@
+type: decision
+title: Mig6's local memory is a scratchpad on the core's data port; the D-cache is for far memory
+date: 2026-11-19
+question: >
+  Chunk 8 gives each PE a DMA that writes the local memory. Mig6Core is Mig3's, with an
+  I-cache and a write-through D-cache in front of one memory port, and the local memory was
+  behind both, so a DMA's write below the D-cache would leave stale lines (Mig3 removes them
+  with cbo.inval, publications/2026-11-dma-and-cbo.md). Marking the local memory not
+  cacheable instead costs a clock per load: measured, fc_layer's one PE 11 369 cycles
+  instead of 9 314 (+22 %, 2 055 cycles for the layer's 2 048 byte loads), because a load
+  the D-cache does not cache is first looked up, then sent to memory, then answered. How
+  should the local memory and the D-cache meet now that others write it?
+decision: >
+  The local memory is a scratchpad for data (user, 2026-11-19): Mig6Caches sends a load or
+  store of the region local not to the D-cache but out on a data port of Mig6Core (lmem,
+  line-wide as the D-cache's CPU side gets it), taken in the clock it comes and answered in
+  the clock after, as a hit is; the region is not cacheable (cfg/mig6_pma.yaml). Mig6Pe puts
+  a ReqMux by fixed priority in front of the local memory, the core's data first, the
+  I-cache's misses second (the DMA will be third); the memory is always ready, so a data
+  request is taken at once and the pipeline's ready stays the D-cache's alone, not
+  dependent on the address (Mig6Caches a_lmem_taken; kb
+  rtl/lib/block/req_mux/fixed_priority). The D-cache stays, for regions behind the network
+  that may be cached (none yet: the shared memory's cached alias, README, later). The I-cache
+  stays: code and data share the memory, and without it every fetch would fight every load
+  for the one port. Mig6Lsu's far rule for LR/SC becomes "reservable and behind the network"
+  (target net), no longer "reservable and not cacheable", which the local memory now is:
+  local LR/SC stay the core's own until the DMA chunk puts a monitor at the local memory.
+why: >
+  The user's point: the local memory is a fast SRAM; it was slower than the D-cache only by
+  where it was wired (behind the cache's request channel, not in the memory stage), and
+  Mig3's caches exist to have cache blocks in the library, not because a core with a fast
+  local SRAM needs them. As a scratchpad it keeps Mig6's one rule, one copy of everything,
+  for every writer of the local memory (the DMA now, the engine later); hits' timing with
+  no tags or refills. And a cache pays where memory is far, which in Mig6 is the shared
+  memory (a round trip over the network): there the D-cache keeps its use. Arm's Cortex-M7
+  and Cortex-R5 pair TCMs and caches this way; PULP and Snitch clusters keep data in a
+  scratchpad (TCDM) beside an I-cache.
+rejected:
+  - choice: Keep the D-cache in front of the local memory, cbo.inval after each DMA transfer
+    why_not: Every program must invalidate after every transfer, a forgotten one is stale
+      data without an error, and every new writer (the engine) brings the same burden.
+  - choice: The local memory not cacheable, through the D-cache as now
+    why_not: Measured +22 % on fc_layer (a clock a load), for nothing a scratchpad does not
+      give.
+  - choice: DMA writes invalidate the D-cache's lines (a snoop inside the PE)
+    why_not: An invalidate port in CacheControl and every cache wrapper, behave and struct
+      (a library-wide change, as answered writes were), coherence for a machine built on one
+      copy.
+  - choice: No D-cache in a PE at all
+    why_not: The user's call, since a cache pays where memory is far, and Mig6 has far
+      memory (the shared memory, later the cached alias); dropping it would throw that away.
+  - choice: Round-robin at the local memory
+    why_not: The core's ready would depend on the address and the others' valid, a new path
+      into EX's stall at a clock with no margin (kb rtl/lib/block/req_mux/fixed_priority).
+relies_on:
+  - rtl/lib/block/req_mux/fixed_priority
+  - rtl/design/mig6/far_lr_sc
+evidence: >
+  2026-11-19, Verilator: every Mig6 test passes (16; cas_check's CAS in the local memory
+  with the core's reservation). fc_layer round 1: one PE 9 234 cycles (9 314 with the
+  D-cache in front of the local memory: its misses are gone), a PE's 4 rows 2 450 (2 436),
+  four PEs 2 541 (2 527), so the speedup reads 3.63 instead of 3.68 because one PE got
+  faster. The rows' +14 cycles are not traced; a guess: the I-cache's misses now wait for
+  the core's data at the local memory, a clock each.
+code:
+  - rtl/design/mig6/mig6_caches.sv#d_local
+  - rtl/design/mig6/mig6_pe.sv#u_local_mux
+  - rtl/design/mig6/mig6_lsu.sv#far
+  - rtl/design/mig6/cfg/mig6_pma.yaml
