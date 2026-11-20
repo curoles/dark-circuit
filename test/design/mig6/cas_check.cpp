@@ -1,13 +1,14 @@
-// Compare-and-swap on the shared memory, on every PE of TbMig6: each hart adds 1 to a shared
-// counter N_INCS times with a compare-and-swap loop (__atomic_compare_exchange_n: LR and SC,
-// far, decided by the shared memory's exclusive monitor; kb rtl/design/mig6/far_lr_sc) and
-// to another N_INCS times with amoadd, then arrives at a barrier (an amoadd counter, as
-// barrier.cpp). After it both counters must be N_HARTS * N_INCS: an SC that succeeded on a
-// word another PE wrote since its LR would lose an increment. A compare-and-swap on a stack
-// variable (the local memory: the core's own reservation, Mig6Atomic) must succeed with the
-// right expected value and fail with a wrong one. Prints the hart's retries (a CAS that found
-// the counter changed by another hart) and exits with 0; prints what differs and exits with
-// 1, or with 2 when the barrier's wait (cycle CSR) ends without every hart.
+// Compare-and-swap on the shared memory, on every PE of TbMig6: each hart adds 1 to a
+// shared counter N_INCS times with a compare-and-swap loop (__atomic_compare_exchange_n: LR
+// and SC, far, decided by the shared memory's exclusive monitor; kb
+// rtl/design/mig6/far_lr_sc) and to another N_INCS times with amoadd, then arrives at a
+// barrier (mig6::ShmemAmoAddBarrier). After it both counters must be N_HARTS * N_INCS: an
+// SC that succeeded on a word another PE wrote since its LR would lose an increment. A
+// compare-and-swap on a stack variable (the local memory: the core's own reservation,
+// Mig6Atomic) must succeed with the right expected value and fail with a wrong one. Prints
+// the hart's retries (a CAS that found the counter changed by another hart) and exits with
+// 0; prints what differs and exits with 1, or with 2 when the barrier's wait (cycle CSR)
+// ends without every hart.
 //
 // @author    Igor Lesik
 // @copyright 2026 Igor Lesik, MIT License
@@ -16,6 +17,7 @@
 
 #include "mig6/mig6_csr_ops.hpp"
 #include "mig6/mig6_pma.hpp"
+#include "mig6/mig6_shmem_amo_add_barrier.hpp"
 #include "tprintf.h"
 
 using namespace mig6;
@@ -45,18 +47,6 @@ uint32_t cas_add(volatile uint32_t* p)
     return retries;
 }
 
-// Arrive at the barrier and wait for every hart, at most WAIT clocks: false when the wait
-// ends without them.
-bool barrier(volatile uint32_t* count)
-{
-    __atomic_fetch_add(count, 1u, __ATOMIC_SEQ_CST);
-    const uint32_t start = csr::cycle::read();
-    while (__atomic_load_n(count, __ATOMIC_ACQUIRE) < N_HARTS)
-        if (csr::cycle::read() - start > WAIT)
-            return false;
-    return true;
-}
-
 }   // namespace
 
 // extern "C": crt0.S calls main (freestanding, its name would be mangled).
@@ -64,7 +54,7 @@ extern "C" int main()
 {
     volatile uint32_t* cas_count = pma::shared::at<uint32_t, CAS_AT>();
     volatile uint32_t* amo_count = pma::shared::at<uint32_t, AMO_AT>();
-    volatile uint32_t* bar_count = pma::shared::at<uint32_t, COUNT_AT>();
+    ShmemAmoAddBarrier bar(pma::shared::at<uint32_t, COUNT_AT>(), N_HARTS);
     const uint32_t     hart      = csr::mhartid::read();
     int                bad       = 0;
 
@@ -87,8 +77,8 @@ extern "C" int main()
         retries += cas_add(cas_count);
         __atomic_fetch_add(amo_count, 1u, __ATOMIC_SEQ_CST);
     }
-    if (!barrier(bar_count)) {
-        tprintf("cas: hart %u gave up at the barrier, %u of %u arrived\n", hart, *bar_count,
+    if (!bar.wait(WAIT)) {
+        tprintf("cas: hart %u gave up at the barrier, %u of %u arrived\n", hart, bar.arrived(),
                 N_HARTS);
         return 2;
     }

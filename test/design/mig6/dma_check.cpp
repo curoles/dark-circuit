@@ -21,6 +21,7 @@
 
 #include "mig6/mig6_csr_ops.hpp"
 #include "mig6/mig6_pma.hpp"
+#include "mig6/mig6_shmem_amo_add_barrier.hpp"
 #include "tprintf.h"
 
 extern "C" {
@@ -49,18 +50,6 @@ uint8_t local_src[BLOCK] __attribute__((aligned(4)));   // the local -> local so
 uint8_t pattern(uint32_t h, uint32_t i)
 {
     return static_cast<uint8_t>(7 * i + 31 * h + 1);
-}
-
-// Barrier k (1, 2, ...): the counter only grows, barrier k ends when it reaches N_HARTS k;
-// false when the wait (WAIT clocks) ends without every hart.
-bool barrier(volatile uint32_t* count, uint32_t k)
-{
-    __atomic_fetch_add(count, 1u, __ATOMIC_SEQ_CST);
-    const uint32_t start = csr::cycle::read();
-    while (__atomic_load_n(count, __ATOMIC_ACQUIRE) < N_HARTS * k)
-        if (csr::cycle::read() - start > WAIT)
-            return false;
-    return true;
 }
 
 // One transfer of n bytes into buf (zeroed first), timed from run to done, then checked
@@ -95,10 +84,9 @@ int transfer(uint32_t hart, const char* what, uintptr_t src, uint32_t n, uint32_
 // extern "C": crt0.S calls main (freestanding, its name would be mangled).
 extern "C" int main()
 {
-    volatile uint32_t* count = pma::shared::at<uint32_t, COUNT_AT>();
+    ShmemAmoAddBarrier bar(pma::shared::at<uint32_t, COUNT_AT>(), N_HARTS);
     const uint32_t     hart  = csr::mhartid::read();
     const uintptr_t    mine  = pma::shared::base + DATA_AT + BLOCK * hart;  // my block
-    uint32_t           k     = 0;      // barriers passed
     int                r     = 0;
 
     dma_claim(DMA, CH);
@@ -111,7 +99,7 @@ extern "C" int main()
                 w |= static_cast<uint32_t>(pattern(h, j + b)) << (8 * b);
             *pma::shared::at<uint32_t>(DATA_AT + i) = w;
         }
-    if (!barrier(count, ++k))
+    if (!bar.wait(WAIT))
         return 2;
 
     if (hart == 0) {
@@ -125,7 +113,7 @@ extern "C" int main()
                           BLOCK, 0)) != 0)
             return r;
     }
-    if (!barrier(count, ++k))
+    if (!bar.wait(WAIT))
         return 2;
 
     if ((r = transfer(hart, "all four, shared -> local", mine, BLOCK, hart)) != 0)
