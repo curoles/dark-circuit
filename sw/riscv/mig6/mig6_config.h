@@ -13,3 +13,9 @@
  * act on the block of MIG6_CBO_BLOCK_SIZE bytes that holds the address: a line of the data
  * cache. */
 #define MIG6_CBO_BLOCK_SIZE 8u
+
+/* Each PE's PLIC (sw/riscv/drivers/plic.h, its base mig6_pma.h's MIG6_PMA_PLIC_BASE): the
+ * sources of its DMA's channel ch (sw/riscv/drivers/dma.h): done and error. */
+#define MIG6_PLIC_PRIO_WIDTH 2
+#define MIG6_DMA_DONE_SOURCE(ch)  (1u + 2u * (ch))
+#define MIG6_DMA_ERROR_SOURCE(ch) (1u + 2u * (ch) + 1u)

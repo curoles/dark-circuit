@@ -17,8 +17,17 @@
 #define MIG6_PMA_LOCAL_ATOMICS 0
 #define MIG6_PMA_LOCAL_RESERVABLE 1
 
+/* plic: the PE's PLIC (rtl/lib/block/plic, sw/riscv/drivers/plic.h), one context: meip (target: devices) */
+#define MIG6_PMA_PLIC_BASE 0x0c000000
+#define MIG6_PMA_PLIC_SIZE 0x00400000
+#define MIG6_PMA_PLIC_ADDR_WIDTH 22
+#define MIG6_PMA_PLIC_CACHEABLE 0
+#define MIG6_PMA_PLIC_IO 1
+#define MIG6_PMA_PLIC_ATOMICS 0
+#define MIG6_PMA_PLIC_RESERVABLE 0
+
 /* dma: the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h) (target: devices) */
-#define MIG6_PMA_DMA_BASE 0x0c000000
+#define MIG6_PMA_DMA_BASE 0x0c420000
 #define MIG6_PMA_DMA_SIZE 0x00001000
 #define MIG6_PMA_DMA_ADDR_WIDTH 12
 #define MIG6_PMA_DMA_CACHEABLE 0

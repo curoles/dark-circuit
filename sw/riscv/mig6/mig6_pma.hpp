@@ -66,6 +66,32 @@ namespace local {
     inline volatile T* at(uint32_t offset) { return reinterpret_cast<volatile T*>(base + offset); }
 }   // namespace local
 
+// plic: the PE's PLIC (rtl/lib/block/plic, sw/riscv/drivers/plic.h), one context: meip
+namespace plic {
+    constexpr uint32_t base       = MIG6_PMA_PLIC_BASE;
+    constexpr uint32_t size       = MIG6_PMA_PLIC_SIZE;
+    constexpr uint32_t addr_width = MIG6_PMA_PLIC_ADDR_WIDTH;
+    constexpr bool     cacheable  = MIG6_PMA_PLIC_CACHEABLE;
+    constexpr bool     io         = MIG6_PMA_PLIC_IO;
+    constexpr bool     atomics    = MIG6_PMA_PLIC_ATOMICS;
+    constexpr bool     reservable = MIG6_PMA_PLIC_RESERVABLE;
+    constexpr target_t target     = target_t::devices;
+    constexpr attributes_t attributes = {true, cacheable, io, atomics, reservable, target};
+
+    constexpr bool contains(uint32_t addr) { return addr - base < size; }
+
+    template <typename T, uint32_t offset>
+    inline volatile T* at()
+    {
+        static_assert(offset < size && sizeof(T) <= size - offset,
+                      "at<T, offset>: the T at offset is not inside the region plic");
+        return reinterpret_cast<volatile T*>(base + offset);
+    }
+
+    template <typename T>
+    inline volatile T* at(uint32_t offset) { return reinterpret_cast<volatile T*>(base + offset); }
+}   // namespace plic
+
 // dma: the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h)
 namespace dma {
     constexpr uint32_t base       = MIG6_PMA_DMA_BASE;
@@ -123,6 +149,8 @@ constexpr attributes_t pma_of(uint32_t addr)
 {
     if (local::contains(addr))
         return local::attributes;
+    if (plic::contains(addr))
+        return plic::attributes;
     if (dma::contains(addr))
         return dma::attributes;
     if (shared::contains(addr))

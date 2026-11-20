@@ -24,8 +24,18 @@ regions:
     atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_lmem_plain)
     reservable: yes         # LR/SC: the core's own reservation (Mig6Atomic), one hart
 
-  - name: dma
+  - name: plic
     base: 0x0C000000
+    size: 0x00400000        # 4 MiB: the spec's map up to context 0's claim register
+    desc: "the PE's PLIC (rtl/lib/block/plic, sw/riscv/drivers/plic.h), one context: meip"
+    target: devices         # the core's memory port to the PLIC's register port (Mig6Pe)
+    cacheable: no
+    io: yes
+    atomics: no
+    reservable: no
+
+  - name: dma
+    base: 0x0C420000        # Mig3's offset in its I/O region
     size: 0x00001000        # 4 KiB a channel: one channel (Mig6Pe: DMA_N)
     desc: "the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h)"
     target: devices         # the core's memory port to the DMA's register port (Mig6Pe)

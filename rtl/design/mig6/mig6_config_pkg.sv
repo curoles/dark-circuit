@@ -16,6 +16,9 @@ package Mig6ConfigPkg;
         int unsigned icache_sets_width;    // I-cache: 2 ways of 1 << icache_sets_width lines
         int unsigned dcache_sets_width;    // D-cache: 2 ways of 1 << dcache_sets_width lines
         int unsigned cache_line_words;     // words in a line of both caches and the memory
+        int unsigned plic_prio_width;      // each PE's PLIC: bits of a priority
+        int unsigned dma_source;           // its sources: DMA channel c's done, error at
+                                           // dma_source + 2c, + 2c + 1
     } mig6_cfg_t;
 
     localparam mig6_cfg_t MIG6_CFG = '{
@@ -25,7 +28,9 @@ package Mig6ConfigPkg;
         ras_addr_width:  3,    // 8 entries
         icache_sets_width: 6,  // 64 lines a way
         dcache_sets_width: 6,  // 64 lines a way
-        cache_line_words:  2    // 8 bytes a line
+        cache_line_words:  2,   // 8 bytes a line
+        plic_prio_width:   2,
+        dma_source:        1
     };
 
 endpackage

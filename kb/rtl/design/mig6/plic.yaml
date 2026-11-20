@@ -1,0 +1,48 @@
+type: decision
+title: Each Mig6 PE has a PLIC; the DMA's done and error are its sources, its output meip
+date: 2026-11-20
+question: >
+  The DMA in each PE (kb rtl/design/mig6/dma) was polled. The user asked for interrupts
+  early, as their own measured step. Mig6Core has one interrupt, the machine external one
+  (mip.MEIP from its meip input). How do a PE's own interrupts (the DMA's now, the engine's
+  later) reach its core?
+decision: >
+  The library's Plic in each PE (user's choice (a), 2026-11-20): one context, the core's
+  meip; its sources the DMA's, channel c's done at CFG.dma_source + 2c and its error at
+  + 2c + 1, level-triggered (dma_source 1 and plic_prio_width 2 in cfg/mig6_config.yaml;
+  mig6_config.h gives programs MIG6_DMA_DONE_SOURCE(ch)), sized to the PE, not Mig3's 16
+  sources and 3-bit priorities. Its registers are the region plic, 0x0C000000, 4 MiB (the
+  spec's layout up to context 0's claim register); the DMA moves to 0x0C420000 (Mig3's
+  offset); AddrDecode tells the two devices apart from the memory map's bases. No core
+  change; sw/riscv/drivers/plic.h works as on Mig3.
+why: >
+  Measure first: the library's block as it is, no core change, and the step measures what
+  an interrupt costs with claim and complete. Per-source enables and priorities serve the
+  engine's sources later, and a doorbell from another PE could be one more source.
+rejected:
+  - choice: Local interrupts in mip and mie bits 16 and up, no controller
+    why_not: SiFive's per-core sources, bits the privileged spec leaves to the platform, but
+      a core change (CSR fields, cause codes, an order among the bits) for a saving (claim
+      and complete) not yet shown to matter; it stays the improvement if it does.
+  - choice: Both, local bits inside the PE and a PLIC for sources from outside it
+    why_not: More than Mig6 needs now.
+  - choice: The PLIC in the DMA's step (8b-1)
+    why_not: The DMA's first numbers would carry interrupt cycles (the user's choice, its own
+      step).
+relies_on:
+  - rtl/design/mig6/dma
+  - rtl/design/mig3/plic
+evidence: >
+  2026-11-20, Verilator, test design_mig6_irq_check (every PE, 64 bytes local to local, every
+  byte checked): done seen polled 108 cycles after run; by interrupt while main spins, the
+  handler's first statement at 111 and main back at 182; with main in WFI (MIE off, a
+  pending interrupt wakes it, then MIE on to take it) 113 and 185. The interrupt arrives
+  about as soon as polling sees done; the handler (claim, done's read, dma_clear's write and
+  read-back, complete, the registers saved and restored, mret) costs about 70 cycles, about
+  six uncached register accesses. Every Mig6 test passes (18); dma_check's cycles are
+  unchanged.
+code:
+  - rtl/design/mig6/mig6_pe.sv#u_plic
+  - rtl/design/mig6/mig6_pe.sv#u_addr_decode
+  - rtl/design/mig6/cfg/mig6_config.yaml
+  - test/design/mig6/irq_check.cpp

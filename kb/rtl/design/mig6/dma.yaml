@@ -1,0 +1,59 @@
+type: decision
+title: Each Mig6 PE has a DmaSifive, joined to the core by a crossbar of request channels
+date: 2026-11-20
+question: >
+  Chunk 8: the weights should start in the shared memory and each PE fetch its part into its
+  local memory (a scratchpad, kb rtl/design/mig6/scratchpad). Which DMA, where do its
+  registers live, and how do the core and the DMA share the local memory and the network
+  interface?
+decision: >
+  The library's DmaSifive, one channel (more channels share one mover: no speed), its
+  memory side a word (the network interface's width), as it is: one transaction in flight,
+  polled (the PLIC is the next step, user 2026-11-20). Its registers are a region of the
+  memory map, dma at 0x0C000000, 4 KiB a channel (target devices), in place of the empty
+  devices region; Mig6Pe derives the channel count from the region, programs get the base
+  from mig6_pma.hpp, and sw/riscv/drivers/dma.h works as on Mig3. The PE's two requesters
+  (the core's memory port, the DMA's memory side) and two targets (the local memory, the
+  network interface) meet in a crossbar of the library's channels (user's choice (b)): a
+  ReqDemux per requester by the region's target, a ReqMux per target; the local memory's
+  by fixed priority (the core's data, the I-cache's misses, the DMA), the network
+  interface's round-robin. A DMA word goes into the local memory's line with its strobes;
+  a word read from it is picked by the index kept when the read is taken, right while the
+  memory answers in the clock after (a_dma_local_next), for any number of reads in flight.
+why: >
+  Measure first, then improve (user): the library's DMA as it is gives the baseline. The
+  crossbar keeps the core on its local memory while the DMA waits for the network (one
+  ReqMux in front of both targets would make a core's miss wait behind a network round
+  trip: ReqDemux holds a target switch until the answers before it come). The register map
+  as a region keeps the memory map the one source. Per transfer software writes source,
+  destination and length and sets run; that cost is small against the transfer (the user's
+  point), and many small transfers would want 2D (strided) transfers, not another map.
+rejected:
+  - choice: One ReqMux merging the core and the DMA, then one ReqDemux (Mig3Cpu's shape)
+    why_not: Head-of-line blocking, a core's local miss behind the DMA's network read.
+  - choice: A PLIC with the DMA in the same step
+    why_not: A bigger step, and interrupt cycles in the DMA's first numbers; it comes next,
+      measured on its own (user's choice).
+  - choice: A leaner register map than SiFive's PDMA (Mig6 has no Linux to serve)
+    why_not: Setup is a few register writes per transfer, small against the transfer.
+relies_on:
+  - rtl/design/mig6/scratchpad
+  - rtl/lib/block/req_mux/fixed_priority
+  - rtl/lib/block/dma/design
+evidence: >
+  2026-11-20, Verilator, test design_mig6_dma_check (every byte checked, cycles from run to
+  done): hart 0 alone, shared to local over three routers: 4 bytes 58 cycles, 64 bytes 522,
+  320 bytes 2 536 (about 32 cycles a word); local to local 320 bytes 424 (5.3 a word: the
+  mover's one transaction at a time, without the network); all four PEs at once, 320 bytes
+  each: hart 3 (one router to the memory) 1 122, harts 1 and 2 (two) 1 778 and 1 770, hart
+  0 (three) 2 384. A round trip sets the speed, about 8 cycles a router, not contention:
+  four PEs at once barely slow each other. Why hart 0 alone (2 536) is slower than with the
+  others busy (2 384) is not traced; a guess: the other harts' loads spinning on the
+  barrier's counter share router (1, 1) with its reads. Every Mig6 test passes (17);
+  fc_layer's cycles are unchanged.
+code:
+  - rtl/design/mig6/mig6_pe.sv#u_dma
+  - rtl/design/mig6/mig6_pe.sv#u_local_mux
+  - rtl/design/mig6/mig6_pe.sv#u_net_mux
+  - rtl/design/mig6/cfg/mig6_pma.yaml
+  - test/design/mig6/dma_check.cpp

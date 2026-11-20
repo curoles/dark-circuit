@@ -132,3 +132,8 @@ mig6_program_test(fc_layer SOURCES fc_layer.cpp ${SW}/kernels/int8_fc/int8_kerne
 # local, checked byte for byte and timed: hart 0 alone (4, 64 and 320 bytes), then every
 # hart at once (320 bytes each, a PE's part of the layer).
 mig6_program_test(dma_check SOURCES dma_check.cpp ARGS +max_cycles=400000)
+
+# Every PE's PLIC (sw/riscv/drivers/plic.h) with its DMA's done as the interrupt: the same
+# transfer polled, by interrupt while main spins, by interrupt while main waits in WFI;
+# the cycles from run to the handler and back to main.
+mig6_program_test(irq_check SOURCES irq_check.cpp)

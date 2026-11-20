@@ -37,8 +37,16 @@ package Mig6PmaPkg;
     localparam pma_t        LOCAL_PMA        =
         pma_t'({1'b1, 1'b0, 1'b0, 1'b0, 1'b1, TARGET_LOCAL});
 
+    // plic: the PE's PLIC (rtl/lib/block/plic, sw/riscv/drivers/plic.h), one context: meip
+    localparam logic [31:0] PLIC_BASE       = 32'h0c00_0000;
+    localparam logic [31:0] PLIC_SIZE       = 32'h0040_0000;
+    localparam int          PLIC_ADDR_WIDTH = 22;
+    // hit, cacheable, io, atomics, reservable, target
+    localparam pma_t        PLIC_PMA        =
+        pma_t'({1'b1, 1'b0, 1'b1, 1'b0, 1'b0, TARGET_DEVICES});
+
     // dma: the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h)
-    localparam logic [31:0] DMA_BASE       = 32'h0c00_0000;
+    localparam logic [31:0] DMA_BASE       = 32'h0c42_0000;
     localparam logic [31:0] DMA_SIZE       = 32'h0000_1000;
     localparam int          DMA_ADDR_WIDTH = 12;
     // hit, cacheable, io, atomics, reservable, target
@@ -60,7 +68,9 @@ package Mig6PmaPkg;
     function automatic pma_t pma_of(logic [31:0] addr);
         if (addr[31:16] == 16'h0000)
             return LOCAL_PMA;
-        if (addr[31:12] == 20'h0_c000)
+        if (addr[31:22] == 10'h030)
+            return PLIC_PMA;
+        if (addr[31:12] == 20'h0_c420)
             return DMA_PMA;
         if (addr[31:20] == 12'h800)
             return SHARED_PMA;

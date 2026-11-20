@@ -1,5 +1,5 @@
-/* Mig6 PE (processing element), for simulation: one Mig6Core, its local memory, its DMA and
- * its network interface.
+/* Mig6 PE (processing element), for simulation: one Mig6Core, its local memory, its DMA, its
+ * PLIC and its network interface.
  *
  * A prototype (rtl/design/mig6/README.md). The local memory is the code and data of the
  * program, private to the PE: a SimLatencyRAM (latency 1, always ready). It is a scratchpad
@@ -19,8 +19,12 @@
  * of them: both pass the one network interface, in order.
  *
  * The DMA is the library's DmaSifive (SiFive's PDMA map, sw/riscv/drivers/dma.h), its
- * registers the region dma (target devices), one channel per 4 KiB of it; the core polls
- * done (no interrupt yet: the PLIC is a later step). Its memory side is a word (the network
+ * registers the region dma (target devices), one channel per 4 KiB of it. Its done and error
+ * are sources of the PE's PLIC (the library's Plic, sw/riscv/drivers/plic.h; kb
+ * rtl/design/mig6/plic): channel c's at CFG.dma_source + 2c and + 2c + 1, level-triggered;
+ * its one context is the core's meip, the machine external interrupt. The PLIC's registers
+ * are the region plic; AddrDecode tells the two devices apart by their regions. The DMA's
+ * memory side is a word (the network
  * interface's), one transaction in flight (DmaEngine's mover): a word written to the local
  * memory goes into every word of the line, its strobes in its own; a word read from it is
  * picked from the line by the word index kept when the read was taken, right while the
@@ -40,7 +44,7 @@
  *   Mig6Core --lmem (data, local)-----------------------------> u_local_mux 0 --+
  *            --mem--> u_req_demux --local---------------------> u_local_mux 1   |
  *                                 --net ---> u_net_mux 0 --+                   |
- *                                 --devices: u_dma's regs  |   u_local_mux 2 --+
+ *                                 --u_dma's, u_plic's regs |   u_local_mux 2 --+
  *   u_dma (memory side) --> u_dma_demux --local---------------^                 |
  *                                       --net -> u_net_mux 1 --+          u_local_mem
  *                                                   u_net_if <==> noc_req_*, noc_rsp_*
@@ -79,13 +83,18 @@ module Mig6Pe import Mig6Pkg::*; #(
     // The DMA's registers: the region dma, 4 KiB a channel (DmaSifivePkg::CHAN_BITS).
     localparam DMA_ADDR_WIDTH = Mig6PmaPkg::DMA_ADDR_WIDTH;
     localparam DMA_N          = 1 << (DMA_ADDR_WIDTH - DmaSifivePkg::CHAN_BITS);
+    // The PLIC: the DMA's sources from CFG.dma_source, two a channel.
+    localparam PLIC_ADDR_WIDTH = Mig6PmaPkg::PLIC_ADDR_WIDTH;
+    localparam N_SOURCES       = CFG.dma_source + 2 * DMA_N - 1;
     localparam LOCAL = 0;           // the requesters' targets
     localparam NET   = 1;
     localparam DMA   = 2;           // ... the core's only: the DMA's registers
+    localparam PLIC  = 3;           // ... and the PLIC's
 
     // Programs are linked to start at the local memory's base (sw/riscv/mig6/mig6.ld).
     `DC_STATIC_ASSERT(a_reset_in_local, CFG.rst_addr == Mig6PmaPkg::LOCAL_BASE)
     `DC_STATIC_ASSERT(a_dma_channels, DMA_ADDR_WIDTH >= DmaSifivePkg::CHAN_BITS)
+    `DC_STATIC_ASSERT(a_plic_sources, CFG.dma_source >= 1 && CFG.plic_prio_width >= 1)
 
     // The core's ports.
     mem_req_t         mem_req;
@@ -102,19 +111,26 @@ module Mig6Pe import Mig6Pkg::*; #(
     Mig6PmaPkg::pma_t mem_pma;      // the core's request's region
     Mig6PmaPkg::pma_t dma_pma;      // the DMA's request's region
     /* verilator lint_on UNUSEDSIGNAL */
-    logic [2:0]       sel;          // one-hot: the core's request's target
-    logic [2:0]       tgt_valid;
-    logic [2:0]       tgt_ready;
-    logic [2:0]       tgt_rsp_valid;
+    logic [3:0]       sel;          // one-hot: the core's request's target
+    wire              sel_dma;      // ... the DMA's registers
+    wire              sel_plic;     // ... the PLIC's
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire              dev_miss;     // in neither device (the memory map's region tells)
+    /* verilator lint_on UNUSEDSIGNAL */
+    logic [3:0]       tgt_valid;
+    logic [3:0]       tgt_ready;
+    logic [3:0]       tgt_rsp_valid;
     word_t            core_wdata;   // the word of the core's line the address names
     strb_t            core_wstrb;
 
-    // The DMA.
+    // The DMA and the PLIC.
     wire              dma_reg_ready;
     word_t            dma_rdata;
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire [2*DMA_N-1:0] dma_irq;     // polled: no interrupt yet
-    /* verilator lint_on UNUSEDSIGNAL */
+    wire [2*DMA_N-1:0] dma_irq;     // 2c channel c's done, 2c + 1 its error
+    wire              plic_ready;
+    word_t            plic_rdata;
+    wire [N_SOURCES:1] plic_src;    // the PLIC's sources
+    wire              meip;         // its context 0: the core's machine external interrupt
     wire              dma_mem_valid;
     wire              dma_mem_ready;
     wire              dma_mem_we;
@@ -178,7 +194,7 @@ module Mig6Pe import Mig6Pkg::*; #(
 
     Mig6Core #(.CFG(CFG), .HART_ID(HART_ID), .MY_PE_GRID_X(8'(MY_PE_GRID_X)),
                .MY_PE_GRID_Y(8'(MY_PE_GRID_Y))) u_mig6_core(
-        .clk, .rst_n, .mem_req, .mem_rsp, .uncached(1'b0), .meip(1'b0), .lmem_req,
+        .clk, .rst_n, .mem_req, .mem_rsp, .uncached(1'b0), .meip, .lmem_req,
         .lmem_rsp, .halt, .retire, .pipe_trace, .dbg_req, .dbg_rsp);
 
     // The core's memory port, by its region's target (an access in no region stops the run
@@ -186,15 +202,24 @@ module Mig6Pe import Mig6Pkg::*; #(
     // @kb: rtl/design/mig6/dma
     assign mem_pma    = Mig6PmaPkg::pma_of(mem_req.addr);
     assign sel[NET]   = mem_pma.hit && mem_pma.target == Mig6PmaPkg::TARGET_NET;
-    assign sel[DMA]   = mem_pma.hit && mem_pma.target == Mig6PmaPkg::TARGET_DEVICES;
-    assign sel[LOCAL] = !sel[NET] && !sel[DMA];
+    assign sel[DMA]   = sel_dma;
+    assign sel[PLIC]  = sel_plic;
+    assign sel[LOCAL] = !sel[NET] && !sel_dma && !sel_plic;
 
-    ReqDemux #(.N_TARGETS(3), .RSP_WIDTH($bits(line_t))) u_req_demux(
+    // The devices, by their regions: rule 0 the PLIC, rule 1 the DMA.
+    // @kb: rtl/design/mig6/plic
+    AddrDecode #(.ADDR_WIDTH($bits(word_t)), .N_RULES(2),
+                 .BASES({Mig6PmaPkg::DMA_BASE, Mig6PmaPkg::PLIC_BASE}),
+                 .WIDTHS({8'(DMA_ADDR_WIDTH), 8'(PLIC_ADDR_WIDTH)}))
+        u_addr_decode(.addr(mem_req.addr), .sel({sel_dma, sel_plic}), .miss(dev_miss));
+
+    ReqDemux #(.N_TARGETS(4), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
         .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(mem_req.rsp),
         .req_sel(sel), .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data),
         .tgt_req_valid(tgt_valid), .tgt_req_ready(tgt_ready), .tgt_rsp_valid(tgt_rsp_valid),
-        .tgt_rsp_data({{LINE_WORDS{dma_rdata}}, {LINE_WORDS{net_rsp_data}}, local_rsp_data}));
+        .tgt_rsp_data({{LINE_WORDS{plic_rdata}}, {LINE_WORDS{dma_rdata}},
+                       {LINE_WORDS{net_rsp_data}}, local_rsp_data}));
 
     // The DMA's memory side, by its region's target: the local memory or the network.
     assign dma_pma        = Mig6PmaPkg::pma_of(dma_mem_addr);
@@ -309,7 +334,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .noc_req_fwd, .noc_req_bwd, .noc_rsp_fwd, .noc_rsp_bwd);
 
     // The DMA: its registers on the core's memory port (the region dma), its memory side to
-    // the crossbar; polled.
+    // the crossbar, its done and error to the PLIC.
     DmaSifive #(.N_CHANNELS(DMA_N), .ADDR_WIDTH($bits(word_t)), .DATA_WIDTH($bits(word_t)),
                 .LEN_WIDTH($bits(word_t))) u_dma(
         .clk, .rst_n,
@@ -321,6 +346,24 @@ module Mig6Pe import Mig6Pkg::*; #(
         .mem_req_wdata(dma_mem_wdata), .mem_req_wstrb(dma_mem_wstrb),
         .mem_rsp_valid(dma_mem_rsp_valid), .mem_rsp_data(dma_mem_rsp_data), .irq(dma_irq));
     assign tgt_ready[DMA] = dma_reg_ready;
+
+    // The PLIC: the DMA's done and error from CFG.dma_source, the others 0; one context, the
+    // core's meip.
+    for (genvar k = 1; k <= N_SOURCES; k++) begin: g_src
+        if (k >= CFG.dma_source) begin: g_dma
+            assign plic_src[k] = dma_irq[k - CFG.dma_source];
+        end else begin: g_none
+            assign plic_src[k] = 1'b0;
+        end
+    end
+
+    Plic #(.N_SOURCES(N_SOURCES), .N_CONTEXTS(1), .PRIO_WIDTH(CFG.plic_prio_width),
+           .ADDR_WIDTH(PLIC_ADDR_WIDTH)) u_plic(
+        .clk, .rst_n, .src(plic_src), .eip(meip),
+        .req_valid(tgt_valid[PLIC]), .req_ready(plic_ready), .req_we(mem_req.we),
+        .req_addr(mem_req.addr[PLIC_ADDR_WIDTH-1:0]), .req_wdata(core_wdata),
+        .req_wstrb(core_wstrb), .rsp_valid(tgt_rsp_valid[PLIC]), .rsp_rdata(plic_rdata));
+    assign tgt_ready[PLIC] = plic_ready;
 
     // The memory map: every access in a region; AMOs only where the region has atomics (the
     // shared memory's AtomicUnit; none in front of the local memory or the DMA).

@@ -167,7 +167,9 @@ AtomicUnit and a RAM.
   when a measured case needs it). Arm's Cortex-M7 and Cortex-R5 pair TCMs and caches the
   same way (kb rtl/design/mig6/scratchpad).
 - **A DMA:** the library's DmaSifive (SiFive's PDMA map, sw/riscv/drivers/dma.h), its
-  registers the region dma, polled for now. Its memory side and the core's memory port
+  registers the region dma; its done and error are sources of the PE's PLIC (the library's
+  Plic, sw/riscv/drivers/plic.h, the region plic), whose one context is the core's machine
+  external interrupt (kb rtl/design/mig6/plic). Its memory side and the core's memory port
   reach the local memory and the network interface through a small crossbar of ReqDemux
   and ReqMux, so the core works on local memory while the DMA waits for the network (kb
   rtl/design/mig6/dma). A word a transaction, one in flight, for now: the measurements in
@@ -243,8 +245,11 @@ bases multiples of their sizes, an io region not cacheable) and generates Mig6Pm
   in every PE (one binary for all); not cacheable: a scratchpad on the core's data port;
   reservable (LR/SC: the core's own reservation, one hart, until a PE's DMA writes it); no
   AMOs (no AtomicUnit in front of it).
-- **dma** at `0x0C000000`, 4 KiB a channel, one channel: the PE's DMA's registers; io,
-  never cached; target devices (the core's memory port to the DMA's register port).
+- **plic** at `0x0C000000`, 4 MiB (the spec's map up to context 0's claim register): the
+  PE's PLIC; io, never cached; target devices.
+- **dma** at `0x0C420000` (Mig3's offset), 4 KiB a channel, one channel: the PE's DMA's
+  registers; io, never cached; target devices (the core's memory port to the DMA's register
+  port; AddrDecode tells the two devices apart).
 - **shared** at `0x80000000` (where RISC-V platforms put main memory), 1 MiB: the shared
   memory at the mesh's edge, through the PE's network interface; never cached (one copy);
   AMOs (the AtomicUnit in front of it); reservable, LR/SC done at the memory by its
@@ -338,8 +343,11 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       the network (done 2026-11-20: kb rtl/design/mig6/dma; test design_mig6_dma_check, 320
       bytes shared to local: 1 122 cycles for the PE one router from the memory, about 1 775
       for two, 2 384 to 2 536 for three; local to local 424; so a round trip, a word at a
-      time, sets the speed, about 8 cycles a router, not the four PEs' contention). Then:
-      the PLIC in each PE and the DMA's done as an interrupt, its latency measured; the
+      time, sets the speed, about 8 cycles a router, not the four PEs' contention). The PLIC
+      in each PE, the DMA's done as an interrupt (done 2026-11-20: kb rtl/design/mig6/plic;
+      test design_mig6_irq_check, 64 bytes local to local: done seen polled 108 cycles after
+      run, the handler entered at 111, main back at 182: the interrupt comes as fast as
+      polling sees done, the handler's claim, clear and complete cost about 70). Then: the
       layer with its weights fetched by DMA, fetch and compute timed; local LR/SC by a
       monitor at the local memory's port, where the core's and the DMA's writes meet (until
       then a DMA write to the local memory does not end the core's reservation); then what
