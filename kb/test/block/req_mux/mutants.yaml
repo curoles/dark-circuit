@@ -7,8 +7,8 @@ mutants:
     tests: [block_req_mux_behave]
     edits:
       - file: rtl/lib/block/req_mux/behave/req_mux.sv
-        old: "assign grant      = lock ? lock_grant : pick(req_valid, last);"
-        new: "assign grant      = (lock & 1'b0) ? lock_grant : pick(req_valid, last);"
+        old: "assign grant      = lock ? lock_grant : order;"
+        new: "assign grant      = (lock & 1'b0) ? lock_grant : order;"
   - name: behave, a request that wants an answer taken while the owners' FIFO is full
     tests: [block_req_mux_behave]
     edits:
@@ -33,3 +33,15 @@ mutants:
       - file: rtl/lib/block/req_mux/behave/req_mux.sv
         old: "assign win_ask    = (grant & req_rsp) != '0;"
         new: "assign win_ask    = (grant & req_rsp & ~req_we) != '0;"
+  - name: behave, fixed priority picks the highest requester (2026-11-19)
+    tests: [block_req_mux_behave]
+    edits:
+      - file: rtl/lib/block/req_mux/behave/req_mux.sv
+        old: "for (int i = N - 1; i >= 0; i--)"
+        new: "for (int i = 0; i < N; i++)"
+  - name: struct, fixed priority ignores the lower requesters (2026-11-19)
+    tests: [block_req_mux_struct]
+    edits:
+      - file: rtl/lib/block/req_mux/struct/req_mux.sv
+        old: ".in(arb_req[i-1:0]), .out(below)"
+        new: ".in(arb_req[i-1:0] & '0), .out(below)"

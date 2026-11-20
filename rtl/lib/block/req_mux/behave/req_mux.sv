@@ -1,5 +1,5 @@
-/* Request multiplexer: N_REQ request channels to one target, round-robin, the answers back to
- * their requesters in order; behavioral.
+/* Request multiplexer: N_REQ request channels to one target, round-robin or by fixed
+ * priority, the answers back to their requesters in order; behavioral.
  *
  * The channels are the library's (the register port, the caches' memory sides, DmaMover's):
  * requests on valid/ready, an offer not taken stays the same; a request with req_rsp=1 (a
@@ -8,13 +8,18 @@
  * (a posted write) gets no answer. we and rsp pass to the target as they are; a request's
  * other fields (address, size, data, strobes, ...) travel as one vector of REQ_WIDTH bits,
  * packed by the caller. The requesters
- * compete round-robin; the winner's request goes to the target as it comes, with no buffer:
+ * compete round-robin (FIXED_PRIO=0) or by fixed priority (FIXED_PRIO=1: requester 0 first,
+ * then 1, ...; the lowest number offering wins, nothing rotates; for a requester that must
+ * never wait for the others while the target is ready, as a core's data port at its
+ * scratchpad, kb rtl/lib/block/req_mux/fixed_priority: the others get the clocks it leaves
+ * free); the winner's request goes to the target as it comes, with no buffer:
  * a request taken here is taken by the target in the same clock, so what one requester does
  * stays in its order at the target, and a request is at the target before anything its
  * requester sends later. While the target does not take an offer, the requester of that
  * offer keeps the grant (the arbiter sees only its request), so the target's offer stays
  * the one of that requester, whose offer stays the same by the rules (fields a request
- * does not use, as a read's data, may change: they pass as they come). Each request taken
+ * does not use, as a read's data, may change: they pass as they come); with fixed priority too,
+ * so a waiting offer keeps the target even from requester 0. Each request taken
  * with req_rsp leaves its requester's number in a FIFO of 1 << PENDING_WIDTH entries; the
  * target's answer goes to the oldest (rsp_valid of that requester; rsp_data to all), so
  * every requester gets its answers in order. A request with req_rsp waits while the FIFO is
@@ -34,7 +39,8 @@ module ReqMux #(
     parameter N_REQ         = 2,        // requesters, 1 or more
     parameter REQ_WIDTH     = 32,       // bits of a request's fields but we and rsp
     parameter RSP_WIDTH     = 32,       // bits of an answer
-    parameter PENDING_WIDTH = 1         // up to 1 << PENDING_WIDTH answers wait
+    parameter PENDING_WIDTH = 1,        // up to 1 << PENDING_WIDTH answers wait
+    parameter FIXED_PRIO    = 0         // 0 round-robin; 1 requester 0 first, then 1, ...
 )(
     input  wire                            clk,
     input  wire                            rst_n,           // synchronous, active low
@@ -57,6 +63,7 @@ module ReqMux #(
     input  wire [RSP_WIDTH-1:0]            tgt_rsp_data
 );
     `DC_STATIC_ASSERT(a_sizes, N_REQ >= 1 && PENDING_WIDTH >= 1)
+    `DC_STATIC_ASSERT(a_fixed_prio, FIXED_PRIO == 0 || FIXED_PRIO == 1)
 
     localparam N     = N_REQ;
     localparam DEPTH = 1 << PENDING_WIDTH;
@@ -64,6 +71,7 @@ module ReqMux #(
     logic [N-1:0]         lock_grant;   // the grant of an offer the target did not take
     logic                 lock;         // ... kept
     logic [N-1:0]         last;         // the requesters below the last winner come first
+    logic [N-1:0]         order;        // one-hot: the winner by the order, unlocked
     logic [N-1:0]         grant;        // one-hot: the winner now
     logic [N-1:0]         owner [DEPTH];    // requester of each answer waiting, oldest first
     logic [PENDING_WIDTH:0] count;      // answers waiting
@@ -85,6 +93,16 @@ module ReqMux #(
         return p;
     endfunction
 
+    // Fixed priority: the lowest requester offering.
+    function automatic logic [N-1:0] first(input logic [N-1:0] r);
+        logic [N-1:0] p;
+        p = '0;
+        for (int i = N - 1; i >= 0; i--)
+            if (r[i])
+                p = N'(1) << i;
+        return p;
+    endfunction
+
     // The fields of the one-hot winner.
     function automatic logic [REQ_WIDTH-1:0] fields_of(
             input logic [N-1:0][REQ_WIDTH-1:0] f, input logic [N-1:0] g);
@@ -97,7 +115,9 @@ module ReqMux #(
     endfunction
 
     // @kb: rtl/lib/block/req_mux/design
-    assign grant      = lock ? lock_grant : pick(req_valid, last);
+    // @kb: rtl/lib/block/req_mux/fixed_priority
+    assign order      = (FIXED_PRIO != 0) ? first(req_valid) : pick(req_valid, last);
+    assign grant      = lock ? lock_grant : order;
     assign full       = count == (PENDING_WIDTH+1)'(DEPTH);
     assign win_ask    = (grant & req_rsp) != '0;
     assign tgt_req_valid  = grant != '0 && !(full && win_ask);

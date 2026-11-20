@@ -9,9 +9,11 @@
  * not at the target yet, in its order. Every clock: an offer to the target that waits stays
  * the same; a posted write the target takes is the next one of its requester; an answer goes
  * to exactly one requester, the one whose oldest request it answers, with that token; a
- * requester's ready only with its valid. At the end every request is answered and every
- * posted write arrived. Configurations: 3 requesters with 2 answers waiting at most, 2 with
- * 4, 1 with 2; 400 requests a requester on Verilator, 80 on Icarus. Every case must happen
+ * requester's ready only with its valid; with fixed priority, an offer that is not a kept
+ * one (the grant not locked) is the lowest requester's offering. At the end every request is
+ * answered and every posted write arrived. Configurations: 3 requesters with 2 answers
+ * waiting at most, 2 with 4, 1 with 2, round-robin; 3 with 2 by fixed priority; 400
+ * requests a requester on Verilator, 80 on Icarus. Every case must happen
  * (checks named cover): two requesters offering at once, an offer the target does not take
  * at once, a request waiting for a full FIFO, every kind of request from every requester.
  * Checks named model and cover. Stops at the first failure.
@@ -23,7 +25,8 @@
 
 module TbReqMuxCheck #(
     parameter N_REQ         = 3,
-    parameter PENDING_WIDTH = 1
+    parameter PENDING_WIDTH = 1,
+    parameter FIXED_PRIO    = 0
 )(
     input  wire  clk,
     input  wire  rst_n,
@@ -63,8 +66,16 @@ module TbReqMuxCheck #(
     bit                   seen_two, seen_wait, seen_full;
     logic [N-1:0]         seen_read, seen_write, seen_ack;
 
-    ReqMux #(.N_REQ(N), .REQ_WIDTH(32), .RSP_WIDTH(32), .PENDING_WIDTH(PENDING_WIDTH))
-        u_req_mux(
+    // The lowest requester offering.
+    function automatic int lowest(input logic [N-1:0] v);
+        for (int i = 0; i < N; i++)
+            if (v[i])
+                return i;
+        return -1;
+    endfunction
+
+    ReqMux #(.N_REQ(N), .REQ_WIDTH(32), .RSP_WIDTH(32), .PENDING_WIDTH(PENDING_WIDTH),
+             .FIXED_PRIO(FIXED_PRIO)) u_req_mux(
             .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_rsp, .req_fields, .rsp_valid,
             .rsp_data, .tgt_req_valid, .tgt_req_ready, .tgt_req_we, .tgt_req_rsp,
             .tgt_req_fields, .tgt_rsp_valid, .tgt_rsp_data);
@@ -78,7 +89,7 @@ module TbReqMuxCheck #(
         logic prev_rsp;
         logic [31:0] prev_fields;
         done = 1'b0;
-        seed = 31 * N + PENDING_WIDTH;
+        seed = 31 * N + PENDING_WIDTH + 7 * FIXED_PRIO;
         {seen_two, seen_wait, seen_full} = '0;
         {seen_read, seen_write, seen_ack} = '0;
         req_valid     = '0;
@@ -126,6 +137,10 @@ module TbReqMuxCheck #(
             if (prev_wait && (!tgt_req_valid || tgt_req_we !== prev_we ||
                               tgt_req_rsp !== prev_rsp || tgt_req_fields !== prev_fields))
                 `DC_TEST_FAIL(model, $sformatf("ReqMux %0d: a waiting offer changed", N))
+            if (FIXED_PRIO != 0 && tgt_req_valid && !u_req_mux.lock &&
+                int'(tgt_req_fields[31:24]) != lowest(req_valid))
+                `DC_TEST_FAIL(model, $sformatf("ReqMux %0d fixed: requester %0d won over %b",
+                                               N, tgt_req_fields[31:24], req_valid))
             if ((req_ready & ~req_valid) != '0)
                 `DC_TEST_FAIL(model, $sformatf("ReqMux %0d: ready %b without valid %b", N,
                                                req_ready, req_valid))
@@ -210,7 +225,7 @@ module TbReqMux;
 
     logic clk;
     logic rst_n;
-    wire  done_3, done_2, done_1;
+    wire  done_3, done_2, done_1, done_f;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
@@ -218,9 +233,11 @@ module TbReqMux;
     TbReqMuxCheck #(.N_REQ(3), .PENDING_WIDTH(1)) u_check_3(.clk, .rst_n, .done(done_3));
     TbReqMuxCheck #(.N_REQ(2), .PENDING_WIDTH(2)) u_check_2(.clk, .rst_n, .done(done_2));
     TbReqMuxCheck #(.N_REQ(1), .PENDING_WIDTH(1)) u_check_1(.clk, .rst_n, .done(done_1));
+    TbReqMuxCheck #(.N_REQ(3), .PENDING_WIDTH(1), .FIXED_PRIO(1)) u_check_f(
+        .clk, .rst_n, .done(done_f));
 
     initial begin
-        wait (done_3 && done_2 && done_1);
+        wait (done_3 && done_2 && done_1 && done_f);
         $display("PASS");
         $finish;
     end

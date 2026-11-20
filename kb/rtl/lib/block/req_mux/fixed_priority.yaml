@@ -1,0 +1,45 @@
+type: decision
+title: ReqMux can arbitrate by fixed priority, requester 0 first
+date: 2026-11-19
+question: >
+  Mig6's PE puts its local memory on the core's data port as a scratchpad (answered in the
+  clock after the request, as a cache hit), shared with the I-cache's misses and, next, a
+  DMA. The core's ready feeds EX's stall, and it has never depended on a request's address
+  (CacheControl's rule, Mig6Caches's d_io through a register): a 5.5 ns clock with no
+  margin. With ReqMux's round-robin the core could lose the scratchpad to another requester,
+  so its ready would depend on the address (local or not) and on the others' valid. How
+  does the core's data side stay sure of the scratchpad?
+decision: >
+  ReqMux gets FIXED_PRIO (default 0, round-robin as before): with 1, the lowest requester
+  number offering wins, nothing rotates. Mig6Pe puts the core's data port at 0 of the local
+  memory's ReqMux; the memory is always ready, so a data request to it is taken in the
+  clock it comes and the core's ready stays the D-cache's own. The lock stays as it is: an
+  offer the target did not take keeps its grant, even over requester 0 (the channel's rule;
+  with an always-ready target it never happens). Behave: a first-one pick beside the
+  round-robin one; struct: requester i wins when it asks and no lower one does (OrReduce of
+  the requests below, Inv, And2), in place of the RoundRobinArbiter.
+why: >
+  A parameter of the block that already merges request channels, used where the order
+  matters more than fairness: the others (I-cache misses, the DMA) get the clocks the
+  core's data side leaves free, most of them (2 of 7 instructions of the int8 kernel's loop
+  are loads), and no requester waits forever while the core can stall on them (a stalled
+  fetch stops the core's data requests too). PULP-style clusters and TCM ports favor the
+  core the same way.
+rejected:
+  - choice: Round-robin, and the core's ready from the address and the grant
+    why_not: A new path from EX's adder through the address decode and the arbiter into the
+      stall, at a clock with no margin; it breaks the rule both cache files state.
+  - choice: A separate fixed-priority multiplexer block
+    why_not: ReqMux's FIFO of owners, lock and answers would be copied; only the pick
+      differs.
+relies_on:
+  - rtl/lib/block/req_mux/design
+evidence: >
+  2026-11-19: behave and struct pass test/block/req_mux with a fourth configuration, 3
+  requesters by fixed priority (every offer not kept goes to the lowest requester offering,
+  checked every clock), on Verilator and Icarus; 7 of 7 mutants caught on Verilator (kb
+  test/block/req_mux/mutants), two new: the behave pick reversed, the struct pick ignoring
+  the lower requesters. Mig3's 149 tests pass (Mig3Cpu's ReqMux, round-robin, unchanged).
+code:
+  - rtl/lib/block/req_mux/behave/req_mux.sv#first
+  - rtl/lib/block/req_mux/struct/req_mux.sv#g_fixed

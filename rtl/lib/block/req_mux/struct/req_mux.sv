@@ -1,9 +1,11 @@
-/* Request multiplexer: N_REQ request channels to one target, round-robin, the answers back to
- * their requesters in order; made of blocks and gates.
+/* Request multiplexer: N_REQ request channels to one target, round-robin or by fixed
+ * priority, the answers back to their requesters in order; made of blocks and gates.
  *
  * Same ports and behavior as the behave version (see there). A RoundRobinArbiter picks the
  * winner (advanced when the target takes it); while an offer waits the arbiter sees only the
- * grant of the clock before (a DffEn keeps it, a DffSyncRst says it waits). MuxOneHot takes
+ * grant of the clock before (a DffEn keeps it, a DffSyncRst says it waits). With FIXED_PRIO=1
+ * gates pick instead: requester i wins when it asks and no lower one does (an OrReduce of
+ * the requests below it, Inv, And2). MuxOneHot takes
  * the winner's fields; a Fifo of 1 << PENDING_WIDTH one-hot requester numbers keeps the
  * owners of the answers waiting, the oldest's bit goes with the target's answer. A request
  * with req_rsp waits while the Fifo is full.
@@ -21,7 +23,8 @@ module ReqMux #(
     parameter N_REQ         = 2,        // requesters, 1 or more
     parameter REQ_WIDTH     = 32,       // bits of a request's fields but we and rsp
     parameter RSP_WIDTH     = 32,       // bits of an answer
-    parameter PENDING_WIDTH = 1         // up to 1 << PENDING_WIDTH answers wait
+    parameter PENDING_WIDTH = 1,        // up to 1 << PENDING_WIDTH answers wait
+    parameter FIXED_PRIO    = 0         // 0 round-robin; 1 requester 0 first, then 1, ...
 )(
     input  wire                            clk,
     input  wire                            rst_n,           // synchronous, active low
@@ -43,6 +46,7 @@ module ReqMux #(
     input  wire [RSP_WIDTH-1:0]            tgt_rsp_data
 );
     `DC_STATIC_ASSERT(a_sizes, N_REQ >= 1 && PENDING_WIDTH >= 1)
+    `DC_STATIC_ASSERT(a_fixed_prio, FIXED_PRIO == 0 || FIXED_PRIO == 1)
 
     localparam N = N_REQ;
 
@@ -72,7 +76,17 @@ module ReqMux #(
     // @kb: rtl/lib/block/req_mux/design
     // The winner; kept while its offer waits.
     Mux2 #(N) u_mux2_arb_req(.in0(req_valid), .in1(grant_q), .sel(lock), .out(arb_req));
-    if (N > 1) begin: g_arbiter
+    // @kb: rtl/lib/block/req_mux/fixed_priority
+    if (N > 1 && FIXED_PRIO != 0) begin: g_fixed
+        assign grant[0] = arb_req[0];
+        for (genvar i = 1; i < N; i++) begin: g_req
+            wire below;             // a lower requester asks
+            wire below_n;
+            OrReduce #(i) u_or_reduce_below(.in(arb_req[i-1:0]), .out(below));
+            Inv  #(1) u_inv_below(.in(below), .out(below_n));
+            And2 #(1) u_and2_grant(.in1(arb_req[i]), .in2(below_n), .out(grant[i]));
+        end
+    end else if (N > 1) begin: g_arbiter
         RoundRobinArbiter #(.N(N)) u_arbiter(
             .clk, .rst_n, .req(arb_req), .advance(tgt_take), .grant);
     end else begin: g_one
