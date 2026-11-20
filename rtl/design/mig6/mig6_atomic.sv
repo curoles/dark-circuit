@@ -19,13 +19,13 @@
  * misaligned LR or SC traps (Mig6Lsu, Mig6Control): it reserves nothing, and its trap
  * ends the reservation.
  *
- * The reservation sees only this hart, so it serves LR/SC only where nothing else writes:
- * a PE's local memory. An LR or SC to a region that is reservable but not cached (the
- * shared memory) is far (Mig6Lsu: far): done at the memory, by its exclusive monitor (kb
- * rtl/design/mig6/far_lr_sc); here a far LR reserves nothing and a far SC is not
- * cancelled (its answer is its rd). An LR or SC that completes outside a reservable region
- * stops the run (a_lr_sc_reservable; later an access fault). When a PE's DMA writes the
- * local memory (README, chunks), this reservation goes: every LR/SC far, a monitor there.
+ * The reservation sees only this hart, and a PE's DMA writes its local memory too, so
+ * every LR or SC to a reservable region is far (Mig6Lsu: far): decided by the exclusive
+ * monitor of that memory (kb rtl/design/mig6/far_lr_sc, rtl/design/mig6/local_lr_sc);
+ * here a far LR reserves nothing and a far SC is not cancelled (its answer is its rd). So
+ * this reservation is never taken any more, and this part goes next. An LR or SC that
+ * completes outside a reservable region stops the run (a_lr_sc_reservable; later an
+ * access fault).
  *
  *   dec.atomic, rs1_data --> +----------------------+ --> cancel  (Mig6Lsu: no store)
  *   done, trap, MRET ------> | reservation: valid,  | --> rd_data (SC: 0 ok, 1 fail)

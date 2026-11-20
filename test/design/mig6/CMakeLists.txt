@@ -144,3 +144,9 @@ mig6_program_test(fc_layer_dma SOURCES fc_layer_dma.cpp ${SW}/kernels/int8_fc/in
 # transfer polled, by interrupt while main spins, by interrupt while main waits in WFI;
 # the cycles from run to the handler and back to main.
 mig6_program_test(irq_check SOURCES irq_check.cpp)
+
+# LR/SC on the local memory, decided by its exclusive monitor: an SC fails after the DMA
+# wrote the reserved line, after the hart's own store to it, after an interrupt handler's
+# store to it; it succeeds alone and after a DMA write to another line.
+# @kb: rtl/design/mig6/local_lr_sc
+mig6_program_test(lrsc_local SOURCES lrsc_local.cpp)

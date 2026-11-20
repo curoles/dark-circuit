@@ -164,9 +164,9 @@ module Mig6Caches import Mig6Pkg::*; #(
     assign icache_rsp.data = i_line;
 
     // The scratchpad: a local request as the D-cache gets it (d_wdata, d_wstrb), taken when
-    // the D-cache would take one; a read wants an answer. No AMO and no exclusive request
-    // goes there (Mig6Pe: a_lmem_plain; LR/SC there are the core's own); a CBO writes no
-    // byte.
+    // the D-cache would take one; a read and an exclusive request (LR, SC: decided by the
+    // local memory's monitor, an SC answered with its status) want an answer. No AMO goes
+    // there (Mig6Pe: a_lmem_no_amo); a CBO writes no byte.
     assign lmem_req.valid = dcache_req.valid && d_local && dcache_rsp.ready;
     assign lmem_req.we    = dcache_req.we;
     assign lmem_req.addr  = {dcache_req.addr, dcache_req.offset};
@@ -175,7 +175,7 @@ module Mig6Caches import Mig6Pkg::*; #(
     assign lmem_req.wstrb = d_wstrb;
     assign lmem_req.atop  = dcache_req.atop;
     assign lmem_req.cmo   = dcache_req.cmo;
-    assign lmem_req.rsp   = !dcache_req.we;
+    assign lmem_req.rsp   = !dcache_req.we || dcache_req.excl;
     assign lmem_req.excl  = dcache_req.excl;
 
     // One data request in flight: the answer is the side's that gives one.

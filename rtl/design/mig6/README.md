@@ -243,8 +243,9 @@ bases multiples of their sizes, an io region not cacheable) and generates Mig6Pm
 
 - **local** at `0x00000000`, 64 KiB: a PE's local memory, code and data, the same addresses
   in every PE (one binary for all); not cacheable: a scratchpad on the core's data port;
-  reservable (LR/SC: the core's own reservation, one hart, until a PE's DMA writes it); no
-  AMOs (no AtomicUnit in front of it).
+  reservable (LR/SC decided by the exclusive monitor at its port, which sees the core's
+  and the DMA's writes: kb rtl/design/mig6/local_lr_sc); no AMOs (no AtomicUnit in front of
+  it).
 - **plic** at `0x0C000000`, 4 MiB (the spec's map up to context 0's claim register): the
   PE's PLIC; io, never cached; target devices.
 - **dma** at `0x0C420000` (Mig3's offset), 4 KiB a channel, one channel: the PE's DMA's
@@ -351,9 +352,12 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       with its data fetched by DMA (done 2026-11-20: kb test/design/mig6/fc_layer_dma; four
       PEs 5 212 cycles against 2 541 with the data local, 1.77 times one PE instead of 3.63;
       a PE's fetch of 336 bytes 1 312 to 2 667 cycles by its distance, its compute 2 450:
-      the slowest fetch adds to the layer). Then: local LR/SC by a
-      monitor at the local memory's port, where the core's and the DMA's writes meet (until
-      then a DMA write to the local memory does not end the core's reservation); then what
+      the slowest fetch adds to the layer). Local LR/SC by an exclusive monitor at the
+      local memory's port, where the core's and the DMA's writes meet: every LR/SC is an
+      exclusive request now (done 2026-11-20: kb rtl/design/mig6/local_lr_sc; test
+      design_mig6_lrsc_local, an SC fails after the DMA's write, the hart's own store or an
+      interrupt handler's store to the reserved line, succeeds alone or after a DMA write
+      elsewhere); next the core's own reservation (Mig6Atomic) goes, unused now. Then what
       the numbers ask (more reads in flight, bursts on the network).
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
@@ -380,9 +384,8 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   reservable (done 2026-11-19: kb rtl/design/mig6/far_lr_sc; test design_mig6_cas_check,
   four harts count to the same total with compare-and-swap as with amoadd). AMOs already
   cover barriers, counters, flags and locks; LR/SC adds compare-and-swap. In a PE's local
-  memory LR/SC syncs nothing (one hart, no interrupts), but it works, by the core's own
-  reservation; when a PE's DMA writes the local memory (chunk 8), that reservation goes:
-  every LR/SC far, a monitor in front of the local memory too.
+  memory, which its DMA writes too, LR/SC are decided the same way, by a monitor at the
+  local memory's port (done 2026-11-20: kb rtl/design/mig6/local_lr_sc).
 
 ## References
 

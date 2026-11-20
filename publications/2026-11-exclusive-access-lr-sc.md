@@ -206,22 +206,50 @@ random requests and check every answer.
   2. The compare-and-swap counter ended at 37 instead of 80: 43 increments lost, while the
   amoadd counter, done at the memory as before, still ended at 80.
 
-## 8. Two kinds of LR/SC in one core, for now
+## 8. The local memory gets a monitor too
 
-The core decides per access, from the memory map: an LR or SC to a region that is
-reservable but not cached (the shared memory) is "far", an exclusive request done at the
-memory; one to the local memory is still the core's own reservation. That is right only
-while nothing but the core writes the local memory. The next step in Mig6 gives each PE a
-DMA engine that writes it; from then on the core's reservation is blind to those writes,
-the same flaw again. Then the local memory gets a monitor too, every LR/SC goes out far,
-and the reservation logic leaves the core: no reservation, no cancelled store, an SC's
-result coming back like a load's.
+For a while the core had two kinds of LR/SC. One to the shared memory was "far", an
+exclusive request decided at the memory. One to the PE's local memory still used the
+core's own reservation, which was right only while nothing but the core wrote there. Then
+each PE got a DMA engine that writes its local memory, and the core's reservation was
+blind to those writes: the flaw of section 2 again, inside one PE.
+
+The fix is the same idea one level down. Every request to a PE's local memory passes one
+place, the multiplexer in front of its RAM: the core's loads and stores, the instruction
+cache's misses, the DMA's writes. The library's monitor sits there, with one agent, the
+core:
+
+- **An LR** reserves its line.
+- **Any write the RAM takes** ends the reservation of its line: the DMA's, the core's
+  own, an interrupt handler's.
+- **An SC** writes only with the reservation, and its status comes back in the clock
+  after, where a read's answer would.
+- **A reservation is a line** (8 bytes), not a word: the RAM's requests carry line
+  addresses, and the spec allows a reservation set larger than the word.
+
+Now every LR or SC is an exclusive request, decided at whichever memory it names. The
+test runs five cases between an `lr.w` and an `sc.w` of a word, on all four PEs at once:
+
+- **nothing in between:** the SC stores;
+- **the DMA writes the word:** the SC fails, the DMA's value stays;
+- **the DMA writes another line:** the SC stores;
+- **the hart's own store to the word:** the SC fails;
+- **an interrupt whose handler stores to the word:** the SC fails.
+
+In a scratch copy where the monitor ignored writes, the second case's SC stored over the
+DMA's value and the test failed, as it should.
+
+The last step is the one section 2 pointed at: the reservation logic leaves the core.
+Nothing takes the core's own reservation any more, so it goes, with the cancelled store;
+an SC's result already comes back like a load's.
 
 The knowledge base has the reasoning behind each step, with the options not taken:
 [far LR/SC in Mig6](../kb/rtl/design/mig6/far_lr_sc.yaml),
+[the local memory's monitor](../kb/rtl/design/mig6/local_lr_sc.yaml),
 [the monitor block](../kb/rtl/lib/block/atomic/exclusive_monitor/design.yaml),
 [answered writes](../kb/rtl/lib/block/answered_writes.yaml),
 [exclusive requests in the caches](../kb/rtl/lib/block/cache/exclusive.yaml).
 The code: `rtl/lib/block/atomic/exclusive_monitor` (the reservations),
 `rtl/design/mig6/mig6_mem_net_if.sv` (where it is called, the SC's answer),
-`mig6_noc_pkg.sv` (the messages), `test/design/mig6/tb/tb_mig6_noc.sv` (the four-PE test).
+`mig6_noc_pkg.sv` (the messages), `test/design/mig6/tb/tb_mig6_noc.sv` (the four-PE test),
+`mig6_pe.sv` (the local memory's monitor), `test/design/mig6/lrsc_local.cpp` (its test).

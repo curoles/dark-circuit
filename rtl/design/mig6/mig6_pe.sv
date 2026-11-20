@@ -33,13 +33,24 @@
  * line the address names, and the answer goes into every word of the line, as for the
  * DMA's registers.
  *
+ * LR/SC on the local memory are decided at its port, where every request to it passes (the
+ * core's data, the I-cache's misses, the DMA's), by an exclusive monitor (the library's
+ * ExclusiveMonitor, u_local_monitor; kb rtl/design/mig6/local_lr_sc), as the shared
+ * memory's are at its network interface: an LR (an exclusive read, the core's data port
+ * only) reserves its line; every write the memory takes ends the reservation of its line,
+ * the DMA's and the core's own (interrupt handlers' too); an SC (an exclusive write) is
+ * decided when the memory would take it: with the reservation it writes, without it goes
+ * nowhere; either way it ends the reservation and its status (RISC-V's SC result: 0 stored,
+ * 1 failed) is answered in the clock after, where a read's answer comes (the memory answers
+ * reads only, a_sc_alone). A reservation is a line, the memory's request (the spec allows a
+ * set larger than the word: a store to the line's other word ends it too).
+ *
  * Checked by assertions, with the regions' attributes: every access is in a region
  * (a_in_region; later an access fault); no AMO goes to a region without atomics
- * (a_atomics_allowed); the scratchpad gets no AMO and no exclusive request (a_lmem_plain: no
- * AtomicUnit in front of the local memory; LR/SC are the core's own); an exclusive request
- * goes to the network (a_excl_to_net); the DMA moves only between the local memory and the
- * network (a_dma_target). Not yet: the DMA's writes to the local memory do not end the
- * core's LR/SC reservation (a monitor at the local memory, a later step).
+ * (a_atomics_allowed); the scratchpad gets no AMO (a_lmem_no_amo: no AtomicUnit in front of
+ * the local memory); an exclusive request on the memory port goes to the network
+ * (a_excl_to_net; local ones come on lmem); the DMA moves only between the local memory and
+ * the network (a_dma_target).
  *
  *   Mig6Core --lmem (data, local)-----------------------------> u_local_mux 0 --+
  *            --mem--> u_req_demux --local---------------------> u_local_mux 1   |
@@ -150,8 +161,9 @@ module Mig6Pe import Mig6Pkg::*; #(
 
     // The local memory's ReqMux: 0 the core's data (the scratchpad), 1 the core's memory
     // port's local requests (the I-cache's misses), 2 the DMA's; a request's fields: the
-    // line's address in the memory, the line and its strobes.
-    localparam LM_FIELDS = MEM_ADDR_WIDTH - LINE_START + $bits(line_t) + $bits(line_strb_t);
+    // line's address in the memory, the line, its strobes, exclusive (LR, SC).
+    localparam LM_FIELDS = MEM_ADDR_WIDTH - LINE_START + $bits(line_t) + $bits(line_strb_t)
+                           + 1;
     logic [2:0][LM_FIELDS-1:0]            lm_fields;
     wire  [2:0]                           lm_ready;
     wire  [2:0]                           lm_rsp_valid;
@@ -166,8 +178,20 @@ module Mig6Pe import Mig6Pkg::*; #(
     logic [MEM_ADDR_WIDTH-LINE_START-1:0] ram_line;   // the line's address in the memory
     line_t                                ram_wdata;
     line_strb_t                           ram_wstrb;
-    wire                                  ram_rsp_valid;
-    line_t                                ram_rsp_data;
+    logic                                 ram_excl;
+    wire                                  ram_rsp_valid;  // to the ReqMux: the memory's
+    line_t                                ram_rsp_data;   //   answers and the SCs' status
+    // The local memory's exclusive monitor.
+    wire                                  ram_take;   // a request taken: the memory is ready
+    wire                                  ram_lr;     // ... an LR
+    wire                                  ram_sc;     // ... an SC
+    wire                                  sc_ok;      // its reservation holds: it writes
+    logic                                 sc_rsp_valid;   // an SC's status, the clock after
+    logic                                 sc_failed;
+    wire                                  mem_valid;  // the memory's request: a failing SC
+                                                      // goes nowhere
+    wire                                  mem_rsp_valid;  // the memory's answers: reads
+    line_t                                mem_rsp_data;
 
     // The network interface's ReqMux: 0 the core's, 1 the DMA's; a request's fields: the
     // byte address, size, atomic operation, CBO, exclusive, the word and its strobes.
@@ -270,10 +294,11 @@ module Mig6Pe import Mig6Pkg::*; #(
     // request is taken in the clock it comes), the I-cache's misses, the DMA.
     // @kb: rtl/design/mig6/scratchpad
     assign lm_fields[0] = {lmem_req.addr[MEM_ADDR_WIDTH-1:LINE_START], lmem_req.wdata,
-                           lmem_req.wstrb};
+                           lmem_req.wstrb, lmem_req.excl};
     assign lm_fields[1] = {mem_req.addr[MEM_ADDR_WIDTH-1:LINE_START], mem_req.wdata,
-                           mem_req.wstrb};
-    assign lm_fields[2] = {dma_mem_addr[MEM_ADDR_WIDTH-1:LINE_START], dma_line, dma_line_strb};
+                           mem_req.wstrb, 1'b0};
+    assign lm_fields[2] = {dma_mem_addr[MEM_ADDR_WIDTH-1:LINE_START], dma_line, dma_line_strb,
+                           1'b0};
     ReqMux #(.N_REQ(3), .REQ_WIDTH(LM_FIELDS), .RSP_WIDTH($bits(line_t)), .PENDING_WIDTH(1),
              .FIXED_PRIO(1)) u_local_mux(
         .clk, .rst_n,
@@ -285,7 +310,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .tgt_req_valid(ram_valid), .tgt_req_ready(ram_ready), .tgt_req_we(ram_we),
         .tgt_req_rsp(ram_rsp), .tgt_req_fields(ram_fields),
         .tgt_rsp_valid(ram_rsp_valid), .tgt_rsp_data(ram_rsp_data));
-    assign {ram_line, ram_wdata, ram_wstrb} = ram_fields;
+    assign {ram_line, ram_wdata, ram_wstrb, ram_excl} = ram_fields;
     assign lmem_rsp.ready           = lm_ready[0];
     assign lmem_rsp.valid           = lm_rsp_valid[0];
     assign lmem_rsp.data            = local_rsp_data;
@@ -294,14 +319,46 @@ module Mig6Pe import Mig6Pkg::*; #(
     assign dma_tgt_ready[LOCAL]     = lm_ready[2];
     assign dma_tgt_rsp_valid[LOCAL] = lm_rsp_valid[2];
 
+    // LR/SC on the local memory: every request to it passes here, in the order the memory
+    // takes them. An LR reserves its line, every write the memory takes ends the
+    // reservation of its line, an SC writes only with its reservation and is answered with
+    // its status in the clock after (the memory answers reads only).
+    // @kb: rtl/design/mig6/local_lr_sc
+    assign ram_take = ram_valid && ram_ready;
+    assign ram_lr   = ram_take && ram_excl && !ram_we;
+    assign ram_sc   = ram_take && ram_excl && ram_we;
+
+    ExclusiveMonitor #(.N_AGENTS(1), .ADDR_WIDTH(MEM_ADDR_WIDTH), .RESV_OFFSET(LINE_START))
+        u_local_monitor(
+            .clk, .rst_n,
+            .reserve(ram_lr), .reserve_agent(1'b0), .reserve_addr({ram_line, {LINE_START{1'b0}}}),
+            .write(ram_take && ram_we && (!ram_excl || sc_ok)),
+            .write_addr({ram_line, {LINE_START{1'b0}}}),
+            .sc_agent(1'b0), .sc_addr({ram_line, {LINE_START{1'b0}}}), .sc_ok,
+            .sc_done(ram_sc));
+
+    always_ff @(posedge clk)
+        if (!rst_n)
+            sc_rsp_valid <= 1'b0;
+        else
+            sc_rsp_valid <= ram_sc;
+
+    always_ff @(posedge clk)
+        if (ram_sc)
+            sc_failed <= !sc_ok;
+
+    assign mem_valid     = ram_valid && !(ram_excl && ram_we && !sc_ok);
+    assign ram_rsp_valid = mem_rsp_valid || sc_rsp_valid;
+    assign ram_rsp_data  = sc_rsp_valid ? {LINE_WORDS{word_t'(sc_failed)}} : mem_rsp_data;
+
     // The local memory, code and data; latency 1, always ready.
     SimLatencyRAM #(.DATA_SIZE(LINE_SIZE), .ADDR_WIDTH(MEM_ADDR_WIDTH),
                     .READY_PERCENT(100), .FAST_PERCENT(100), .FAST_MIN(1), .FAST_MAX(1),
                     .MAX_PENDING(1)) u_local_mem(
         .clk, .rst_n,
-        .req_valid(ram_valid), .req_ready(ram_ready), .req_we(ram_we),
+        .req_valid(mem_valid), .req_ready(ram_ready), .req_we(ram_we),
         .req_addr({ram_line, {LINE_START{1'b0}}}), .req_wdata(ram_wdata),
-        .req_wstrb(ram_wstrb), .rsp_valid(ram_rsp_valid), .rsp_data(ram_rsp_data));
+        .req_wstrb(ram_wstrb), .rsp_valid(mem_rsp_valid), .rsp_data(mem_rsp_data));
 
     // The network interface's requesters, round-robin: the core's, the DMA's.
     assign ni_fields[0] = {mem_req.addr, mem_req.size, mem_req.atop, mem_req.cmo, mem_req.excl,
@@ -372,9 +429,11 @@ module Mig6Pe import Mig6Pkg::*; #(
                !(mem_req.valid && AtomicPkg::is_atomic(mem_req.atop) && !mem_pma.atomics))
     // An exclusive LR or SC goes to the network interface: the shared memory's monitor.
     `DC_ASSERT(a_excl_to_net, !(mem_req.valid && mem_req.excl && !sel[NET]))
-    // The scratchpad: plain loads and stores (a CBO writes no byte).
-    `DC_ASSERT(a_lmem_plain,
-               !(lmem_req.valid && (AtomicPkg::is_atomic(lmem_req.atop) || lmem_req.excl)))
+    // The scratchpad: no AMO (a CBO writes no byte; LR and SC are its monitor's).
+    `DC_ASSERT(a_lmem_no_amo, !(lmem_req.valid && AtomicPkg::is_atomic(lmem_req.atop)))
+    // An SC's status and a read's answer never meet: one request a clock, each answered in
+    // the clock after it.
+    `DC_ASSERT(a_sc_alone, !(mem_rsp_valid && sc_rsp_valid))
     // The DMA moves between the local memory and the network only.
     `DC_ASSERT(a_dma_target, !(dma_mem_valid && !(dma_pma.hit &&
                                (dma_pma.target == Mig6PmaPkg::TARGET_LOCAL ||

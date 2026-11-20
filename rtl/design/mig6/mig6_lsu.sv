@@ -19,12 +19,12 @@
  * word is made in front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom)
  * is a store of no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache
  * block, so it is never misaligned; mem has its address and no masks (kb
- * rtl/design/mig3/cbo). An LR or SC to a reservable region behind the network
- * (Mig6PmaPkg: target net, the shared memory) is far: an exclusive request (dmem_req.excl), done at
- * the memory, where every PE's writes pass; the SC is not cancelled here and its answer,
- * the status, is its rd (MEM/WB waits for it as for a load's word); mem shows its write
- * as asked (whether it was done comes back as rd). An LR or SC elsewhere (the local
- * memory) is the core's own (Mig6Atomic). kb rtl/design/mig6/far_lr_sc.
+ * rtl/design/mig3/cbo). An LR or SC to a reservable region (Mig6PmaPkg: the local
+ * memory, the shared memory) is far: an exclusive request (dmem_req.excl), decided by the
+ * exclusive monitor at that memory, where every writer's writes pass (kb
+ * rtl/design/mig6/far_lr_sc, rtl/design/mig6/local_lr_sc); the SC is not cancelled here
+ * and its answer, the status, is its rd (MEM/WB waits for it as for a load's word); mem
+ * shows its write as asked (whether it was done comes back as rd).
  *
  * Mig6Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig6Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -87,15 +87,15 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     // @kb: rtl/design/mig3/cbo
     assign cbo   = store && dec.mem.cmo != CachePkg::CMO_NONE;
 
-    // LR/SC on reservable memory behind the network: done there (the local memory's, a
-    // scratchpad, are the core's own). Of the region's attributes only these two are read.
+    // LR/SC on reservable memory: decided by that memory's exclusive monitor. Of the
+    // region's attributes only reservable is read.
     // @kb: rtl/design/mig6/far_lr_sc
+    // @kb: rtl/design/mig6/local_lr_sc
     /* verilator lint_off UNUSEDSIGNAL */
     Mig6PmaPkg::pma_t pma;
     /* verilator lint_on UNUSEDSIGNAL */
     assign pma = Mig6PmaPkg::pma_of(addr);
-    assign far = (dec.atomic.lr || dec.atomic.sc) && pma.reservable &&
-                 pma.target == Mig6PmaPkg::TARGET_NET;
+    assign far = (dec.atomic.lr || dec.atomic.sc) && pma.reservable;
 
     always_comb
         case (dec.funct3)
