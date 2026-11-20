@@ -9,8 +9,8 @@
  * int8_requantize (int8_kernel_ref.c, compiled without P: its 64-bit arithmetic compiled
  * with P becomes RV32 register-pair instructions, which Mig3 does not have), so their
  * outputs must be the same, bit for bit, and they differ only in the dot products.
- * int8_fc_p_rows computes some rows only: a core's part when several share the layer (Mig6:
- * four rows a PE).
+ * int8_fc_ref_rows and int8_fc_p_rows compute some rows only: a core's part when several
+ * share the layer (Mig6: four rows a PE, in plain C; Mig6 has no P).
  *
  * Software of the project, not of one design (sw/riscv/kernels): Mig3's test
  * (test/design/mig3/int8_kernel.c) and Mig6's use it; publications/2026-11-int8-kernel.md.
@@ -45,8 +45,11 @@ void int8_fc_ref(const int8_t *x, const int8_t *w, const int32_t *bias, const in
 void int8_fc_p(const int8_t *x, const int8_t *w, const int32_t *bias, const int8_quant_t *q,
                int8_t *y);
 
-// Rows first_row .. first_row + n_rows - 1 of int8_fc_p: y[n] for those n only (y is the
-// whole layer's array; the other entries are not written).
+// Rows first_row .. first_row + n_rows - 1 of int8_fc_ref and int8_fc_p: y[n] for those n
+// only (y is the whole layer's array; the other entries are not written). Each in a file of
+// its own (int8_kernel_ref_rows.c, int8_kernel_p_rows.c).
+void int8_fc_ref_rows(const int8_t *x, const int8_t *w, const int32_t *bias,
+                      const int8_quant_t *q, int8_t *y, int first_row, int n_rows);
 void int8_fc_p_rows(const int8_t *x, const int8_t *w, const int32_t *bias,
                     const int8_quant_t *q, int8_t *y, int first_row, int n_rows);
 

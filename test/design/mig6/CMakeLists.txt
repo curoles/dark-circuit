@@ -62,8 +62,9 @@ cmake_language(CALL dc_add_${SIM}_build design_mig6_sim TOP TbMig6 TB tb/tb_mig6
 # sw/riscv on the include path (mig6/mig6_csr_ops.h, tprintf.h); the test passes when
 # every hart exits with 0 (TbMig6). ARCH is -march of the program, default rv32ima: the
 # core has A, and C atomics (__atomic_*) become AMOs. The compiler makes LR/SC loops of the
-# others (compare-and-swap, a byte's add), allowed only in the local memory
-# (Mig6Atomic: a_lr_sc_reservable).
+# others (compare-and-swap, a byte's add), allowed where the memory map says reservable:
+# the local memory (the core's reservation) and the shared memory (its exclusive monitor,
+# kb rtl/design/mig6/far_lr_sc).
 function(mig6_program_test NAME)
     cmake_parse_arguments(P "" "ARCH" "SOURCES;FLAGS;ARGS" ${ARGN})
     if(NOT P_ARCH)
@@ -117,3 +118,12 @@ mig6_program_test(timeout_check SOURCES timeout_check.cpp)
 # four harts count to the same total with CAS loops as with amoadd; a CAS in the local
 # memory (the core's own reservation) too.
 mig6_program_test(cas_check SOURCES cas_check.cpp)
+
+# The int8 fully connected layer on four PEs (the first target, README): each PE 4 of the 16
+# outputs in plain C, compared with hart 0's whole-layer reference, bit for bit; one PE's
+# cycles against four PEs'. The kernel from sw/riscv/kernels/int8_fc (the reference and its
+# rows); three rounds, so more clocks than the default +max_cycles.
+# @kb: test/design/mig6/fc_layer
+mig6_program_test(fc_layer SOURCES fc_layer.cpp ${SW}/kernels/int8_fc/int8_kernel_ref.c
+                                   ${SW}/kernels/int8_fc/int8_kernel_ref_rows.c
+                  FLAGS -I${SW}/kernels/int8_fc ARGS +max_cycles=400000)

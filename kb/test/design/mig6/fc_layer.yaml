@@ -1,0 +1,44 @@
+type: decision
+title: Mig6's layer test is one binary; each hart makes the data, hart 0 checks and times it
+date: 2026-11-19
+question: >
+  The first target (rtl/design/mig6/README.md): the int8 layer of sw/riscv/kernels/int8_fc,
+  64 inputs and 16 outputs, on four PEs, every output checked, the cycles against one core.
+  How do the PEs get their data, how are the outputs gathered and checked, and what is
+  timed?
+decision: >
+  One program, the same hex in every PE (test/design/mig6/fc_layer.cpp). Every hart makes
+  the same data with the generator and the three rounds of Mig3's test, so the data is in
+  its local memory before the layer starts. A round: hart 0 runs int8_fc_ref over the whole
+  layer alone (the reference, and one PE's cycles); a barrier; each hart runs
+  int8_fc_ref_rows over rows 4 * mhartid to 4 * mhartid + 3 and stores its four outputs to
+  the shared memory as one word; a barrier; hart 0 compares the 16 bytes with its
+  reference, bit for bit, and prints four PEs' cycles from the first barrier to the second
+  as it sees them. The barrier's counter only grows: barrier k ends at 4 k arrivals, so it
+  is never reset. A barrier's wait ends after 100 000 clocks (the cycle CSR), exit 2.
+why: >
+  One binary needs nothing new in the testbench or the build (Mig6's tests load one hex
+  into every PE) and keeps the data local, which is what this chunk measures; fetching it
+  over the NoC is chunk 8's comparison. Hart 0's view from barrier to barrier is what a
+  layer costs when it is split: the slowest PE, the stores and the barrier, not only the
+  kernel. The reference computed by the same code path (int8_fc_ref and its rows share
+  int8_requantize) makes any difference a split or memory error.
+rejected:
+  - choice: The testbench preloads each PE's rows and the input (README's first plan)
+    why_not: A hex or a plusarg per PE and data layout shared by testbench and program, for
+      the same thing (local data before the layer) the program gets by generating it.
+  - choice: Each hart prints its outputs, the log compared
+    why_not: Checks by text; the exit code is the verdict (hart 0 reads the shared word).
+  - choice: Four PEs' cycles as the slowest PE's kernel
+    why_not: Leaves out the stores and the barrier, which a split layer always pays.
+code:
+  - test/design/mig6/fc_layer.cpp
+  - sw/riscv/kernels/int8_fc/int8_kernel_ref_rows.c
+relies_on:
+  - test/design/mig3/int8_kernel
+  - rtl/design/mig6/no_p
+evidence: >
+  2026-11-19, Verilator, clang-23, rv32ima: all 16 outputs equal in all three rounds; one PE
+  9 273 to 9 371 cycles (Mig3's plain C: 9 214 to 9 322), each PE's rows 2 424 to 2 502,
+  four PEs 2 525 to 2 544 (3.67 to 3.68 times faster); the whole run 79 877 cycles. Mig3's
+  int8 test prints the same cycles as before the kernel's rows file.

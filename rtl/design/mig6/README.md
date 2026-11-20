@@ -19,7 +19,8 @@ One workload defines the first milestone: the int8 fully connected layer of the 
 (sw/riscv/kernels/int8_fc, publications/2026-11-int8-kernel.md), 64 inputs and 16
 outputs, run on four PEs at once, every output compared with the plain-C reference, the
 cycles compared with one Mig3: 9 220 cycles in plain C (Mig6 has no P; Mig3's P version
-takes 2 560).
+takes 2 560). Reached 2026-11-19 (test design_mig6_fc_layer): one PE 9 270 to 9 370
+cycles, four PEs 2 525 to 2 545, 3.7 times faster, every output as the reference's.
 
 ## The system, for now
 
@@ -237,12 +238,17 @@ fault).
 
 - **Split by outputs:** each PE computes 4 of the 16 outputs, from its 4 rows of the weights
   and the whole input, with the plain-C kernel (Mig6 has no P).
-- **Data, for now:** the testbench loads every PE's local memory (code, the input, its rows
-  of the weights) before reset, as Mig3's tests load their memory. Fetching them over the
-  NoC (loads or DMA) is a later step, and a comparison: data local against data fetched.
-- **Results:** each PE stores its 4 outputs to shared memory, then arrives at the barrier;
-  hart 0 waits for all four, checks the outputs and prints the cycles; then every hart exits
-  (see Ending a run).
+- **Data, for now:** one binary in every PE's local memory; every hart makes the same data
+  there (the generator of Mig3's test, the whole layer, though it needs only its rows)
+  before the first barrier, so the layer reads only local memory. Fetching the data over
+  the NoC (loads or DMA) is a later step, and a comparison: data local against data
+  fetched.
+- **Results:** each PE stores its 4 outputs to shared memory (one word), then arrives at the
+  barrier; hart 0 waits for all four, checks the outputs against its own whole-layer run
+  and prints the cycles: one PE's (that run) against four PEs' (first barrier to second, its
+  view: the slowest PE, the stores and the barrier); then every hart exits (see Ending a
+  run). Each PE's rows take 2 425 to 2 500 cycles, the stores and the barrier about 90
+  (kb test/design/mig6/fc_layer).
 
 ## Ending a run, for now
 
@@ -295,8 +301,10 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
    barrier (done 2026-11-18: test design_mig6_barrier, every hart sees every ID after it;
    the barrier takes 50 to 88 cycles, the PE next to the memory first; programs' -march
    rv32ima).
-7. The layer on four PEs, outputs checked, cycles against one Mig3; the testbench preloads
-   each PE's weights and inputs into its local memory.
+7. The layer on four PEs, outputs checked, cycles against one Mig3 (done 2026-11-19: the
+   kernel moved to sw/riscv/kernels/int8_fc with a rows version; P out of Mig6, kb
+   rtl/design/mig6/no_p; test design_mig6_fc_layer, 3.7 times one PE; the data made by each
+   hart in its local memory, not preloaded by the testbench).
 8. A DMA in each PE (the library's DmaSifive, sharing the network interface through a
    `ReqMux`, as in Mig3Cpu): the weights in shared memory, each PE fetching its part; cycles
    against the preloaded run.
