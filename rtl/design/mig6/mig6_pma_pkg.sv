@@ -51,7 +51,7 @@ package Mig6PmaPkg;
     localparam int          SHARED_ADDR_WIDTH = 20;
     // hit, cacheable, io, atomics, reservable, target
     localparam pma_t        SHARED_PMA        =
-        pma_t'({1'b1, 1'b0, 1'b0, 1'b1, 1'b0, TARGET_NET});
+        pma_t'({1'b1, 1'b0, 1'b0, 1'b1, 1'b1, TARGET_NET});
     /* verilator lint_on UNUSEDPARAM */
 
     // The attributes of the region that holds addr, all 0 (hit 0) when none does. A region

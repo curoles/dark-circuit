@@ -19,8 +19,8 @@ namespace {
 
 // The map, when compiled.
 static_assert(pma::shared::base == 0x80000000u && pma::shared::size == 0x00100000u, "shared");
-static_assert(pma::shared::atomics && !pma::shared::cacheable && !pma::shared::reservable,
-              "shared: AMOs (the barrier), one copy, no LR/SC yet");
+static_assert(pma::shared::atomics && !pma::shared::cacheable && pma::shared::reservable,
+              "shared: AMOs (the barrier), one copy, LR/SC at the memory");
 static_assert(pma::shared::target == pma::target_t::net, "shared: through the network");
 static_assert(pma::pma_of(0x8000003cu).target == pma::target_t::net, "inside shared");
 static_assert(!pma::pma_of(0x80100000u).hit, "just past the shared memory: no region");

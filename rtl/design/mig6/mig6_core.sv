@@ -146,6 +146,7 @@ module Mig6Core import Mig6Pkg::*; #(
     logic         ex_lsu_valid;     // the load or store in EX may send its request
     logic         ex_dmem_wait;     // the D-cache does not take the request of EX
     logic         ex_sc_cancel;     // the SC in EX fails: no store (Mig6Atomic)
+    logic         ex_far;           // the LR or SC in EX is done at the memory (Mig6Lsu)
     word_t        ex_atomic_rd_data; // SC: 0 stored, 1 failed
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
     word_t        ex_packed_result;     // packed SIMD (Mig6Packed)
@@ -278,12 +279,13 @@ module Mig6Core import Mig6Pkg::*; #(
     Mig6Lsu u_mig6_lsu(
         .valid(ex_lsu_valid), .dec(ex_dec), .rs1_data(ex_rs1_data), .addr(ex_alu_result),
         .rs2_data(ex_rs2_data), .cancel(ex_sc_cancel), .dmem_req(dcache_req),
-        .misaligned(ex_lsu_misaligned), .mem(ex_lsu_mem));
+        .misaligned(ex_lsu_misaligned), .far(ex_far), .mem(ex_lsu_mem));
 
-    // LR/SC: the reservation; a failing SC cancels its store in Mig6Lsu.
+    // LR/SC: the reservation; a failing SC cancels its store in Mig6Lsu. A far LR or SC is
+    // the memory's (kb rtl/design/mig6/far_lr_sc).
     // @kb: rtl/design/mig3/lr_sc
     Mig6Atomic u_atomic(
-        .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .dec(ex_dec),
+        .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .far(ex_far), .dec(ex_dec),
         .rs1_data(ex_rs1_data), .trap(ex_trap), .cancel(ex_sc_cancel),
         .rd_data(ex_atomic_rd_data));
 
@@ -401,12 +403,13 @@ module Mig6Core import Mig6Pkg::*; #(
                                 ex_fpu_stall || ex_pmul_stall || ex_wfi_wait ||
                                 ex_dmem_wait || mem_wait)
 
-    // load: a load that sent its read (a misaligned one traps and reads nothing); MEM/WB
-    // waits for its word.
+    // load: a load that sent its read (a misaligned one traps and reads nothing), or a far
+    // SC (its answer, the status, is its rd); MEM/WB waits for its word.
     assign ex_mem_d = '{valid:  ex_retire.valid,
                         bubble: ex_bubble,
                         ret:    ex_retire,
-                        load:   ex_dec.rd_src == RD_LOAD && !ex_trap.valid,
+                        load:   (ex_dec.rd_src == RD_LOAD || (ex_far && ex_dec.atomic.sc))
+                                && !ex_trap.valid,
                         funct3: ex_dec.funct3,
                         offset: ex_load_offset};
 

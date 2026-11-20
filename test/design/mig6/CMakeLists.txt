@@ -111,3 +111,8 @@ mig6_program_test(barrier SOURCES barrier.cpp)
 # The semihosting timeout (semihost::Timeout on SYS_CLOCK, the testbench's simulated time):
 # a true condition returns at once, a false one gives up after its milliseconds.
 mig6_program_test(timeout_check SOURCES timeout_check.cpp)
+
+# Compare-and-swap on the shared memory (LR/SC done at the memory, its exclusive monitor):
+# four harts count to the same total with CAS loops as with amoadd; a CAS in the local
+# memory (the core's own reservation) too.
+mig6_program_test(cas_check SOURCES cas_check.cpp)

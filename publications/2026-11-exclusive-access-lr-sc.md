@@ -197,14 +197,25 @@ random requests and check every answer.
 - **The check that the check works.** In a scratch copy, the monitor was made to end only
   the writer's own reservation, the bug of section 2 moved into the monitor. No SC failed,
   and the word ended at 79: 41 increments lost, caught.
+- **The real cores.** A C++ program on the four cores adds 1 to a shared counter 20 times
+  per core with `__atomic_compare_exchange_n` (clang makes it an `lr.w.aqrl` and
+  `sc.w.rl` loop), and 20 times to another counter with `amoadd`. Both end at 80; the
+  compare-and-swaps found the counter changed by another core 134 times and tried again.
+- **And the bug itself, on the real cores.** With the core's choice of "far" switched off,
+  LR/SC on the shared memory go back to the core's own reservation, the setup of section
+  2. The compare-and-swap counter ended at 37 instead of 80: 43 increments lost, while the
+  amoadd counter, done at the memory as before, still ended at 80.
 
-## 8. What is left
+## 8. Two kinds of LR/SC in one core, for now
 
-The cores do not send LR and SC to the shared memory yet; they still stop at the assertion.
-The next step: the core sends LR/SC as exclusive requests when the address is in a region
-that is reservable but not cached, the shared region becomes reservable, and a program on
-the four cores does compare-and-swap with `__atomic_compare_exchange`, checked against the
-same count done with `amoadd`.
+The core decides per access, from the memory map: an LR or SC to a region that is
+reservable but not cached (the shared memory) is "far", an exclusive request done at the
+memory; one to the local memory is still the core's own reservation. That is right only
+while nothing but the core writes the local memory. The next step in Mig6 gives each PE a
+DMA engine that writes it; from then on the core's reservation is blind to those writes,
+the same flaw again. Then the local memory gets a monitor too, every LR/SC goes out far,
+and the reservation logic leaves the core: no reservation, no cancelled store, an SC's
+result coming back like a load's.
 
 The knowledge base has the reasoning behind each step, with the options not taken:
 [far LR/SC in Mig6](../kb/rtl/design/mig6/far_lr_sc.yaml),

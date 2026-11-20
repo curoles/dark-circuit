@@ -50,12 +50,23 @@ evidence: >
   Negative, in a scratch copy: a monitor that ends only the writer's own reservation makes
   no SC fail and loses increments (the word 79, expected 120: caught). The Mig6 suite (14
   tests) passes.
+  2026-11-19, the core side: Mig6Lsu makes an LR or SC far when its region is reservable
+  but not cached (dmem_req.excl), Mig6Atomic leaves far ones alone, a far SC waits in
+  MEM/WB for its answer as a load and writes it to rd; mem_req_t carries rsp and excl; the
+  shared region is reservable. cas_check (four harts, 20 increments each by a CAS loop,
+  __atomic_compare_exchange_n: lr.w.aqrl / sc.w.rl, and by amoadd): both counters end at
+  80, 134 retries in all; a CAS in the local memory by the core's own reservation passes.
+  Negative, in a scratch copy: far forced off (LR/SC on the shared memory by the core's
+  reservation) leaves the CAS counter at 37, the amoadd one at 80: caught. The other
+  programs' cycles unchanged; the Mig6 suite (15 tests) passes.
 code:
   - rtl/design/mig6/mig6_mem_net_if.sv#u_monitor
   - rtl/design/mig6/mig6_mem_net_if.sv#sc_ready
   - rtl/design/mig6/mig6_noc_pkg.sv#REQ_SC
   - rtl/design/mig6/mig6_noc_pkg.sv#SC_FAIL
   - test/design/mig6/tb/tb_mig6_noc.sv#lrsc_fails
+  - rtl/design/mig6/mig6_lsu.sv#far
+  - test/design/mig6/cas_check.cpp#cas_add
 relies_on:
   - rtl/lib/block/answered_writes
   - rtl/lib/block/cache/exclusive

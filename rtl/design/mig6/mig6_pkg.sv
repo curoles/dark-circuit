@@ -130,7 +130,9 @@ package Mig6Pkg;
     // operand, the answer is the old word; it is done in front of the memory (Mig3Cpu,
     // kb rtl/lib/block/atomic/design). A CBO (Zicbom) is a write without strobes with its
     // cmo (CachePkg): the D-cache drops the line on an inval or flush and sends it on to
-    // memory (kb rtl/lib/block/cache/cbo).
+    // memory (kb rtl/lib/block/cache/cbo). An LR or SC to memory that is reservable but not
+    // cached is exclusive (excl): done at the memory, an SC answered with its status (kb
+    // rtl/design/mig6/far_lr_sc); one to the local memory is the core's (Mig6Atomic).
     typedef struct packed {
         logic         valid;
         logic         we;
@@ -141,6 +143,7 @@ package Mig6Pkg;
         strb_t        wstrb;
         AtomicPkg::atop_t atop; // ATOP_NONE, or the AMO's operation
         CachePkg::cmo_t   cmo;  // CMO_NONE, or the CBO's operation (a write of no bytes)
+        logic         excl;     // an exclusive LR (we 0) or SC (we 1), far
     } dmem_req_t;
 
     typedef struct packed {
@@ -151,7 +154,9 @@ package Mig6Pkg;
 
     // Memory, behind the caches: the same for a line; a write writes the bytes of wdata
     // with wstrb=1 (a store's word, or an uncached store's); an AMO comes as asked, its
-    // operand in every word of wdata; a CBO as a write of its line without strobes.
+    // operand in every word of wdata; a CBO as a write of its line without strobes; an
+    // exclusive LR or SC as asked. rsp: the request wants an answer (a read, an AMO, an
+    // LR, an SC; kb rtl/lib/block/answered_writes).
     typedef struct packed {
         logic       valid;
         logic       we;
@@ -161,6 +166,8 @@ package Mig6Pkg;
         line_strb_t wstrb;
         AtomicPkg::atop_t atop; // ATOP_NONE, or an AMO's operation
         CachePkg::cmo_t   cmo;  // CMO_NONE, or a CBO's operation
+        logic       rsp;    // wants an answer
+        logic       excl;   // an exclusive LR or SC
     } mem_req_t;
 
     typedef struct packed {

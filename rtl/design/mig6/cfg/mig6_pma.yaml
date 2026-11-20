@@ -7,7 +7,8 @@
 #   cacheable   the core's caches may hold it
 #   io          accesses have side effects: never speculated, merged or repeated
 #   atomics     AMOs allowed (an AtomicUnit at the target does them)
-#   reservable  LR/SC allowed (a reservation works for it)
+#   reservable  LR/SC allowed (a reservation works for it: the core's when cacheable,
+#               the memory's exclusive monitor when not)
 #   target      where a PE sends the access: local (its local memory), net (its network
 #               interface: the shared memory), devices (none in Mig6 yet)
 # Addresses in no region are an error (an access fault, later).
@@ -21,7 +22,7 @@ regions:
     cacheable: yes
     io: no
     atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_atomics_allowed)
-    reservable: yes         # LR/SC: the core's own reservation, one hart
+    reservable: yes         # LR/SC: the core's own reservation (Mig6Atomic), one hart
 
   - name: devices
     base: 0x0C000000
@@ -42,7 +43,7 @@ regions:
     cacheable: no           # one copy, no coherence (README: ways to cache shared data)
     io: no
     atomics: yes            # the AtomicUnit in front of the shared RAM: the barrier
-    reservable: no          # LR/SC across PEs: not yet (README, open questions)
+    reservable: yes         # LR/SC at the memory, its exclusive monitor (far: not cached)
 
 # Generated files: template in this directory -> output relative to repository root.
 generate:

@@ -19,7 +19,12 @@
  * word is made in front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom)
  * is a store of no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache
  * block, so it is never misaligned; mem has its address and no masks (kb
- * rtl/design/mig3/cbo).
+ * rtl/design/mig3/cbo). An LR or SC to a region that is reservable but not cached
+ * (Mig6PmaPkg: the shared memory) is far: an exclusive request (dmem_req.excl), done at
+ * the memory, where every PE's writes pass; the SC is not cancelled here and its answer,
+ * the status, is its rd (MEM/WB waits for it as for a load's word); mem shows its write
+ * as asked (whether it was done comes back as rd). An LR or SC elsewhere (the local
+ * memory) is the core's own (Mig6Atomic). kb rtl/design/mig6/far_lr_sc.
  *
  * Mig6Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig6Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -44,6 +49,7 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     input  wire              cancel,     // the store is not done: an SC that fails
     output dmem_req_t       dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
+    output wire              far,        // an LR or SC done at the memory: exclusive
     output lsu_mem_t         mem         // access for the retire trace
 );
     // Parts of the address and of the store data.
@@ -80,6 +86,15 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     assign clear = dec.atomic.atop == AtomicPkg::ATOP_LD_CLR;
     // @kb: rtl/design/mig3/cbo
     assign cbo   = store && dec.mem.cmo != CachePkg::CMO_NONE;
+
+    // LR/SC on memory that is reservable but not cached: done there. Of the region's
+    // attributes only these two are read.
+    // @kb: rtl/design/mig6/far_lr_sc
+    /* verilator lint_off UNUSEDSIGNAL */
+    Mig6PmaPkg::pma_t pma;
+    /* verilator lint_on UNUSEDSIGNAL */
+    assign pma = Mig6PmaPkg::pma_of(addr);
+    assign far = (dec.atomic.lr || dec.atomic.sc) && pma.reservable && !pma.cacheable;
 
     always_comb
         case (dec.funct3)
@@ -126,6 +141,7 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     assign dmem_req.wstrb = strb;
     assign dmem_req.atop  = dec.atomic.atop;
     assign dmem_req.cmo   = dec.mem.cmo;
+    assign dmem_req.excl  = far;
 
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;

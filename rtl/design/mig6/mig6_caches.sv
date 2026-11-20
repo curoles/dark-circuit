@@ -94,12 +94,6 @@ module Mig6Caches import Mig6Pkg::*; #(
     CachePkg::cmo_t   d_mem_cmo;
     wire              d_mem_rsp;         // the D-cache's: wants an answer, exclusive
     wire              d_mem_excl;
-    // The arbiter's: no field of mem_req_t carries them yet (no request is exclusive,
-    // only a read wants an answer: mem_req.we says it).
-    /* verilator lint_off UNUSEDSIGNAL */
-    wire              mem_rsp_ask;
-    wire              mem_excl;
-    /* verilator lint_on UNUSEDSIGNAL */
     logic             d_mem_rsp_valid;
     line_t            d_mem_rsp_data;
     // The caches' CPU sides, lines.
@@ -129,7 +123,8 @@ module Mig6Caches import Mig6Pkg::*; #(
         .req_we(dcache_req.we), .req_addr({dcache_req.addr, dcache_req.offset}),
         .req_wdata(d_wdata), .req_wstrb(d_wstrb), .req_size(dcache_req.size),
         .req_nocache(d_io), .req_atop(dcache_req.atop),
-        .req_cmo(dcache_req.cmo), .req_excl(1'b0), .req_rsp(!dcache_req.we),
+        .req_cmo(dcache_req.cmo), .req_excl(dcache_req.excl),
+        .req_rsp(!dcache_req.we || dcache_req.excl),
         .rsp_valid(dcache_rsp.valid), .rsp_data(d_line),
         .mem_req_valid(d_mem_valid), .mem_req_ready(d_mem_ready),
         .mem_req_we(d_mem_we), .mem_req_addr(d_mem_addr),
@@ -188,7 +183,7 @@ module Mig6Caches import Mig6Pkg::*; #(
         .mem_req_addr(mem_req.addr), .mem_req_wdata(mem_req.wdata),
         .mem_req_wstrb(mem_req.wstrb), .mem_req_size(mem_req.size),
         .mem_req_atop(mem_req.atop), .mem_req_cmo(mem_req.cmo),
-        .mem_req_rsp(mem_rsp_ask), .mem_req_excl(mem_excl),
+        .mem_req_rsp(mem_req.rsp), .mem_req_excl(mem_req.excl),
         .mem_rsp_valid(mem_rsp.valid),
         .mem_rsp_data(mem_rsp.data));
 

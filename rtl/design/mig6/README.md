@@ -217,11 +217,13 @@ bases multiples of their sizes, an io region not cacheable) and generates Mig6Pm
 
 - **local** at `0x00000000`, 64 KiB: a PE's local memory, code and data, the same addresses
   in every PE (one binary for all); cacheable; reservable (LR/SC: the core's own
-  reservation, one hart); no AMOs (no AtomicUnit in front of it).
+  reservation, one hart, until a PE's DMA writes it); no AMOs (no AtomicUnit in front of
+  it).
 - **devices** at `0x0C000000`, 64 MiB: no devices in a PE yet; io, never cached.
 - **shared** at `0x80000000` (where RISC-V platforms put main memory), 1 MiB: the shared
   memory at the mesh's edge, through the PE's network interface; never cached (one copy);
-  AMOs (the AtomicUnit in front of it); not reservable yet (see Open questions).
+  AMOs (the AtomicUnit in front of it); reservable, LR/SC done at the memory by its
+  exclusive monitor (a region reservable but not cached: the core sends them far).
 - **Other PEs' local memories** over the NoC: not needed by the first target; later, as more
   regions with target net.
 
@@ -313,11 +315,14 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
   outside a reservable region stops the run (Mig6Atomic: `a_lr_sc_reservable`; later an
   access fault). Then LR/SC done at the shared memory: the library's channels carry
   `req_excl` and `req_rsp` (kb rtl/lib/block/answered_writes, rtl/lib/block/cache/exclusive),
-  the network LR and SC with Mig6MemNetIf's monitor (done 2026-11-19, tested with stand-in
-  cores: kb rtl/design/mig6/far_lr_sc); left, the core sending them for the shared region
-  (reservable then). AMOs already cover barriers, counters, flags and locks; LR/SC adds
-  compare-and-swap. In a PE's local memory LR/SC syncs nothing (one hart, no interrupts),
-  but it works.
+  the network LR and SC with Mig6MemNetIf's monitor (the library's ExclusiveMonitor),
+  and the core sends LR/SC far to a region reservable but not cached; the shared region is
+  reservable (done 2026-11-19: kb rtl/design/mig6/far_lr_sc; test design_mig6_cas_check,
+  four harts count to the same total with compare-and-swap as with amoadd). AMOs already
+  cover barriers, counters, flags and locks; LR/SC adds compare-and-swap. In a PE's local
+  memory LR/SC syncs nothing (one hart, no interrupts), but it works, by the core's own
+  reservation; when a PE's DMA writes the local memory (chunk 8), that reservation goes:
+  every LR/SC far, a monitor in front of the local memory too.
 - **The core's caches in a PE:** keep Mig3's, or a simpler local memory without them.
 
 ## References

@@ -19,11 +19,13 @@
  * misaligned LR or SC traps (Mig6Lsu, Mig6Control): it reserves nothing, and its trap
  * ends the reservation.
  *
- * The reservation sees only this hart, so LR/SC are only for a region the memory map
- * (Mig6PmaPkg) makes reservable: a PE's local memory. On the shared memory another PE's
- * store would not end it; an LR or SC that completes outside a reservable region stops the
- * run (a_lr_sc_reservable; later an access fault, LR/SC at the shared memory after that:
- * rtl/design/mig6/README.md, Open questions).
+ * The reservation sees only this hart, so it serves LR/SC only where nothing else writes:
+ * a PE's local memory. An LR or SC to a region that is reservable but not cached (the
+ * shared memory) is far (Mig6Lsu: far): done at the memory, by its exclusive monitor (kb
+ * rtl/design/mig6/far_lr_sc); here a far LR reserves nothing and a far SC is not
+ * cancelled (its answer is its rd). An LR or SC that completes outside a reservable region
+ * stops the run (a_lr_sc_reservable; later an access fault). When a PE's DMA writes the
+ * local memory (README, chunks), this reservation goes: every LR/SC far, a monitor there.
  *
  *   dec.atomic, rs1_data --> +----------------------+ --> cancel  (Mig6Lsu: no store)
  *   done, trap, MRET ------> | reservation: valid,  | --> rd_data (SC: 0 ok, 1 fail)
@@ -43,6 +45,7 @@ module Mig6Atomic import Mig6Pkg::*; (
     input  wire      rst_n,         // synchronous reset, active low
     input  wire      valid,         // instruction in EX is valid
     input  wire      done,          // it completes in this cycle
+    input  wire      far,           // the LR or SC is done at the memory (Mig6Lsu)
     // Of dec only atomic and sys.mret are used, of rs1_data the word address (all of it in
     // a_lr_sc_reservable), of trap valid.
     /* verilator lint_off UNUSEDSIGNAL */
@@ -64,11 +67,11 @@ module Mig6Atomic import Mig6Pkg::*; (
     assign addr  = rs1_data[WIDTH-1:DADDR_START];
     assign sc_ok = resv_valid && resv_addr == addr;
 
-    assign cancel  = valid && dec.atomic.sc && !sc_ok;
+    assign cancel  = valid && dec.atomic.sc && !sc_ok && !far;
     assign rd_data = word_t'(!sc_ok);
 
     // Every reason the reservation ends, in one place.
-    assign resv_take = done && dec.atomic.lr;
+    assign resv_take = done && dec.atomic.lr && !far;
     assign resv_end  = trap.valid || (done && (dec.atomic.sc || dec.sys.mret));
 
     // Clear first, set last: a trapping instruction does not complete, so the two never

@@ -97,7 +97,7 @@ module Mig6Pe import Mig6Pkg::*; #(
 
     ReqDemux #(.N_TARGETS(2), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
-        .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(!mem_req.we),
+        .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(mem_req.rsp),
         .req_sel(sel), .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data),
         .tgt_req_valid(tgt_valid), .tgt_req_ready(tgt_ready), .tgt_rsp_valid(tgt_rsp_valid),
         .tgt_rsp_data({{LINE_WORDS{net_rsp_data}}, local_rsp_data}));
@@ -131,7 +131,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .clk, .rst_n,
         .req_valid(tgt_valid[NET]), .req_ready(tgt_ready[NET]), .req_we(mem_req.we),
         .req_addr(mem_req.addr), .req_size(mem_req.size), .req_atop(mem_req.atop),
-        .req_cmo(mem_req.cmo), .req_excl(1'b0), .req_rsp(!mem_req.we),
+        .req_cmo(mem_req.cmo), .req_excl(mem_req.excl), .req_rsp(mem_req.rsp),
         .req_wdata(net_wdata), .req_wstrb(net_wstrb),
         .rsp_valid(tgt_rsp_valid[NET]), .rsp_data(net_rsp_data),
         .noc_req_fwd, .noc_req_bwd, .noc_rsp_fwd, .noc_rsp_bwd);
@@ -142,6 +142,8 @@ module Mig6Pe import Mig6Pkg::*; #(
     `DC_ASSERT(a_no_devices, !(mem_req.valid && mem_pma.target == Mig6PmaPkg::TARGET_DEVICES))
     `DC_ASSERT(a_atomics_allowed,
                !(mem_req.valid && AtomicPkg::is_atomic(mem_req.atop) && !mem_pma.atomics))
+    // An exclusive LR or SC goes to the network interface: the shared memory's monitor.
+    `DC_ASSERT(a_excl_to_net, !(mem_req.valid && mem_req.excl && !sel[NET]))
 
     // Load the hex image into the local memory, returns 1 when it is loaded.
     function automatic int load(string hex);
