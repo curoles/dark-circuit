@@ -17,14 +17,14 @@
 #define MIG6_PMA_LOCAL_ATOMICS 0
 #define MIG6_PMA_LOCAL_RESERVABLE 1
 
-/* devices: devices, none in Mig6 yet (Mig6Pe: a_no_devices) (target: devices) */
-#define MIG6_PMA_DEVICES_BASE 0x0c000000
-#define MIG6_PMA_DEVICES_SIZE 0x04000000
-#define MIG6_PMA_DEVICES_ADDR_WIDTH 26
-#define MIG6_PMA_DEVICES_CACHEABLE 0
-#define MIG6_PMA_DEVICES_IO 1
-#define MIG6_PMA_DEVICES_ATOMICS 0
-#define MIG6_PMA_DEVICES_RESERVABLE 0
+/* dma: the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h) (target: devices) */
+#define MIG6_PMA_DMA_BASE 0x0c000000
+#define MIG6_PMA_DMA_SIZE 0x00001000
+#define MIG6_PMA_DMA_ADDR_WIDTH 12
+#define MIG6_PMA_DMA_CACHEABLE 0
+#define MIG6_PMA_DMA_IO 1
+#define MIG6_PMA_DMA_ATOMICS 0
+#define MIG6_PMA_DMA_RESERVABLE 0
 
 /* shared: the shared memory at the mesh's edge, one copy that all PEs share (target: net) */
 #define MIG6_PMA_SHARED_BASE 0x80000000

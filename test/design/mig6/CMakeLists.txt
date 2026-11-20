@@ -127,3 +127,8 @@ mig6_program_test(cas_check SOURCES cas_check.cpp)
 mig6_program_test(fc_layer SOURCES fc_layer.cpp ${SW}/kernels/int8_fc/int8_kernel_ref.c
                                    ${SW}/kernels/int8_fc/int8_kernel_ref_rows.c
                   FLAGS -I${SW}/kernels/int8_fc ARGS +max_cycles=400000)
+
+# Every PE's DMA (sw/riscv/drivers/dma.h), shared -> local over the network and local ->
+# local, checked byte for byte and timed: hart 0 alone (4, 64 and 320 bytes), then every
+# hart at once (320 bytes each, a PE's part of the layer).
+mig6_program_test(dma_check SOURCES dma_check.cpp ARGS +max_cycles=400000)

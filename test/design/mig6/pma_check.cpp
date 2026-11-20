@@ -26,7 +26,9 @@ static_assert(pma::pma_of(0x8000003cu).target == pma::target_t::net, "inside sha
 static_assert(!pma::pma_of(0x80100000u).hit, "just past the shared memory: no region");
 static_assert(!pma::pma_of(0x0000fffcu).cacheable && pma::pma_of(0x0000fffcu).reservable,
               "the local memory's last word: a scratchpad, LR/SC the core's own");
-static_assert(pma::pma_of(0x0c000000u).io && !pma::pma_of(0x0c000000u).cacheable, "devices");
+static_assert(pma::dma::base == 0x0c000000u && pma::dma::io && !pma::dma::cacheable &&
+              pma::dma::target == pma::target_t::devices, "the DMA's registers");
+static_assert(!pma::pma_of(0x0c001000u).hit, "just past the DMA's one channel: no region");
 static_assert(!pma::pma_of(0x00010000u).hit, "just past the local memory: no region");
 
 }   // namespace

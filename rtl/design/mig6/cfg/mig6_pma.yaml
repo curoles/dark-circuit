@@ -24,11 +24,11 @@ regions:
     atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_lmem_plain)
     reservable: yes         # LR/SC: the core's own reservation (Mig6Atomic), one hart
 
-  - name: devices
+  - name: dma
     base: 0x0C000000
-    size: 0x04000000        # 64 MiB
-    desc: "devices, none in Mig6 yet (Mig6Pe: a_no_devices)"
-    target: devices
+    size: 0x00001000        # 4 KiB a channel: one channel (Mig6Pe: DMA_N)
+    desc: "the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h)"
+    target: devices         # the core's memory port to the DMA's register port (Mig6Pe)
     cacheable: no
     io: yes
     atomics: no

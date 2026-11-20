@@ -143,10 +143,16 @@ AtomicUnit and a RAM.
 
 ```
   Mig6Pe:
-    Mig3 core: data, local ---------------------+--> local memory (a scratchpad)
-               I-cache misses --> address  -----+    (fixed priority: the core's data first)
-               D-cache, far   --> decode   -----+--> network interface --> router
-                                                     (shared memory: uncached)
+    Mig3 core: data, local --------------------+--> local memory (a scratchpad)
+               I-cache misses --> address -----+    (fixed priority: the core's data first,
+               D-cache, far   --> decode       |     the I-cache's misses, the DMA)
+                                    |  +-------+
+                                    |  |    +--> network interface --> router
+                                    |  |    |    (round-robin: the core, the DMA)
+                                    +--|----+
+                                    +--|--> DMA's registers
+               DMA ---> address -------+
+                        decode  ------------+
 ```
 
 - **One core a PE, for now.** A PE may later get a matrix engine or a second core without
@@ -160,6 +166,12 @@ AtomicUnit and a RAM.
   is far: regions behind the network that may be cached (none yet: the cached alias below,
   when a measured case needs it). Arm's Cortex-M7 and Cortex-R5 pair TCMs and caches the
   same way (kb rtl/design/mig6/scratchpad).
+- **A DMA:** the library's DmaSifive (SiFive's PDMA map, sw/riscv/drivers/dma.h), its
+  registers the region dma, polled for now. Its memory side and the core's memory port
+  reach the local memory and the network interface through a small crossbar of ReqDemux
+  and ReqMux, so the core works on local memory while the DMA waits for the network (kb
+  rtl/design/mig6/dma). A word a transaction, one in flight, for now: the measurements in
+  chunk 8 say what to improve.
 - **Network interface:** the PE's door to the NoC; requests to the shared memory leave
   through it as packets, answers come back.
 - **The same program on every PE** (SPMD): each finds its part from `mhartid`, the RISC-V
@@ -231,7 +243,8 @@ bases multiples of their sizes, an io region not cacheable) and generates Mig6Pm
   in every PE (one binary for all); not cacheable: a scratchpad on the core's data port;
   reservable (LR/SC: the core's own reservation, one hart, until a PE's DMA writes it); no
   AMOs (no AtomicUnit in front of it).
-- **devices** at `0x0C000000`, 64 MiB: no devices in a PE yet; io, never cached.
+- **dma** at `0x0C000000`, 4 KiB a channel, one channel: the PE's DMA's registers; io,
+  never cached; target devices (the core's memory port to the DMA's register port).
 - **shared** at `0x80000000` (where RISC-V platforms put main memory), 1 MiB: the shared
   memory at the mesh's edge, through the PE's network interface; never cached (one copy);
   AMOs (the AtomicUnit in front of it); reservable, LR/SC done at the memory by its
@@ -319,11 +332,18 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       only (done 2026-11-19: ReqMux by fixed priority, kb rtl/lib/block/req_mux/fixed_priority
       and rtl/design/mig6/scratchpad; fc_layer's one PE 9 234 cycles instead of 9 314, its
       misses gone).
-   b. The DMA (the library's DmaSifive, its registers in the PE's devices region, polled):
-      the PE's requesters and targets as a 2 x 2 crossbar of ReqDemux and ReqMux (core and
-      DMA, local memory and network interface), so the core works on local memory while the
-      DMA reads the network; local LR/SC by a monitor at the local memory's port, where the
-      core's and the DMA's writes meet.
+   b. The DMA (the library's DmaSifive, its registers the region dma, polled): the PE's
+      requesters and targets as a 2 x 2 crossbar of ReqDemux and ReqMux (core and DMA, local
+      memory and network interface), so the core works on local memory while the DMA reads
+      the network (done 2026-11-20: kb rtl/design/mig6/dma; test design_mig6_dma_check, 320
+      bytes shared to local: 1 122 cycles for the PE one router from the memory, about 1 775
+      for two, 2 384 to 2 536 for three; local to local 424; so a round trip, a word at a
+      time, sets the speed, about 8 cycles a router, not the four PEs' contention). Then:
+      the PLIC in each PE and the DMA's done as an interrupt, its latency measured; the
+      layer with its weights fetched by DMA, fetch and compute timed; local LR/SC by a
+      monitor at the local memory's port, where the core's and the DMA's writes meet (until
+      then a DMA write to the local memory does not end the core's reservation); then what
+      the numbers ask (more reads in flight, bursts on the network).
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),

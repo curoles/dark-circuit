@@ -66,15 +66,15 @@ namespace local {
     inline volatile T* at(uint32_t offset) { return reinterpret_cast<volatile T*>(base + offset); }
 }   // namespace local
 
-// devices: devices, none in Mig6 yet (Mig6Pe: a_no_devices)
-namespace devices {
-    constexpr uint32_t base       = MIG6_PMA_DEVICES_BASE;
-    constexpr uint32_t size       = MIG6_PMA_DEVICES_SIZE;
-    constexpr uint32_t addr_width = MIG6_PMA_DEVICES_ADDR_WIDTH;
-    constexpr bool     cacheable  = MIG6_PMA_DEVICES_CACHEABLE;
-    constexpr bool     io         = MIG6_PMA_DEVICES_IO;
-    constexpr bool     atomics    = MIG6_PMA_DEVICES_ATOMICS;
-    constexpr bool     reservable = MIG6_PMA_DEVICES_RESERVABLE;
+// dma: the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h)
+namespace dma {
+    constexpr uint32_t base       = MIG6_PMA_DMA_BASE;
+    constexpr uint32_t size       = MIG6_PMA_DMA_SIZE;
+    constexpr uint32_t addr_width = MIG6_PMA_DMA_ADDR_WIDTH;
+    constexpr bool     cacheable  = MIG6_PMA_DMA_CACHEABLE;
+    constexpr bool     io         = MIG6_PMA_DMA_IO;
+    constexpr bool     atomics    = MIG6_PMA_DMA_ATOMICS;
+    constexpr bool     reservable = MIG6_PMA_DMA_RESERVABLE;
     constexpr target_t target     = target_t::devices;
     constexpr attributes_t attributes = {true, cacheable, io, atomics, reservable, target};
 
@@ -84,13 +84,13 @@ namespace devices {
     inline volatile T* at()
     {
         static_assert(offset < size && sizeof(T) <= size - offset,
-                      "at<T, offset>: the T at offset is not inside the region devices");
+                      "at<T, offset>: the T at offset is not inside the region dma");
         return reinterpret_cast<volatile T*>(base + offset);
     }
 
     template <typename T>
     inline volatile T* at(uint32_t offset) { return reinterpret_cast<volatile T*>(base + offset); }
-}   // namespace devices
+}   // namespace dma
 
 // shared: the shared memory at the mesh's edge, one copy that all PEs share
 namespace shared {
@@ -123,8 +123,8 @@ constexpr attributes_t pma_of(uint32_t addr)
 {
     if (local::contains(addr))
         return local::attributes;
-    if (devices::contains(addr))
-        return devices::attributes;
+    if (dma::contains(addr))
+        return dma::attributes;
     if (shared::contains(addr))
         return shared::attributes;
     return {false, false, false, false, false, target_t::local};

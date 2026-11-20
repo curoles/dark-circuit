@@ -37,12 +37,12 @@ package Mig6PmaPkg;
     localparam pma_t        LOCAL_PMA        =
         pma_t'({1'b1, 1'b0, 1'b0, 1'b0, 1'b1, TARGET_LOCAL});
 
-    // devices: devices, none in Mig6 yet (Mig6Pe: a_no_devices)
-    localparam logic [31:0] DEVICES_BASE       = 32'h0c00_0000;
-    localparam logic [31:0] DEVICES_SIZE       = 32'h0400_0000;
-    localparam int          DEVICES_ADDR_WIDTH = 26;
+    // dma: the PE's DMA's registers (DmaSifive: SiFive's PDMA map, sw/riscv/drivers/dma.h)
+    localparam logic [31:0] DMA_BASE       = 32'h0c00_0000;
+    localparam logic [31:0] DMA_SIZE       = 32'h0000_1000;
+    localparam int          DMA_ADDR_WIDTH = 12;
     // hit, cacheable, io, atomics, reservable, target
-    localparam pma_t        DEVICES_PMA        =
+    localparam pma_t        DMA_PMA        =
         pma_t'({1'b1, 1'b0, 1'b1, 1'b0, 1'b0, TARGET_DEVICES});
 
     // shared: the shared memory at the mesh's edge, one copy that all PEs share
@@ -60,8 +60,8 @@ package Mig6PmaPkg;
     function automatic pma_t pma_of(logic [31:0] addr);
         if (addr[31:16] == 16'h0000)
             return LOCAL_PMA;
-        if (addr[31:26] == 6'h03)
-            return DEVICES_PMA;
+        if (addr[31:12] == 20'h0_c000)
+            return DMA_PMA;
         if (addr[31:20] == 12'h800)
             return SHARED_PMA;
         return '0;
