@@ -357,7 +357,9 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       exclusive request now (done 2026-11-20: kb rtl/design/mig6/local_lr_sc; test
       design_mig6_lrsc_local, an SC fails after the DMA's write, the hart's own store or an
       interrupt handler's store to the reserved line, succeeds alone or after a DMA write
-      elsewhere); next the core's own reservation (Mig6Atomic) goes, unused now. Then what
+      elsewhere); then the core's own reservation (Mig6Atomic) went, unused (done
+      2026-11-20: an SC's status comes back as loaded data, every program's cycles
+      unchanged). Then what
       the numbers ask (more reads in flight, bursts on the network).
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
@@ -376,7 +378,7 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
 - **LR/SC on the shared memory:** a reservation lives in a core, so another PE's store to
   the reserved word does not end it, and an SC would succeed when it must fail. Decided
   (2026-11-18), in two steps. First: the shared region is not reservable, and an LR or SC
-  outside a reservable region stops the run (Mig6Atomic: `a_lr_sc_reservable`; later an
+  outside a reservable region stops the run (Mig6Core: `a_lr_sc_reservable`; later an
   access fault). Then LR/SC done at the shared memory: the library's channels carry
   `req_excl` and `req_rsp` (kb rtl/lib/block/answered_writes, rtl/lib/block/cache/exclusive),
   the network LR and SC with Mig6MemNetIf's monitor (the library's ExclusiveMonitor),

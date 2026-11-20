@@ -19,7 +19,9 @@ decision: >
   with the reservation, and is answered with its status (0 stored, 1 failed) in the clock
   after, where a read's answer comes (a_sc_alone). A reservation is a line of the local
   memory, the RAM's request (RESV_OFFSET = LINE_START). The core's reservation is never
-  taken any more; the next step removes Mig6Atomic.
+  taken any more, so Mig6Atomic went right after (the same day): no reservation in the
+  core, no cancelled store; an SC's rd_src is RD_LOAD, its status coming back as loaded
+  data; a_lr_sc_reservable moved to Mig6Core (an LR or SC that is not exclusive).
 why: >
   One mechanism for every memory, right for any number of writers (the engine later too),
   with a block the library already has and tests; the core gets simpler, not a snoop port
@@ -46,9 +48,10 @@ evidence: >
   SC stores; the hart's own store to the word, the SC fails; an interrupt (the DMA's done)
   whose handler stores to the word, the SC fails. cas_check's local CAS passes through the
   monitor. A negative probe (the monitor ignoring every write): case 2's SC stores, the
-  test fails. Every Mig6 test passes (20).
+  test fails. Every Mig6 test passes (20). With Mig6Atomic removed every Mig6 program
+  prints the same, cycles included (14 programs, before and after).
 code:
   - rtl/design/mig6/mig6_pe.sv#u_local_monitor
-  - rtl/design/mig6/mig6_lsu.sv#far
+  - rtl/design/mig6/mig6_lsu.sv#excl
   - rtl/design/mig6/mig6_caches.sv#lmem_req
   - test/design/mig6/lrsc_local.cpp

@@ -129,9 +129,9 @@ package Mig6Pkg;
     // operand, the answer is the old word; it is done in front of the memory (Mig3Cpu,
     // kb rtl/lib/block/atomic/design). A CBO (Zicbom) is a write without strobes with its
     // cmo (CachePkg): the D-cache drops the line on an inval or flush and sends it on to
-    // memory (kb rtl/lib/block/cache/cbo). An LR or SC to reservable memory behind the
-    // network is exclusive (excl): done at the memory, an SC answered with its status (kb
-    // rtl/design/mig6/far_lr_sc); one to the local memory is the core's (Mig6Atomic).
+    // memory (kb rtl/lib/block/cache/cbo). An LR or SC (to reservable memory) is
+    // exclusive (excl): decided by that memory's exclusive monitor, an SC answered with its
+    // status (kb rtl/design/mig6/far_lr_sc, rtl/design/mig6/local_lr_sc).
     typedef struct packed {
         logic         valid;
         logic         we;
@@ -332,8 +332,8 @@ package Mig6Pkg;
         KIND_WFI,
         KIND_MULDIV,    // MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
         KIND_BITMANIP,  // Zbb in ComputeCoreBitmanip: SEXT.B/H, ZEXT.H, ORC.B, REV8, CLZ, CTZ, CPOP
-        KIND_LR,        // LR.W (Zalrsc): a load that reserves its word (Mig6Atomic)
-        KIND_SC,        // SC.W (Zalrsc): a store when the word is reserved, rd 0 or 1
+        KIND_LR,        // LR.W (Zalrsc): an exclusive load, it reserves at the memory
+        KIND_SC,        // SC.W (Zalrsc): an exclusive store, its status (0, 1) loaded to rd
         KIND_AMO,       // AMO*.W (Zaamo): a load with an atop, done in front of memory
         KIND_CBO,       // CBO.CLEAN, CBO.FLUSH, CBO.INVAL (Zicbom): a store of no bytes
         KIND_FP         // F on the x registers (Zfinx): the FPU, dec.fp
@@ -347,7 +347,6 @@ package Mig6Pkg;
         RD_CSR,         // old value of the CSR: CSR instructions
         RD_MULDIV,      // product or quotient/remainder: M instructions
         RD_BITMANIP,    // ComputeCoreBitmanip result: Zbb with one operand
-        RD_ATOMIC,      // Mig6Atomic: SC's 0 (stored) or 1 (failed)
         RD_FP           // the FPU: an F instruction's result (Zfinx)
     } rd_src_e;
 
@@ -455,7 +454,7 @@ package Mig6Pkg;
         alu_ctrl_t         alu;      // Mig6Alu
         br_ctrl_t          br;       // Mig6Branch
         mem_ctrl_t         mem;      // Mig6Lsu
-        atomic_ctrl_t      atomic;   // Mig6Atomic
+        atomic_ctrl_t      atomic;   // Mig6Lsu: LR, SC, an AMO's atop
         sys_ctrl_t         sys;      // Mig6Control, Mig6Csr
         muldiv_ctrl_t      muldiv;   // Mig6MulDiv
         fp_ctrl_t          fp;       // the FPU (Zfinx)

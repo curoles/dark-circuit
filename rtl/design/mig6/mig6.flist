@@ -13,7 +13,6 @@ mig6_alu.sv
 mig6_branch.sv
 mig6_branch_predict.sv
 mig6_lsu.sv
-mig6_atomic.sv
 mig6_load_data.sv
 mig6_csr.sv
 mig6_muldiv.sv

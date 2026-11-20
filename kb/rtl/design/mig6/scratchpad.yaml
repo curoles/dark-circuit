@@ -65,5 +65,5 @@ evidence: >
 code:
   - rtl/design/mig6/mig6_caches.sv#d_local
   - rtl/design/mig6/mig6_pe.sv#u_local_mux
-  - rtl/design/mig6/mig6_lsu.sv#far
+  - rtl/design/mig6/mig6_lsu.sv#excl
   - rtl/design/mig6/cfg/mig6_pma.yaml

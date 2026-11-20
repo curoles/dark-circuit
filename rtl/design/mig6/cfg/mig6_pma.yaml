@@ -22,7 +22,7 @@ regions:
     cacheable: no           # a scratchpad on the core's data port (kb rtl/design/mig6/scratchpad)
     io: no
     atomics: no             # no AtomicUnit in front of it (Mig6Pe: a_lmem_plain)
-    reservable: yes         # LR/SC: the core's own reservation (Mig6Atomic), one hart
+    reservable: yes         # LR/SC: its exclusive monitor (Mig6Pe: u_local_monitor)
 
   - name: plic
     base: 0x0C000000

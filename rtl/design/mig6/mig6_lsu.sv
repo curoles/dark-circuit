@@ -1,30 +1,28 @@
 /* Mig6 load/store unit: data memory requests of loads and stores.
  *
- * addr is the byte address rs1 + imm (Mig6Alu). A load or a store sends its request to
- * dmem in EX. A store writes there: the bytes of rs2 are repeated over the word and wstrb
+ * addr is the byte address rs1 + imm (Mig6Alu). A load or a store sends its request to dmem
+ * in EX. A store writes there: the bytes of rs2 are repeated over the word and wstrb
  * selects the bytes at addr. A load's word comes 1 or more clocks later, in MEM/WB, where
  * Mig6LoadData takes the loaded value from it. valid=0 sends nothing (Mig6Core: a load in
- * MEM/WB waits, one dmem request in flight).
- * misaligned=1 when the address is not aligned to the access size (LW, SW: 4 bytes;
- * LH, LHU, SH: 2): nothing is read or written, the instruction must not complete. The byte
- * in the word (offset: alignment, strobes) is rs1[1:0] + imm[1:0], added here: the low bits
- * of a sum depend only on the low bits of the operands, so the trap does not wait for the
- * adder and result mux of Mig6Alu; addr, the same sum, gives the word address.
- * mem describes the access for the retire trace (RVFI): bytes read or written; the word
- * read is added in MEM/WB. dmem_req also carries the byte and the size of the access, so
- * an uncached one reaches memory or a device exactly. cancel=1 (an SC that fails,
- * Mig6Atomic) does not do the store: no request, no write in mem; a misaligned SC still
- * traps. An AMO is a word load with its atop (dec.atomic.atop) and its operand rs2 in
- * wdata (AMOAND: ~rs2, a clear); mem has its read and its write, mem.wdata 0 (the new
- * word is made in front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom)
- * is a store of no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache
- * block, so it is never misaligned; mem has its address and no masks (kb
- * rtl/design/mig3/cbo). An LR or SC to a reservable region (Mig6PmaPkg: the local
- * memory, the shared memory) is far: an exclusive request (dmem_req.excl), decided by the
- * exclusive monitor at that memory, where every writer's writes pass (kb
- * rtl/design/mig6/far_lr_sc, rtl/design/mig6/local_lr_sc); the SC is not cancelled here
- * and its answer, the status, is its rd (MEM/WB waits for it as for a load's word); mem
- * shows its write as asked (whether it was done comes back as rd).
+ * MEM/WB waits, one dmem request in flight). misaligned=1 when the address is not aligned
+ * to the access size (LW, SW: 4 bytes; LH, LHU, SH: 2): nothing is read or written, the
+ * instruction must not complete. The byte in the word (offset: alignment, strobes) is
+ * rs1[1:0] + imm[1:0], added here: the low bits of a sum depend only on the low bits of the
+ * operands, so the trap does not wait for the adder and result mux of Mig6Alu; addr, the
+ * same sum, gives the word address. mem describes the access for the retire trace (RVFI):
+ * bytes read or written; the word read is added in MEM/WB. dmem_req also carries the byte
+ * and the size of the access, so an uncached one reaches memory or a device exactly. An AMO
+ * is a word load with its atop (dec.atomic.atop) and its operand rs2 in wdata (AMOAND:
+ * ~rs2, a clear); mem has its read and its write, mem.wdata 0 (the new word is made in
+ * front of the memory, kb rtl/design/mig3/amo). A CBO (dec.mem.cmo, Zicbom) is a store of
+ * no bytes (wstrb 0) with its cmo, to its word (offset 0): it names a cache block, so it is
+ * never misaligned; mem has its address and no masks (kb rtl/design/mig3/cbo). An LR or SC
+ * to a reservable region (Mig6PmaPkg: the local memory, the shared memory) is an exclusive
+ * request (dmem_req.excl), decided by the exclusive monitor at that memory, where every
+ * writer's writes pass (kb rtl/design/mig6/far_lr_sc, rtl/design/mig6/local_lr_sc); an SC's
+ * answer, the status, is its rd (MEM/WB waits for it as for a load's word); mem shows its
+ * write as asked (whether it was done comes back as rd). One outside a reservable region
+ * goes out plain (Mig6Core: a_lr_sc_reservable stops the run; later an access fault).
  *
  * Mig6Core instantiates it in EX, for the instruction in EX. In: addr is the result of
  * Mig6Alu, rs1_data and rs2_data come from the ID/EX register. Out: dmem_req goes straight out of
@@ -46,10 +44,8 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     input  word_t            addr,       // rs1 + imm, from Mig6Alu
     /* verilator lint_on UNUSEDSIGNAL */
     input  word_t            rs2_data,   // store data
-    input  wire              cancel,     // the store is not done: an SC that fails
     output dmem_req_t       dmem_req,
     output wire              misaligned, // address not aligned to the access size: a fault
-    output wire              far,        // an LR or SC done at the memory: exclusive
     output lsu_mem_t         mem         // access for the retire trace
 );
     // Parts of the address and of the store data.
@@ -65,8 +61,8 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     assign rs2_h  = rs2_data[15:0];
 
     logic  load;
-    logic  store;       // a store, also one that is cancelled (it may be misaligned)
-    logic  write;       // a store that writes: not cancelled
+    logic  store;       // a store (it may be misaligned)
+    logic  excl;        // an LR or SC: decided by the memory's exclusive monitor
     logic  amo;         // an AMO: a load with an atop
     logic  clear;       // AMOAND: the operand is ~rs2
     logic  cbo;         // a CBO: a store of no bytes, never misaligned
@@ -81,7 +77,6 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
 
     assign load  = valid && dec.mem.read;
     assign store = valid && dec.mem.write;
-    assign write = store && !cancel;
     assign amo   = load && AtomicPkg::is_atomic(dec.atomic.atop);
     assign clear = dec.atomic.atop == AtomicPkg::ATOP_LD_CLR;
     // @kb: rtl/design/mig3/cbo
@@ -95,7 +90,7 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     Mig6PmaPkg::pma_t pma;
     /* verilator lint_on UNUSEDSIGNAL */
     assign pma = Mig6PmaPkg::pma_of(addr);
-    assign far = (dec.atomic.lr || dec.atomic.sc) && pma.reservable;
+    assign excl = (dec.atomic.lr || dec.atomic.sc) && pma.reservable;
 
     always_comb
         case (dec.funct3)
@@ -133,8 +128,8 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
             default: wr_data = rs2_data;
         endcase
 
-    assign dmem_req.valid = (load || write) && !misaligned;
-    assign dmem_req.we    = write;
+    assign dmem_req.valid = (load || store) && !misaligned;
+    assign dmem_req.we    = store;
     assign dmem_req.addr   = addr[WIDTH-1:DADDR_START];
     assign dmem_req.offset = cbo ? '0 : offset;
     assign dmem_req.size   = size;
@@ -142,12 +137,12 @@ module Mig6Lsu import Mig6Pkg::*, RiscvPkg::*; (
     assign dmem_req.wstrb = strb;
     assign dmem_req.atop  = dec.atomic.atop;
     assign dmem_req.cmo   = dec.mem.cmo;
-    assign dmem_req.excl  = far;
+    assign dmem_req.excl  = excl;
 
     // Access for the retire trace, 0 for other instructions and misaligned addresses.
     assign mem.addr  = (load || store) ? {addr[WIDTH-1:DADDR_START], {DADDR_START{1'b0}}} : '0;
     assign mem.rmask = (load && !misaligned) ? strb : '0;
-    assign mem.wmask = ((write || amo) && !misaligned) ? strb : '0;
-    assign mem.wdata = (write && !misaligned && !cbo) ? wr_data : '0;
+    assign mem.wmask = ((store || amo) && !misaligned) ? strb : '0;
+    assign mem.wdata = (store && !misaligned && !cbo) ? wr_data : '0;
 
 endmodule

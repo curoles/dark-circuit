@@ -35,8 +35,8 @@
  * (the result of an F instruction not there yet) keep the instruction in EX: ID and IF
  * hold.
  * Interlock: results are forwarded to ID (Mig6Forward), except load data, which comes
- * in MEM/WB, and an SC's result, which goes there (Mig6Atomic): the instruction in ID
- * waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
+ * in MEM/WB (an SC's status too: it comes from memory as loaded data): the instruction in
+ * ID waits one cycle while it reads the rd of a load or SC in EX (load-use); EX gets a
  * bubble meanwhile. Whether it reads rs1 or rs2 comes from its opcode alone (hz_rs1,
  * hz_rs2 of Mig6Decode): an immediate in an rs field may cost a needless bubble, a read
  * is never missed.
@@ -345,8 +345,7 @@ module Mig6Control import Mig6Pkg::*, RiscvPkg::*; (
     logic id_reads_ex_rd;   // the instruction in ID reads the register EX writes
 
     assign ex_writes      = ex_fetch.valid && ex_dec.rd_we && ex_dec.rd != '0;
-    assign ex_load        = ex_writes &&
-                            (ex_dec.rd_src == RD_LOAD || ex_dec.rd_src == RD_ATOMIC);
+    assign ex_load        = ex_writes && ex_dec.rd_src == RD_LOAD;
     assign id_reads_ex_rd = (id_dec.hz_rs1 && id_dec.rs1 == ex_dec.rd) ||
                             (id_dec.hz_rs2 && id_dec.rs2 == ex_dec.rd);
     assign id_load_use    = ex_load && id_reads_ex_rd;

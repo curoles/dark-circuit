@@ -22,7 +22,7 @@
  * - Mig6Regs: the register file, also for the debug port;
  * - Mig6Forward: results not yet in the register file, for ID;
  * - Mig6Pipe: the ID/EX and EX/MEM registers;
- * - Mig6Alu, Mig6Branch, Mig6Lsu (D-cache requests), Mig6Atomic (the reservation of LR/SC),
+ * - Mig6Alu, Mig6Branch, Mig6Lsu (D-cache requests; LR/SC exclusive, decided at memory),
  *   Mig6Csr, Mig6MulDiv, Mig6Fpu (F on the x registers: Zfinx) and the library block
  *   ComputeCoreBitmanip (Zbb with one
  *   operand): the parts of EX;
@@ -146,9 +146,6 @@ module Mig6Core import Mig6Pkg::*; #(
     RiscvPkg::funct3_t ex_frm;      // fcsr.frm: the FPU's mode for FRM_DYN
     logic         ex_lsu_valid;     // the load or store in EX may send its request
     logic         ex_dmem_wait;     // the D-cache does not take the request of EX
-    logic         ex_sc_cancel;     // the SC in EX fails: no store (Mig6Atomic)
-    logic         ex_far;           // the LR or SC in EX is done at the memory (Mig6Lsu)
-    word_t        ex_atomic_rd_data; // SC: 0 stored, 1 failed
     word_t        ex_bitmanip_result;   // Zbb with one operand (ComputeCoreBitmanip)
     logic         ex_done;          // instruction in EX completes: CSR write and minstret
                                     // now, rd and retire in MEM/WB
@@ -277,21 +274,16 @@ module Mig6Core import Mig6Pkg::*; #(
 
     Mig6Lsu u_mig6_lsu(
         .valid(ex_lsu_valid), .dec(ex_dec), .rs1_data(ex_rs1_data), .addr(ex_alu_result),
-        .rs2_data(ex_rs2_data), .cancel(ex_sc_cancel), .dmem_req(dcache_req),
-        .misaligned(ex_lsu_misaligned), .far(ex_far), .mem(ex_lsu_mem));
-
-    // LR/SC: the reservation; a failing SC cancels its store in Mig6Lsu. A far LR or SC is
-    // the memory's (kb rtl/design/mig6/far_lr_sc).
-    // @kb: rtl/design/mig3/lr_sc
-    Mig6Atomic u_atomic(
-        .clk, .rst_n, .valid(ex_fetch.valid), .done(ex_done), .far(ex_far), .dec(ex_dec),
-        .rs1_data(ex_rs1_data), .trap(ex_trap), .cancel(ex_sc_cancel),
-        .rd_data(ex_atomic_rd_data));
+        .rs2_data(ex_rs2_data), .dmem_req(dcache_req), .misaligned(ex_lsu_misaligned),
+        .mem(ex_lsu_mem));
 
     // An instruction an interrupt is taken on sends nothing to the D-cache.
     `DC_ASSERT(a_irq_no_request, !ex_irq || !dcache_req.valid)
-    // A failing SC sends nothing to the D-cache.
-    `DC_ASSERT(a_sc_cancel_no_req, !ex_sc_cancel || !dcache_req.valid)
+    // LR/SC are decided by the exclusive monitor of a reservable memory (kb
+    // rtl/design/mig6/far_lr_sc, rtl/design/mig6/local_lr_sc): one outside a reservable
+    // region (not exclusive) stops the run (later an access fault).
+    `DC_ASSERT(a_lr_sc_reservable, !(dcache_req.valid &&
+                                     (ex_dec.atomic.lr || ex_dec.atomic.sc) && !dcache_req.excl))
 
     // Mig6Lsu adds the byte offset of its own; it is the low bits of the ALU's address.
     `DC_ASSERT(a_lsu_offset, !(ex_fetch.valid && (ex_dec.mem.read || ex_dec.mem.write)) ||
@@ -345,11 +337,9 @@ module Mig6Core import Mig6Pkg::*; #(
             default:     ex_rd_data = ex_alu_result;    // loads: MEM/WB replaces it
         endcase
 
-    // rd value of the retire entry: an SC's result goes to MEM/WB only, not into EX's
-    // forwarding (ex_rd_data): the reservation compare stays off that path, and
-    // Mig6Control holds an instruction that reads it, as after a load.
-    // @kb: rtl/design/mig3/lr_sc
-    assign ex_rd_wdata = ex_dec.rd_src == RD_ATOMIC ? ex_atomic_rd_data : ex_rd_data;
+    // rd value of the retire entry: EX's result (a load's word, an SC's status come in
+    // MEM/WB).
+    assign ex_rd_wdata = ex_rd_data;
 
     // Retire entry, RVFI: an instruction that completes or traps; fields it does not
     // use are 0. MEM/WB adds order, bubble and the load data.
@@ -386,13 +376,12 @@ module Mig6Core import Mig6Pkg::*; #(
                                 ex_fpu_stall || ex_wfi_wait ||
                                 ex_dmem_wait || mem_wait)
 
-    // load: a load that sent its read (a misaligned one traps and reads nothing), or a far
-    // SC (its answer, the status, is its rd); MEM/WB waits for its word.
+    // load: a load that sent its read (a misaligned one traps and reads nothing), or an SC
+    // (its answer, the status, is its rd: rd_src RD_LOAD); MEM/WB waits for its word.
     assign ex_mem_d = '{valid:  ex_retire.valid,
                         bubble: ex_bubble,
                         ret:    ex_retire,
-                        load:   (ex_dec.rd_src == RD_LOAD || (ex_far && ex_dec.atomic.sc))
-                                && !ex_trap.valid,
+                        load:   ex_dec.rd_src == RD_LOAD && !ex_trap.valid,
                         funct3: ex_dec.funct3,
                         offset: ex_load_offset};
 

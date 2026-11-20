@@ -4,11 +4,11 @@
 // rtl/design/mig6/far_lr_sc) and to another N_INCS times with amoadd, then arrives at a
 // barrier (mig6::ShmemAmoAddBarrier). After it both counters must be N_HARTS * N_INCS: an
 // SC that succeeded on a word another PE wrote since its LR would lose an increment. A
-// compare-and-swap on a stack variable (the local memory: the core's own reservation,
-// Mig6Atomic) must succeed with the right expected value and fail with a wrong one. Prints
-// the hart's retries (a CAS that found the counter changed by another hart) and exits with
-// 0; prints what differs and exits with 1, or with 2 when the barrier's wait (cycle CSR)
-// ends without every hart.
+// compare-and-swap on a stack variable (the local memory: its exclusive monitor, kb
+// rtl/design/mig6/local_lr_sc) must succeed with the right expected value and fail with a
+// wrong one. Prints the hart's retries (a CAS that found the counter changed by another
+// hart) and exits with 0; prints what differs and exits with 1, or with 2 when the
+// barrier's wait (cycle CSR) ends without every hart.
 //
 // @author    Igor Lesik
 // @copyright 2026 Igor Lesik, MIT License

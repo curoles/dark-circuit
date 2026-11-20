@@ -65,7 +65,7 @@ code:
   - rtl/design/mig6/mig6_noc_pkg.sv#REQ_SC
   - rtl/design/mig6/mig6_noc_pkg.sv#SC_FAIL
   - test/design/mig6/tb/tb_mig6_noc.sv#lrsc_fails
-  - rtl/design/mig6/mig6_lsu.sv#far
+  - rtl/design/mig6/mig6_lsu.sv#excl
   - test/design/mig6/cas_check.cpp#cas_add
 relies_on:
   - rtl/lib/block/answered_writes

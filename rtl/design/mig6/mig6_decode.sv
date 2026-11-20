@@ -7,7 +7,8 @@
  * computes the controls of every part, grouped in decoded_t (the table below); parts
  * use funct3 and alt only to choose an operation within their part. The immediates come from
  * RiscvPkg (imm_*_of), sign-extended to 32 bits. LR.W and SC.W (Zalrsc) are a load and
- * a store whose address is rs1 (imm 0), with dec.atomic for Mig6Atomic; an AMO (Zaamo)
+ * a store whose address is rs1 (imm 0), exclusive (dec.atomic; Mig6Lsu): an SC's status
+ * comes back as loaded data (rd_src RD_LOAD); an AMO (Zaamo)
  * is a load of rs1 to rd with its operation in dec.atomic.atop, done in front of the
  * memory (kb rtl/design/mig3/amo); a CBO (Zicbom: cbo.clean, cbo.flush, cbo.inval) a store
  * of rs1 (imm 0) that writes no byte, its operation in dec.mem.cmo (kb
@@ -330,7 +331,7 @@ module Mig6Decode import Mig6Pkg::*, RiscvPkg::*; (
                 dec.atomic.lr = 1'b1;
             end
             KIND_SC: begin
-                dec.rd_we = 1'b1;  dec.rd_src = RD_ATOMIC;
+                dec.rd_we = 1'b1;  dec.rd_src = RD_LOAD;     // its status, from memory
                 dec.uses_rs1 = 1'b1;  dec.uses_rs2 = 1'b1;  dec.mem.write = 1'b1;
                 dec.atomic.sc = 1'b1;
             end

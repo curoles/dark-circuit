@@ -239,9 +239,11 @@ test runs five cases between an `lr.w` and an `sc.w` of a word, on all four PEs 
 In a scratch copy where the monitor ignored writes, the second case's SC stored over the
 DMA's value and the test failed, as it should.
 
-The last step is the one section 2 pointed at: the reservation logic leaves the core.
-Nothing takes the core's own reservation any more, so it goes, with the cancelled store;
-an SC's result already comes back like a load's.
+The last step was the one section 2 pointed at: the reservation logic left the core.
+Nothing took the core's own reservation any more, so it went, with the cancelled store;
+an SC's result comes back like a load's, from the memory that decided it. Every Mig6
+program printed the same afterwards, cycles included: the core is smaller and nothing
+got slower.
 
 The knowledge base has the reasoning behind each step, with the options not taken:
 [far LR/SC in Mig6](../kb/rtl/design/mig6/far_lr_sc.yaml),
