@@ -1,0 +1,43 @@
+type: decision
+title: Mig6's layer test with its data fetched by DMA, fetch and compute timed apart
+date: 2026-11-20
+question: >
+  fc_layer (kb test/design/mig6/fc_layer) makes the layer's data in every PE's local memory,
+  so it measures the split, not the moving of data. With a DMA in each PE (kb
+  rtl/design/mig6/dma) the data can start in the shared memory. How is the layer measured
+  with its data fetched, so that the two runs compare?
+decision: >
+  A second program, fc_layer_dma.cpp, with fc_layer's data and rounds (fc_data.hpp, shared
+  by both) and its split (rows 4 * mhartid to + 3). Hart 0 makes the data, computes the
+  reference and one PE's cycles, and stores the input, the weights and the biases to the
+  shared memory in their own layout (no layout made for the PEs); every hart zeroes its
+  local copy of its part, so only the DMA can bring it back; a barrier; every hart fetches
+  its part with three transfers, polled (the input, its 4 rows, its 4 biases), computes,
+  stores its 4 outputs as one word, a barrier; hart 0 checks all 16 bit for bit. Every hart
+  prints its fetch's and its compute's cycles; hart 0 four PEs' from barrier to barrier.
+why: >
+  The same data, split and checks as fc_layer, so the difference is the fetch alone. The
+  zeroed copy makes a wrong or missing transfer a wrong output (hart 0 made the data, its
+  local copy would be right without the DMA). Polled transfers and the DMA as it is: the
+  baseline the DMA's improvements are measured against (measure first, the user's rule).
+rejected:
+  - choice: A layout made for the PEs (each PE's input, rows and biases together, one
+      transfer)
+    why_not: Copies of the input in the shared memory and a layout the producer must know;
+      setup per transfer is small (the user's point), so three transfers cost little.
+  - choice: The fetch overlapped with compute (double buffering)
+    why_not: Not yet; first the plain cost, then the improvements (more reads in flight,
+      overlap) against it.
+relies_on:
+  - test/design/mig6/fc_layer
+  - rtl/design/mig6/dma
+evidence: >
+  2026-11-20, Verilator, rv32ima: all 16 outputs equal in all three rounds. Round 1: one PE
+  9 234 cycles; a PE's fetch of 336 bytes (84 words) 1 312 cycles for hart 3 (one router
+  from the shared memory), 1 952 for harts 1 and 2 (two), 2 667 for hart 0 (three); its
+  compute 2 449 to 2 463; four PEs 5 212 (the slowest fetch, its compute, the store and the
+  barrier), 1.77 times one PE, against fc_layer's 2 541 and 3.63 with the data local. The
+  whole run 102 720 cycles.
+code:
+  - test/design/mig6/fc_layer_dma.cpp
+  - test/design/mig6/fc_data.hpp

@@ -133,6 +133,13 @@ mig6_program_test(fc_layer SOURCES fc_layer.cpp ${SW}/kernels/int8_fc/int8_kerne
 # hart at once (320 bytes each, a PE's part of the layer).
 mig6_program_test(dma_check SOURCES dma_check.cpp ARGS +max_cycles=400000)
 
+# The int8 layer of fc_layer with its data fetched by each PE's DMA from the shared memory:
+# fetch and compute timed apart, the outputs compared with hart 0's whole-layer reference.
+# @kb: test/design/mig6/fc_layer_dma
+mig6_program_test(fc_layer_dma SOURCES fc_layer_dma.cpp ${SW}/kernels/int8_fc/int8_kernel_ref.c
+                                       ${SW}/kernels/int8_fc/int8_kernel_ref_rows.c
+                  FLAGS -I${SW}/kernels/int8_fc ARGS +max_cycles=400000)
+
 # Every PE's PLIC (sw/riscv/drivers/plic.h) with its DMA's done as the interrupt: the same
 # transfer polled, by interrupt while main spins, by interrupt while main waits in WFI;
 # the cycles from run to the handler and back to main.

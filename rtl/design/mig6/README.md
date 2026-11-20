@@ -347,8 +347,11 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       in each PE, the DMA's done as an interrupt (done 2026-11-20: kb rtl/design/mig6/plic;
       test design_mig6_irq_check, 64 bytes local to local: done seen polled 108 cycles after
       run, the handler entered at 111, main back at 182: the interrupt comes as fast as
-      polling sees done, the handler's claim, clear and complete cost about 70). Then: the
-      layer with its weights fetched by DMA, fetch and compute timed; local LR/SC by a
+      polling sees done, the handler's claim, clear and complete cost about 70). The layer
+      with its data fetched by DMA (done 2026-11-20: kb test/design/mig6/fc_layer_dma; four
+      PEs 5 212 cycles against 2 541 with the data local, 1.77 times one PE instead of 3.63;
+      a PE's fetch of 336 bytes 1 312 to 2 667 cycles by its distance, its compute 2 450:
+      the slowest fetch adds to the layer). Then: local LR/SC by a
       monitor at the local memory's port, where the core's and the DMA's writes meet (until
       then a DMA write to the local memory does not end the core's reservation); then what
       the numbers ask (more reads in flight, bursts on the network).
