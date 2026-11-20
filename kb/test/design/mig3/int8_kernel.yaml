@@ -31,7 +31,7 @@ relies_on:
   - rtl/design/mig3/p_profile
   - rtl/design/mig3/packed_mul
 code:
-  - test/design/mig3/int8_kernel_p.c
+  - sw/riscv/kernels/int8_fc/int8_kernel_p.c
   - test/design/mig3/int8_kernel.c
   - tools/check_insns.py
 evidence: >

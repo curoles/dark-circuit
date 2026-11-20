@@ -2,22 +2,14 @@
  * multiply-adds of bytes per PM4ADDA.B; the requantization is int8_kernel_ref.c's, compiled
  * without P. The loops are plain C here, so clang may use any P instruction it likes in
  * them; the test design_mig3_int8_insns lists the instructions of this file and fails on one
- * that Mig3 does not decode.
+ * that Mig3 does not decode. int8_fc_p_rows is in int8_kernel_p_rows.c (a file of its own:
+ * Mig3's binary, and its measured cycles, stay as they were).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
-#include <riscv_packed_simd.h>
-
 #include "int8_kernel.h"
-
-// The intrinsic of P-ext-intrinsics.adoc, which clang-23's riscv_packed_simd.h does not have
-// yet: rd + the four byte products of rs1 and rs2. A clang that has it fails on this
-// definition; then it goes.
-static inline int32_t __riscv_pm4adda_i8x4(int32_t rd, int8x4_t rs1, int8x4_t rs2) {
-    __asm__("pm4adda.b %0, %1, %2" : "+r"(rd) : "r"((uint32_t)rs1), "r"((uint32_t)rs2));
-    return rd;
-}
+#include "int8_kernel_p.h"
 
 void int8_fc_p(const int8_t *x, const int8_t *w, const int32_t *bias, const int8_quant_t *q,
                int8_t *y) {

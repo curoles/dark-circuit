@@ -1,6 +1,7 @@
-/* The int8 kernel on TbMig3 (int8_kernel.h), judged by the exit status: the layer computed by
- * the plain-C reference (int8_kernel_ref.c, compiled without P) and by the P version
- * (int8_kernel_p.c, compiled with P), on the same random inputs, weights and biases; every
+/* The int8 kernel on TbMig3 (sw/riscv/kernels/int8_fc/int8_kernel.h), judged by the exit
+ * status: the layer computed by the plain-C reference (int8_kernel_ref.c, compiled without P)
+ * and by the P version (int8_kernel_p.c, compiled with P), on the same random inputs, weights
+ * and biases; every
  * output must agree. Three rounds, each with its data and quantization (one with a ReLU: the
  * activation's minimum at the zero point). The clock cycles of each version (rdcycle) are
  * printed (semihosting), round by round. Exit 0 when all outputs agree, else 1.

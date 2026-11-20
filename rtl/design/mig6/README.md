@@ -14,7 +14,7 @@ experiments. It gives a home to library blocks that have none yet: the network o
 ## The first target
 
 One workload defines the first milestone: the int8 fully connected layer of the int8 kernel
-(test/design/mig3/int8_kernel*, publications/2026-11-int8-kernel.md), 64 inputs and 16
+(sw/riscv/kernels/int8_fc, publications/2026-11-int8-kernel.md), 64 inputs and 16
 outputs, run on four PEs at once, every output compared with the plain-C reference, the
 cycles compared with one Mig3: 9 220 cycles in plain C, 2 560 with P.
 

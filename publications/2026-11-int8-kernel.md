@@ -145,8 +145,9 @@ Cycles from `rdcycle` on Mig3 in Verilator, three rounds: plain C 9 214 to 9 322
 to 2 565. Ubuntu clang 23.1.6, `-O2`, `-march=rv32im_zba_zbb` for the plain files and
 `rv32im_zba_zbb_p0p21` for the P file; the breakdown in section 4 is counted from clang's
 assembly output, not measured cycle by cycle. The kernel is
-`test/design/mig3/int8_kernel.h`, `int8_kernel.c` (driver), `int8_kernel_ref.c` (reference
-and requantization) and `int8_kernel_p.c`; the instruction check is
+`sw/riscv/kernels/int8_fc/` (`int8_kernel.h`, `int8_kernel_ref.c`, the reference and
+requantization, and `int8_kernel_p.c`) and `test/design/mig3/int8_kernel.c` (the driver);
+the instruction check is
 `tools/check_insns.py`, run as the test `design_mig3_int8_insns`. The decisions are in
 `kb/test/design/mig3/int8_kernel.yaml`, and the P subset and why it stopped in
 `rtl/design/mig3/p_profile.md`.

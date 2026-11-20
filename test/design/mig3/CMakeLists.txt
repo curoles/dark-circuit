@@ -214,16 +214,18 @@ if(DARK_CIRCUIT_RISCV)
                           FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
         mig3_program_test(pk_pli SOURCES pk_pli.S ARCH rv32i${DC_RISCV_P_MARCH}
                           FLAGS ${DC_RISCV_P_FLAGS} ARGS +expect_regs)
-        # The int8 kernel (kb test/design/mig3/int8_kernel): only int8_kernel_p.c compiled
-        # with P, the reference and the rest without; outputs compared, cycles printed.
+        # The int8 kernel (kb test/design/mig3/int8_kernel; the kernel in
+        # sw/riscv/kernels/int8_fc): only int8_kernel_p.c compiled with P, the reference and
+        # the rest without; outputs compared, cycles printed.
         # design_mig3_int8_insns lists the P object's instructions and fails on one that
         # Mig3 does not decode (tools/check_insns.py).
-        mig3_program_test(int8_kernel SOURCES int8_kernel_p.c
+        mig3_program_test(int8_kernel SOURCES ${SW}/kernels/int8_fc/int8_kernel_p.c
                           ARCH rv32im_zba_zbb${DC_RISCV_P_MARCH}
                           ALT_ARCH rv32im_zba_zbb
                           ALT_SOURCES ${SW}/crt0.S ${SW}/semihosting/riscv_semihosting.c
-                                      int8_kernel.c int8_kernel_ref.c
-                          FLAGS -O2 -ffreestanding -I${SW} ${DC_RISCV_P_FLAGS})
+                                      int8_kernel.c ${SW}/kernels/int8_fc/int8_kernel_ref.c
+                          FLAGS -O2 -ffreestanding -I${SW} -I${SW}/kernels/int8_fc
+                                ${DC_RISCV_P_FLAGS})
         if(PYTHON3_BIN)
             set(int8_p_obj
                 ${CMAKE_CURRENT_BINARY_DIR}/design_mig3_int8_kernel.objs/0_int8_kernel_p.c.o)
