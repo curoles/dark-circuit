@@ -15,7 +15,12 @@
  * the command is taken: cmd_ready is 1 while fewer than DEPTH transactions are in flight and
  * the read channel is ready. The transaction waits in a queue (A: its destination's beat,
  * offset, rotation, n, ID); the reads' answers come in order into another (D), each in the
- * place its read reserved (answers have no ready). The oldest answer is written as soon as
+ * place its read reserved. Answers have no ready, so the mover must always take one: the
+ * place is reserved before the read goes out, and freed only by the write. Were it the
+ * other way (an answer that may wait for room, room freed by a write that waits for the
+ * write channel), a full mover would hold the answer path: the network's answers or a
+ * ReqDemux's owner behind it would stop, and the target the write waits for might be
+ * waiting for those answers: a deadlock. The oldest answer is written as soon as
  * it is there: rotated so that byte src % BEAT lands on byte dst % BEAT, to the
  * destination's beat with the strobes of its n bytes. A transaction retires when its write
  * is taken, or, with WR_ACK, when the write's answer comes (wr_req_rsp; writes answered in
@@ -24,9 +29,10 @@
  * retire, with done_id and done_n (the requester advances its addresses by n and takes n off
  * its bytes left; done has no ready: it is always taken).
  *
- * Reads run ahead of writes by up to DEPTH transactions, so a transfer whose source and
- * destination overlap within that distance reads bytes before their write lands: such a
- * transfer is undefined (with DEPTH 1 each read waits for the write before it).
+ * Reads run ahead of writes by up to DEPTH transactions, so a transfer whose destination
+ * starts after its source by less than DEPTH beats (DEPTH * BEAT bytes) reads bytes before
+ * their write lands: such a transfer is undefined (with DEPTH 1 each read waits for the
+ * write before it).
  *
  *   cmd --take: n, rotation--> READ src beat (rd_req) --> A
  *   rd_rsp --> D;  A, D heads --rotate--> WRITE dst beat, strobes (wr_req) --> retire

@@ -1,0 +1,72 @@
+type: decision
+title: DmaMover keeps up to DEPTH transactions in flight on a read and a write channel
+date: 2026-11-20
+question: >
+  Mig6's DMA fetches its PE's part of the int8 layer at one word a round trip: traced cycle by
+  cycle, 31.3 cycles a word for the PE three routers from the shared memory, 84 % of it the
+  request and the answer crossing the network (about 4.2 cycles a router each way), the
+  memory 1 cycle, the mover's own gap 3; the memory and the links mostly idle; four PEs at
+  once barely slower. The layer with its data fetched took 5 212 cycles on four PEs against
+  2 541 with the data local (1.77 times one PE). The hardware waits on latency one word at a
+  time. How does the library's DMA keep several reads in flight, without cornering later
+  designs?
+decision: >
+  DmaMover, replaced (user's choice (b), 2026-11-20; behave and struct versions, user's
+  choice (a)): a read channel and a write channel of the library's kind, as AXI splits them
+  and as Synopsys DW_axi_dmac and PULP's iDMA do. A command's read goes out in the clock it
+  is taken while fewer than DEPTH transactions are in flight; the transaction waits in a
+  queue (A), the answers come in order into another (D), each in the place its read
+  reserved (answers have no ready, so no deadlock); the oldest answer is written as soon as
+  it is there, rotated at the write. A transaction retires when its write is taken, or with
+  WR_ACK when the write's answer comes (queue R): then its bytes are surely at the
+  destination, which a write over a network or to several destinations needs (the
+  library's answered writes, kb rtl/lib/block/answered_writes). Overlapping source and
+  destination within the read-ahead are undefined. DmaEngine passes the two channels, DEPTH
+  and WR_ACK; DmaSifive joins the channels into its one memory channel with a ReqMux (the
+  write first), so Mig3Cpu and Mig6Pe are wired as before. With DEPTH 1 a transaction
+  waits for the one before, as the old mover; the old mover's 3-cycle gap a transaction is
+  gone, so Mig3's DMA programs run a little faster. Next (agreed 2026-11-20): DmaChannel
+  keeps an issue pointer apart from its completion counters, so one channel has DEPTH in
+  flight (the Exec registers stay completion-based; a stop drains); DmaSifive's split
+  channels and WR_ACK for Mig6Pe.
+why: >
+  The measured problem is latency: with K reads in flight a word costs about a round trip
+  divided by K, until a narrower part of the path takes over. A pipelined mover needs its
+  writes off its reads' channel: on one channel through Mig6Pe's ReqDemux, a write to the
+  local memory would wait for every read the network owes. The four choices that keep it
+  from cornering later designs (user, 2026-11-20): done after write answers (WR_ACK),
+  completion-based registers with a separate issue pointer, overlap undefined, one mover for
+  all (Mig3's cycles change, its bytes do not).
+rejected:
+  - choice: Keep one channel; ReqDemux lets a posted write pass while another target owes
+      answers
+    why_not: Reads and writes would share one request a clock (2 cycles a word at best), and
+      ReqDemux's ordering rule, which other users rely on, would bend.
+  - choice: The old mover kept beside the new one for Mig3 (two movers)
+    why_not: A permanent maintenance cost for Mig3's cycle counts (user's choice (b)).
+  - choice: The new mover as one file of parts, no behave version
+    why_not: The behave version is where the design is read; the struct is checked against
+      it by the same test (user's choice (a)).
+  - choice: Faster routers, or software double buffering, first
+    why_not: Routers alone still move one word a round trip; double buffering changes the
+      program, not the hardware, and the benchmark stays fixed while the hardware improves.
+relies_on:
+  - rtl/lib/block/dma/design
+  - rtl/lib/block/answered_writes
+  - rtl/design/mig6/dma
+evidence: >
+  2026-11-20: test/block/dma/dma_mover (behave and struct, Verilator and Icarus): random
+  transfers, commands back to back, every byte against a reference, dones in order with
+  their ID and n, with WR_ACK none before its write's answer; 32, 64 and 128-bit beats with
+  DEPTH 1 (overlapping transfers too), 32 with DEPTH 4 and WR_ACK, 64 with DEPTH 8; DEPTH
+  transactions in flight and a read and a write in one clock covered. 8 mutants (kb
+  test/block/dma/dma_mover/mutants). DmaEngine's test on the split channels (a DEPTH 4,
+  WR_ACK configuration added) and DmaSifive's pass on both simulators. Mig3's 149 tests
+  pass. Mig6's 20 pass; with DEPTH 1 its DMA costs 2 cycles less a word: dma_check 320 bytes
+  2 536 to 2 360 cycles for the far PE, 1 122 to 1 026 for the near one, local to local 424
+  to 344.
+code:
+  - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+  - rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+  - rtl/lib/block/dma/dma_engine/dma_engine.sv
+  - rtl/lib/block/dma/dma_sifive/dma_sifive.sv#u_req_mux

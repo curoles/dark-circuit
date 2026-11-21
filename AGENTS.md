@@ -189,6 +189,11 @@ This file has the rules that are not in README.md.
   of the memory map, accessed by loads and stores through the register port (`RegPortTarget`,
   `StrbReg`); for devices and engines that run on their own (PLIC, Timer, UART, DMA). Plain
   "registers" in a device's own description means these.
+- **Channel** alone means a request channel of the library: a valid/ready path of requests,
+  their answers back in order (the mover's read channel and write channel are two).
+  **DMA channel** is a DMA's job slot: one transfer at a time, its own registers (the PDMA's
+  Next and Exec registers, run, done); DmaSifive has N_CHANNELS of them sharing one mover.
+  In DMA code and comments say "DMA channel" for the slot when both could be meant.
 
 ## Library idioms
 

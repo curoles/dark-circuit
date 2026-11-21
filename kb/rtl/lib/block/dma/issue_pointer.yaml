@@ -1,0 +1,63 @@
+type: decision
+title: A DMA channel keeps an issue pointer apart from its completion counters
+date: 2026-11-20
+question: >
+  After the pipelined mover (kb rtl/lib/block/dma/pipelined_mover), DmaMover holds up to
+  DEPTH transactions, but a DMA channel offered its next transaction only after the done of
+  the one before (DmaChannel: cmd_valid = busy && !waiting; its addresses and bytes left
+  advanced only at mv_done), so one DMA channel, Mig6's, still had one in flight: one word a
+  round trip. How does one DMA channel fill the mover's depth, with the PDMA's Exec
+  registers and stop staying right?
+decision: >
+  DmaChannel keeps two sets of counters (user's choice 2, 2026-11-20): the issue pointer
+  (iss_src, iss_dst, iss_left), the next transaction to send, offered on new ports cmd_src,
+  cmd_dst, cmd_left and advanced at the take by the transaction's n, computed in the DMA
+  channel with the mover's formula (the beat from N_WIDTH); and the completion counters
+  (cur_src, cur_dst, left: the Exec registers), advanced at each done. The bytes in flight
+  are left - iss_left. done when the completion counters reach 0. A stop sends no new
+  command, but an offer made in an earlier clock stays until taken (the library's channels
+  never withdraw an offer; found by quizzing a fresh agent on the plan) and the transactions
+  in flight finish; the DMA channel is idle when none is in flight and none offered, the
+  Exec registers exact. DmaEngine builds the commands from the issue pointers. DmaSifiveSplit
+  (new) is the PDMA device with the mover's read and write channels apart and WR_ACK, for a
+  design whose reads and writes go to different targets (Mig6Pe); DmaSifive is
+  DmaSifiveSplit with the two channels joined by a ReqMux, its ports as before (Mig3Cpu).
+  dma.h documents the stop (run reads 0 at once, the drain, a run during it waits),
+  completion-based Exec registers, overlap within DEPTH beats undefined, and how to resume.
+  Open: the PDMA map has no busy bit, so software cannot read when a stopped DMA channel has
+  drained and its Exec registers are final for a resume (so with one transaction in flight
+  too; DEPTH makes the drain longer); when a program needs it, a status bit outside SiFive's
+  map, or a driver rule (wait DEPTH transactions' time).
+why: >
+  The counters software reads must say what has landed, not what was sent, or a stop and
+  resume would skip or repeat bytes; the issue pointer is internal. Computing n in the DMA
+  channel is what lets it offer the next transaction before the done that carries n. A
+  separate DmaSifiveSplit instead of a SPLIT parameter keeps DmaSifive's ports as they are
+  and needs no tied-off ports in Mig3Cpu.
+rejected:
+  - choice: The mover generates the transactions of a whole transfer (one command a transfer)
+    why_not: The DMA channels would no longer share the mover transaction by transaction
+      (round-robin), and the mover would hold every DMA channel's issue state anyway.
+  - choice: A SPLIT parameter on DmaSifive with both port sets
+    why_not: Every user would tie off the ports it does not use.
+relies_on:
+  - rtl/lib/block/dma/pipelined_mover
+  - rtl/lib/block/dma/design
+evidence: >
+  2026-11-20: test/block/dma/dma_engine (DmaChannel behave and struct inside DmaEngine) on
+  Verilator and Icarus, with a DEPTH 4 and WR_ACK configuration beside the two of DEPTH 1: a
+  DMA channel with more than one transaction in flight (counted: its takes minus its dones),
+  a stop with more than one in flight and a stop while an offer waits all covered; every
+  stopped transfer ends at a transaction with exact Exec state; 9 of 9 mutants caught (kb
+  test/block/dma/dma_engine/mutants), three new (a stop withdrawing an offer, a stop ending
+  with transactions in flight, the issue pointer advancing wrong). DmaMover's and DmaSifive's
+  tests pass; Mig3's 149 and Mig6's 20 tests pass. With DEPTH 1 a DMA channel now offers its
+  next transaction while the one before finishes, another cycle a word: Mig6's dma_check 320
+  bytes 2 360 to 2 296 cycles for the far PE, 1 026 to 954 for the near one, local to local
+  344 to 264; fc_layer_dma round 1, four PEs 5 124 to 5 059 cycles (1.82 times one PE).
+code:
+  - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#iss_left
+  - rtl/lib/block/dma/dma_channel/struct/dma_channel.sv#u_dff_en_issue
+  - rtl/lib/block/dma/dma_engine/dma_engine.sv#iss_src
+  - rtl/lib/block/dma/dma_sifive/dma_sifive_split.sv
+  - sw/riscv/drivers/dma.h

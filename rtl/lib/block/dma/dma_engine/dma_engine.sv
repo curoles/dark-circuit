@@ -12,8 +12,10 @@
  * request meanwhile cannot change it, and the arbiter's order moves on with the right
  * winner. The mover keeps up to DEPTH transactions in flight, reads ahead of writes, a
  * transaction retiring at its write's take or, with WR_ACK, at its answer (kb
- * rtl/lib/block/dma/pipelined_mover); a channel offers its next transaction after the done
- * of the one before, so a channel has one in flight and the channels share DEPTH.
+ * rtl/lib/block/dma/pipelined_mover); a DMA channel offers its next transaction from its
+ * issue pointer as soon as the one before is taken, its completion counters (the Exec
+ * state) advancing at the dones (kb rtl/lib/block/dma/issue_pointer), so one DMA channel can
+ * fill the mover's DEPTH and the DMA channels share it.
  *
  *   channel 0 ..N-1 --cmd--> RoundRobinArbiter (lock while waiting) --MuxOneHot, ID-->
  *       DmaMover <--> read channel, write channel;   done_id --Decoder--> that channel's mv_done
@@ -91,6 +93,9 @@ module DmaEngine #(
     wire                  mv_take;          // the mover takes a command now
     /* verilator lint_on UNUSEDSIGNAL */
     wire [N-1:0]          chan_ready;       // ... channel c's
+    wire [N-1:0][ADDR_WIDTH-1:0] iss_src;  // every channel's issue pointer
+    wire [N-1:0][ADDR_WIDTH-1:0] iss_dst;
+    wire [N-1:0][LEN_WIDTH-1:0]  iss_left;
     wire [N-1:0][CW-1:0]  cmds;             // every channel's command
     wire [CW-1:0]         cmd;              // the winner's
     wire [ID_WIDTH-1:0]   cmd_id;
@@ -105,13 +110,14 @@ module DmaEngine #(
 
     // @kb: rtl/lib/block/dma/design
     for (genvar c = 0; c < N; c++) begin: g_channel
-        assign cmds[c] = {cur_src[c], cur_dst[c], left[c]};
+        assign cmds[c] = {iss_src[c], iss_dst[c], iss_left[c]};
         DmaChannel #(.ADDR_WIDTH(ADDR_WIDTH), .LEN_WIDTH(LEN_WIDTH), .N_WIDTH(N_WIDTH))
             u_channel(
                 .clk, .rst_n, .start(start[c]), .start_src(start_src[c]),
                 .start_dst(start_dst[c]), .start_len(start_len[c]), .stop(stop[c]),
                 .busy(busy[c]), .done(done[c]), .cur_src(cur_src[c]), .cur_dst(cur_dst[c]),
                 .left(left[c]), .cmd_valid(req[c]), .cmd_ready(chan_ready[c]),
+                .cmd_src(iss_src[c]), .cmd_dst(iss_dst[c]), .cmd_left(iss_left[c]),
                 .mv_done(mv_done[c]), .mv_n(done_n));
     end
 

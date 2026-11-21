@@ -689,12 +689,12 @@ block:
       what: "DMA channel: the state of one transfer, its commands to the DMA mover"
       versions: [behave, struct]
       path: rtl/lib/block/dma/dma_channel
-      kb: [rtl/lib/block/dma/design]
+      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer]
     DmaEngine:
       what: "DMA engine: N_CHANNELS DMA channels sharing one DMA mover, with its read and write channels of the library's kind, wiring only; the part every DMA front end (a register map) is built on"
       path: rtl/lib/block/dma/dma_engine
       test: test/block/dma/dma_engine
-      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/pipelined_mover]
+      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer, rtl/lib/block/dma/pipelined_mover]
     DmaMover:
       what: "DMA mover: moves the bytes of the transactions of DMA transfers, each a read of the source beat and a write of the destination beat, on a read channel and a write channel of the library's kind, up to DEPTH transactions in flight"
       versions: [behave, struct]
@@ -702,10 +702,10 @@ block:
       test: test/block/dma/dma_mover
       kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/pipelined_mover]
     DmaSifive:
-      what: "DmaSifive: a DMA with SiFive's PDMA register map (DmaSifivePkg) behind the register port and N_CHANNELS channels on one memory channel, the device top, wiring only"
+      what: "DmaSifive: a DMA with SiFive's PDMA register map (DmaSifivePkg) behind the register port and N_CHANNELS DMA channels on one memory channel, the device top, wiring only"
       path: rtl/lib/block/dma/dma_sifive
       test: test/block/dma/dma_sifive
-      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/pipelined_mover]
+      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer, rtl/lib/block/dma/pipelined_mover]
     dma_sifive:
       DmaSifiveChannelRegs:
         what: "The registers of one DmaSifive channel (DmaSifivePkg) and their control of a DMA channel (DmaEngine's start and stop), wiring only"
@@ -723,6 +723,10 @@ block:
       DmaSifiveRegs:
         what: "DmaSifive's registers: SiFive's PDMA register map (DmaSifivePkg) for N_CHANNELS channels behind the register port, wiring only"
         path: rtl/lib/block/dma/dma_sifive/dma_sifive_regs.sv
+      DmaSifiveSplit:
+        what: "DmaSifiveSplit: a DMA with SiFive's PDMA register map (DmaSifivePkg) behind the register port and N_CHANNELS DMA channels, its mover's read and write channels apart, the device top, wiring only"
+        path: rtl/lib/block/dma/dma_sifive/dma_sifive_split.sv
+        kb: [rtl/lib/block/dma/issue_pointer]
   fifo:
     FifoT:
       what: "FIFO of type T: Fifo with DATA_WIDTH = $bits(T); entries are values of T (a struct, an enum, a vector typedef)"

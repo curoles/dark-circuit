@@ -19,8 +19,8 @@ mutants:
     tests: [block_dma_engine_struct]
     edits:
       - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
-        old: ".in1(left), .in2(n_len), .eq(last)"
-        new: ".in1(left), .in2(~n_len), .eq(last)"
+        old: ".in1(left), .in2(mv_len), .eq(last)"
+        new: ".in1(left), .in2(~mv_len), .eq(last)"
   - name: DmaChannel struct, a start of 0 bytes taken as a transfer
     tests: [block_dma_engine_struct]
     edits:
@@ -37,3 +37,18 @@ mutants:
       - file: rtl/lib/block/dma/dma_engine/dma_engine.sv
         old: ".in(done_id), .en(done_valid)"
         new: ".in(done_id ^ ID_WIDTH'(1)), .en(done_valid)"
+  - name: DmaChannel behave, a stop withdraws an offer (2026-11-20, the issue pointer)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
+        old: "assign cmd_valid = busy && iss_left != '0 && (!stopping || offered);"
+        new: "assign cmd_valid = busy && iss_left != '0 && (!stopping || (offered & 1'b0));"
+  - name: DmaChannel struct, a stop ends the transfer with transactions in flight (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
+        old: ".in1(stop_any), .in2(drained), .in3(offered_next_n), .out(stopped)"
+        new: ".in1(stop_any), .in2(drained | 1'b1), .in3(offered_next_n), .out(stopped)"
+  - name: DmaChannel behave, the issue pointer's destination one byte too far (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
+        old: "iss_dst  <= iss_dst + ADDR_WIDTH'(n);"
+        new: "iss_dst  <= iss_dst + ADDR_WIDTH'(n) + 1;"

@@ -1,23 +1,15 @@
 /* DmaSifive: a DMA with SiFive's PDMA register map (DmaSifivePkg) behind the register port
- * and N_CHANNELS channels on one memory channel, the device top, wiring only.
+ * and N_CHANNELS DMA channels on one memory channel, the device top, wiring only.
  *
- * DmaSifiveRegs (the map, a channel's registers every 0x1000) controls DmaEngine (the
- * channels, a round-robin arbiter, one mover: any alignment, one transaction in flight).
- * Software claims a channel, writes NextSource, NextDestination, NextBytes (and NextConfig),
- * and sets run: the transfer copies NextBytes bytes from the source to the destination, the
- * Exec registers show it going, and at its end done is set (an interrupt with doneIE) and
- * run cleared, unless NextConfig.repeat starts it again. Writing run 0 stops a transfer after
- * the transaction offered or in flight. irq[2c] is channel c's done, irq[2c + 1] its error
- * (levels: PLIC sources); error is never set yet (the memory channel has no error answer).
- * DmaEngine's mover has a read and a write channel and up to DEPTH transactions in flight
- * (kb rtl/lib/block/dma/pipelined_mover); a ReqMux joins its two channels into the one
- * memory channel, the write first (it drains what the reads brought), the answers back in
- * order to the read; its writes want no answer.
- * The choices where SiFive's manual and Linux's driver are silent or differ: kb
- * rtl/lib/block/dma/design.
+ * DmaSifiveSplit (the register map and DmaEngine, see there: up to DEPTH transactions in
+ * flight, a stop drains them) with its mover's read and write channels joined into the one
+ * memory channel by a ReqMux: the write first (it drains what the reads brought), the
+ * answers back in order to the read; its writes want no answer (WR_ACK 0), as the memory
+ * of a design with one memory channel (Mig3Cpu) answers none. irq[2c] is DMA channel c's
+ * done, irq[2c + 1] its error (levels: PLIC sources).
  *
- *     register port --> DmaSifiveRegs --start, stop--> DmaEngine --> memory channel
- *                            ^  busy, done, Exec <-------+
+ *     register port --> DmaSifiveSplit --read channel---> ReqMux --> memory channel
+ *                            |          \--write channel-->
  *                            +--> irq
  *
  * One file for the behave and the struct library: the parts of the library it is built with
@@ -60,12 +52,9 @@ module DmaSifive import DmaSifivePkg::*; #(
     output wire [STRB_WIDTH-1:0] mem_req_wstrb,
     input  wire                  mem_rsp_valid,
     input  wire [DATA_WIDTH-1:0] mem_rsp_data,
-    // Interrupts: 2c done, 2c + 1 error of channel c
+    // Interrupts: 2c done, 2c + 1 error of DMA channel c
     output wire [2*N-1:0]        irq
 );
-    wire [N-1:0]                 start, stop, busy, done;
-    wire [N-1:0][ADDR_WIDTH-1:0] start_src, start_dst, cur_src, cur_dst;
-    wire [N-1:0][LEN_WIDTH-1:0]  start_len, left;
     // The mover's read and write channels.
     wire                         rd_valid, rd_ready, rd_rsp_valid;
     wire [ADDR_WIDTH-1:0]        rd_addr;
@@ -83,22 +72,15 @@ module DmaSifive import DmaSifivePkg::*; #(
     localparam FW = ADDR_WIDTH + 3 + DATA_WIDTH + STRB_WIDTH;  // a request's fields
     localparam PW = $clog2(DEPTH + 1);                         // answers waiting: reads
 
-    // @kb: rtl/lib/block/dma/design
-    DmaSifiveRegs #(.N_CHANNELS(N), .ADDR_WIDTH(ADDR_WIDTH), .LEN_WIDTH(LEN_WIDTH),
-                    .LOG_BEAT($clog2(STRB_WIDTH))) u_regs(
+    DmaSifiveSplit #(.N_CHANNELS(N), .ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH),
+                     .LEN_WIDTH(LEN_WIDTH), .DEPTH(DEPTH), .WR_ACK(0)) u_split(
         .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_addr, .req_wdata, .req_wstrb,
-        .rsp_valid, .rsp_rdata, .start, .start_src, .start_dst, .start_len, .stop, .busy,
-        .done, .error_ev({N{1'b0}}), .cur_src, .cur_dst, .left, .irq);
-
-    DmaEngine #(.N_CHANNELS(N), .ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH),
-                .LEN_WIDTH(LEN_WIDTH), .DEPTH(DEPTH), .WR_ACK(0)) u_engine(
-        .clk, .rst_n, .start, .start_src, .start_dst, .start_len, .stop, .busy, .done,
-        .cur_src, .cur_dst, .left,
+        .rsp_valid, .rsp_rdata,
         .rd_req_valid(rd_valid), .rd_req_ready(rd_ready), .rd_req_addr(rd_addr),
         .rd_req_size(rd_size), .rd_rsp_valid, .rd_rsp_data(mem_rsp_data),
         .wr_req_valid(wr_valid), .wr_req_ready(wr_ready), .wr_req_addr(wr_addr),
         .wr_req_size(wr_size), .wr_req_wdata(wr_wdata), .wr_req_wstrb(wr_wstrb),
-        .wr_req_rsp(wr_rsp), .wr_rsp_valid);
+        .wr_req_rsp(wr_rsp), .wr_rsp_valid, .irq);
 
     // The two channels into the one memory channel: the write first, then the read.
     ReqMux #(.N_REQ(2), .REQ_WIDTH(FW), .RSP_WIDTH(DATA_WIDTH),

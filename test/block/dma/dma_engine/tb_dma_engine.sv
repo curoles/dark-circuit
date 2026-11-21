@@ -2,8 +2,11 @@
  *
  * The testbench drives every channel and is the memory. Each channel runs random transfers in
  * its own part of the memory (so the result does not depend on how the channels interleave):
- * 0 to 60 bytes, source and destination anywhere in the part (they may overlap), a random
- * gap between transfers; in one transfer of six a stop at a random clock. Per channel, the
+ * 0 to 60 bytes, source and destination anywhere in the part (with DEPTH 1 they may overlap;
+ * with more, reads run ahead of writes inside a channel and overlap is undefined, so none),
+ * a random gap between transfers; in one transfer of six a stop at a random clock (the
+ * transactions in flight and an offer already made finish; the state must then end at a
+ * transaction). Per channel, the
  * clock after a start: busy, or done for 0 bytes; at the end: done with nothing left and the
  * addresses past the last byte, or (stopped) idle with bytes left and the addresses that far.
  * The memory is behind the mover's read and write channels, each ready in 70 % of the clocks;
@@ -16,7 +19,10 @@
  * channel with 32, both with DEPTH 1; 3 channels with 64 and DEPTH 4 and WR_ACK (each channel
  * has one transaction in flight, the channels share the depth). Every case must happen
  * (checks named cover): two channels offering at once, an offer that waits, a stop, a
- * transfer of 0 bytes, each channel done. Checks named model and cover. Stops at the first failure.
+ * transfer of 0 bytes, each channel done, a stop while an offer waits; with DEPTH above 1,
+ * a channel with more than one transaction in flight (counted: its commands taken minus its
+ * dones) and a stop with more than one in flight.
+ * Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -82,6 +88,14 @@ module TbDmaEngineCheck #(
     int                    cycle;
     integer                seed;
     bit                    seen_two, seen_wait, seen_stop, seen_empty;
+    bit                    seen_deep, seen_drain, seen_stop_offer;
+    // The engine's grant, take and dones, as the testbench's own wires (Icarus indexes no
+    // hierarchical name by a variable).
+    wire  [N-1:0]          eng_grant = u_dma_engine.grant;
+    wire                   eng_take  = u_dma_engine.mv_take;
+    wire  [N-1:0]          eng_done  = u_dma_engine.mv_done[N-1:0];
+    wire  [N-1:0]          eng_req   = u_dma_engine.req;
+    wire  [N-1:0]          eng_ready = u_dma_engine.chan_ready;
     logic [N-1:0]          seen_done;
 
     DmaEngine #(.N_CHANNELS(N), .ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LW),
@@ -162,12 +176,14 @@ module TbDmaEngineCheck #(
         phase_e phase [N];
         int     gap [N], s [N], d [N], len [N], age [N], stop_at [N], xfers [N];
         int     moved, n_done;
+        int     in_flight [N];      // a channel's transactions: taken, not done
         logic   prev_offer;
         logic [IW-1:0] prev_id;
         logic [2 * AW + LW - 1:0] prev_cmd;
         done_all = 1'b0;
         seed     = 13 * N + DATA_WIDTH;
         {seen_two, seen_wait, seen_stop, seen_empty} = '0;
+        {seen_deep, seen_drain, seen_stop_offer} = '0;
         seen_done = '0;
         start = '0;
         stop  = '0;
@@ -179,9 +195,10 @@ module TbDmaEngineCheck #(
             ref_mem[a] = mem[a];
         end
         for (int c = 0; c < N; c++) begin
-            phase[c] = GAP;
-            gap[c]   = 1 + c;
-            xfers[c] = 0;
+            phase[c]     = GAP;
+            gap[c]       = 1 + c;
+            xfers[c]     = 0;
+            in_flight[c] = 0;
         end
         prev_offer = 1'b0;
         prev_id    = '0;
@@ -203,6 +220,8 @@ module TbDmaEngineCheck #(
             start = '0;
             stop  = '0;
             n_done = 0;
+            for (int c = 0; c < N; c++)
+                in_flight[c] += int'(eng_take && eng_grant[c]) - int'(eng_done[c]);
             for (int c = 0; c < N; c++) begin
                 case (phase[c])
                     GAP: if (xfers[c] == N_XFERS) begin
@@ -218,6 +237,8 @@ module TbDmaEngineCheck #(
                                : s[c] + $unsigned($random(seed)) % 12;
                         if (d[c] > c * PART + PART - MAX_LEN)
                             d[c] = s[c];
+                        while (DEPTH > 1 && d[c] < s[c] + len[c] && s[c] < d[c] + len[c])
+                            d[c] = c * PART + $unsigned($random(seed)) % (PART - MAX_LEN);
                         stop_at[c] = ($random(seed) % 6 == 0) ? 1 + $unsigned($random(seed)) % 40
                                                               : -1;
                         start[c]     = 1'b1;
@@ -244,9 +265,16 @@ module TbDmaEngineCheck #(
                             phase[c] = RUN;
                     end
                     default: begin
+                        if (in_flight[c] > 1)
+                            seen_deep = 1'b1;
                         age[c]++;
-                        if (age[c] == stop_at[c])
+                        if (age[c] == stop_at[c]) begin
                             stop[c] = 1'b1;
+                            if (in_flight[c] > 1)
+                                seen_drain = 1'b1;
+                            if (eng_req[c] && !eng_ready[c])
+                                seen_stop_offer = 1'b1;
+                        end
                         if (age[c] > LIMIT)
                             `DC_TEST_FAIL(model, $sformatf(
                                 "DmaEngine %0d: channel %0d: no end after %0d clocks", N, c,
@@ -282,10 +310,11 @@ module TbDmaEngineCheck #(
                 `DC_TEST_FAIL(model, $sformatf("DmaEngine %0d: byte %h is %h, expected %h", N,
                                                a, mem[a], ref_mem[a]))
         if ((N > 1 && !seen_two) || (N > 1 && !seen_wait) || !seen_stop || !seen_empty ||
-            seen_done != '1)
+            seen_done != '1 || !seen_stop_offer || (DEPTH > 1 && (!seen_deep || !seen_drain)))
             `DC_TEST_FAIL(cover, $sformatf(
-                "DmaEngine %0d: two %b wait %b stop %b empty %b done %b", N, seen_two,
-                seen_wait, seen_stop, seen_empty, seen_done))
+                "DmaEngine %0d: two %b wait %b stop %b empty %b done %b offer %b deep %b drain %b",
+                N, seen_two, seen_wait, seen_stop, seen_empty, seen_done, seen_stop_offer,
+                seen_deep, seen_drain))
         done_all = 1'b1;
     end
 endmodule

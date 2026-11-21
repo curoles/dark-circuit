@@ -8,20 +8,32 @@
  * How the hardware works
  *
  * A channel copies NextBytes bytes from NextSource to NextDestination, any alignment, in
- * transactions of up to a memory beat each; the channels share one mover, round-robin.
+ * transactions of up to a memory beat each; the channels share one mover, round-robin, which
+ * may keep several transactions in flight (a design's DEPTH; reads run ahead of writes).
  *  - claim: setting it (0 to 1) clears the Next registers, done and error; it can be cleared
  *    only while run is 0 (dma_claim, dma_release).
  *  - run: writing 1 starts a transfer from the Next registers (copied into Exec); the
  *    hardware clears run at the end, unless NextConfig's repeat starts it again; writing 0
- *    stops it after the transaction in flight (dma_stop).
+ *    stops it (dma_stop) and reads back 0 at once, but the channel first finishes the
+ *    transaction it offered and the ones in flight (up to the design's DEPTH); a run written
+ *    meanwhile waits until the channel is idle, then starts from the Next registers.
  *  - done: set at the end of every transfer, cleared by software (dma_clear); with doneIE
  *    it is an interrupt (Mig3: PLIC source MIG3_DMA_DONE_SOURCE(ch)), a level like done.
- *  - Exec registers: the transfer going on: ExecBytes the bytes left (dma_left).
+ *  - Exec registers: how far the transfer has landed, not how far it has been sent:
+ *    ExecSource and ExecDestination past the last byte written, ExecBytes the bytes left
+ *    (dma_left); they move while transactions in flight finish.
  *  - error: set when a transfer gets a bus error (none yet on Mig3).
  * 64-bit registers are two words, the low one first; RV32 writes the high word 0.
  *
  * The rules for software
  *
+ *  - Overlap: a transfer whose source and destination overlap is undefined when the
+ *    destination starts after the source within DEPTH beats (reads run ahead of writes by up
+ *    to DEPTH beats); a design with DEPTH 1 copies such a transfer beat by beat.
+ *  - Resume after a stop: once the channel is idle, ExecSource, ExecDestination and
+ *    ExecBytes say where it stopped; set the Next registers to them and write run. The PDMA
+ *    map has no busy bit, so the program cannot read when a stopped channel is idle; the
+ *    drain takes at most DEPTH transactions (kb rtl/lib/block/dma/issue_pointer).
  *  - Memory and device order (fences): the DMA reads memory itself. Before run, the data a
  *    program stored must be in memory: fence w,o (stores before the device write) in
  *    dma_run. After done, the DMA's writes are in memory, but the program must read them
