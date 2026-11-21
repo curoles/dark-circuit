@@ -6,14 +6,14 @@ mutants:
   - name: behave, a request to another target does not wait for the answers
     edits:
       - file: rtl/lib/block/req_demux/behave/req_demux.sv
-        old: "assign blocked   = (busy && other) || (pending == MAX && req_rsp);"
-        new: "assign blocked   = (busy && other && 1'b0) || (pending == MAX && req_rsp);"
+        old: "assign blocked   = (busy && other) || (req_rsp && need > SW'(MAX));"
+        new: "assign blocked   = (busy && other && 1'b0) || (req_rsp && need > SW'(MAX));"
     expect: model
-  - name: behave, a request that wants an answer does not wait for a full count
+  - name: behave, a request that wants answers does not wait for room
     edits:
       - file: rtl/lib/block/req_demux/behave/req_demux.sv
-        old: "assign blocked   = (busy && other) || (pending == MAX && req_rsp);"
-        new: "assign blocked   = (busy && other) || (pending == MAX && req_rsp && 1'b0);"
+        old: "assign blocked   = (busy && other) || (req_rsp && need > SW'(MAX));"
+        new: "assign blocked   = (busy && other) || (req_rsp && need > SW'(MAX) && 1'b0);"
     expect: model
   - name: behave, the answer of the selected target, not the owner's
     edits:
@@ -21,11 +21,16 @@ mutants:
         old: "assign rsp_data  = answer_of(tgt_rsp_data, owner);"
         new: "assign rsp_data  = answer_of(tgt_rsp_data, req_sel);"
     expect: model
-  - name: struct, an answer does not count down
+  - name: behave, a burst counted as one answer (2026-11-20)
+    edits:
+      - file: rtl/lib/block/req_demux/behave/req_demux.sv
+        old: "pending <= pending + (ask_taken ? (PENDING_WIDTH+1)'(req_len) + 1'b1 : '0)"
+        new: "pending <= pending + (ask_taken ? (PENDING_WIDTH+1)'(1) : '0)"
+  - name: struct, an answer does not count down (2026-11-20, the adders)
     edits:
       - file: rtl/lib/block/req_demux/struct/req_demux.sv
-        old: ".in2(rsp_valid), .out(count_en)"
-        new: ".in2(1'b0), .out(count_en)"
+        old: ".in2({PW{rsp_valid}}), .ci(1'b0)"
+        new: ".in2({PW{rsp_valid & 1'b0}}), .ci(1'b0)"
     expect: model
   - name: struct, a blocked request still goes to its target
     edits:

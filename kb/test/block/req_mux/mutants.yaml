@@ -19,8 +19,8 @@ mutants:
     tests: [block_req_mux_struct]
     edits:
       - file: rtl/lib/block/req_mux/struct/req_mux.sv
-        old: ".write(ask_taken), .data_in(grant),"
-        new: ".write(ask_taken), .data_in(grant ^ N'(1)),"
+        old: ".write(ask_taken), .data_in({grant, win_len}),"
+        new: ".write(ask_taken), .data_in({grant ^ N'(1), win_len}),"
   - name: struct, posted writes counted as answers waiting
     tests: [block_req_mux_struct]
     edits:
@@ -45,3 +45,15 @@ mutants:
       - file: rtl/lib/block/req_mux/struct/req_mux.sv
         old: ".in(arb_req[i-1:0]), .out(below)"
         new: ".in(arb_req[i-1:0] & '0), .out(below)"
+  - name: behave, a burst's owner leaves at every answer (2026-11-20)
+    tests: [block_req_mux_behave]
+    edits:
+      - file: rtl/lib/block/req_mux/behave/req_mux.sv
+        old: "assign last_beat = beat == owner_len[0];"
+        new: "assign last_beat = (beat == owner_len[0]) || tgt_rsp_valid;"
+  - name: struct, the beat count never reaches the burst's end (2026-11-20)
+    tests: [block_req_mux_struct]
+    edits:
+      - file: rtl/lib/block/req_mux/struct/req_mux.sv
+        old: ".in1(beat), .in2(old_len), .eq(last)"
+        new: ".in1(beat), .in2(old_len ^ LEN_WIDTH'(1)), .eq(last)"

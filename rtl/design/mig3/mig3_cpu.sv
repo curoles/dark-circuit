@@ -194,6 +194,7 @@ module Mig3Cpu import Mig3Pkg::*; #(
     ReqDemux #(.N_TARGETS(5), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
         .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(!mem_req.we),
+        .req_len('0),
         .req_sel({sel_dma, sel_uart, sel_timer, sel_plic, sel_mem}), .rsp_valid(mem_rsp.valid),
         .rsp_data(mem_rsp.data),
         .tgt_req_valid({dma_valid, uart_valid, timer_valid, plic_valid, mem_valid}),
@@ -210,6 +211,7 @@ module Mig3Cpu import Mig3Pkg::*; #(
             .clk, .rst_n,
             .req_valid({dma_mem_valid, mem_valid}), .req_ready({dma_mem_ready, mem_ready}),
             .req_we({dma_mem_we, mem_req.we}), .req_rsp({!dma_mem_we, !mem_req.we}),
+            .req_len('0),
             .req_fields({{dma_mem_addr, dma_mem_size, NO_ATOP, NO_CMO, dma_mem_wdata,
                           dma_mem_wstrb},
                          {mem_req.addr, mem_req.size, mem_req.atop, mem_req.cmo,

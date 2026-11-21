@@ -6,9 +6,12 @@
  * grant of the clock before (a DffEn keeps it, a DffSyncRst says it waits). With FIXED_PRIO=1
  * gates pick instead: requester i wins when it asks and no lower one does (an OrReduce of
  * the requests below it, Inv, And2). MuxOneHot takes
- * the winner's fields; a Fifo of 1 << PENDING_WIDTH one-hot requester numbers keeps the
- * owners of the answers waiting, the oldest's bit goes with the target's answer. A request
- * with req_rsp waits while the Fifo is full.
+ * the winner's fields; a Fifo of 1 << PENDING_WIDTH one-hot requester numbers, each with its
+ * req_len (MuxOneHot of the winner's), keeps the owners of the answers waiting, the oldest's
+ * bit goes with the target's answers; a beat count (DffSyncRst, Incr, Mux2) against the
+ * oldest's req_len (CmpEq) pops it at its last answer. A request with req_rsp waits while
+ * the Fifo is full. PENDING_WIDTH counts requests (each with all its answers), where
+ * ReqDemux's counts answers.
  *
  *   req_valid --Mux2 (lock: grant_q)--> RoundRobinArbiter --> grant --MuxOneHot--> target
  *   taken with req_rsp: grant --> Fifo --oldest--> And2 tgt_rsp_valid --> rsp_valid
@@ -24,7 +27,8 @@ module ReqMux #(
     parameter REQ_WIDTH     = 32,       // bits of a request's fields but we and rsp
     parameter RSP_WIDTH     = 32,       // bits of an answer
     parameter PENDING_WIDTH = 1,        // up to 1 << PENDING_WIDTH answers wait
-    parameter FIXED_PRIO    = 0         // 0 round-robin; 1 requester 0 first, then 1, ...
+    parameter FIXED_PRIO    = 0,        // 0 round-robin; 1 requester 0 first, then 1, ...
+    parameter LEN_WIDTH     = 1         // bits of req_len: a burst of up to 1 << it answers
 )(
     input  wire                            clk,
     input  wire                            rst_n,           // synchronous, active low
@@ -33,6 +37,7 @@ module ReqMux #(
     output wire [N_REQ-1:0]                req_ready,
     input  wire [N_REQ-1:0]                req_we,          // a write
     input  wire [N_REQ-1:0]                req_rsp,         // wants an answer
+    input  wire [N_REQ-1:0][LEN_WIDTH-1:0] req_len,         // answers - 1 (with req_rsp)
     input  wire [N_REQ-1:0][REQ_WIDTH-1:0] req_fields,
     output wire [N_REQ-1:0]                rsp_valid,       // an answer to requester r
     output wire [RSP_WIDTH-1:0]            rsp_data,        // ... to every requester
@@ -47,6 +52,7 @@ module ReqMux #(
 );
     `DC_STATIC_ASSERT(a_sizes, N_REQ >= 1 && PENDING_WIDTH >= 1)
     `DC_STATIC_ASSERT(a_fixed_prio, FIXED_PRIO == 0 || FIXED_PRIO == 1)
+    `DC_STATIC_ASSERT(a_len_width, LEN_WIDTH >= 1)
 
     localparam N = N_REQ;
 
@@ -66,6 +72,18 @@ module ReqMux #(
     wire         tgt_take_n;
     wire         ask_taken;
     wire [N-1:0] oldest;            // the requester of the oldest answer waiting
+    wire [LEN_WIDTH-1:0] win_len;   // the winner's req_len
+    wire [LEN_WIDTH-1:0] old_len;   // the oldest's
+    wire [LEN_WIDTH-1:0] beat;      // its answers so far
+    wire [LEN_WIDTH-1:0] beat_inc;
+    wire [LEN_WIDTH-1:0] beat_step; // beat + 1, or 0 after the last
+    wire [LEN_WIDTH-1:0] beat_next;
+    wire         last;              // the answer now is the oldest's last
+    wire         pop;               // ... so it leaves the Fifo
+    // Not needed: the beat count's carry (it wraps to 0 at the last anyway).
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire         co_beat;
+    /* verilator lint_on UNUSEDSIGNAL */
     // Not needed: the Fifo's count and thresholds; empty is checked by an assertion.
     /* verilator lint_off UNUSEDSIGNAL */
     wire         empty;
@@ -113,10 +131,22 @@ module ReqMux #(
     And2 #(N) u_and2_ready(.in1(grant), .in2({N{tgt_take}}), .out(req_ready));
     And2 #(1) u_and2_ask_taken(.in1(tgt_take), .in2(win_ask), .out(ask_taken));
 
-    // The owners of the answers waiting; the answer to the oldest.
-    Fifo #(.ADDR_WIDTH(PENDING_WIDTH), .DATA_WIDTH(N)) u_fifo_owner(
-        .clk, .rst_n, .write(ask_taken), .data_in(grant), .read(tgt_rsp_valid),
-        .data_out(oldest), .empty, .full, .count, .almost_full, .almost_empty);
+    // The owners of the answers waiting, each with its req_len; the answers to the oldest,
+    // which leaves with its last.
+    // @kb: rtl/lib/block/bursts
+    MuxOneHot #(.N(N), .WIDTH(LEN_WIDTH)) u_mux_one_hot_len(
+        .in(req_len), .sel(grant), .out(win_len));
+    Fifo #(.ADDR_WIDTH(PENDING_WIDTH), .DATA_WIDTH(N + LEN_WIDTH)) u_fifo_owner(
+        .clk, .rst_n, .write(ask_taken), .data_in({grant, win_len}), .read(pop),
+        .data_out({oldest, old_len}), .empty, .full, .count, .almost_full, .almost_empty);
+    CmpEq #(LEN_WIDTH) u_cmp_eq_last(.in1(beat), .in2(old_len), .eq(last));
+    And2 #(1) u_and2_pop(.in1(tgt_rsp_valid), .in2(last), .out(pop));
+    Incr #(.WIDTH(LEN_WIDTH)) u_incr_beat(.in(beat), .out(beat_inc), .co(co_beat));
+    Mux2 #(LEN_WIDTH) u_mux2_beat_step(.in0(beat_inc), .in1('0), .sel(last), .out(beat_step));
+    Mux2 #(LEN_WIDTH) u_mux2_beat(.in0(beat), .in1(beat_step), .sel(tgt_rsp_valid),
+                                  .out(beat_next));
+    DffSyncRst #(.WIDTH(LEN_WIDTH)) u_dff_sync_rst_beat(.clk, .rst_n, .in(beat_next),
+                                                        .out(beat));
     And2 #(N) u_and2_rsp(.in1(oldest), .in2({N{tgt_rsp_valid}}), .out(rsp_valid));
     assign rsp_data = tgt_rsp_data;
 

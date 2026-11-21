@@ -87,7 +87,7 @@ module DmaSifive import DmaSifivePkg::*; #(
              .PENDING_WIDTH((PW > 1) ? PW : 1), .FIXED_PRIO(1)) u_req_mux(
         .clk, .rst_n,
         .req_valid({rd_valid, wr_valid}), .req_ready({rd_ready, wr_ready}),
-        .req_we({1'b0, 1'b1}), .req_rsp({1'b1, 1'b0}),
+        .req_we({1'b0, 1'b1}), .req_rsp({1'b1, 1'b0}), .req_len('0),
         .req_fields({{rd_addr, rd_size, {DATA_WIDTH{1'b0}}, {STRB_WIDTH{1'b0}}},
                      {wr_addr, wr_size, wr_wdata, wr_wstrb}}),
         .rsp_valid({rd_rsp_valid, wr_rsp_valid}), .rsp_data(mux_rsp_data),

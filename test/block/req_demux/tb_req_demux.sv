@@ -1,19 +1,22 @@
 /* Test of ReqDemux, behave or struct version.
  *
  * The testbench is the initiator and the targets. The initiator offers random requests
- * (nothing, one that wants an answer, req_rsp=1, or a posted write; mostly the target
- * before, a random one in a quarter) and holds one that is not taken. Each target is ready
+ * (nothing, one that wants answers, req_rsp=1, with a random req_len: a burst of req_len + 1
+ * answers, or a posted write; mostly the target before, a random one in a quarter) and holds
+ * one that is not taken. Each target is ready
  * in 70 % of the clocks and answers the requests that want an answer in order, each 1 to
- * 2 << PENDING_WIDTH clocks after it took it (so they pile up to the full count), with a
- * token (a number per request, unique). A model of the demux (answers pending, their
- * target) gives in every clock tgt_req_valid (only the selected target, only when the
- * request does not wait: another target while answers wait, or one that wants an answer
- * while 1 << PENDING_WIDTH wait), req_ready, and every answer: the token of the oldest
- * request not answered, in the order they were taken. 3000 clocks on Verilator, 400 on
- * Icarus; 2 targets with up to 2 answers waiting, 3 targets with up to 4. Every case must
+ * 2 << PENDING_WIDTH clocks after it took it (so they pile up to the full count; a burst's
+ * answers a clock apart at the earliest), each with a token (a number per answer, unique). A
+ * model of the demux (answers pending, their target) gives in every clock tgt_req_valid
+ * (only the selected target, only when the request does not wait: another target while
+ * answers wait, or one whose answers do not all fit below 1 << PENDING_WIDTH), req_ready,
+ * and every answer: the token of the oldest answer due, in the order they were taken. 3000
+ * clocks on Verilator, 400 on Icarus; 2 targets with up to 2 answers waiting (bursts of 1
+ * or 2), 3 targets with up to 4 (bursts of 1 to 4). Every case must
  * happen (checks named cover): a request to another target that waits, one that waits for a
  * full count, answered requests to the same target while one waits, a posted write taken, a
- * request taken by every target. Checks named model and cover. Stops at the first failure.
+ * request taken by every target, a burst taken, a burst that waits where a single
+ * answer would fit. Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -22,7 +25,8 @@
 
 module TbReqDemuxCheck #(
     parameter N_TARGETS     = 2,
-    parameter PENDING_WIDTH = 1
+    parameter PENDING_WIDTH = 1,
+    parameter LEN_WIDTH     = 1
 )(
     input  wire  clk,
     input  wire  rst_n,
@@ -41,6 +45,7 @@ module TbReqDemuxCheck #(
     logic                          req_valid;
     wire                           req_ready;
     logic                          req_rsp;
+    logic [LEN_WIDTH-1:0]          req_len;
     logic [N_TARGETS-1:0]          req_sel;
     wire                           rsp_valid;
     wire  [RW-1:0]                 rsp_data;
@@ -50,8 +55,9 @@ module TbReqDemuxCheck #(
     logic [N_TARGETS-1:0][RW-1:0]  tgt_rsp_data;
     integer                        seed;
 
-    ReqDemux #(.N_TARGETS(N_TARGETS), .RSP_WIDTH(RW), .PENDING_WIDTH(PENDING_WIDTH)) u_req_demux(
-        .clk, .rst_n, .req_valid, .req_ready, .req_rsp, .req_sel, .rsp_valid, .rsp_data,
+    ReqDemux #(.N_TARGETS(N_TARGETS), .RSP_WIDTH(RW), .PENDING_WIDTH(PENDING_WIDTH),
+               .LEN_WIDTH(LEN_WIDTH)) u_req_demux(
+        .clk, .rst_n, .req_valid, .req_ready, .req_rsp, .req_len, .req_sel, .rsp_valid, .rsp_data,
         .tgt_req_valid, .tgt_req_ready, .tgt_rsp_valid, .tgt_rsp_data);
 
     // The targets: reads taken and not answered, a circular queue each (flat: target t's
@@ -66,11 +72,12 @@ module TbReqDemuxCheck #(
     int pend;
     logic [N_TARGETS-1:0] owner;
     int tok_next, cyc;
-    logic seen_other_wait, seen_full_wait, seen_same, seen_posted;
+    logic seen_other_wait, seen_full_wait, seen_same, seen_posted, seen_burst, seen_burst_wait;
     logic [N_TARGETS-1:0] seen_taken;
 
     function automatic logic blocked();
-        return (pend > 0 && (req_sel & ~owner) != '0) || (pend == MAX && req_rsp);
+        return (pend > 0 && (req_sel & ~owner) != '0) ||
+               (req_rsp && pend + int'(req_len) + 1 > MAX);
     endfunction
 
     function automatic int target_of(input logic [N_TARGETS-1:0] s);
@@ -84,6 +91,9 @@ module TbReqDemuxCheck #(
     task automatic new_request();
         req_valid = ($random(seed) % 4) != 0;
         req_rsp   = ($random(seed) % 3) != 0;
+        // A burst of at most MAX answers (more would never fit, a_len_fits).
+        req_len   = req_rsp ? LEN_WIDTH'({$random(seed)} % ((MAX < (1 << LEN_WIDTH)) ? MAX
+                                                                     : (1 << LEN_WIDTH))) : '0;
         if (req_sel == '0 || ({$random(seed)} % 4) == 0)
             req_sel = N_TARGETS'(1) << ({$random(seed)} % N_TARGETS);
     endtask
@@ -94,7 +104,7 @@ module TbReqDemuxCheck #(
         logic [RW-1:0]   d;
         done = 1'b0;
         seed = N_TARGETS * 16 + PENDING_WIDTH;
-        {seen_other_wait, seen_full_wait, seen_same, seen_posted} = '0;
+        {seen_other_wait, seen_full_wait, seen_same, seen_posted, seen_burst, seen_burst_wait} = '0;
         seen_taken = '0;
         for (int i = 0; i < N_TARGETS; i++) begin
             t_head[i] = 0;
@@ -133,6 +143,11 @@ module TbReqDemuxCheck #(
                 seen_other_wait = 1'b1;
             if (req_valid && pend == MAX && req_rsp && (req_sel & ~owner) == '0)
                 seen_full_wait = 1'b1;
+            if (req_valid && req_rsp && (req_sel & ~owner) == '0 && pend + 1 <= MAX &&
+                pend + int'(req_len) + 1 > MAX)
+                seen_burst_wait = 1'b1;
+            if (taken && req_rsp && req_len != '0)
+                seen_burst = 1'b1;
             if (taken && req_rsp && pend > 0)
                 seen_same = 1'b1;
             if (taken && !req_rsp)
@@ -145,13 +160,17 @@ module TbReqDemuxCheck #(
                 pend   = pend - 1;
             end
             if (taken && req_rsp) begin
-                e_tok[e_tail % ED] = tok_next;
-                e_tail = e_tail + 1;
-                t_tok[t * QD + t_tail[t] % QD] = tok_next;
-                t_due[t * QD + t_tail[t] % QD] = cyc + 1 + {$random(seed)} % (2 * MAX);
-                t_tail[t] = t_tail[t] + 1;
-                tok_next = tok_next + 1;
-                pend  = pend + 1;
+                int due0;
+                due0 = cyc + 1 + {$random(seed)} % (2 * MAX);
+                for (int b = 0; b <= int'(req_len); b++) begin      // a burst: req_len + 1
+                    e_tok[e_tail % ED] = tok_next;
+                    e_tail = e_tail + 1;
+                    t_tok[t * QD + t_tail[t] % QD] = tok_next;
+                    t_due[t * QD + t_tail[t] % QD] = due0 + b;
+                    t_tail[t] = t_tail[t] + 1;
+                    tok_next = tok_next + 1;
+                end
+                pend  = pend + int'(req_len) + 1;
                 owner = req_sel;
             end
             @(posedge clk);
@@ -174,10 +193,11 @@ module TbReqDemuxCheck #(
                 tgt_req_ready[i] = ({$random(seed)} % 10) < 7;
         end
         if (!seen_other_wait || !seen_full_wait || !seen_same || !seen_posted ||
-            seen_taken !== '1)
+            seen_taken !== '1 || !seen_burst || !seen_burst_wait)
             `DC_TEST_FAIL(cover, $sformatf({
-                "ReqDemux %0d targets: other wait %b full wait %b same %b posted %b taken %b"},
-                N_TARGETS, seen_other_wait, seen_full_wait, seen_same, seen_posted, seen_taken))
+                "ReqDemux %0d targets: other wait %b full wait %b same %b posted %b taken %b ",
+                "burst %b burst wait %b"}, N_TARGETS, seen_other_wait, seen_full_wait, seen_same,
+                seen_posted, seen_taken, seen_burst, seen_burst_wait))
         done = 1'b1;
     end
 endmodule
@@ -193,7 +213,8 @@ module TbReqDemux;
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
     TbReqDemuxCheck #(.N_TARGETS(2), .PENDING_WIDTH(1)) u_check_2(.clk, .rst_n, .done(done_2));
-    TbReqDemuxCheck #(.N_TARGETS(3), .PENDING_WIDTH(2)) u_check_3(.clk, .rst_n, .done(done_3));
+    TbReqDemuxCheck #(.N_TARGETS(3), .PENDING_WIDTH(2), .LEN_WIDTH(2)) u_check_3(
+        .clk, .rst_n, .done(done_3));
 
     initial begin
         wait (done_2 && done_3);

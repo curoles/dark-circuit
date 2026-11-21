@@ -2,7 +2,9 @@
  *
  * The testbench is every requester and the target. Each requester offers random reads,
  * posted writes (req_rsp=0) and writes that want an answer (req_rsp=1), each with a token in
- * its fields (its number and a sequence number), and holds an offer until it is taken. The
+ * its fields (its number and a sequence number) and, when answered, a random req_len (a
+ * burst of req_len + 1 answers, the k-th the token + k), and holds an offer until it is
+ * taken. The
  * target is ready in 60 % of the clocks and answers each request with req_rsp with its
  * token, 1 to 6 clocks after taking it (one in eight 10 to 19: answers pile up), in order.
  * Model: per requester the tokens of its requests not answered yet and of its posted writes
@@ -15,7 +17,8 @@
  * waiting at most, 2 with 4, 1 with 2, round-robin; 3 with 2 by fixed priority; 400
  * requests a requester on Verilator, 80 on Icarus. Every case must happen
  * (checks named cover): two requesters offering at once, an offer the target does not take
- * at once, a request waiting for a full FIFO, every kind of request from every requester.
+ * at once, a request waiting for a full FIFO, every kind of request from every requester, a
+ * burst.
  * Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
@@ -26,7 +29,8 @@
 module TbReqMuxCheck #(
     parameter N_REQ         = 3,
     parameter PENDING_WIDTH = 1,
-    parameter FIXED_PRIO    = 0
+    parameter FIXED_PRIO    = 0,
+    parameter LEN_WIDTH     = 1
 )(
     input  wire  clk,
     input  wire  rst_n,
@@ -44,6 +48,7 @@ module TbReqMuxCheck #(
     wire  [N-1:0]         req_ready;
     logic [N-1:0]         req_we;
     logic [N-1:0]         req_rsp;
+    logic [N-1:0][LEN_WIDTH-1:0] req_len;
     logic [N-1:0][31:0]   req_fields;
     wire  [N-1:0]         rsp_valid;
     wire  [31:0]          rsp_data;
@@ -63,7 +68,7 @@ module TbReqMuxCheck #(
     int                   due [$];
     int                   cycle;
     integer               seed;
-    bit                   seen_two, seen_wait, seen_full;
+    bit                   seen_two, seen_wait, seen_full, seen_burst;
     logic [N-1:0]         seen_read, seen_write, seen_ack;
 
     // The lowest requester offering.
@@ -75,8 +80,9 @@ module TbReqMuxCheck #(
     endfunction
 
     ReqMux #(.N_REQ(N), .REQ_WIDTH(32), .RSP_WIDTH(32), .PENDING_WIDTH(PENDING_WIDTH),
-             .FIXED_PRIO(FIXED_PRIO)) u_req_mux(
-            .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_rsp, .req_fields, .rsp_valid,
+             .FIXED_PRIO(FIXED_PRIO), .LEN_WIDTH(LEN_WIDTH)) u_req_mux(
+            .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_rsp, .req_len, .req_fields,
+            .rsp_valid,
             .rsp_data, .tgt_req_valid, .tgt_req_ready, .tgt_req_we, .tgt_req_rsp,
             .tgt_req_fields, .tgt_rsp_valid, .tgt_rsp_data);
 
@@ -90,11 +96,12 @@ module TbReqMuxCheck #(
         logic [31:0] prev_fields;
         done = 1'b0;
         seed = 31 * N + PENDING_WIDTH + 7 * FIXED_PRIO;
-        {seen_two, seen_wait, seen_full} = '0;
+        {seen_two, seen_wait, seen_full, seen_burst} = '0;
         {seen_read, seen_write, seen_ack} = '0;
         req_valid     = '0;
         req_we        = '0;
         req_rsp       = '0;
+        req_len       = '0;
         req_fields    = '0;
         tgt_req_ready = 1'b0;
         tgt_rsp_valid = 1'b0;
@@ -126,6 +133,7 @@ module TbReqMuxCheck #(
                         1:       {req_we[i], req_rsp[i]} = 2'b10;    // a posted write
                         default: {req_we[i], req_rsp[i]} = 2'b11;    // answered write
                     endcase
+                    req_len[i]    = req_rsp[i] ? LEN_WIDTH'($random(seed)) : '0;
                     req_fields[i] = {8'(i), 16'(sent[i]), 8'($random(seed))};
                     sent[i]++;
                 end
@@ -173,8 +181,11 @@ module TbReqMuxCheck #(
                         wr_tail[i]++;
                         seen_write[i] = 1'b1;
                     end else begin
-                        rd_q[i][rd_tail[i] % QD] = req_fields[i];
-                        rd_tail[i]++;
+                        for (int b = 0; b <= int'(req_len[i]); b++) begin   // a burst
+                            rd_q[i][rd_tail[i] % QD] = req_fields[i] + 32'(b);
+                            rd_tail[i]++;
+                        end
+                        if (req_len[i] != '0) seen_burst = 1'b1;
                         if (req_we[i]) seen_ack[i]  = 1'b1;
                         else           seen_read[i] = 1'b1;
                     end
@@ -188,10 +199,15 @@ module TbReqMuxCheck #(
                                                        tgt_req_fields))
                     wr_head[r]++;
                 end else begin
-                    ans.push_back(tgt_req_fields);
-                    due.push_back(cycle + 1 + (($unsigned($random(seed)) % 8 == 0)
-                                               ? 10 + $unsigned($random(seed)) % 10
-                                               : $unsigned($random(seed)) % 6));
+                    int due0;
+                    due0 = cycle + 1 + (($unsigned($random(seed)) % 8 == 0)
+                                        ? 10 + $unsigned($random(seed)) % 10
+                                        : $unsigned($random(seed)) % 6);
+                    // The requester's offer is held until taken: its req_len is this one's.
+                    for (int b = 0; b <= int'(req_len[r]); b++) begin
+                        ans.push_back(tgt_req_fields + 32'(b));
+                        due.push_back(due0 + b);
+                    end
                 end
             end
             // The end: everything sent, answered and arrived.
@@ -212,7 +228,7 @@ module TbReqMuxCheck #(
         tgt_req_ready = 1'b0;
         tgt_rsp_valid = 1'b0;
         if ((N > 1 && !seen_two) || !seen_wait || !seen_full || seen_read != '1 ||
-            seen_write != '1 || seen_ack != '1)
+            seen_write != '1 || seen_ack != '1 || !seen_burst)
             `DC_TEST_FAIL(cover, $sformatf(
                 "ReqMux %0d: two %b wait %b full %b read %b write %b answered write %b", N,
                 seen_two, seen_wait, seen_full, seen_read, seen_write, seen_ack))
@@ -230,8 +246,10 @@ module TbReqMux;
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
-    TbReqMuxCheck #(.N_REQ(3), .PENDING_WIDTH(1)) u_check_3(.clk, .rst_n, .done(done_3));
-    TbReqMuxCheck #(.N_REQ(2), .PENDING_WIDTH(2)) u_check_2(.clk, .rst_n, .done(done_2));
+    TbReqMuxCheck #(.N_REQ(3), .PENDING_WIDTH(1), .LEN_WIDTH(2)) u_check_3(
+        .clk, .rst_n, .done(done_3));
+    TbReqMuxCheck #(.N_REQ(2), .PENDING_WIDTH(2), .LEN_WIDTH(2)) u_check_2(
+        .clk, .rst_n, .done(done_2));
     TbReqMuxCheck #(.N_REQ(1), .PENDING_WIDTH(1)) u_check_1(.clk, .rst_n, .done(done_1));
     TbReqMuxCheck #(.N_REQ(3), .PENDING_WIDTH(1), .FIXED_PRIO(1)) u_check_f(
         .clk, .rst_n, .done(done_f));

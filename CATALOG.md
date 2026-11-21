@@ -483,13 +483,13 @@ block:
     versions: [behave, struct]
     path: rtl/lib/block/req_demux
     test: test/block/req_demux
-    kb: [rtl/lib/block/answered_writes, rtl/lib/block/req_demux/design]
+    kb: [rtl/lib/block/answered_writes, rtl/lib/block/bursts, rtl/lib/block/req_demux/design]
   ReqMux:
     what: "Request multiplexer: N_REQ request channels to one target, round-robin or by fixed priority, the answers back to their requesters in order"
     versions: [behave, struct]
     path: rtl/lib/block/req_mux
     test: test/block/req_mux
-    kb: [rtl/lib/block/answered_writes, rtl/lib/block/req_mux/design, rtl/lib/block/req_mux/fixed_priority]
+    kb: [rtl/lib/block/answered_writes, rtl/lib/block/bursts, rtl/lib/block/req_mux/design, rtl/lib/block/req_mux/fixed_priority]
   ReturnAddressStack:
     what: "Return-address stack: predicts where a return goes"
     versions: [behave, struct]

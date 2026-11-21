@@ -266,6 +266,7 @@ module Mig6Pe import Mig6Pkg::*; #(
     ReqDemux #(.N_TARGETS(4), .RSP_WIDTH($bits(line_t))) u_req_demux(
         .clk, .rst_n,
         .req_valid(mem_req.valid), .req_ready(mem_rsp.ready), .req_rsp(mem_req.rsp),
+        .req_len('0),
         .req_sel(sel), .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data),
         .tgt_req_valid(tgt_valid), .tgt_req_ready(tgt_ready), .tgt_rsp_valid(tgt_rsp_valid),
         .tgt_rsp_data({{LINE_WORDS{plic_rdata}}, {LINE_WORDS{dma_rdata}},
@@ -285,13 +286,13 @@ module Mig6Pe import Mig6Pkg::*; #(
     ReqDemux #(.N_TARGETS(2), .RSP_WIDTH($bits(word_t)), .PENDING_WIDTH(DMA_PW))
         u_dma_rd_demux(
             .clk, .rst_n,
-            .req_valid(rd_valid), .req_ready(rd_ready), .req_rsp(1'b1),
+            .req_valid(rd_valid), .req_ready(rd_ready), .req_rsp(1'b1), .req_len('0),
             .req_sel(rd_sel), .rsp_valid(rd_rsp_valid), .rsp_data(rd_rsp_data),
             .tgt_req_valid(rd_tgt_valid), .tgt_req_ready(rd_tgt_ready),
             .tgt_rsp_valid(rd_tgt_rsp_valid), .tgt_rsp_data({net_rsp_data, dma_local_rsp}));
     ReqDemux #(.N_TARGETS(2), .RSP_WIDTH($bits(word_t))) u_dma_wr_demux(
         .clk, .rst_n,
-        .req_valid(wr_valid), .req_ready(wr_ready), .req_rsp(1'b0),
+        .req_valid(wr_valid), .req_ready(wr_ready), .req_rsp(1'b0), .req_len('0),
         .req_sel(wr_sel), .rsp_valid(wr_rsp_valid), .rsp_data(wr_rsp_data),
         .tgt_req_valid(wr_tgt_valid), .tgt_req_ready(wr_tgt_ready),
         .tgt_rsp_valid(2'b00), .tgt_rsp_data({2{word_t'(0)}}));
@@ -346,7 +347,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .req_valid({rd_tgt_valid[LOCAL], wr_tgt_valid[LOCAL], tgt_valid[LOCAL], lmem_req.valid}),
         .req_ready(lm_ready),
         .req_we({1'b0, 1'b1, mem_req.we, lmem_req.we}),
-        .req_rsp({1'b1, 1'b0, mem_req.rsp, lmem_req.rsp}),
+        .req_rsp({1'b1, 1'b0, mem_req.rsp, lmem_req.rsp}), .req_len('0),
         .req_fields(lm_fields), .rsp_valid(lm_rsp_valid), .rsp_data(local_rsp_data),
         .tgt_req_valid(ram_valid), .tgt_req_ready(ram_ready), .tgt_req_we(ram_we),
         .tgt_req_rsp(ram_rsp), .tgt_req_fields(ram_fields),
@@ -416,6 +417,7 @@ module Mig6Pe import Mig6Pkg::*; #(
             .req_valid({wr_tgt_valid[NET], rd_tgt_valid[NET], tgt_valid[NET]}),
             .req_ready(ni_ready),
             .req_we({1'b1, 1'b0, mem_req.we}), .req_rsp({1'b0, 1'b1, mem_req.rsp}),
+            .req_len('0),
             .req_fields(ni_fields), .rsp_valid(ni_rsp_valid), .rsp_data(net_rsp_data),
             .tgt_req_valid(net_valid), .tgt_req_ready(net_ready), .tgt_req_we(net_we),
             .tgt_req_rsp(net_rsp), .tgt_req_fields(net_fields),

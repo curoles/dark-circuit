@@ -1,0 +1,76 @@
+type: decision
+title: A request on the library's channel may be a burst, req_len + 1 answers in order
+date: 2026-11-20
+question: >
+  Mig6's DMA with 8 transactions in flight (kb rtl/design/mig6/dma_depth) was traced again:
+  the shared memory takes exactly one request every 3 clocks, alone or with four PEs, with
+  deeper router buffers too (12 flits, measured: no change). The cause is the router: a head
+  flit leaves 3 clocks after it came (route, virtual-channel allocation, switch;
+  NocVirtChRouter's header, measured), body flits one a clock, and every Mig6 message is a
+  one-flit packet on one virtual channel, so an input passes one packet every 3 clocks. N
+  words as one packet (a head and N data flits) pay the head once. Where does the N-word unit
+  come from: wide beats (one wide request, one wide answer), a burst length on the request
+  channel (one request, N answers), or the network interface merging word reads?
+decision: >
+  A burst length on the request channel (user's choice (b), 2026-11-20: bursts are well
+  understood and scale to any length; width hits its limit soon; AXI, CHI and PCIe carry
+  long transfers so, and kb rtl/lib/block/cache/uncached already planned the caches' line
+  bursts as AXI's AxLEN with the size one beat). req_len is the answers - 1 (AXI's ARLEN):
+  a request with req_rsp gets exactly req_len + 1 answers, in order; one without gets none
+  (the rule, now written in AGENTS.md Terminology: the code relied on one answer a request
+  everywhere but no document said it). ReqDemux counts answers per beat (pending + req_len +
+  1 must fit below its count: a request waits until all its answers fit; a burst bigger than
+  the count never does, a_len_fits); ReqMux keeps each request's req_len with its owner and
+  pops the owner at its last answer; the target learns req_len from the fields the caller
+  packs. A block that does not take bursts has no req_len port, so a burst never reaches it
+  (the caches, AtomicUnit, the register port today). Scope, first (user's (i)): read bursts
+  only, made by the DMA when source and destination share their offset in a beat (each
+  answer beat lands whole; otherwise beat by beat as before, so a copy whose offsets differ
+  gets no burst: a realigning mover is a later step); a burst stays inside one memory region.
+  Chunks: 9b-1 the channel (ReqDemux, ReqMux, their tests); 9b-2 the DMA's read bursts; 9b-3
+  Mig6's network (a burst-read request, the answer one packet of a head and req_len + 1 data
+  flits, the shared memory's interface reading a burst's words back to back with no other
+  request between them) and the measurements: bursts alone, faster routers alone, both.
+why: >
+  The links pass a packet every 3 clocks, so moving more words a packet is the lever for
+  streams; a length scales to any burst with the datapaths a word wide, where wide beats
+  cost wide buses (shared with the core at the network interface), a width adapter at the
+  local memory, and fetch whole wide beats for short unaligned copies. The rule changes in
+  the blocks that count answers, by a few lines each; ReqDemux and ReqMux first, with
+  bursts in their tests. Two costs to remember: PENDING_WIDTH now means answers in ReqDemux
+  (its fit check needs beats) and requests in ReqMux (its owner queue), so the two are sized
+  apart (both headers say so); and ReqDemux's ready path goes through an adder (pending +
+  req_len + 1 against its count, combinational from the requester's req_len), which folds
+  back to the old compare where req_len is tied to 0 (Mig3, Mig6 today) but costs a few
+  gate levels where real bursts cross a timing-critical ReqDemux.
+rejected:
+  - choice: Wide DMA beats carried as multi-flit packets (one wide request, one wide answer)
+    why_not: The channel's one-answer rule would stay, but every bus on the DMA's path grows
+      (the network interface's mux is shared with the core), local memory needs a width
+      adapter, short unaligned copies over-fetch, and width runs out where a length does not.
+  - choice: The network interface merging consecutive word reads into bursts
+    why_not: It must guess, holding reads a few clocks to see the next, which delays every
+      access, the core's single loads too.
+  - choice: A second virtual channel, two packets in a router's pipeline
+    why_not: Mig6's barrier relies on one virtual channel keeping a PE's requests in order.
+relies_on:
+  - rtl/lib/block/answered_writes
+  - rtl/lib/block/cache/uncached
+  - rtl/lib/block/req_demux/design
+  - rtl/lib/block/req_mux/design
+  - rtl/design/mig6/dma_depth
+evidence: >
+  2026-11-20: test/block/req_demux and test/block/req_mux, behave and struct, Verilator and
+  Icarus, with random bursts: every answer the token of the oldest answer due (ReqDemux), the
+  oldest request's token + beat (ReqMux); a burst taken, and (ReqDemux) a burst that waits
+  where a single answer would fit, covered; the earlier configurations pass as before.
+  Mutants all caught: ReqDemux 6 (two new: a burst counted as one answer, an answer not
+  counted down by the adders), ReqMux 9 (two new: a burst's owner leaving at every answer,
+  the beat count never reaching the burst's end). With req_len tied to 0, Mig3's 149 and
+  Mig6's 20 tests pass and their DMA programs print the same, cycles included.
+code:
+  - rtl/lib/block/req_demux/behave/req_demux.sv#need
+  - rtl/lib/block/req_demux/struct/req_demux.sv#u_ripple_carry_adder_need
+  - rtl/lib/block/req_mux/behave/req_mux.sv#owner_len
+  - rtl/lib/block/req_mux/struct/req_mux.sv#u_fifo_owner
+  - AGENTS.md

@@ -190,7 +190,12 @@ This file has the rules that are not in README.md.
   `StrbReg`); for devices and engines that run on their own (PLIC, Timer, UART, DMA). Plain
   "registers" in a device's own description means these.
 - **Channel** alone means a request channel of the library: a valid/ready path of requests,
-  their answers back in order (the mover's read channel and write channel are two).
+  their answers back in order (the mover's read channel and write channel are two). A
+  request with req_rsp = 1 gets exactly req_len + 1 answers, in order (req_len 0 unless the
+  channel carries bursts: kb rtl/lib/block/bursts); one with req_rsp = 0 gets none. Every
+  block that keeps answers in order (ReqDemux, ReqMux, the caches, AtomicUnit, a network
+  interface, a requester's queue) counts them so; one that does not take bursts has no
+  req_len port, and a burst never reaches it.
   **DMA channel** is a DMA's job slot: one transfer at a time, its own registers (the PDMA's
   Next and Exec registers, run, done); DmaSifive has N_CHANNELS of them sharing one mover.
   In DMA code and comments say "DMA channel" for the slot when both could be meant.
