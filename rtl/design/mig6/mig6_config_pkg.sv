@@ -19,6 +19,7 @@ package Mig6ConfigPkg;
         int unsigned plic_prio_width;      // each PE's PLIC: bits of a priority
         int unsigned dma_source;           // its sources: DMA channel c's done, error at
                                            // dma_source + 2c, + 2c + 1
+        int unsigned dma_depth;            // each PE's DMA: transactions in flight
     } mig6_cfg_t;
 
     localparam mig6_cfg_t MIG6_CFG = '{
@@ -30,7 +31,8 @@ package Mig6ConfigPkg;
         dcache_sets_width: 6,  // 64 lines a way
         cache_line_words:  2,   // 8 bytes a line
         plic_prio_width:   2,
-        dma_source:        1
+        dma_source:        1,
+        dma_depth:         8
     };
 
 endpackage

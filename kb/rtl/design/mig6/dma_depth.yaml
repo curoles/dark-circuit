@@ -1,0 +1,51 @@
+type: decision
+title: Mig6's DMA keeps 8 transactions in flight, its reads and writes on their own demuxes
+date: 2026-11-20
+question: >
+  With the library's DMA able to keep several transactions in flight (kb
+  rtl/lib/block/dma/pipelined_mover, issue_pointer), how does Mig6Pe use it, and what does
+  the fixed benchmark fc_layer_dma (kb test/design/mig6/fc_layer_dma) gain?
+decision: >
+  Mig6Pe takes DmaSifiveSplit with DEPTH from a new config knob, dma_depth 8 (also
+  MIG6_DMA_DEPTH for programs: dma.h's overlap and drain rules), and WR_ACK 0: the local
+  memory writes in the clock it takes a write, and nothing in Mig6 answers a plain write yet
+  (the shared memory's interface answers reads, atomics and SCs; a DMA writing over the
+  network with acknowledgements would need that first). The DMA's read channel and write
+  channel each get a ReqDemux by the region's target: the reads' one keeps DMA_DEPTH answers
+  in order (PENDING_WIDTH log2 of the depth; the old single demux allowed 2, a cap found by
+  quizzing a fresh agent), the writes' one owes none, so it never holds a switch of target
+  (one demux for both made a local write wait for every answer the network owed). The local
+  memory's ReqMux gets a fourth requester (the core's data, the I-cache's misses, the DMA's
+  writes, its reads: writes first, they drain what the reads brought); the network
+  interface's ReqMux a third (the core, the DMA's reads, its writes) and room for 16 answers.
+why: >
+  The trace of the baseline said the DMA waited a network round trip a word with one in
+  flight; with 8, up to 8 round trips overlap. 8 covers the far PE's round trip (about 29
+  cycles) at a few cycles a word; the knob lets later measurements change it. Every cap on
+  the path to the memory had to be at least the depth, or it would have been the new limit.
+rejected:
+  - choice: One demux for the DMA's reads and writes (the merged DmaSifive)
+    why_not: ReqDemux's order rule makes a write to the local memory wait for every read
+      the network owes, and the overlap would be lost.
+  - choice: WR_ACK 1
+    why_not: Nothing in Mig6 answers a plain write; local writes are done when taken.
+relies_on:
+  - rtl/lib/block/dma/pipelined_mover
+  - rtl/lib/block/dma/issue_pointer
+  - rtl/design/mig6/dma
+evidence: >
+  2026-11-20, Verilator: every Mig6 test passes (20). dma_check, 320 bytes: hart 0 alone,
+  three routers from the shared memory, 2 296 to 408 cycles (28.7 to 5.1 a word); local to
+  local 264 to 192; all four at once 714 to 976 cycles (954 to 2 280 before), harts 0 and 1,
+  which share router (1, 1)'s south input, the slowest: contention shows for the first time.
+  fc_layer_dma round 1: fetch 848 to 1 107 cycles (1 136 to 2 515), compute 2 449 to 2 463,
+  four PEs 3 651 cycles (5 059), 2.52 times one PE (1.82). Not yet explained, the next
+  limit: alone 5.1 cycles a word where 8 in flight over a 29-cycle round trip would give
+  about 3.6, and four PEs at once about 0.3 words a clock at a memory that takes one
+  (candidates: the shared memory's interface owing at most 4 answers, the routers' 4-flit
+  buffers and credits, router (1, 1)'s round-robin); the next step traces it.
+code:
+  - rtl/design/mig6/mig6_pe.sv#u_dma_rd_demux
+  - rtl/design/mig6/mig6_pe.sv#u_dma_wr_demux
+  - rtl/design/mig6/mig6_pe.sv#u_dma
+  - rtl/design/mig6/cfg/mig6_config.yaml

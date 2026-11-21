@@ -166,14 +166,15 @@ AtomicUnit and a RAM.
   is far: regions behind the network that may be cached (none yet: the cached alias below,
   when a measured case needs it). Arm's Cortex-M7 and Cortex-R5 pair TCMs and caches the
   same way (kb rtl/design/mig6/scratchpad).
-- **A DMA:** the library's DmaSifive (SiFive's PDMA map, sw/riscv/drivers/dma.h), its
+- **A DMA:** the library's DmaSifiveSplit (SiFive's PDMA map, sw/riscv/drivers/dma.h), its
   registers the region dma; its done and error are sources of the PE's PLIC (the library's
   Plic, sw/riscv/drivers/plic.h, the region plic), whose one context is the core's machine
-  external interrupt (kb rtl/design/mig6/plic). Its memory side and the core's memory port
-  reach the local memory and the network interface through a small crossbar of ReqDemux
-  and ReqMux, so the core works on local memory while the DMA waits for the network (kb
-  rtl/design/mig6/dma). A word a transaction, one in flight, for now: the measurements in
-  chunk 8 say what to improve.
+  external interrupt (kb rtl/design/mig6/plic). Its read channel, its write channel and the
+  core's memory port reach the local memory and the network interface through a small
+  crossbar of ReqDemux and ReqMux, so the core works on local memory while the DMA waits
+  for the network, and the DMA's writes never wait behind the answers its reads are owed
+  (kb rtl/design/mig6/dma, dma_depth). A word a transaction, up to 8 in flight (cfg
+  dma_depth).
 - **Network interface:** the PE's door to the NoC; requests to the shared memory leave
   through it as packets, answers come back.
 - **The same program on every PE** (SPMD): each finds its part from `mhartid`, the RISC-V
@@ -359,8 +360,17 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       interrupt handler's store to the reserved line, succeeds alone or after a DMA write
       elsewhere); then the core's own reservation (Mig6Atomic) went, unused (done
       2026-11-20: an SC's status comes back as loaded data, every program's cycles
-      unchanged). Then what
-      the numbers ask (more reads in flight, bursts on the network).
+      unchanged). Then the DMA's improvements, measure, discuss, improve, against the fixed
+      benchmark fc_layer_dma (traced first: a far PE's word 31 cycles, 84 % of it the
+      network's round trip, about 4.2 cycles a router each way; the DMA had one word in
+      flight): the library's DmaMover with read and write channels and DEPTH transactions in
+      flight, DmaChannel with an issue pointer (kb rtl/lib/block/dma/pipelined_mover,
+      issue_pointer); Mig6Pe with DmaSifiveSplit at depth 8, its reads and writes on their
+      own demuxes (done 2026-11-20: kb rtl/design/mig6/dma_depth; dma_check 320 bytes on the
+      far PE alone 2 296 to 408 cycles; fc_layer_dma four PEs 5 059 to 3 651 cycles, 1.82
+      to 2.52 times one PE). Next: trace again; the path now caps below the DMA's depth
+      (alone 5.1 cycles a word where 8 in flight would give about 3.6; four PEs at once
+      about 0.3 words a clock at a memory that takes one).
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),

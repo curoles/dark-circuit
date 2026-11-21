@@ -19,3 +19,8 @@
 #define MIG6_PLIC_PRIO_WIDTH 2
 #define MIG6_DMA_DONE_SOURCE(ch)  (1u + 2u * (ch))
 #define MIG6_DMA_ERROR_SOURCE(ch) (1u + 2u * (ch) + 1u)
+
+/* Each PE's DMA keeps up to MIG6_DMA_DEPTH transactions (beats of a word) in flight: a
+ * transfer whose destination starts after its source by less than that many beats is
+ * undefined, and a stop drains up to that many (sw/riscv/drivers/dma.h). */
+#define MIG6_DMA_DEPTH 8u

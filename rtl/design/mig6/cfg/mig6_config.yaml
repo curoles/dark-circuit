@@ -9,6 +9,7 @@ dcache_sets_width: 6          # D-cache: skewed, write-through, 2 ways of 64 lin
 cache_line_words: 2           # words in a line of both caches and of the memory: 1 or 2
 plic_prio_width: 2            # each PE's PLIC: priorities 1 to 3 (0: never)
 dma_source:      1            # its sources: DMA channel c's done at 1 + 2c, its error 2 + 2c
+dma_depth:       8            # each PE's DMA: transactions in flight (kb rtl/design/mig6/dma_depth)
 
 # Generated files: template in this directory -> output relative to repository root.
 generate:
