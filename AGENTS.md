@@ -300,6 +300,8 @@ Icarus means Icarus 13, the version the project uses.
   `{p_N-1, ..., p_0}` by the caller as for a packed array (`block/addr_decode`).
 - Icarus has no queues of packed structs ("Queue of type netstruct_t is not yet
   supported"); queue plain vectors of `$bits(T)` and assign to and from T.
+- Icarus has no unpacked structs ("sorry: Unpacked structs not supported"), not even in a
+  testbench; make the struct packed (`int` fields are fine in it).
 - Icarus and fields of array elements: a field of an element of an unpacked array of
   structs, `hist[k].valid`, crashes the elaboration (the same elab_expr.cc assert), and a
   field of a packed-array element picked by a variable index, `grant[w].valid = 1`, can not

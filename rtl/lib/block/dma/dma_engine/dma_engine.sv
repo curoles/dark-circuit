@@ -1,5 +1,6 @@
-/* DMA engine: N_CHANNELS DMA channels sharing one DMA mover on the library's memory channel,
- * wiring only; the part every DMA front end (a register map) is built on.
+/* DMA engine: N_CHANNELS DMA channels sharing one DMA mover, with its read and write channels
+ * of the library's kind, wiring only; the part every DMA front end (a register map) is built
+ * on.
  *
  * Each channel c is controlled by its own start, start_src, start_dst, start_len and stop
  * and shows busy, done, cur_src, cur_dst and left (DmaChannel, see there). The channels'
@@ -9,11 +10,13 @@
  * stays the same (the library's valid/ready rules): while it waits the arbiter sees only the
  * waiting channel's request (a flop remembers the grant), so a channel that starts to
  * request meanwhile cannot change it, and the arbiter's order moves on with the right
- * winner. One transaction in flight for all channels; a channel waits at most N_CHANNELS - 1
- * transactions of the others.
+ * winner. The mover keeps up to DEPTH transactions in flight, reads ahead of writes, a
+ * transaction retiring at its write's take or, with WR_ACK, at its answer (kb
+ * rtl/lib/block/dma/pipelined_mover); a channel offers its next transaction after the done
+ * of the one before, so a channel has one in flight and the channels share DEPTH.
  *
  *   channel 0 ..N-1 --cmd--> RoundRobinArbiter (lock while waiting) --MuxOneHot, ID-->
- *       DmaMover <--> memory;   done_id --Decoder--> that channel's mv_done
+ *       DmaMover <--> read channel, write channel;   done_id --Decoder--> that channel's mv_done
  *
  * One file for the behave and the struct library: the parts of the library it is built with
  * give the version.
@@ -29,6 +32,8 @@ module DmaEngine #(
     parameter  ADDR_WIDTH = 32,                     // byte address
     parameter  DATA_WIDTH = 64,                     // a beat: a power of 2, 16 bits or more
     parameter  LEN_WIDTH  = 32,                     // bits of a byte count
+    parameter  DEPTH      = 1,                      // the mover's transactions in flight
+    parameter  WR_ACK     = 0,                      // the mover's writes want an answer
     localparam STRB_WIDTH = DATA_WIDTH / 8,
     localparam N_WIDTH    = $clog2(STRB_WIDTH) + 1, // bits of a transaction's bytes
     localparam ID_WIDTH   = (N_CHANNELS > 1) ? $clog2(N_CHANNELS) : 1,
@@ -49,16 +54,23 @@ module DmaEngine #(
     output wire [N-1:0][ADDR_WIDTH-1:0] cur_dst,
     output wire [N-1:0][LEN_WIDTH-1:0]  left,
 
-    // Memory side
-    output wire                         mem_req_valid,
-    input  wire                         mem_req_ready,
-    output wire                         mem_req_we,
-    output wire [ADDR_WIDTH-1:0]        mem_req_addr,
-    output wire [2:0]                   mem_req_size,
-    output wire [DATA_WIDTH-1:0]        mem_req_wdata,
-    output wire [STRB_WIDTH-1:0]        mem_req_wstrb,
-    input  wire                         mem_rsp_valid,
-    input  wire [DATA_WIDTH-1:0]        mem_rsp_data
+    // Read channel (DmaMover's)
+    output wire                         rd_req_valid,
+    input  wire                         rd_req_ready,
+    output wire [ADDR_WIDTH-1:0]        rd_req_addr,
+    output wire [2:0]                   rd_req_size,
+    input  wire                         rd_rsp_valid,
+    input  wire [DATA_WIDTH-1:0]        rd_rsp_data,
+
+    // Write channel (DmaMover's)
+    output wire                         wr_req_valid,
+    input  wire                         wr_req_ready,
+    output wire [ADDR_WIDTH-1:0]        wr_req_addr,
+    output wire [2:0]                   wr_req_size,
+    output wire [DATA_WIDTH-1:0]        wr_req_wdata,
+    output wire [STRB_WIDTH-1:0]        wr_req_wstrb,
+    output wire                         wr_req_rsp,
+    input  wire                         wr_rsp_valid
 );
     localparam CW = 2 * ADDR_WIDTH + LEN_WIDTH;     // a command's fields
     localparam IN = 1 << ID_WIDTH;                  // IDs
@@ -125,12 +137,13 @@ module DmaEngine #(
         .in({{(IN-N){1'b0}}, grant}), .out(cmd_id), .valid(id_valid));
 
     DmaMover #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LEN_WIDTH),
-               .ID_WIDTH(ID_WIDTH)) u_mover(
+               .ID_WIDTH(ID_WIDTH), .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_mover(
         .clk, .rst_n, .cmd_valid(mv_cmd_valid), .cmd_ready(mv_cmd_ready), .cmd_id,
         .cmd_src(cmd[CW-1 -: ADDR_WIDTH]), .cmd_dst(cmd[LEN_WIDTH +: ADDR_WIDTH]),
         .cmd_left(cmd[LEN_WIDTH-1:0]), .done_valid, .done_id, .done_n,
-        .mem_req_valid, .mem_req_ready, .mem_req_we, .mem_req_addr, .mem_req_size,
-        .mem_req_wdata, .mem_req_wstrb, .mem_rsp_valid, .mem_rsp_data);
+        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
+        .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
+        .wr_req_rsp, .wr_rsp_valid);
 
     // The done to its channel.
     Decoder #(.SIZE(ID_WIDTH)) u_decoder_done(.in(done_id), .en(done_valid), .out(mv_done));

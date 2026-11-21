@@ -9,12 +9,24 @@ mutants:
         old: "(OFF_WIDTH+1)'(STRB_WIDTH) - (OFF_WIDTH+1)'((so > d_o) ? so : d_o);"
         new: "(OFF_WIDTH+1)'(STRB_WIDTH - 1) - (OFF_WIDTH+1)'((so > d_o) ? so : d_o);"
     expect: model
-  - name: behave, the rotation the wrong way
+  - name: behave, the rotation the wrong way (2026-11-20, the pipelined mover)
     edits:
       - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
-        old: "rot_q     <= cmd_dst[OFF_WIDTH-1:0] - cmd_src[OFF_WIDTH-1:0];"
-        new: "rot_q     <= cmd_src[OFF_WIDTH-1:0] - cmd_dst[OFF_WIDTH-1:0];"
+        old: "assign cmd_x.rot     = cmd_dst[OFF_WIDTH-1:0] - cmd_src[OFF_WIDTH-1:0];"
+        new: "assign cmd_x.rot     = cmd_src[OFF_WIDTH-1:0] - cmd_dst[OFF_WIDTH-1:0];"
     expect: model
+  - name: behave, with WR_ACK a transaction retires at its write's take (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+        old: "        assign retire = wr_rsp_valid;"
+        new: "        assign retire = wr_take;"
+    expect: model
+  - name: behave, a read's answer written before its data is there (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+        old: "    assign wr_req_valid = !d_empty;"
+        new: "    assign wr_req_valid = !d_empty || !a_empty;"
+    expect: a_answer_expected
   - name: struct, n the larger of left and room
     edits:
       - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
@@ -27,9 +39,15 @@ mutants:
         old: ".in0(dst_off), .in1(src_off), .sel(src_ge)"
         new: ".in0(src_off), .in1(dst_off), .sel(src_ge)"
     expect: model
-  - name: struct, the data not rotated
+  - name: struct, the data not rotated (2026-11-20, rotated at the write)
     edits:
       - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
-        old: ".shift({rot_q, 3'b000})"
-        new: ".shift({rot_q & '0, 3'b000})"
+        old: ".shift({h_rot, 3'b000})"
+        new: ".shift({h_rot & '0, 3'b000})"
+    expect: model
+  - name: struct, the count in flight never goes down (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+        old: ".in1(take), .in2(retire), .out(count_en)"
+        new: ".in1(take), .in2(1'b0), .out(count_en)"
     expect: model

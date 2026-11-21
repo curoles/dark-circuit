@@ -6,14 +6,17 @@
  * gap between transfers; in one transfer of six a stop at a random clock. Per channel, the
  * clock after a start: busy, or done for 0 bytes; at the end: done with nothing left and the
  * addresses past the last byte, or (stopped) idle with bytes left and the addresses that far.
- * The memory is ready in 70 % of the clocks and answers 1 to 4 clocks late. Model: a
+ * The memory is behind the mover's read and write channels, each ready in 70 % of the clocks;
+ * it answers reads 1 to 4 clocks late and, with WR_ACK, writes 1 to 3 clocks late, in
+ * order. Model: a
  * reference memory where a transfer's transactions are replayed (n counted byte by byte as
  * the mover does, each copied from a snapshot) up to the bytes the channel moved, which must
  * end at a transaction. Every clock: an offer to the mover that waits stays the same. At the
  * end the memory equals the reference. Configurations: 3 channels with beats of 64 bits, 1
- * channel with 32. Every case must happen (checks named cover): two channels offering at
- * once, an offer that waits, a stop, a transfer of 0 bytes, each channel done. Checks named
- * model and cover. Stops at the first failure.
+ * channel with 32, both with DEPTH 1; 3 channels with 64 and DEPTH 4 and WR_ACK (each channel
+ * has one transaction in flight, the channels share the depth). Every case must happen
+ * (checks named cover): two channels offering at once, an offer that waits, a stop, a
+ * transfer of 0 bytes, each channel done. Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -22,7 +25,9 @@
 
 module TbDmaEngineCheck #(
     parameter N_CHANNELS = 3,
-    parameter DATA_WIDTH = 64
+    parameter DATA_WIDTH = 64,
+    parameter DEPTH      = 1,
+    parameter WR_ACK     = 0
 )(
     input  wire  clk,
     input  wire  rst_n,
@@ -52,34 +57,40 @@ module TbDmaEngineCheck #(
     wire  [N-1:0]          busy, done;
     wire  [N-1:0][AW-1:0]  cur_src, cur_dst;
     wire  [N-1:0][LW-1:0]  left;
-    wire                   mem_req_valid;
-    logic                  mem_req_ready;
-    wire                   mem_req_we;
-    wire  [AW-1:0]         mem_req_addr;
+    wire                   rd_req_valid;
+    logic                  rd_req_ready;
+    wire  [AW-1:0]         rd_req_addr;
+    logic                  rd_rsp_valid;
+    logic [DATA_WIDTH-1:0] rd_rsp_data;
+    wire                   wr_req_valid;
+    logic                  wr_req_ready;
+    wire  [AW-1:0]         wr_req_addr;
+    wire  [DATA_WIDTH-1:0] wr_req_wdata;
+    wire  [B-1:0]          wr_req_wstrb;
+    logic                  wr_rsp_valid;
     // Checked by the DmaMover test.
     /* verilator lint_off UNUSEDSIGNAL */
-    wire  [2:0]            mem_req_size;
+    wire  [2:0]            rd_req_size, wr_req_size;
+    wire                   wr_req_rsp;
     /* verilator lint_on UNUSEDSIGNAL */
-    wire  [DATA_WIDTH-1:0] mem_req_wdata;
-    wire  [B-1:0]          mem_req_wstrb;
-    logic                  mem_rsp_valid;
-    logic [DATA_WIDTH-1:0] mem_rsp_data;
 
     logic [7:0]            mem [MEM];
     logic [7:0]            ref_mem [MEM];
     logic [DATA_WIDTH-1:0] ans [$];
     int                    due [$];
+    int                    ack_due [$];         // write answers due (WR_ACK)
     int                    cycle;
     integer                seed;
     bit                    seen_two, seen_wait, seen_stop, seen_empty;
     logic [N-1:0]          seen_done;
 
-    DmaEngine #(.N_CHANNELS(N), .ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LW))
-        u_dma_engine(
-            .clk, .rst_n, .start, .start_src, .start_dst, .start_len, .stop, .busy, .done,
-            .cur_src, .cur_dst, .left, .mem_req_valid, .mem_req_ready, .mem_req_we,
-            .mem_req_addr, .mem_req_size, .mem_req_wdata, .mem_req_wstrb, .mem_rsp_valid,
-            .mem_rsp_data);
+    DmaEngine #(.N_CHANNELS(N), .ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LW),
+                .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_dma_engine(
+        .clk, .rst_n, .start, .start_src, .start_dst, .start_len, .stop, .busy, .done,
+        .cur_src, .cur_dst, .left,
+        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
+        .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
+        .wr_req_rsp, .wr_rsp_valid);
 
     function automatic logic [DATA_WIDTH-1:0] beat_at(input logic [AW-1:0] a);
         logic [DATA_WIDTH-1:0] d;
@@ -109,33 +120,40 @@ module TbDmaEngineCheck #(
         return len - left_b == moved;
     endfunction
 
-    // The memory, as in the DmaMover test.
+    // The memory, as in the DmaMover test: a read channel and a write channel.
     initial begin
-        mem_req_ready = 1'b0;
-        mem_rsp_valid = 1'b0;
-        mem_rsp_data  = '0;
-        cycle         = 0;
+        rd_req_ready = 1'b0;
+        rd_rsp_valid = 1'b0;
+        rd_rsp_data  = '0;
+        wr_req_ready = 1'b0;
+        wr_rsp_valid = 1'b0;
+        cycle        = 0;
         forever begin
             @(negedge clk);
             cycle++;
-            mem_req_ready = $unsigned($random(seed)) % 10 < 7;
-            mem_rsp_valid = ans.size() > 0 && due[0] <= cycle;
-            mem_rsp_data  = mem_rsp_valid ? ans[0] : '0;
+            rd_req_ready = $unsigned($random(seed)) % 10 < 7;
+            wr_req_ready = $unsigned($random(seed)) % 10 < 7;
+            rd_rsp_valid = ans.size() > 0 && due[0] <= cycle;
+            rd_rsp_data  = rd_rsp_valid ? ans[0] : '0;
+            wr_rsp_valid = ack_due.size() > 0 && ack_due[0] <= cycle;
             #1;
-            if (rst_n && mem_req_valid && mem_req_ready) begin
-                if (mem_req_we) begin
-                    for (int k = 0; k < B; k++)
-                        if (mem_req_wstrb[k])
-                            mem[int'(mem_req_addr) + k] = mem_req_wdata[8 * k +: 8];
-                end else begin
-                    ans.push_back(beat_at(mem_req_addr));
-                    due.push_back(cycle + 1 + $unsigned($random(seed)) % 4);
-                end
+            if (rst_n && rd_req_valid && rd_req_ready) begin
+                ans.push_back(beat_at(rd_req_addr));
+                due.push_back(cycle + 1 + $unsigned($random(seed)) % 4);
             end
-            if (mem_rsp_valid) begin
+            if (rst_n && wr_req_valid && wr_req_ready) begin
+                for (int k = 0; k < B; k++)
+                    if (wr_req_wstrb[k])
+                        mem[int'(wr_req_addr) + k] = wr_req_wdata[8 * k +: 8];
+                if (WR_ACK != 0)
+                    ack_due.push_back(cycle + 1 + $unsigned($random(seed)) % 3);
+            end
+            if (rd_rsp_valid) begin
                 void'(ans.pop_front());
                 void'(due.pop_front());
             end
+            if (wr_rsp_valid)
+                void'(ack_due.pop_front());
         end
     end
 
@@ -277,16 +295,18 @@ module TbDmaEngine;
 
     logic clk;
     logic rst_n;
-    wire  done_3, done_1;
+    wire  done_3, done_1, done_3_4;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
 
     TbDmaEngineCheck #(.N_CHANNELS(3), .DATA_WIDTH(64)) u_check_3(.clk, .rst_n, .done_all(done_3));
     TbDmaEngineCheck #(.N_CHANNELS(1), .DATA_WIDTH(32)) u_check_1(.clk, .rst_n, .done_all(done_1));
+    TbDmaEngineCheck #(.N_CHANNELS(3), .DATA_WIDTH(64), .DEPTH(4), .WR_ACK(1)) u_check_3_4(
+        .clk, .rst_n, .done_all(done_3_4));
 
     initial begin
-        wait (done_3 && done_1);
+        wait (done_3 && done_1 && done_3_4);
         $display("PASS");
         $finish;
     end
