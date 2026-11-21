@@ -49,7 +49,7 @@ module DmaChannel #(
     input  wire                  cmd_ready,
     output wire [ADDR_WIDTH-1:0] cmd_src,           // the issue pointer: the next source,
     output wire [ADDR_WIDTH-1:0] cmd_dst,           //   destination,
-    output wire [LEN_WIDTH-1:0]  cmd_left,          //   bytes left to send
+    output wire [N_WIDTH-1:0]    cmd_n,             //   the transaction's bytes (the mover's)
     input  wire                  mv_done,           // a done of this channel's, in order
     input  wire [N_WIDTH-1:0]    mv_n               // the bytes it moved
 );
@@ -126,7 +126,7 @@ module DmaChannel #(
                                                    .out(offered));
     assign cmd_src  = iss_src;
     assign cmd_dst  = iss_dst;
-    assign cmd_left = iss_left;
+    assign cmd_n    = n;
 
     // The offered transaction's n, as the mover computes it.
     assign src_off = iss_src[OFF_WIDTH-1:0];

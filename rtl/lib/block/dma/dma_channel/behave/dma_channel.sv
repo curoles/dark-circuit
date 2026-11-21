@@ -15,7 +15,9 @@
  * takes it, the issue pointer advances by the transaction's n, computed here as the mover
  * does (as many bytes as both the source's and the destination's beat still hold, at most
  * the bytes left: n = min(left, BEAT - max(src % BEAT, dst % BEAT)), BEAT = 1 << (N_WIDTH -
- * 1) bytes), and the next command is offered in the clock after, without waiting: the mover
+ * 1) bytes; the one place n is computed: it goes to the mover with the command, cmd_n, kb
+ * rtl/lib/block/dma/byte_count), and the next command is offered in the clock after,
+ * without waiting: the mover
  * keeps as many in flight as its depth. Each done from the mover (mv_done with mv_n, in the
  * order of the commands) advances the completion counters by mv_n. When they reach 0, done
  * is 1 for a clock and the channel is idle. So the bytes in flight are left - iss_left.
@@ -62,7 +64,7 @@ module DmaChannel #(
     input  wire                  cmd_ready,
     output wire [ADDR_WIDTH-1:0] cmd_src,           // the issue pointer: the next source,
     output wire [ADDR_WIDTH-1:0] cmd_dst,           //   destination,
-    output wire [LEN_WIDTH-1:0]  cmd_left,          //   bytes left to send
+    output wire [N_WIDTH-1:0]    cmd_n,             //   the transaction's bytes (the mover's)
     input  wire                  mv_done,           // a done of this channel's, in order
     input  wire [N_WIDTH-1:0]    mv_n               // the bytes it moved
 );
@@ -96,7 +98,8 @@ module DmaChannel #(
     assign take      = cmd_valid && cmd_ready;
     assign cmd_src   = iss_src;
     assign cmd_dst   = iss_dst;
-    assign cmd_left  = iss_left;
+    assign cmd_n     = n;
+    // @kb: rtl/lib/block/dma/byte_count
     assign n         = bytes_of(iss_src[OFF_WIDTH-1:0], iss_dst[OFF_WIDTH-1:0], iss_left);
     assign last      = left == LEN_WIDTH'(mv_n);
 

@@ -2,32 +2,32 @@
  * beat and a write of the destination beat, on a read channel and a write channel of the
  * library's kind, up to DEPTH transactions in flight; behavioral.
  *
- * A command (cmd_valid, cmd_ready; the library's valid/ready rules) gives a transfer's
- * current source and destination byte addresses and its bytes left (1 or more), and an ID
- * that the done comes back with (the channel). The transaction moves n bytes, as many as
- * both the source's beat and the destination's beat still hold from those addresses, at
- * most the bytes left:
+ * A command (cmd_valid, cmd_ready; the library's valid/ready rules) gives a transaction's
+ * source and destination byte addresses, its bytes n and an ID that the done comes back
+ * with (the DMA channel). The requester computes n (DmaChannel, kb
+ * rtl/lib/block/dma/byte_count): as many bytes as both the source's beat and the
+ * destination's beat still hold from those addresses, at most the transfer's bytes left,
  *
  *   n = min(left, BEAT - max(src % BEAT, dst % BEAT))     (BEAT = DATA_WIDTH / 8 bytes)
  *
- * so any alignment of source and destination works, a transfer of aligned addresses moving
- * a whole beat a transaction. The command's read of the source's beat goes out in the clock
- * the command is taken: cmd_ready is 1 while fewer than DEPTH transactions are in flight and
- * the read channel is ready. The transaction waits in a queue (A: its destination's beat,
- * offset, rotation, n, ID); the reads' answers come in order into another (D), each in the
- * place its read reserved. Answers have no ready, so the mover must always take one: the
- * place is reserved before the read goes out, and freed only by the write. Were it the
- * other way (an answer that may wait for room, room freed by a write that waits for the
- * write channel), a full mover would hold the answer path: the network's answers or a
- * ReqDemux's owner behind it would stop, and the target the write waits for might be
- * waiting for those answers: a deadlock. The oldest answer is written as soon as
+ * (a_n_fits), so any alignment of source and destination works, a transfer of aligned
+ * addresses moving a whole beat a transaction. The command's read of the source's beat goes
+ * out in the clock the command is taken: cmd_ready is 1 while fewer than DEPTH transactions
+ * are in flight and the read channel is ready. The transaction waits in a queue (A: its
+ * destination's beat, offset, rotation, n, ID); the reads' answers come in order into
+ * another (D), each in the place its read reserved. Answers have no ready, so the mover
+ * must always take one: the place is reserved before the read goes out, and freed only by
+ * the write. Were it the other way (an answer that may wait for room, room freed by a write
+ * that waits for the write channel), a full mover would hold the answer path: the network's
+ * answers or a ReqDemux's owner behind it would stop, and the target the write waits for
+ * might be waiting for those answers: a deadlock. The oldest answer is written as soon as
  * it is there: rotated so that byte src % BEAT lands on byte dst % BEAT, to the
  * destination's beat with the strobes of its n bytes. A transaction retires when its write
  * is taken, or, with WR_ACK, when the write's answer comes (wr_req_rsp; writes answered in
  * order, a queue R holds the transactions waiting): only then are its bytes surely at the
  * destination (kb rtl/lib/block/dma/pipelined_mover). done_valid is 1 for a clock after a
- * retire, with done_id and done_n (the requester advances its addresses by n and takes n off
- * its bytes left; done has no ready: it is always taken).
+ * retire, with done_id and done_n (the requester advances its addresses by n and takes n
+ * off its bytes left; done has no ready: it is always taken).
  *
  * Reads run ahead of writes by up to DEPTH transactions, so a transfer whose destination
  * starts after its source by less than DEPTH beats (DEPTH * BEAT bytes) reads bytes before
@@ -47,7 +47,6 @@
 module DmaMover #(
     parameter  ADDR_WIDTH = 32,                     // byte address
     parameter  DATA_WIDTH = 64,                     // a beat: a power of 2, 16 bits or more
-    parameter  LEN_WIDTH  = 32,                     // bits of a byte count
     parameter  ID_WIDTH   = 2,                      // bits of a command's ID
     parameter  DEPTH      = 1,                      // transactions in flight, 1 or more
     parameter  WR_ACK     = 0,                      // 1: a transaction retires at its write's
@@ -64,7 +63,7 @@ module DmaMover #(
     input  wire [ID_WIDTH-1:0]   cmd_id,
     input  wire [ADDR_WIDTH-1:0] cmd_src,           // the transfer's current source
     input  wire [ADDR_WIDTH-1:0] cmd_dst,           // ... and destination
-    input  wire [LEN_WIDTH-1:0]  cmd_left,          // its bytes left: 1 or more
+    input  wire [OFF_WIDTH:0]    cmd_n,             // its bytes: 1 to a beat's
 
     // Done: one clock, no ready
     output logic                 done_valid,
@@ -90,7 +89,7 @@ module DmaMover #(
     input  wire                  wr_rsp_valid       // a write's answer (WR_ACK)
 );
     `DC_STATIC_ASSERT(a_sizes, DATA_WIDTH >= 16 && (1 << OFF_WIDTH) == STRB_WIDTH &&
-                               ADDR_WIDTH > OFF_WIDTH && LEN_WIDTH > OFF_WIDTH &&
+                               ADDR_WIDTH > OFF_WIDTH &&
                                DEPTH >= 1 && (WR_ACK == 0 || WR_ACK == 1))
 
     localparam HW = ADDR_WIDTH - OFF_WIDTH;             // bits of a beat's address
@@ -110,6 +109,7 @@ module DmaMover #(
 
     logic [CW-1:0]         in_flight;   // transactions taken, not retired
     logic                  take;        // a command is taken: its read goes out
+    logic [OFF_WIDTH-1:0]  max_off;     // the larger of the command's two offsets (a_n_fits)
     xact_t                 cmd_x;       // the command's transaction
     xact_t                 head;        // A's oldest: the next write
     logic [DATA_WIDTH-1:0] data;        // D's oldest: its source beat
@@ -122,15 +122,6 @@ module DmaMover #(
     logic                  a_empty, a_full, d_full, a_af, a_ae, d_af, d_ae;
     logic [QW:0]           a_count, d_count;
     /* verilator lint_on UNUSEDSIGNAL */
-
-    // The bytes a transaction moves, from the offsets of the source and the destination.
-    function automatic logic [OFF_WIDTH:0] bytes_of(input logic [OFF_WIDTH-1:0] so,
-                                                    input logic [OFF_WIDTH-1:0] d_o,
-                                                    input logic [LEN_WIDTH-1:0] left);
-        logic [OFF_WIDTH:0] room;
-        room = (OFF_WIDTH+1)'(STRB_WIDTH) - (OFF_WIDTH+1)'((so > d_o) ? so : d_o);
-        return (left < LEN_WIDTH'(room)) ? left[OFF_WIDTH:0] : room;
-    endfunction
 
     // Rotate a beat left by k bytes.
     function automatic logic [DATA_WIDTH-1:0] rotate(input logic [DATA_WIDTH-1:0] d,
@@ -157,10 +148,13 @@ module DmaMover #(
     assign rd_req_addr  = {cmd_src[ADDR_WIDTH-1:OFF_WIDTH], {OFF_WIDTH{1'b0}}};
     assign rd_req_size  = 3'(OFF_WIDTH);
 
+    assign max_off       = (cmd_src[OFF_WIDTH-1:0] > cmd_dst[OFF_WIDTH-1:0])
+                           ? cmd_src[OFF_WIDTH-1:0] : cmd_dst[OFF_WIDTH-1:0];
     assign cmd_x.dst     = cmd_dst[ADDR_WIDTH-1:OFF_WIDTH];
     assign cmd_x.dst_off = cmd_dst[OFF_WIDTH-1:0];
     assign cmd_x.rot     = cmd_dst[OFF_WIDTH-1:0] - cmd_src[OFF_WIDTH-1:0];
-    assign cmd_x.n       = bytes_of(cmd_src[OFF_WIDTH-1:0], cmd_dst[OFF_WIDTH-1:0], cmd_left);
+    // @kb: rtl/lib/block/dma/byte_count
+    assign cmd_x.n       = cmd_n;
     assign cmd_x.id      = cmd_id;
 
     always_ff @(posedge clk)
@@ -214,8 +208,9 @@ module DmaMover #(
         if (retire)
             {done_n, done_id} <= retire_x;
 
-    // A command has bytes left; an answer only to a read in flight.
-    `DC_ASSERT(a_left, !(cmd_valid && cmd_left == '0))
+    // A command's bytes fit in its beats; an answer only to a read in flight.
+    `DC_ASSERT(a_n_fits, !(cmd_valid && (cmd_n == '0 ||
+                                         int'(cmd_n) + int'(max_off) > STRB_WIDTH)))
     `DC_ASSERT(a_answer_expected, !rd_rsp_valid || a_count > d_count)
 
 endmodule

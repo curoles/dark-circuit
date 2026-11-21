@@ -74,7 +74,7 @@ module DmaEngine #(
     output wire                         wr_req_rsp,
     input  wire                         wr_rsp_valid
 );
-    localparam CW = 2 * ADDR_WIDTH + LEN_WIDTH;     // a command's fields
+    localparam CW = 2 * ADDR_WIDTH + N_WIDTH;       // a command's fields: src, dst, n
     localparam IN = 1 << ID_WIDTH;                  // IDs
 
     `DC_STATIC_ASSERT(a_channels, N_CHANNELS >= 1)
@@ -95,7 +95,7 @@ module DmaEngine #(
     wire [N-1:0]          chan_ready;       // ... channel c's
     wire [N-1:0][ADDR_WIDTH-1:0] iss_src;  // every channel's issue pointer
     wire [N-1:0][ADDR_WIDTH-1:0] iss_dst;
-    wire [N-1:0][LEN_WIDTH-1:0]  iss_left;
+    wire [N-1:0][N_WIDTH-1:0]    iss_n;    // ... its transaction's bytes
     wire [N-1:0][CW-1:0]  cmds;             // every channel's command
     wire [CW-1:0]         cmd;              // the winner's
     wire [ID_WIDTH-1:0]   cmd_id;
@@ -110,14 +110,14 @@ module DmaEngine #(
 
     // @kb: rtl/lib/block/dma/design
     for (genvar c = 0; c < N; c++) begin: g_channel
-        assign cmds[c] = {iss_src[c], iss_dst[c], iss_left[c]};
+        assign cmds[c] = {iss_src[c], iss_dst[c], iss_n[c]};
         DmaChannel #(.ADDR_WIDTH(ADDR_WIDTH), .LEN_WIDTH(LEN_WIDTH), .N_WIDTH(N_WIDTH))
             u_channel(
                 .clk, .rst_n, .start(start[c]), .start_src(start_src[c]),
                 .start_dst(start_dst[c]), .start_len(start_len[c]), .stop(stop[c]),
                 .busy(busy[c]), .done(done[c]), .cur_src(cur_src[c]), .cur_dst(cur_dst[c]),
                 .left(left[c]), .cmd_valid(req[c]), .cmd_ready(chan_ready[c]),
-                .cmd_src(iss_src[c]), .cmd_dst(iss_dst[c]), .cmd_left(iss_left[c]),
+                .cmd_src(iss_src[c]), .cmd_dst(iss_dst[c]), .cmd_n(iss_n[c]),
                 .mv_done(mv_done[c]), .mv_n(done_n));
     end
 
@@ -142,11 +142,11 @@ module DmaEngine #(
     PriorityEncoder #(.SIZE(ID_WIDTH)) u_priority_encoder_id(
         .in({{(IN-N){1'b0}}, grant}), .out(cmd_id), .valid(id_valid));
 
-    DmaMover #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LEN_WIDTH),
-               .ID_WIDTH(ID_WIDTH), .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_mover(
+    DmaMover #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .ID_WIDTH(ID_WIDTH),
+               .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_mover(
         .clk, .rst_n, .cmd_valid(mv_cmd_valid), .cmd_ready(mv_cmd_ready), .cmd_id,
-        .cmd_src(cmd[CW-1 -: ADDR_WIDTH]), .cmd_dst(cmd[LEN_WIDTH +: ADDR_WIDTH]),
-        .cmd_left(cmd[LEN_WIDTH-1:0]), .done_valid, .done_id, .done_n,
+        .cmd_src(cmd[CW-1 -: ADDR_WIDTH]), .cmd_dst(cmd[N_WIDTH +: ADDR_WIDTH]),
+        .cmd_n(cmd[N_WIDTH-1:0]), .done_valid, .done_id, .done_n,
         .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
         .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
         .wr_req_rsp, .wr_rsp_valid);

@@ -1,0 +1,35 @@
+type: decision
+title: A DMA transaction's byte count is computed once, in DmaChannel, and sent to the mover
+date: 2026-11-20
+question: >
+  With the issue pointer (kb rtl/lib/block/dma/issue_pointer) DmaChannel computes each
+  transaction's bytes n to advance its pointer at the take, and DmaMover computed the same n
+  from the command's addresses and bytes left: two copies of one formula. Bursts (kb
+  rtl/lib/block/bursts) make the formula bigger (a burst's beats, its block boundary); two
+  copies would have to change together, and one that drifts moves the wrong bytes. Where
+  should n live?
+decision: >
+  In DmaChannel only: its command carries cmd_n (the transaction's bytes) in place of
+  cmd_left; DmaEngine's command is {source, destination, n}; DmaMover takes cmd_n as given
+  (a_n_fits: n is at least 1 and fits in the beats from the two offsets) and loses its
+  byte-count logic and its LEN_WIDTH parameter. The mover's n mutants move to the engine's
+  test, where DmaChannel is tested.
+why: >
+  One formula, in the block that needs n first (to advance its issue pointer before the
+  done that carries n); the mover gets simpler. A pure refactor, done before the bursts so
+  that each step can be checked alone: every output the same.
+rejected:
+  - choice: A shared function in a package, called by both
+    why_not: Still two places computing (and two sets of gates in the struct versions); the
+      mover does not need to know a transfer's bytes left at all.
+relies_on:
+  - rtl/lib/block/dma/issue_pointer
+  - rtl/lib/block/dma/pipelined_mover
+evidence: >
+  2026-11-20: test/block/dma (mover, engine, sifive; behave and struct; Verilator and
+  Icarus) pass; Mig3's and Mig6's tests pass and their DMA programs print the same, cycles
+  included; the moved mutants are caught in the engine's test.
+code:
+  - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#cmd_n
+  - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv#cmd_n
+  - rtl/lib/block/dma/dma_engine/dma_engine.sv#iss_n

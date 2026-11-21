@@ -43,7 +43,6 @@ module TbDmaMoverCheck #(
 `endif
     localparam AW      = 10;                    // a memory of 1 KiB
     localparam MEM     = 1 << AW;
-    localparam LW      = 16;
     localparam IW      = 2;
     localparam B       = DATA_WIDTH / 8;        // bytes of a beat
     localparam OW      = $clog2(B);
@@ -59,7 +58,7 @@ module TbDmaMoverCheck #(
     wire                   cmd_ready;
     logic [IW-1:0]         cmd_id;
     logic [AW-1:0]         cmd_src, cmd_dst;
-    logic [LW-1:0]         cmd_left;
+    logic [OW:0]           cmd_n;
     wire                   done_valid;
     wire  [IW-1:0]         done_id;
     wire  [OW:0]           done_n;
@@ -91,9 +90,9 @@ module TbDmaMoverCheck #(
     bit                    seen_left, seen_src, seen_dst, seen_beat, seen_same, seen_overlap;
     bit                    seen_deep, seen_both;
 
-    DmaMover #(.ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LW), .ID_WIDTH(IW),
+    DmaMover #(.ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .ID_WIDTH(IW),
                .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_dma_mover(
-        .clk, .rst_n, .cmd_valid, .cmd_ready, .cmd_id, .cmd_src, .cmd_dst, .cmd_left,
+        .clk, .rst_n, .cmd_valid, .cmd_ready, .cmd_id, .cmd_src, .cmd_dst, .cmd_n,
         .done_valid, .done_id, .done_n,
         .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
         .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
@@ -129,7 +128,7 @@ module TbDmaMoverCheck #(
         cmd_id       = '0;
         cmd_src      = '0;
         cmd_dst      = '0;
-        cmd_left     = '0;
+        cmd_n        = '0;
         rd_req_ready = 1'b0;
         rd_rsp_valid = 1'b0;
         rd_rsp_data  = '0;
@@ -188,7 +187,7 @@ module TbDmaMoverCheck #(
             offered   = cmd_valid;
             cmd_src   = AW'(s);
             cmd_dst   = AW'(d);
-            cmd_left  = LW'(left);
+            cmd_n     = (OW+1)'(n_of(s, d, left));
             // The memory.
             rd_req_ready = $unsigned($random(seed)) % 10 < 7;
             wr_req_ready = $unsigned($random(seed)) % 10 < 7;

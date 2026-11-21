@@ -87,8 +87,8 @@ evidence: >
   6 of 6 mutants caught on both simulators (kb test/block/dma/dma_sifive/mutants). Not
   checked yet: real software (Linux's sf-pdma, a C driver) on a core: that comes with Mig3.
 code:
-  - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv#bytes_of
-  - rtl/lib/block/dma/dma_mover/struct/dma_mover.sv#u_incr_room
+  - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#bytes_of
+  - rtl/lib/block/dma/dma_channel/struct/dma_channel.sv#u_incr_room
   - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#stopping
   - rtl/lib/block/dma/dma_engine/dma_engine.sv#u_mux2_arb_req
   - rtl/lib/block/dma/dma_sifive/dma_sifive_pkg.sv

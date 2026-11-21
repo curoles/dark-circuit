@@ -179,7 +179,7 @@ module TbDmaEngineCheck #(
         int     in_flight [N];      // a channel's transactions: taken, not done
         logic   prev_offer;
         logic [IW-1:0] prev_id;
-        logic [2 * AW + LW - 1:0] prev_cmd;
+        logic [2 * AW + $clog2(B):0] prev_cmd;   // src, dst, n
         done_all = 1'b0;
         seed     = 13 * N + DATA_WIDTH;
         {seen_two, seen_wait, seen_stop, seen_empty} = '0;

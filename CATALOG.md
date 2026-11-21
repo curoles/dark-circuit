@@ -689,18 +689,18 @@ block:
       what: "DMA channel: the state of one transfer, its commands to the DMA mover"
       versions: [behave, struct]
       path: rtl/lib/block/dma/dma_channel
-      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer]
+      kb: [rtl/lib/block/dma/byte_count, rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer]
     DmaEngine:
       what: "DMA engine: N_CHANNELS DMA channels sharing one DMA mover, with its read and write channels of the library's kind, wiring only; the part every DMA front end (a register map) is built on"
       path: rtl/lib/block/dma/dma_engine
       test: test/block/dma/dma_engine
-      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer, rtl/lib/block/dma/pipelined_mover]
+      kb: [rtl/lib/block/dma/byte_count, rtl/lib/block/dma/design, rtl/lib/block/dma/issue_pointer, rtl/lib/block/dma/pipelined_mover]
     DmaMover:
       what: "DMA mover: moves the bytes of the transactions of DMA transfers, each a read of the source beat and a write of the destination beat, on a read channel and a write channel of the library's kind, up to DEPTH transactions in flight"
       versions: [behave, struct]
       path: rtl/lib/block/dma/dma_mover
       test: test/block/dma/dma_mover
-      kb: [rtl/lib/block/dma/design, rtl/lib/block/dma/pipelined_mover]
+      kb: [rtl/lib/block/dma/byte_count, rtl/lib/block/dma/pipelined_mover]
     DmaSifive:
       what: "DmaSifive: a DMA with SiFive's PDMA register map (DmaSifivePkg) behind the register port and N_CHANNELS DMA channels on one memory channel, the device top, wiring only"
       path: rtl/lib/block/dma/dma_sifive

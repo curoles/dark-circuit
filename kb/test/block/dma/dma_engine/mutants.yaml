@@ -52,3 +52,18 @@ mutants:
       - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
         old: "iss_dst  <= iss_dst + ADDR_WIDTH'(n);"
         new: "iss_dst  <= iss_dst + ADDR_WIDTH'(n) + 1;"
+  - name: DmaChannel behave, the room one byte short (2026-11-20, n moved from DmaMover)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
+        old: "room = N_WIDTH'(1 << OFF_WIDTH) - N_WIDTH'((so > d_o) ? so : d_o);"
+        new: "room = N_WIDTH'((1 << OFF_WIDTH) - 1) - N_WIDTH'((so > d_o) ? so : d_o);"
+  - name: DmaChannel struct, n the larger of the bytes left and the room (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
+        old: ".in0(iss_left[N_WIDTH-1:0]), .in1(room), .sel(rest_ge)"
+        new: ".in0(room), .in1(iss_left[N_WIDTH-1:0]), .sel(rest_ge)"
+  - name: DmaChannel struct, the smaller offset taken, n crosses a beat (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
+        old: ".in0(dst_off), .in1(src_off), .sel(src_ge)"
+        new: ".in0(src_off), .in1(dst_off), .sel(src_ge)"

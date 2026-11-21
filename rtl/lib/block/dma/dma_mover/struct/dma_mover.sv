@@ -4,14 +4,12 @@
  *
  * Same ports and behavior as the behave version (see there). A Counter keeps the
  * transactions in flight (up at a take, down at a retire: count_en their Xor2); CmpGe with
- * DEPTH says when it is full. At the take: the larger of the two offsets (CmpGe, Mux2), the
- * room left in the beats, BEAT - max = ~max + 1 (Inv, Incr: its carry is the bit for a whole
- * beat), n = min(left, room) (CmpGe, Mux2), the rotation dst - src = dst + ~src + 1
- * (RippleCarryAdder); the transaction goes into Fifo A, the reads' answers into Fifo D, and
- * with WR_ACK the written transactions into Fifo R. The write rotates D's head by A's
- * rotation (BarrelShifter, 8 * rotation bits); its strobes are the first n bytes (a CmpGe per
- * byte) shifted to the destination's offset (BarrelShifter). Done is a DffSyncRst and a
- * DffEn of the retiring transaction's n and ID.
+ * DEPTH says when it is full. At the take: the rotation dst - src = dst + ~src + 1
+ * (RippleCarryAdder; n comes with the command); the transaction goes into Fifo A, the
+ * reads' answers into Fifo D, and with WR_ACK the written transactions into Fifo R. The
+ * write rotates D's head by A's rotation (BarrelShifter, 8 * rotation bits); its strobes
+ * are the first n bytes (a CmpGe per byte) shifted to the destination's offset
+ * (BarrelShifter). Done is a DffSyncRst and a DffEn of the retiring transaction's n and ID.
  *
  *   cmd --CmpGe, Mux2, Inv, Incr, RippleCarryAdder--> Fifo A {dst, off, rot, n, id}
  *   rd_rsp_data --> Fifo D --BarrelShifter (rotate by A's rot)--> wr_req_wdata
@@ -27,7 +25,6 @@
 module DmaMover #(
     parameter  ADDR_WIDTH = 32,                     // byte address
     parameter  DATA_WIDTH = 64,                     // a beat: a power of 2, 16 bits or more
-    parameter  LEN_WIDTH  = 32,                     // bits of a byte count
     parameter  ID_WIDTH   = 2,                      // bits of a command's ID
     parameter  DEPTH      = 1,                      // transactions in flight, 1 or more
     parameter  WR_ACK     = 0,                      // 1: a transaction retires at its write's
@@ -44,7 +41,7 @@ module DmaMover #(
     input  wire [ID_WIDTH-1:0]   cmd_id,
     input  wire [ADDR_WIDTH-1:0] cmd_src,           // the transfer's current source
     input  wire [ADDR_WIDTH-1:0] cmd_dst,           // ... and destination
-    input  wire [LEN_WIDTH-1:0]  cmd_left,          // its bytes left: 1 or more
+    input  wire [OFF_WIDTH:0]    cmd_n,             // its bytes: 1 to a beat's
 
     // Done: one clock, no ready
     output wire                  done_valid,
@@ -70,7 +67,7 @@ module DmaMover #(
     input  wire                  wr_rsp_valid       // a write's answer (WR_ACK)
 );
     `DC_STATIC_ASSERT(a_sizes, DATA_WIDTH >= 16 && (1 << OFF_WIDTH) == STRB_WIDTH &&
-                               ADDR_WIDTH > OFF_WIDTH && LEN_WIDTH > OFF_WIDTH &&
+                               ADDR_WIDTH > OFF_WIDTH &&
                                DEPTH >= 1 && (WR_ACK == 0 || WR_ACK == 1))
 
     localparam HW = ADDR_WIDTH - OFF_WIDTH;             // bits of a beat's address
@@ -86,12 +83,6 @@ module DmaMover #(
     wire                  retire;
     wire                  count_en;         // take or retire, not both
     wire [OFF_WIDTH-1:0]  src_off, dst_off; // the offsets of the command
-    wire                  src_ge;           // src_off >= dst_off
-    wire [OFF_WIDTH-1:0]  off_max;
-    wire [OFF_WIDTH-1:0]  off_max_n;
-    wire [OFF_WIDTH:0]    room;             // BEAT - off_max
-    wire                  left_ge;          // cmd_left >= room
-    wire [OFF_WIDTH:0]    n;                // min(cmd_left, room)
     wire [OFF_WIDTH-1:0]  src_off_n;
     wire [OFF_WIDTH-1:0]  rot;              // (dst_off - src_off) % BEAT
     wire [HW-1:0]         h_dst;            // A's head: the next write's beat,
@@ -127,17 +118,9 @@ module DmaMover #(
     assign rd_req_addr = {cmd_src[ADDR_WIDTH-1:OFF_WIDTH], {OFF_WIDTH{1'b0}}};
     assign rd_req_size = 3'(OFF_WIDTH);
 
-    // The transaction: n and the rotation, from the command.
+    // The transaction: the rotation, from the command (n comes with it).
     assign src_off = cmd_src[OFF_WIDTH-1:0];
     assign dst_off = cmd_dst[OFF_WIDTH-1:0];
-    CmpGe #(OFF_WIDTH) u_cmp_ge_off(.in1(src_off), .in2(dst_off), .ge(src_ge));
-    Mux2 #(OFF_WIDTH) u_mux2_off_max(.in0(dst_off), .in1(src_off), .sel(src_ge), .out(off_max));
-    Inv  #(OFF_WIDTH) u_inv_off_max(.in(off_max), .out(off_max_n));
-    Incr #(.WIDTH(OFF_WIDTH)) u_incr_room(.in(off_max_n), .out(room[OFF_WIDTH-1:0]),
-                                          .co(room[OFF_WIDTH]));
-    CmpGe #(LEN_WIDTH) u_cmp_ge_left(.in1(cmd_left), .in2({{(LEN_WIDTH-OFF_WIDTH-1){1'b0}}, room}),
-                                     .ge(left_ge));
-    Mux2 #(OFF_WIDTH+1) u_mux2_n(.in0(cmd_left[OFF_WIDTH:0]), .in1(room), .sel(left_ge), .out(n));
     Inv  #(OFF_WIDTH) u_inv_src_off(.in(src_off), .out(src_off_n));
     RippleCarryAdder #(OFF_WIDTH) u_ripple_carry_adder_rot(
         .in1(dst_off), .in2(src_off_n), .ci(1'b1), .co(co_rot), .sum(rot));
@@ -145,7 +128,7 @@ module DmaMover #(
     // A: the transactions whose writes wait; D: their reads' answers, in order.
     Fifo #(.ADDR_WIDTH(QW), .DATA_WIDTH(AW)) u_fifo_xact(
         .clk, .rst_n, .write(take),
-        .data_in({cmd_dst[ADDR_WIDTH-1:OFF_WIDTH], dst_off, rot, n, cmd_id}), .read(wr_take),
+        .data_in({cmd_dst[ADDR_WIDTH-1:OFF_WIDTH], dst_off, rot, cmd_n, cmd_id}), .read(wr_take),
         .data_out({h_dst, h_off, h_rot, h_n, h_id}), .empty(a_empty), .full(a_full),
         .count(a_count), .almost_full(a_af), .almost_empty(a_ae));
     Fifo #(.ADDR_WIDTH(QW), .DATA_WIDTH(DATA_WIDTH)) u_fifo_data(
@@ -192,7 +175,9 @@ module DmaMover #(
     DffEn #(RW) u_dff_en_done(.clk, .en(retire), .in(retire_x), .out({done_n, done_id}));
 
     // See the behave version.
-    `DC_ASSERT(a_left, !(cmd_valid && cmd_left == '0))
+    `DC_ASSERT(a_n_fits, !(cmd_valid && (cmd_n == '0 || int'(cmd_n) + int'(src_off)
+                                         > STRB_WIDTH || int'(cmd_n) + int'(dst_off)
+                                         > STRB_WIDTH)))
     `DC_ASSERT(a_answer_expected, !rd_rsp_valid || a_count > d_count)
 
 endmodule
