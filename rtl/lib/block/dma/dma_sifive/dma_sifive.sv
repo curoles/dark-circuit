@@ -64,9 +64,11 @@ module DmaSifive import DmaSifivePkg::*; #(
     wire [2:0]                   wr_size;
     wire [DATA_WIDTH-1:0]        wr_wdata;
     wire [STRB_WIDTH-1:0]        wr_wstrb;
-    // No write is answered: wr_rsp_valid stays 0, the target's rsp follows the requester's.
+    // No write is answered: wr_rsp_valid stays 0, the target's rsp follows the requester's;
+    // no bursts (MAX_BURST 1: the memory channel has no length), rd_len is 0.
     /* verilator lint_off UNUSEDSIGNAL */
     wire                         wr_rsp, wr_rsp_valid, mem_req_rsp;
+    wire                         rd_len;
     wire [DATA_WIDTH-1:0]        mux_rsp_data;      // = mem_rsp_data, read straight
     /* verilator lint_on UNUSEDSIGNAL */
     localparam FW = ADDR_WIDTH + 3 + DATA_WIDTH + STRB_WIDTH;  // a request's fields
@@ -77,7 +79,7 @@ module DmaSifive import DmaSifivePkg::*; #(
         .clk, .rst_n, .req_valid, .req_ready, .req_we, .req_addr, .req_wdata, .req_wstrb,
         .rsp_valid, .rsp_rdata,
         .rd_req_valid(rd_valid), .rd_req_ready(rd_ready), .rd_req_addr(rd_addr),
-        .rd_req_size(rd_size), .rd_rsp_valid, .rd_rsp_data(mem_rsp_data),
+        .rd_req_size(rd_size), .rd_req_len(rd_len), .rd_rsp_valid, .rd_rsp_data(mem_rsp_data),
         .wr_req_valid(wr_valid), .wr_req_ready(wr_ready), .wr_req_addr(wr_addr),
         .wr_req_size(wr_size), .wr_req_wdata(wr_wdata), .wr_req_wstrb(wr_wstrb),
         .wr_req_rsp(wr_rsp), .wr_rsp_valid, .irq);

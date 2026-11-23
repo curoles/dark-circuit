@@ -166,8 +166,10 @@ module Mig6Pe import Mig6Pkg::*; #(
     size_t            wr_size;
     word_t            wr_wdata;
     strb_t            wr_wstrb;
-    // The write channel wants no answer (WR_ACK 0), so its demux returns none.
+    // The write channel wants no answer (WR_ACK 0), so its demux returns none; the DMA reads
+    // no bursts yet (MAX_BURST 1), its rd_len is 0.
     /* verilator lint_off UNUSEDSIGNAL */
+    wire              rd_len;
     wire              wr_rsp;
     wire              wr_rsp_valid;
     word_t            wr_rsp_data;
@@ -449,7 +451,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .req_addr(mem_req.addr[DMA_ADDR_WIDTH-1:0]), .req_wdata(core_wdata),
         .req_wstrb(core_wstrb), .rsp_valid(tgt_rsp_valid[DMA]), .rsp_rdata(dma_rdata),
         .rd_req_valid(rd_valid), .rd_req_ready(rd_ready), .rd_req_addr(rd_addr),
-        .rd_req_size(rd_size), .rd_rsp_valid, .rd_rsp_data,
+        .rd_req_size(rd_size), .rd_req_len(rd_len), .rd_rsp_valid, .rd_rsp_data,
         .wr_req_valid(wr_valid), .wr_req_ready(wr_ready), .wr_req_addr(wr_addr),
         .wr_req_size(wr_size), .wr_req_wdata(wr_wdata), .wr_req_wstrb(wr_wstrb),
         .wr_req_rsp(wr_rsp), .wr_rsp_valid(1'b0), .irq(dma_irq));

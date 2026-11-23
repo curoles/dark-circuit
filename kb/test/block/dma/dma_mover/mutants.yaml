@@ -13,8 +13,8 @@ mutants:
   - name: behave, with WR_ACK a transaction retires at its write's take (2026-11-20)
     edits:
       - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
-        old: "        assign retire = wr_rsp_valid;"
-        new: "        assign retire = wr_take;"
+        old: "        assign retire   = wr_rsp_valid && r_head[RW-1];"
+        new: "        assign retire   = wr_take && wlast && (r_head[RW-1] || 1'b1);"
     expect: model
   - name: behave, a read's answer written before its data is there (2026-11-20)
     edits:
@@ -33,4 +33,28 @@ mutants:
       - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
         old: ".in1(take), .in2(retire), .out(count_en)"
         new: ".in1(take), .in2(1'b0), .out(count_en)"
+    expect: model
+  - name: behave, a burst's beats all written to its first beat (2026-11-20, read bursts)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+        old: "assign wr_req_addr  = {head.dst + HW'(wbeat), {OFF_WIDTH{1'b0}}};"
+        new: "assign wr_req_addr  = {head.dst, {OFF_WIDTH{1'b0}}};"
+    expect: model
+  - name: behave, a burst one beat too long (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/behave/dma_mover.sv
+        old: "assign rd_req_len   = LW'(n_m1 >> OFF_WIDTH);"
+        new: "assign rd_req_len   = LW'(cmd_n >> OFF_WIDTH);"
+    expect: model
+  - name: struct, a transaction leaves A after its first beat (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+        old: ".in1(wbeat), .in2(h_len), .eq(wlast)"
+        new: ".in1(wbeat), .in2(h_len & '0), .eq(wlast)"
+    expect: a_answer_expected
+  - name: struct, the bytes left one beat short (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_mover/struct/dma_mover.sv
+        old: ".in2((BB+1)'({1'b1, wbeat_n})), .ci(1'b1)"
+        new: ".in2((BB+1)'({1'b1, wbeat_n})), .ci(1'b0)"
     expect: model

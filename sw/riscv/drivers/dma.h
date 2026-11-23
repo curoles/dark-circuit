@@ -8,8 +8,11 @@
  * How the hardware works
  *
  * A channel copies NextBytes bytes from NextSource to NextDestination, any alignment, in
- * transactions of up to a memory beat each; the channels share one mover, round-robin, which
- * may keep several transactions in flight (a design's DEPTH; reads run ahead of writes).
+ * transactions of up to a memory beat each, or, in a design with read bursts (MAX_BURST
+ * above 1), of up to MAX_BURST beats read at once while source and destination are both at
+ * a beat's start (a burst never crosses an aligned block of MAX_BURST beats of the source;
+ * kb rtl/lib/block/dma/read_bursts); the channels share one mover, round-robin, which may
+ * keep several transactions in flight (a design's DEPTH; reads run ahead of writes).
  *  - claim: setting it (0 to 1) clears the Next registers, done and error; it can be cleared
  *    only while run is 0 (dma_claim, dma_release).
  *  - run: writing 1 starts a transfer from the Next registers (copied into Exec); the
@@ -28,8 +31,12 @@
  * The rules for software
  *
  *  - Overlap: a transfer whose source and destination overlap is undefined when the
- *    destination starts after the source within DEPTH beats (reads run ahead of writes by up
- *    to DEPTH beats); a design with DEPTH 1 copies such a transfer beat by beat.
+ *    destination starts after the source within DEPTH * MAX_BURST beats (reads run ahead of
+ *    writes by up to that many beats); a design with DEPTH 1 and no bursts copies such a
+ *    transfer beat by beat.
+ *  - Alignment and speed: give source and destination the same offset in a beat (best:
+ *    both beat-aligned). Then, with read bursts, only the first beat goes alone and the rest
+ *    in bursts; a transfer whose offsets differ moves beat by beat.
  *  - Resume after a stop: once the channel is idle, ExecSource, ExecDestination and
  *    ExecBytes say where it stopped; set the Next registers to them and write run. The PDMA
  *    map has no busy bit, so the program cannot read when a stopped channel is idle; the

@@ -12,13 +12,15 @@
  * counters (cur_src, cur_dst, left: the PDMA's Exec registers), how far the transfer has
  * landed. While busy and bytes are left to send, the channel offers a command from its issue
  * pointer (cmd_valid; held until taken, the library's valid/ready rules); when the mover
- * takes it, the issue pointer advances by the transaction's n, computed here as the mover
- * does (as many bytes as both the source's and the destination's beat still hold, at most
- * the bytes left: n = min(left, BEAT - max(src % BEAT, dst % BEAT)), BEAT = 1 << (N_WIDTH -
- * 1) bytes; the one place n is computed: it goes to the mover with the command, cmd_n, kb
- * rtl/lib/block/dma/byte_count), and the next command is offered in the clock after,
- * without waiting: the mover
- * keeps as many in flight as its depth. Each done from the mover (mv_done with mv_n, in the
+ * takes it, the issue pointer advances by the transaction's n, computed here (the one place:
+ * it goes to the mover with the command, cmd_n, kb rtl/lib/block/dma/byte_count): as many
+ * bytes as both the source's and the destination's beat still hold, at most the bytes left,
+ * n = min(left, BEAT - max(src % BEAT, dst % BEAT)) (BEAT = 1 << OFF_WIDTH bytes); but when
+ * both are at a beat's start, a burst up to the end of the source's aligned block of
+ * MAX_BURST beats, n = min(left, (MAX_BURST - (src / BEAT) % MAX_BURST) * BEAT) (kb
+ * rtl/lib/block/dma/read_bursts; with MAX_BURST 1 the same as the first). The next command
+ * is offered in the clock after, without waiting: the mover keeps as many in flight as its
+ * depth. Each done from the mover (mv_done with mv_n, in the
  * order of the commands) advances the completion counters by mv_n. When they reach 0, done
  * is 1 for a clock and the channel is idle. So the bytes in flight are left - iss_left.
  *
@@ -42,7 +44,9 @@ module DmaChannel #(
     parameter  ADDR_WIDTH = 32,                     // byte address
     parameter  LEN_WIDTH  = 32,                     // bits of a byte count
     parameter  N_WIDTH    = 4,                      // bits of mv_n (the mover's done_n)
-    localparam OFF_WIDTH  = N_WIDTH - 1             // bits of a byte's offset in a beat
+    parameter  MAX_BURST  = 1,                      // beats of a burst: 1 (none), 2, 4, ...
+    localparam BB         = $clog2(MAX_BURST),      // bits of a beat's number in a burst
+    localparam OFF_WIDTH  = N_WIDTH - 1 - BB        // bits of a byte's offset in a beat
 )(
     input  wire                  clk,
     input  wire                  rst_n,             // synchronous reset, active low
@@ -68,7 +72,8 @@ module DmaChannel #(
     input  wire                  mv_done,           // a done of this channel's, in order
     input  wire [N_WIDTH-1:0]    mv_n               // the bytes it moved
 );
-    `DC_STATIC_ASSERT(a_widths, LEN_WIDTH >= N_WIDTH && ADDR_WIDTH >= N_WIDTH && N_WIDTH >= 2)
+    `DC_STATIC_ASSERT(a_widths, LEN_WIDTH >= N_WIDTH && ADDR_WIDTH >= N_WIDTH &&
+                                OFF_WIDTH >= 1 && (1 << BB) == MAX_BURST)
 
     logic [ADDR_WIDTH-1:0] iss_src;     // the issue pointer
     logic [ADDR_WIDTH-1:0] iss_dst;
@@ -82,13 +87,16 @@ module DmaChannel #(
     logic [LEN_WIDTH-1:0]  iss_left_next;
     logic                  offered_next;
 
-    // The bytes a transaction moves, from the offsets of the source and the destination (the
-    // mover's formula, DmaMover's bytes_of).
+    // The bytes a transaction moves, from the offsets of the source and the destination, the
+    // source's beat in its block of MAX_BURST (sb) and the bytes left.
     function automatic logic [N_WIDTH-1:0] bytes_of(input logic [OFF_WIDTH-1:0] so,
                                                     input logic [OFF_WIDTH-1:0] d_o,
+                                                    input int                   sb,
                                                     input logic [LEN_WIDTH-1:0] rest);
         logic [N_WIDTH-1:0] room;
         room = N_WIDTH'(1 << OFF_WIDTH) - N_WIDTH'((so > d_o) ? so : d_o);
+        if (so == '0 && d_o == '0)          // a burst, to the end of the block
+            room = N_WIDTH'(MAX_BURST - sb) << OFF_WIDTH;
         return (rest < LEN_WIDTH'(room)) ? rest[N_WIDTH-1:0] : room;
     endfunction
 
@@ -100,7 +108,9 @@ module DmaChannel #(
     assign cmd_dst   = iss_dst;
     assign cmd_n     = n;
     // @kb: rtl/lib/block/dma/byte_count
-    assign n         = bytes_of(iss_src[OFF_WIDTH-1:0], iss_dst[OFF_WIDTH-1:0], iss_left);
+    // @kb: rtl/lib/block/dma/read_bursts
+    assign n         = bytes_of(iss_src[OFF_WIDTH-1:0], iss_dst[OFF_WIDTH-1:0],
+                                (int'(iss_src) >> OFF_WIDTH) % MAX_BURST, iss_left);
     assign last      = left == LEN_WIDTH'(mv_n);
 
     assign left_next     = mv_done ? left - LEN_WIDTH'(mv_n) : left;

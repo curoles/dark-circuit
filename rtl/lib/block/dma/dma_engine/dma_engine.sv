@@ -36,8 +36,11 @@ module DmaEngine #(
     parameter  LEN_WIDTH  = 32,                     // bits of a byte count
     parameter  DEPTH      = 1,                      // the mover's transactions in flight
     parameter  WR_ACK     = 0,                      // the mover's writes want an answer
+    parameter  MAX_BURST  = 1,                      // the mover's read bursts: 1 (none), 2, ...
     localparam STRB_WIDTH = DATA_WIDTH / 8,
-    localparam N_WIDTH    = $clog2(STRB_WIDTH) + 1, // bits of a transaction's bytes
+    localparam BB         = $clog2(MAX_BURST),
+    localparam LW         = (BB > 0) ? BB : 1,      // bits of rd_req_len
+    localparam N_WIDTH    = $clog2(STRB_WIDTH) + BB + 1,    // bits of a transaction's bytes
     localparam ID_WIDTH   = (N_CHANNELS > 1) ? $clog2(N_CHANNELS) : 1,
     localparam N          = N_CHANNELS
 )(
@@ -61,6 +64,7 @@ module DmaEngine #(
     input  wire                         rd_req_ready,
     output wire [ADDR_WIDTH-1:0]        rd_req_addr,
     output wire [2:0]                   rd_req_size,
+    output wire [LW-1:0]                rd_req_len,
     input  wire                         rd_rsp_valid,
     input  wire [DATA_WIDTH-1:0]        rd_rsp_data,
 
@@ -111,8 +115,8 @@ module DmaEngine #(
     // @kb: rtl/lib/block/dma/design
     for (genvar c = 0; c < N; c++) begin: g_channel
         assign cmds[c] = {iss_src[c], iss_dst[c], iss_n[c]};
-        DmaChannel #(.ADDR_WIDTH(ADDR_WIDTH), .LEN_WIDTH(LEN_WIDTH), .N_WIDTH(N_WIDTH))
-            u_channel(
+        DmaChannel #(.ADDR_WIDTH(ADDR_WIDTH), .LEN_WIDTH(LEN_WIDTH), .N_WIDTH(N_WIDTH),
+                     .MAX_BURST(MAX_BURST)) u_channel(
                 .clk, .rst_n, .start(start[c]), .start_src(start_src[c]),
                 .start_dst(start_dst[c]), .start_len(start_len[c]), .stop(stop[c]),
                 .busy(busy[c]), .done(done[c]), .cur_src(cur_src[c]), .cur_dst(cur_dst[c]),
@@ -143,11 +147,12 @@ module DmaEngine #(
         .in({{(IN-N){1'b0}}, grant}), .out(cmd_id), .valid(id_valid));
 
     DmaMover #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .ID_WIDTH(ID_WIDTH),
-               .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_mover(
+               .DEPTH(DEPTH), .WR_ACK(WR_ACK), .MAX_BURST(MAX_BURST)) u_mover(
         .clk, .rst_n, .cmd_valid(mv_cmd_valid), .cmd_ready(mv_cmd_ready), .cmd_id,
         .cmd_src(cmd[CW-1 -: ADDR_WIDTH]), .cmd_dst(cmd[N_WIDTH +: ADDR_WIDTH]),
         .cmd_n(cmd[N_WIDTH-1:0]), .done_valid, .done_id, .done_n,
-        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
+        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_req_len, .rd_rsp_valid,
+        .rd_rsp_data,
         .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
         .wr_req_rsp, .wr_rsp_valid);
 

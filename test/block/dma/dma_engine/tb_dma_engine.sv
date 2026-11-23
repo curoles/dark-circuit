@@ -3,25 +3,29 @@
  * The testbench drives every channel and is the memory. Each channel runs random transfers in
  * its own part of the memory (so the result does not depend on how the channels interleave):
  * 0 to 60 bytes, source and destination anywhere in the part (with DEPTH 1 they may overlap;
- * with more, reads run ahead of writes inside a channel and overlap is undefined, so none),
- * a random gap between transfers; in one transfer of six a stop at a random clock (the
+ * with more, reads run ahead of writes inside a channel and overlap is undefined, so none;
+ * with MAX_BURST above 1, half of the transfers from beat starts), a random gap between
+ * transfers; in one transfer of six a stop at a random clock (the
  * transactions in flight and an offer already made finish; the state must then end at a
  * transaction). Per channel, the
  * clock after a start: busy, or done for 0 bytes; at the end: done with nothing left and the
  * addresses past the last byte, or (stopped) idle with bytes left and the addresses that far.
  * The memory is behind the mover's read and write channels, each ready in 70 % of the clocks;
- * it answers reads 1 to 4 clocks late and, with WR_ACK, writes 1 to 3 clocks late, in
- * order. Model: a
- * reference memory where a transfer's transactions are replayed (n counted byte by byte as
- * the mover does, each copied from a snapshot) up to the bytes the channel moved, which must
- * end at a transaction. Every clock: an offer to the mover that waits stays the same. At the
+ * it answers each beat of a read (rd_req_len + 1 of them) 1 to 4 clocks late and, with
+ * WR_ACK, writes 1 to 3 clocks late, in order. Model: a reference memory where a transfer's
+ * transactions are replayed (n counted byte by byte as DmaChannel computes it: from two beat
+ * starts to the end of the source's block of MAX_BURST beats, else inside both beats; each
+ * copied from a snapshot) up to the bytes the channel moved, which must end at a
+ * transaction. Every clock: an offer to the mover that waits stays the same. At the
  * end the memory equals the reference. Configurations: 3 channels with beats of 64 bits, 1
  * channel with 32, both with DEPTH 1; 3 channels with 64 and DEPTH 4 and WR_ACK (each channel
- * has one transaction in flight, the channels share the depth). Every case must happen
+ * has one transaction in flight, the channels share the depth); 2 channels with 32, DEPTH 4
+ * and MAX_BURST 4. Every case must happen
  * (checks named cover): two channels offering at once, an offer that waits, a stop, a
  * transfer of 0 bytes, each channel done, a stop while an offer waits; with DEPTH above 1,
  * a channel with more than one transaction in flight (counted: its commands taken minus its
- * dones) and a stop with more than one in flight.
+ * dones) and a stop with more than one in flight; with MAX_BURST above 1, a done of a
+ * burst (more than a beat's bytes).
  * Checks named model and cover. Stops at the first failure.
  *
  * @author    Igor Lesik
@@ -33,7 +37,8 @@ module TbDmaEngineCheck #(
     parameter N_CHANNELS = 3,
     parameter DATA_WIDTH = 64,
     parameter DEPTH      = 1,
-    parameter WR_ACK     = 0
+    parameter WR_ACK     = 0,
+    parameter MAX_BURST  = 1
 )(
     input  wire  clk,
     input  wire  rst_n,
@@ -53,6 +58,9 @@ module TbDmaEngineCheck #(
     localparam MAX_LEN = 60;
     localparam LIMIT   = 400 * N;       // clocks a transfer may take
     localparam IW      = (N > 1) ? $clog2(N) : 1;
+    localparam BB      = $clog2(MAX_BURST);
+    localparam RLW     = (BB > 0) ? BB : 1;     // bits of rd_req_len
+    localparam BLOCK   = B * MAX_BURST;         // bytes of a burst's block
 
     typedef enum int {GAP, STARTED, RUN} phase_e;
 
@@ -66,6 +74,7 @@ module TbDmaEngineCheck #(
     wire                   rd_req_valid;
     logic                  rd_req_ready;
     wire  [AW-1:0]         rd_req_addr;
+    wire  [RLW-1:0]        rd_req_len;
     logic                  rd_rsp_valid;
     logic [DATA_WIDTH-1:0] rd_rsp_data;
     wire                   wr_req_valid;
@@ -88,7 +97,7 @@ module TbDmaEngineCheck #(
     int                    cycle;
     integer                seed;
     bit                    seen_two, seen_wait, seen_stop, seen_empty;
-    bit                    seen_deep, seen_drain, seen_stop_offer;
+    bit                    seen_deep, seen_drain, seen_stop_offer, seen_burst;
     // The engine's grant, take and dones, as the testbench's own wires (Icarus indexes no
     // hierarchical name by a variable).
     wire  [N-1:0]          eng_grant = u_dma_engine.grant;
@@ -99,10 +108,11 @@ module TbDmaEngineCheck #(
     logic [N-1:0]          seen_done;
 
     DmaEngine #(.N_CHANNELS(N), .ADDR_WIDTH(AW), .DATA_WIDTH(DATA_WIDTH), .LEN_WIDTH(LW),
-                .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_dma_engine(
+                .DEPTH(DEPTH), .WR_ACK(WR_ACK), .MAX_BURST(MAX_BURST)) u_dma_engine(
         .clk, .rst_n, .start, .start_src, .start_dst, .start_len, .stop, .busy, .done,
         .cur_src, .cur_dst, .left,
-        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
+        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_req_len, .rd_rsp_valid,
+        .rd_rsp_data,
         .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
         .wr_req_rsp, .wr_rsp_valid);
 
@@ -117,12 +127,16 @@ module TbDmaEngineCheck #(
     // exactly there.
     function automatic bit replay(input int s, input int d, input int len, input int moved);
         int         left_b, n;
-        logic [7:0] snap [B];
+        logic [7:0] snap [MAX_LEN];
         left_b = len;
         while (len - left_b < moved) begin
             n = 0;
-            while (n < left_b && (s + n) / B == s / B && (d + n) / B == d / B)
-                n++;
+            if (s % B == 0 && d % B == 0)
+                while (n < left_b && (s + n) / BLOCK == s / BLOCK)
+                    n++;
+            else
+                while (n < left_b && (s + n) / B == s / B && (d + n) / B == d / B)
+                    n++;
             for (int i = 0; i < n; i++)
                 snap[i] = ref_mem[s + i];
             for (int i = 0; i < n; i++)
@@ -152,8 +166,12 @@ module TbDmaEngineCheck #(
             wr_rsp_valid = ack_due.size() > 0 && ack_due[0] <= cycle;
             #1;
             if (rst_n && rd_req_valid && rd_req_ready) begin
-                ans.push_back(beat_at(rd_req_addr));
-                due.push_back(cycle + 1 + $unsigned($random(seed)) % 4);
+                int first;
+                first = cycle + 1 + $unsigned($random(seed)) % 4;
+                for (int i = 0; i <= int'(rd_req_len); i++) begin
+                    ans.push_back(beat_at(AW'(int'(rd_req_addr) + i * B)));
+                    due.push_back(first + i);
+                end
             end
             if (rst_n && wr_req_valid && wr_req_ready) begin
                 for (int k = 0; k < B; k++)
@@ -179,11 +197,11 @@ module TbDmaEngineCheck #(
         int     in_flight [N];      // a channel's transactions: taken, not done
         logic   prev_offer;
         logic [IW-1:0] prev_id;
-        logic [2 * AW + $clog2(B):0] prev_cmd;   // src, dst, n
+        logic [2 * AW + $clog2(B) + BB:0] prev_cmd;  // src, dst, n
         done_all = 1'b0;
         seed     = 13 * N + DATA_WIDTH;
         {seen_two, seen_wait, seen_stop, seen_empty} = '0;
-        {seen_deep, seen_drain, seen_stop_offer} = '0;
+        {seen_deep, seen_drain, seen_stop_offer, seen_burst} = '0;
         seen_done = '0;
         start = '0;
         stop  = '0;
@@ -213,6 +231,7 @@ module TbDmaEngineCheck #(
                                u_dma_engine.cmd !== prev_cmd))
                 `DC_TEST_FAIL(model, $sformatf("DmaEngine %0d: a waiting offer changed", N))
             if ($countones(u_dma_engine.req) > 1)                  seen_two  = 1'b1;
+            if (u_dma_engine.done_valid && int'(u_dma_engine.done_n) > B) seen_burst = 1'b1;
             prev_offer = u_dma_engine.mv_cmd_valid && !u_dma_engine.mv_cmd_ready;
             if (prev_offer)                                         seen_wait = 1'b1;
             prev_id    = u_dma_engine.cmd_id;
@@ -229,8 +248,10 @@ module TbDmaEngineCheck #(
                     end else if (gap[c] > 1) begin
                         gap[c] = gap[c] - 1;
                     end else begin
+                        bit aligned;
                         len[c] = ($random(seed) % 10 == 0) ? 0
                                                            : 1 + $unsigned($random(seed)) % MAX_LEN;
+                        aligned = MAX_BURST > 1 && $random(seed) % 2 == 0;
                         s[c] = c * PART + $unsigned($random(seed)) % (PART - MAX_LEN);
                         d[c] = ($random(seed) % 4 == 0)
                                ? c * PART + $unsigned($random(seed)) % (PART - MAX_LEN)
@@ -239,6 +260,13 @@ module TbDmaEngineCheck #(
                             d[c] = s[c];
                         while (DEPTH > 1 && d[c] < s[c] + len[c] && s[c] < d[c] + len[c])
                             d[c] = c * PART + $unsigned($random(seed)) % (PART - MAX_LEN);
+                        if (aligned) begin      // PART is a multiple of B: still in the part
+                            s[c] -= s[c] % B;
+                            d[c] -= d[c] % B;
+                            while (DEPTH > 1 && d[c] < s[c] + len[c] && s[c] < d[c] + len[c])
+                                d[c] = c * PART + B * ($unsigned($random(seed)) %
+                                                       ((PART - MAX_LEN) / B));
+                        end
                         stop_at[c] = ($random(seed) % 6 == 0) ? 1 + $unsigned($random(seed)) % 40
                                                               : -1;
                         start[c]     = 1'b1;
@@ -310,11 +338,13 @@ module TbDmaEngineCheck #(
                 `DC_TEST_FAIL(model, $sformatf("DmaEngine %0d: byte %h is %h, expected %h", N,
                                                a, mem[a], ref_mem[a]))
         if ((N > 1 && !seen_two) || (N > 1 && !seen_wait) || !seen_stop || !seen_empty ||
-            seen_done != '1 || !seen_stop_offer || (DEPTH > 1 && (!seen_deep || !seen_drain)))
+            seen_done != '1 || !seen_stop_offer || (DEPTH > 1 && (!seen_deep || !seen_drain)) ||
+            (MAX_BURST > 1 && !seen_burst))
             `DC_TEST_FAIL(cover, $sformatf(
-                "DmaEngine %0d: two %b wait %b stop %b empty %b done %b offer %b deep %b drain %b",
+                {"DmaEngine %0d: two %b wait %b stop %b empty %b done %b offer %b deep %b",
+                 " drain %b burst %b"},
                 N, seen_two, seen_wait, seen_stop, seen_empty, seen_done, seen_stop_offer,
-                seen_deep, seen_drain))
+                seen_deep, seen_drain, seen_burst))
         done_all = 1'b1;
     end
 endmodule
@@ -324,7 +354,7 @@ module TbDmaEngine;
 
     logic clk;
     logic rst_n;
-    wire  done_3, done_1, done_3_4;
+    wire  done_3, done_1, done_3_4, done_2_b4;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
     SimRstGen #(.CYCLES(3))      u_sim_rst_gen(.clk, .rst_n);
@@ -333,9 +363,11 @@ module TbDmaEngine;
     TbDmaEngineCheck #(.N_CHANNELS(1), .DATA_WIDTH(32)) u_check_1(.clk, .rst_n, .done_all(done_1));
     TbDmaEngineCheck #(.N_CHANNELS(3), .DATA_WIDTH(64), .DEPTH(4), .WR_ACK(1)) u_check_3_4(
         .clk, .rst_n, .done_all(done_3_4));
+    TbDmaEngineCheck #(.N_CHANNELS(2), .DATA_WIDTH(32), .DEPTH(4), .MAX_BURST(4)) u_check_2_b4(
+        .clk, .rst_n, .done_all(done_2_b4));
 
     initial begin
-        wait (done_3 && done_1 && done_3_4);
+        wait (done_3 && done_1 && done_3_4 && done_2_b4);
         $display("PASS");
         $finish;
     end

@@ -1,17 +1,19 @@
 /* DMA channel: the state of one transfer, its commands to the DMA mover; made of parts and
  * gates.
  *
- * Same ports and behavior as the behave version (see there). busy, stopping, offered and done
- * are DffSyncRst with their set and clear terms. The issue pointer advances by the offered
- * transaction's n at a take: n as in DmaMover's struct version (the larger offset: CmpGe,
- * Mux2; the room BEAT - max = ~max + 1: Inv, Incr; n = min(left to send, room): CmpGe,
- * Mux2), the addresses + n (RippleCarryAdder each), the bytes left - n (+ ~n + 1, a
- * RippleCarryAdder). The completion counters advance by mv_n at a done the same way. A Mux2
- * each picks the start's value or the advanced one into a DffEn, enabled at a start while
- * idle (any, also of 0 bytes) or a take (the issue pointer) or a done (completion). last (the
- * done moves the bytes left) is a CmpEq, a start of 0 bytes a NorReduce, bytes left to send
- * an OrReduce. A stop ends the transfer when the counters after this clock are equal (CmpEq:
- * nothing in flight) and nothing is offered.
+ * Same ports and behavior as the behave version (see there). busy, stopping, offered and
+ * done are DffSyncRst with their set and clear terms. The issue pointer advances by the
+ * offered transaction's n at a take (the larger offset: CmpGe, Mux2; the room BEAT - max =
+ * ~max + 1: Inv, Incr; with MAX_BURST more than 1, when the larger offset is 0 (NorReduce)
+ * the room of a burst instead, MAX_BURST - the source's beat in its block = ~beat + 1
+ * beats: Inv, Incr, Mux2; n = min(left to send, room): CmpGe, Mux2), the addresses + n
+ * (RippleCarryAdder each), the bytes left - n (+ ~n + 1, a RippleCarryAdder). The
+ * completion counters advance by mv_n at a done the same way. A Mux2 each picks the start's
+ * value or the advanced one into a DffEn, enabled at a start while idle (any, also of 0
+ * bytes) or a take (the issue pointer) or a done (completion). last (the done moves the
+ * bytes left) is a CmpEq, a start of 0 bytes a NorReduce, bytes left to send an OrReduce. A
+ * stop ends the transfer when the counters after this clock are equal (CmpEq: nothing in
+ * flight) and nothing is offered.
  *
  *   start_* --Mux2--> DffEn iss_* <--Mux2-- + n, - n <-- take          --> cmd_*
  *   start_* --Mux2--> DffEn cur_*, left <--Mux2-- + mv_n, - mv_n <-- mv_done
@@ -27,7 +29,9 @@ module DmaChannel #(
     parameter  ADDR_WIDTH = 32,                     // byte address
     parameter  LEN_WIDTH  = 32,                     // bits of a byte count
     parameter  N_WIDTH    = 4,                      // bits of mv_n (the mover's done_n)
-    localparam OFF_WIDTH  = N_WIDTH - 1             // bits of a byte's offset in a beat
+    parameter  MAX_BURST  = 1,                      // beats of a burst: 1 (none), 2, 4, ...
+    localparam BB         = $clog2(MAX_BURST),      // bits of a beat's number in a burst
+    localparam OFF_WIDTH  = N_WIDTH - 1 - BB        // bits of a byte's offset in a beat
 )(
     input  wire                  clk,
     input  wire                  rst_n,             // synchronous reset, active low
@@ -53,7 +57,8 @@ module DmaChannel #(
     input  wire                  mv_done,           // a done of this channel's, in order
     input  wire [N_WIDTH-1:0]    mv_n               // the bytes it moved
 );
-    `DC_STATIC_ASSERT(a_widths, LEN_WIDTH >= N_WIDTH && ADDR_WIDTH >= N_WIDTH && N_WIDTH >= 2)
+    `DC_STATIC_ASSERT(a_widths, LEN_WIDTH >= N_WIDTH && ADDR_WIDTH >= N_WIDTH &&
+                                OFF_WIDTH >= 1 && (1 << BB) == MAX_BURST)
 
     wire [ADDR_WIDTH-1:0] iss_src, iss_dst; // the issue pointer
     wire [LEN_WIDTH-1:0]  iss_left;
@@ -89,7 +94,8 @@ module DmaChannel #(
     wire [OFF_WIDTH-1:0]  src_off, dst_off;
     wire                  src_ge;           // src_off >= dst_off
     wire [OFF_WIDTH-1:0]  off_max, off_max_n;
-    wire [N_WIDTH-1:0]    room;             // BEAT - off_max
+    wire [OFF_WIDTH:0]    room_beat;        // BEAT - off_max
+    wire [N_WIDTH-1:0]    room;             // ... or a burst's, to the end of its block
     wire                  rest_ge;          // iss_left >= room
     wire [N_WIDTH-1:0]    n;                // min(iss_left, room)
     wire [LEN_WIDTH-1:0]  n_len, n_len_n;   // n as a count
@@ -128,15 +134,31 @@ module DmaChannel #(
     assign cmd_dst  = iss_dst;
     assign cmd_n    = n;
 
-    // The offered transaction's n, as the mover computes it.
+    // The offered transaction's n.
     assign src_off = iss_src[OFF_WIDTH-1:0];
     assign dst_off = iss_dst[OFF_WIDTH-1:0];
     CmpGe #(OFF_WIDTH) u_cmp_ge_off(.in1(src_off), .in2(dst_off), .ge(src_ge));
     Mux2 #(OFF_WIDTH) u_mux2_off_max(.in0(dst_off), .in1(src_off), .sel(src_ge), .out(off_max));
     Inv  #(OFF_WIDTH) u_inv_off_max(.in(off_max), .out(off_max_n));
-    Incr #(.WIDTH(OFF_WIDTH)) u_incr_room(.in(off_max_n), .out(room[OFF_WIDTH-1:0]),
+    Incr #(.WIDTH(OFF_WIDTH)) u_incr_room(.in(off_max_n), .out(room_beat[OFF_WIDTH-1:0]),
                                           .co(co_room));
-    assign room[N_WIDTH-1] = co_room;
+    assign room_beat[OFF_WIDTH] = co_room;
+    // @kb: rtl/lib/block/dma/read_bursts
+    if (BB > 0) begin: g_burst
+        wire [BB-1:0] sb, sb_n;     // the source's beat in its block
+        wire [BB-1:0] rb;           // MAX_BURST - sb beats, with co_rb on top
+        wire          co_rb;
+        wire          off_zero;     // both offsets 0: a burst
+        assign sb = iss_src[OFF_WIDTH +: BB];
+        Inv  #(BB) u_inv_sb(.in(sb), .out(sb_n));
+        Incr #(.WIDTH(BB)) u_incr_burst(.in(sb_n), .out(rb), .co(co_rb));
+        NorReduce #(OFF_WIDTH) u_nor_reduce_off(.in(off_max), .out(off_zero));
+        Mux2 #(N_WIDTH) u_mux2_room(.in0({{BB{1'b0}}, room_beat}),
+                                    .in1({co_rb, rb, {OFF_WIDTH{1'b0}}}), .sel(off_zero),
+                                    .out(room));
+    end else begin: g_single
+        assign room = room_beat;
+    end
     CmpGe #(LEN_WIDTH) u_cmp_ge_rest(.in1(iss_left),
                                      .in2({{(LEN_WIDTH-N_WIDTH){1'b0}}, room}), .ge(rest_ge));
     Mux2 #(N_WIDTH) u_mux2_n(.in0(iss_left[N_WIDTH-1:0]), .in1(room), .sel(rest_ge), .out(n));

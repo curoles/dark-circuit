@@ -1,0 +1,68 @@
+type: decision
+title: The DMA reads bursts of up to MAX_BURST beats when source and destination are aligned
+date: 2026-11-20
+question: >
+  Mig6's routers pass one packet every 3 clocks an input (kb rtl/lib/block/bursts), and the
+  DMA sends one read request a beat, so its reads are bound by the request rate, not by the
+  memory or the links. The library's channels now carry bursts (req_len, kb
+  rtl/lib/block/bursts). Which of the DMA's transactions should be bursts, how long, who
+  computes the length, and how does the mover write a burst's answers?
+decision: >
+  A transaction is a burst when both its source and its destination are at a beat's start:
+  up to MAX_BURST beats, at most the bytes left, never past the end of the source's aligned
+  block of MAX_BURST beats, n = min(left, (MAX_BURST - (src / BEAT) % MAX_BURST) * BEAT);
+  any other transaction is one beat as before, n = min(left, BEAT - max(src % BEAT, dst %
+  BEAT)). DmaChannel computes n, the one place (kb rtl/lib/block/dma/byte_count); the mover
+  derives the beats from it, rd_req_len = (n - 1) / BEAT, sends one read, and writes every
+  answer as its own beat (the destination's first beat + k, a beat's strobes from the bytes
+  left); its answer queue holds DEPTH * MAX_BURST beats, reserved before the read goes out
+  (answers have no ready); a transaction leaves the queue of transactions at its last beat's
+  write and retires then, or with WR_ACK at that write's answer. MAX_BURST is a parameter of
+  DmaMover, DmaChannel, DmaEngine and DmaSifiveSplit; 1 means no bursts, every output as
+  before. DmaSifive (one memory channel, no length: Mig3Cpu) keeps 1, and so does Mig6Pe
+  until its network carries bursts (chunk 9b-3).
+why: >
+  Bulk copies are mostly aligned, and a transfer whose source and destination share their
+  offset in a beat becomes aligned after its first transaction (that one ends at the beat's
+  end in both), so it bursts from then on; only a transfer whose offsets differ stays beat
+  by beat, since each written beat takes bytes from two read beats. The block limit keeps a
+  burst inside one line or row of the target (a cache line when MAX_BURST is the line's
+  beats), as AXI keeps a burst inside 4 KiB, so no target has to split one. Single-beat
+  writes keep the write channel as it is: Mig6's DMA writes go to the local memory, which
+  takes one a clock.
+rejected:
+  - choice: Bursts for any offsets (a written beat from the tails of two answers)
+    why_not: A register of the previous answer and a two-beat rotation, for copies whose
+      offsets differ, which are rare in the int8 layer and in bulk copies; later if measured.
+  - choice: Write bursts as well
+    why_not: The writes are not the bottleneck (the local memory takes one a clock), and a
+      write burst needs a length on the write channel and in every target; later, for writes
+      over the network, if measured.
+  - choice: The mover computes the burst's length from the addresses and bytes left
+    why_not: Two copies of one formula (kb rtl/lib/block/dma/byte_count); the channel needs n
+      at the take to advance its issue pointer.
+  - choice: Bursts up to the bytes left with no block limit
+    why_not: A burst could cross a line or a memory row, so a target would have to split it
+      or answer from two places; the block limit costs one shorter burst a block at most.
+relies_on:
+  - rtl/lib/block/bursts
+  - rtl/lib/block/dma/byte_count
+  - rtl/lib/block/dma/pipelined_mover
+  - rtl/lib/block/dma/issue_pointer
+evidence: >
+  2026-11-20: test/block/dma (mover, engine, sifive; behave and struct; Verilator and
+  Icarus) pass. The mover's test adds 32-bit beats with DEPTH 4, MAX_BURST 4 and WR_ACK, and
+  64-bit beats with DEPTH 8 and MAX_BURST 8: n counted byte by byte (to the end of the
+  source's block from two beat starts), every read's length checked, a memory answering
+  len + 1 beats, the done of a transaction only after its last beat's write answer; covered:
+  a burst of MAX_BURST beats and one cut by its block's end. The engine's test adds 2
+  channels with 32-bit beats, DEPTH 4 and MAX_BURST 4 (stops end at a burst's end), covered:
+  a done of a burst. With MAX_BURST 1 Mig3's and Mig6's DMA programs print the same, cycles
+  included. Mutants caught: a burst's beats all written to its first beat, a burst one beat
+  too long, a transaction leaving after its first beat, the bytes left one beat short, a
+  burst past its block's end (behave and struct DmaChannel).
+code:
+  - rtl/lib/block/dma/dma_channel/behave/dma_channel.sv#bytes_of
+  - rtl/lib/block/dma/dma_channel/struct/dma_channel.sv#u_incr_burst
+  - rtl/lib/block/dma/dma_mover/behave/dma_mover.sv#rd_req_len
+  - rtl/lib/block/dma/dma_mover/struct/dma_mover.sv#u_counter_wbeat

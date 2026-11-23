@@ -67,3 +67,15 @@ mutants:
       - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
         old: ".in0(dst_off), .in1(src_off), .sel(src_ge)"
         new: ".in0(src_off), .in1(dst_off), .sel(src_ge)"
+  - name: DmaChannel behave, a burst past the end of its block (2026-11-20, read bursts)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/behave/dma_channel.sv
+        old: "room = N_WIDTH'(MAX_BURST - sb) << OFF_WIDTH;"
+        new: "room = N_WIDTH'(MAX_BURST - (sb & 0)) << OFF_WIDTH;"
+    expect: a_n_fits
+  - name: DmaChannel struct, a burst's room from the beat, not to the block's end (2026-11-20)
+    edits:
+      - file: rtl/lib/block/dma/dma_channel/struct/dma_channel.sv
+        old: "u_incr_burst(.in(sb_n)"
+        new: "u_incr_burst(.in(sb | (sb_n & '0))"
+    expect: a_n_fits

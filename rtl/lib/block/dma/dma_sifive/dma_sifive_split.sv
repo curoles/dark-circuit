@@ -12,7 +12,9 @@
  * transaction, the one offered and the ones in flight finish (a run written meanwhile waits
  * until the DMA channel is idle). irq[2c] is DMA channel c's done, irq[2c + 1] its error
  * (levels: PLIC sources); error is never set yet (no error answer). The read channel reads
- * source beats, answered in order; the write channel writes destination beats, with WR_ACK
+ * source beats (bursts of up to MAX_BURST when a transfer's source and destination are at
+ * beat boundaries: rd_req_len, kb rtl/lib/block/dma/read_bursts), answered in order, a beat
+ * an answer; the write channel writes destination beats, with WR_ACK
  * answered in order and a transaction done only at its answer. For a design whose reads and
  * writes go to different targets (Mig6Pe: the network and the local memory), so that a
  * write never waits for the answers a read's target owes; DmaSifive joins the two into one
@@ -39,6 +41,8 @@ module DmaSifiveSplit import DmaSifivePkg::*; #(
     parameter  LEN_WIDTH  = 32,                     // bits of a byte count, 64 at most
     parameter  DEPTH      = 1,                      // the mover's transactions in flight
     parameter  WR_ACK     = 0,                      // the mover's writes want an answer
+    parameter  MAX_BURST  = 1,                      // the mover's read bursts: 1 (none), 2, ...
+    localparam LW         = (MAX_BURST > 1) ? $clog2(MAX_BURST) : 1,    // bits of rd_req_len
     localparam N          = N_CHANNELS,
     localparam ADDR_BITS  = CHAN_BITS + ((N > 1) ? $clog2(N) : 0),  // bits of req_addr
     localparam STRB_WIDTH = DATA_WIDTH / 8
@@ -59,6 +63,7 @@ module DmaSifiveSplit import DmaSifivePkg::*; #(
     input  wire                  rd_req_ready,
     output wire [ADDR_WIDTH-1:0] rd_req_addr,
     output wire [2:0]            rd_req_size,
+    output wire [LW-1:0]         rd_req_len,        // beats - 1 (kb rtl/lib/block/bursts)
     input  wire                  rd_rsp_valid,
     input  wire [DATA_WIDTH-1:0] rd_rsp_data,
     // Write channel
@@ -85,10 +90,12 @@ module DmaSifiveSplit import DmaSifivePkg::*; #(
         .done, .error_ev({N{1'b0}}), .cur_src, .cur_dst, .left, .irq);
 
     DmaEngine #(.N_CHANNELS(N), .ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH),
-                .LEN_WIDTH(LEN_WIDTH), .DEPTH(DEPTH), .WR_ACK(WR_ACK)) u_engine(
+                .LEN_WIDTH(LEN_WIDTH), .DEPTH(DEPTH), .WR_ACK(WR_ACK),
+                .MAX_BURST(MAX_BURST)) u_engine(
         .clk, .rst_n, .start, .start_src, .start_dst, .start_len, .stop, .busy, .done,
         .cur_src, .cur_dst, .left,
-        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_rsp_valid, .rd_rsp_data,
+        .rd_req_valid, .rd_req_ready, .rd_req_addr, .rd_req_size, .rd_req_len, .rd_rsp_valid,
+        .rd_rsp_data,
         .wr_req_valid, .wr_req_ready, .wr_req_addr, .wr_req_size, .wr_req_wdata, .wr_req_wstrb,
         .wr_req_rsp, .wr_rsp_valid);
 
