@@ -1,0 +1,55 @@
+type: decision
+title: ReqBurstSplit sends a burst read to a single-beat target as its beats, taken with the first
+date: 2026-11-23
+question: >
+  Bursts on the library's request channel (kb rtl/lib/block/bursts) reach targets that take
+  only single beats: in Mig6 the DMA's reads to a PE's local memory (u_dma_rd_demux picks
+  the local memory or the network by address, and the DMA bursts by alignment alone), and
+  the shared memory's AtomicUnit and RAM behind Mig6MemNetIf. Something must answer a burst
+  len + 1 times. Where, and how?
+decision: >
+  A library block, ReqBurstSplit #(ADDR_WIDTH, FIELDS_WIDTH, LEN_WIDTH), in front of a
+  single-beat target: a burst read (req_len L above 0) goes out as L + 1 single-beat requests
+  at req_addr + (k << req_size) (AXI's INCR), one a clock while the target is ready; the
+  target's in-order answers to the beats are the burst's answers, so the block has no answer
+  path. The burst is taken with its FIRST beat (req_ready is the target's ready while idle),
+  and a copy of its address, size, length and fields serves the beats after (busy, req_ready
+  0); a single beat passes as wires. Only a read is a burst (a_burst_is_read: the channel
+  carries one wdata a request). Struct: a Counter (loaded with 1 at the take), CmpEq, a
+  DffEn copy, a DffSyncRst busy, BarrelShifter and RippleCarryAdder for the address, Mux2s.
+  The name follows PULP's axi_burst_splitter (user's choice 2026-11-23; Rocket Chip calls a
+  similar block a fragmenter, Intel's Avalon a burst adapter).
+why: >
+  One block for every single-beat target, used twice from the start (Mig6Pe's local memory,
+  Mig6MemNetIf's shared memory): bursts stay a property of the channel, not of particular
+  memories, and the DMA needs no knowledge of the address map. Taken with the first beat
+  because the requester's own records (a ReqDemux's count and owner, a ReqMux's owner
+  queue, Mig6MemNetIf's src FIFO) are made when it is taken, and the target answers each
+  beat on its own, one or more clocks after it took it: taken with the last beat, the
+  answers to the first beats would come before the requester counted the burst (found by
+  an agent reading the first design, 2026-11-23). Holding req_ready 0 while busy keeps every
+  later request of the same requester behind the burst's beats, the order the channel's
+  users rely on (no IDs); other requesters of the same target (a ReqMux after the block)
+  may come between two beats, which their owner queue sorts out.
+rejected:
+  - choice: Taken with the last beat, no copy (wires and a counter only)
+    why_not: Answers to the first beats come back before the requester recorded the burst;
+      a ReqDemux in front sees answers it does not expect (a_answer_expected).
+  - choice: The DMA bursts only to targets that take bursts (a bursts attribute per region)
+    why_not: Ties a library block to a design's address map; every new target a new case.
+  - choice: Each single-beat memory takes bursts itself
+    why_not: The same splitting logic inside every such memory.
+relies_on:
+  - rtl/lib/block/bursts
+  - rtl/lib/block/req_demux/design
+evidence: >
+  2026-11-23: test/block/req_burst_split (behave and struct, Verilator and Icarus): random
+  bursts of 1 to 1 << LEN_WIDTH beats, single reads, writes answered or not, any address and
+  size 1, 2 or 4 bytes; every beat checked in order, each take only with its beat 0, every
+  answer (1 to 3 clocks after each beat) against a requester's count made at the take;
+  LEN_WIDTH 1 and 4; covered: the longest burst, a target stall in a burst, a burst taken
+  in the clock after the last beat of one before. Mutants caught, among them the first
+  design (taken with the last beat).
+code:
+  - rtl/lib/block/req_burst_split/behave/req_burst_split.sv#req_ready
+  - rtl/lib/block/req_burst_split/struct/req_burst_split.sv#u_dff_en_copy

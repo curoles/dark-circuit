@@ -478,6 +478,12 @@ block:
     path: rtl/lib/block/reg_port_target
     test: test/block/reg_port_target
     kb: [rtl/lib/block/reg_port_target/design]
+  ReqBurstSplit:
+    what: "Request burst splitter: a burst read on a request channel goes out as its single beats to a target that takes no bursts"
+    versions: [behave, struct]
+    path: rtl/lib/block/req_burst_split
+    test: test/block/req_burst_split
+    kb: [rtl/lib/block/req_burst_split/design]
   ReqDemux:
     what: "Request demultiplexer: one request channel to one of N_TARGETS targets by a one-hot select, the answers back in order"
     versions: [behave, struct]

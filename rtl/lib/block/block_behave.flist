@@ -5,6 +5,7 @@
 -F addr_decode/behave/addr_decode.flist
 -F req_demux/behave/req_demux.flist
 -F req_mux/behave/req_mux.flist
+-F req_burst_split/behave/req_burst_split.flist
 -F priority_encoder/behave/priority_encoder.flist
 -F shift_reg/behave/shift_reg.flist
 -F delay_line/behave/delay_line.flist

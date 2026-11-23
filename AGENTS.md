@@ -195,7 +195,11 @@ This file has the rules that are not in README.md.
   channel carries bursts: kb rtl/lib/block/bursts); one with req_rsp = 0 gets none. Every
   block that keeps answers in order (ReqDemux, ReqMux, the caches, AtomicUnit, a network
   interface, a requester's queue) counts them so; one that does not take bursts has no
-  req_len port, and a burst never reaches it.
+  req_len port, and a burst never reaches it (ReqBurstSplit turns one into single beats in
+  front of such a target). Answers have no ready: every answer is taken in the clock it
+  comes, so a requester reserves room for all of a request's answers before it is taken. A
+  target answers one or more clocks after it took the request, so a block in front records
+  a request (its count, its owner) at the take and never misses an answer.
   **DMA channel** is a DMA's job slot: one transfer at a time, its own registers (the PDMA's
   Next and Exec registers, run, done); DmaSifive has N_CHANNELS of them sharing one mover.
   In DMA code and comments say "DMA channel" for the slot when both could be meant.

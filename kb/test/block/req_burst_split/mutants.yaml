@@ -1,0 +1,41 @@
+type: mutants
+title: Mutants of the ReqBurstSplit test (behave and struct versions)
+date: 2026-11-23
+tests: [block_req_burst_split_behave, block_req_burst_split_struct]
+mutants:
+  - name: behave, the burst taken with its last beat (the first design, 2026-11-23)
+    edits:
+      - file: rtl/lib/block/req_burst_split/behave/req_burst_split.sv
+        old: "assign req_ready      = !busy && tgt_req_ready;"
+        new: "assign req_ready      = (busy ? last : req_len == '0) && tgt_req_ready;"
+    expect: model
+  - name: behave, every beat at beat 0's address
+    edits:
+      - file: rtl/lib/block/req_burst_split/behave/req_burst_split.sv
+        old: "assign tgt_req_addr   = busy ? addr_q + (ADDR_WIDTH'(k) << size_q) : req_addr;"
+        new: "assign tgt_req_addr   = busy ? addr_q + (ADDR_WIDTH'(k & '0) << size_q) : req_addr;"
+    expect: model
+  - name: behave, the beats a byte apart whatever the size
+    edits:
+      - file: rtl/lib/block/req_burst_split/behave/req_burst_split.sv
+        old: "assign tgt_req_addr   = busy ? addr_q + (ADDR_WIDTH'(k) << size_q) : req_addr;"
+        new: "assign tgt_req_addr   = busy ? addr_q + (ADDR_WIDTH'(k) << (size_q & 3'd0)) : req_addr;"
+    expect: model
+  - name: struct, the counter starts at 0 (beat 0 twice)
+    edits:
+      - file: rtl/lib/block/req_burst_split/struct/req_burst_split.sv
+        old: ".load(take), .in(LEN_WIDTH'(1))"
+        new: ".load(take), .in(LEN_WIDTH'(0))"
+    expect: model
+  - name: struct, busy never ends
+    edits:
+      - file: rtl/lib/block/req_burst_split/struct/req_burst_split.sv
+        old: ".in1(next_beat), .in2(last), .out(finish)"
+        new: ".in1(next_beat), .in2(last & 1'b0), .out(finish)"
+    expect: model
+  - name: struct, the copy's fields not kept (the request's go on)
+    edits:
+      - file: rtl/lib/block/req_burst_split/struct/req_burst_split.sv
+        old: ".in0(req_fields), .in1(fields_q), .sel(busy)"
+        new: ".in0(req_fields), .in1(req_fields | (fields_q & '0)), .sel(busy)"
+    expect: model

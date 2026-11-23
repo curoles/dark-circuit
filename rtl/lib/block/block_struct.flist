@@ -5,6 +5,7 @@
 -F addr_decode/struct/addr_decode.flist
 -F req_demux/struct/req_demux.flist
 -F req_mux/struct/req_mux.flist
+-F req_burst_split/struct/req_burst_split.flist
 -F priority_encoder/struct/priority_encoder.flist
 -F shift_reg/struct/shift_reg.flist
 -F delay_line/struct/delay_line.flist
