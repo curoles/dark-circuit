@@ -336,6 +336,10 @@ Icarus means Icarus 13, the version the project uses.
 - Icarus gets `$onehot` of a concatenation wrong, `$onehot({write, wait_rsp, read, idle})`
   is false for `4'b0001` (Verilator gets it right). Give the vector a name and pass
   that, `$onehot(state)`.
+- Verilator prints a `$display` whose format is a concatenation, `$display({"a %0d",
+  " b %0d"}, x, y)`, as one big number (the string's bits), none of its text; Icarus prints
+  it right. `$sformatf` takes such a format on both (the DC_TEST_FAIL messages); for a
+  long `$display`, split it into two or pass `$sformatf(...)` as `%s`.
 - Undeclared names: no `default_nettype in the code. Verilator -Wall rejects them
   (IMPLICIT; in an expression always an error), and every design is built with it.
   sv2v declares an undeclared name of a port connection as a wire, and Yosys makes

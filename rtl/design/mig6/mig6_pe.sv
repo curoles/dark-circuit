@@ -436,7 +436,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .clk, .rst_n,
         .req_valid(net_valid), .req_ready(net_ready), .req_we(net_we),
         .req_addr(net_addr), .req_size(net_size), .req_atop(net_atop),
-        .req_cmo(net_cmo), .req_excl(net_excl), .req_rsp(net_rsp),
+        .req_cmo(net_cmo), .req_excl(net_excl), .req_len('0), .req_rsp(net_rsp),
         .req_wdata(net_wdata), .req_wstrb(net_wstrb),
         .rsp_valid(net_if_rsp_valid), .rsp_data(net_if_rsp_data),
         .noc_req_fwd, .noc_req_bwd, .noc_rsp_fwd, .noc_rsp_bwd);

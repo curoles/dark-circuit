@@ -6,7 +6,8 @@
  *   shared memory: Mig6MemNetIf (node 1, 2) <--------+  --> AtomicUnit --> RAM
  *
  * Each stand-in core (TbMig6StandIn) has its own window of the shared memory (16 words at
- * 64 * p) and checks every answer there against its shadow memory: routes there and back,
+ * 64 * p) and checks every answer there (burst reads' too, multi-flit answer packets through
+ * the mesh) against its shadow memory: routes there and back,
  * credits, four PEs competing for one memory. Each also adds 1 to one shared counter
  * N_COUNTER times; the old counts the adds get back, over all PEs, must be 0, 1, ..., every
  * add's once (atomic under contention, the barrier's mechanism), and the counter must end at
@@ -97,6 +98,7 @@ module TbMig6NocCheck #(
         atop_t                 req_atop;
         CachePkg::cmo_t        req_cmo;
         logic                  req_excl;
+        logic [LEN_WIDTH-1:0]  req_len;
         logic                  req_rsp;
         logic [DATA_WIDTH-1:0] req_wdata;
         logic [STRB_WIDTH-1:0] req_wstrb;
@@ -110,14 +112,14 @@ module TbMig6NocCheck #(
                         .LRSC_ADDR(LRSC_ADDR)) u_stand_in(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
-            .req_excl, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
+            .req_excl, .req_len, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
             .done(stand_in_done));
 
         Mig6PeNetIf #(.MY_PE_GRID_X(X_WIDTH'(p % MESH_X)), .MY_PE_GRID_Y(Y_WIDTH'(p / MESH_X)),
                       .BUF_DEPTH(BUF_DEPTH)) u_pe_net_if(
             .clk, .rst_n,
             .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
-            .req_excl, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
+            .req_excl, .req_len, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
             .noc_req_fwd(pe_req_fwd[p]), .noc_req_bwd(pe_req_bwd[p]),
             .noc_rsp_fwd(pe_rsp_fwd[p]), .noc_rsp_bwd(pe_rsp_bwd[p]));
 

@@ -6,15 +6,18 @@
  *   (TbMig6StandIn) <-- Mig6PeNetIf <==answer link=== throttle <== Mig6MemNetIf
  *
  * The stand-in core (TbMig6StandIn) sends a fixed start, then random reads, writes, atomics,
- * CBOs, LRs and SCs in its window, and checks every answer against its shadow memory and
+ * CBOs, LRs, SCs and burst reads (up to 16 words, so longer than D) in its window, and
+ * checks every answer against its shadow memory and
  * every SC's status against its model of the reservation; and LR/SC increments of a word of
  * its own (alone: none fails). The RAM
  * answers after a random latency and is not always ready. The throttle on the answer link
  * holds answers back at random (a busy mesh): without it Mig6PeNetIf would take every
  * answer at once and Mig6MemNetIf would never wait for a credit. Every case must happen by
  * the end: the stand-in's (each opcode, an SC that succeeds and one that fails, req_ready
- * low), Mig6MemNetIf owing D answers, an answer waiting for a credit, an SC waiting for
- * the answers in the memory. Checks before the end of a clock (the falling edge), drives
+ * low, a burst), Mig6MemNetIf owing D answers, an answer waiting for a credit, an SC waiting
+ * for the answers in the memory, a burst's word held at the gate (owed D in a burst), a
+ * burst's answer paused inside its packet (a body flit waiting for a credit). Checks before
+ * the end of a clock (the falling edge), drives
  * after its rising edge. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
@@ -46,6 +49,7 @@ module TbMig6NetIfCheck #(
     atop_t                 req_atop;
     CachePkg::cmo_t        req_cmo;
     logic                  req_excl;
+    logic [LEN_WIDTH-1:0]  req_len;
     logic                  req_rsp;
     logic [DATA_WIDTH-1:0] req_wdata;
     logic [STRB_WIDTH-1:0] req_wstrb;
@@ -98,13 +102,13 @@ module TbMig6NetIfCheck #(
                     .N_LRSC(20), .LRSC_ADDR('h100)) u_stand_in(
         .clk, .rst_n,
         .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
-        .req_excl, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
+        .req_excl, .req_len, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
         .done(stand_in_done));
 
     Mig6PeNetIf #(.MY_PE_GRID_X(2'd1), .MY_PE_GRID_Y(2'd0), .BUF_DEPTH(BUF_DEPTH)) u_pe_net_if(
         .clk, .rst_n,
         .req_valid, .req_ready, .req_we, .req_addr, .req_size, .req_atop, .req_cmo,
-        .req_excl, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
+        .req_excl, .req_len, .req_rsp, .req_wdata, .req_wstrb, .rsp_valid, .rsp_data,
         .noc_req_fwd(req_fwd), .noc_req_bwd(req_bwd),
         .noc_rsp_fwd(pe_rsp_fwd), .noc_rsp_bwd(pe_rsp_bwd));
 
@@ -145,6 +149,8 @@ module TbMig6NetIfCheck #(
     integer    n_owed_d;                // clocks with D answers owed
     integer    n_rsp_wait;              // clocks with an answer waiting for a credit
     integer    n_sc_wait;               // clocks with an SC waiting for answers in memory
+    integer    n_gated;                 // clocks with a burst's word held at the gate
+    integer    n_body_wait;             // clocks with a body flit waiting for a credit
 
     // The throttle, and the counts of Mig6MemNetIf's cases, until the stand-in is done.
     initial begin
@@ -155,6 +161,8 @@ module TbMig6NetIfCheck #(
         n_owed_d    = 0;
         n_rsp_wait  = 0;
         n_sc_wait   = 0;
+        n_gated     = 0;
+        n_body_wait = 0;
         thr_credits = BUF_DEPTH;
         wait (rst_n);
         while (!stand_in_done) begin
@@ -164,6 +172,11 @@ module TbMig6NetIfCheck #(
                 n_rsp_wait = n_rsp_wait + 1;
             if (u_mem_net_if.whole && u_mem_net_if.cur.op == REQ_SC && !u_mem_net_if.src_empty)
                 n_sc_wait = n_sc_wait + 1;
+            if (u_mem_net_if.beat_valid && !u_mem_net_if.gate && !u_mem_net_if.split_ready)
+                n_gated = n_gated + 1;
+            if (!u_mem_net_if.rsp_empty && !u_mem_net_if.out_front.head &&
+                u_mem_net_if.credits_q == '0)
+                n_body_wait = n_body_wait + 1;
             if (mem_rsp_fwd.valid) begin
                 if (thr_q.size() >= BUF_DEPTH)
                     $fatal(1, "Mig6 NetIf: Mig6MemNetIf sent without a credit");
@@ -187,7 +200,10 @@ module TbMig6NetIfCheck #(
         end
         $display("Mig6 NetIf: clocks with D owed %0d, an answer waiting %0d, an SC waiting %0d",
                  n_owed_d, n_rsp_wait, n_sc_wait);
-        if (n_owed_d == 0 || n_rsp_wait == 0 || n_sc_wait == 0)
+        $display("Mig6 NetIf: clocks with a burst's word at the gate %0d, a body flit waiting %0d",
+                 n_gated, n_body_wait);
+        if (n_owed_d == 0 || n_rsp_wait == 0 || n_sc_wait == 0 || n_gated == 0 ||
+            n_body_wait == 0)
             $fatal(1, "Mig6 NetIf: a case never happened (a count above is 0)");
         done = 1'b1;
     end

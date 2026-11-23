@@ -3,13 +3,15 @@
  *
  * First a fixed start in its window of WORDS words at BASE (every word written, two read
  * back, an atomic add), then N_REQS random requests in the window: reads, writes and
- * atomics of the nine operations, bytes, halfwords and words with their strobes, CBOs, LRs
- * and SCs (exclusive, a word; most SCs to the word reserved), with random gaps; an offer
+ * atomics of the nine operations, bytes, halfwords and words with their strobes, burst
+ * reads of 2 to 1 << LEN_WIDTH words (req_len, inside the window), CBOs, LRs and SCs
+ * (exclusive, a word; most SCs to the word reserved), with random gaps; an offer
  * stays the same until taken; req_rsp is set exactly for the requests answered (all but a
  * write and a CBO). Every N_REQS / N_COUNTER requests, if N_COUNTER is above 0, one of them
  * is an atomic add of 1 to the shared counter at COUNTER_ADDR instead. A shadow memory of
  * the window, updated in the order the requests are taken, gives each read's, LR's and
- * atomic's answer, which the stand-in computes itself (the window is its own: no other
+ * atomic's answer (a burst's, one a word), which the stand-in computes itself (the window
+ * is its own: no other
  * requester writes it); a model of its reservation (the monitor's: one word, set by an LR,
  * ended by its write, atomic or SC of that word, replaced by another LR) gives each SC's
  * status, SC_SUCCESS or SC_FAIL (a successful SC writes the shadow); every answer must be
@@ -21,7 +23,8 @@
  * a new LR only with no answer owed); other requesters do
  * the same, so the SCs fail now and then (n_lrsc_fail), and the word must end up added
  * N_LRSC times by each, for the test to check. At the end every opcode must have been sent,
- * an SC of the window must have succeeded and one failed, and an offer must have waited
+ * a burst read, an SC of the window must have succeeded and one failed, and an offer must
+ * have waited
  * (req_ready low); then done. Checks before the end of a clock (the falling edge), drives
  * after its rising edge. Stops at the first mismatch with $fatal.
  *
@@ -51,6 +54,7 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
     output atop_t                 req_atop,
     output CachePkg::cmo_t        req_cmo,
     output logic                  req_excl,
+    output logic [LEN_WIDTH-1:0]  req_len,
     output logic                  req_rsp,
     output logic [DATA_WIDTH-1:0] req_wdata,
     output logic [STRB_WIDTH-1:0] req_wstrb,
@@ -119,6 +123,7 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
     integer                   n_counter;            // counter adds offered
     integer                   n_op [8];             // per opcode, by its value
     integer                   n_not_ready;          // clocks with an offer not taken
+    integer                   n_burst;              // burst reads taken
     integer                   n_sc_ok;              // SCs of the window that succeeded
     integer                   n_sc_fail;            // ... that failed
     integer                   n_lrsc_ok;            // LR/SC increments done
@@ -147,6 +152,7 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
         req_excl   = 1'b0;
         req_wdata  = $random(seed);
         req_wstrb  = '0;
+        req_len    = '0;
         req_size   = SIZE_WIDTH'(2);
         offer_kind = OFFER_RANDOM;
         if (k < WORDS) begin                    // fixed: write word k
@@ -164,8 +170,13 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
             req_wdata  = 32'd1;
             n_counter  = n_counter + 1;
         end else begin
-            kind = {$random(seed)} % 24;
-            if (kind < 6) begin                 // a read
+            kind = {$random(seed)} % 26;
+            if (kind >= 24) begin               // a burst read of words, inside the window
+                word    = {$random(seed)} % (WORDS - 1);
+                req_len = LEN_WIDTH'(1 + {$random(seed)} %
+                                     ((WORDS - 1 - word < (1 << LEN_WIDTH) - 1)
+                                      ? WORDS - 1 - word : (1 << LEN_WIDTH) - 1));
+            end else if (kind < 6) begin        // a read
                 req_size = SIZE_WIDTH'({$random(seed)} % 3);
             end else if (kind < 12) begin       // a write of a byte, a halfword or a word
                 req_we   = 1'b1;
@@ -212,6 +223,7 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
         req_cmo    = CachePkg::CMO_NONE;
         req_excl   = 1'b1;
         req_rsp    = 1'b1;
+        req_len    = '0;
         req_addr   = ADDR_WIDTH'(LRSC_ADDR);
         req_size   = SIZE_WIDTH'(2);
         req_wdata  = sc ? loop_val + 32'd1 : 32'd0;
@@ -228,6 +240,7 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
         n_sent      = 0;
         n_counter   = 0;
         n_not_ready = 0;
+        n_burst     = 0;
         n_sc_ok     = 0;
         n_sc_fail   = 0;
         n_lrsc_ok   = 0;
@@ -305,8 +318,12 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
                         n_op[op] = n_op[op] + 1;
                         n_sent   = n_sent + 1;
                         case (op)
-                            REQ_READ, REQ_LR:
-                                expect_q.push_back('{kind: EXP_KNOWN, data: shadow[w]});
+                            REQ_READ, REQ_LR: begin     // a word each, req_len + 1
+                                for (int k = 0; k <= int'(req_len); k++)
+                                    expect_q.push_back('{kind: EXP_KNOWN,
+                                                         data: shadow[int'(w) + k]});
+                                if (req_len != '0) n_burst = n_burst + 1;
+                            end
                             REQ_WRITE: begin
                                 for (int b = 0; b < 4; b++)
                                     if (req_wstrb[b]) shadow[w][8*b +: 8] = req_wdata[8*b +: 8];
@@ -353,13 +370,15 @@ module TbMig6StandIn import Mig6NocPkg::*, AtomicPkg::*; #(
         end
         $display("Mig6 stand-in %0d: %0d requests in %0d clocks, %0d not ready", ID, n_sent,
                  cycle, n_not_ready);
-        $display("Mig6 stand-in %0d: read %0d write %0d atomic %0d cbo %0d lr %0d sc %0d",
-                 ID, n_op[REQ_READ], n_op[REQ_WRITE], n_op[REQ_ATOMIC], n_op[REQ_CBO],
-                 n_op[REQ_LR], n_op[REQ_SC]);
+        $display("Mig6 stand-in %0d: read %0d (bursts %0d) write %0d atomic %0d", ID,
+                 n_op[REQ_READ], n_burst, n_op[REQ_WRITE], n_op[REQ_ATOMIC]);
+        $display("Mig6 stand-in %0d: cbo %0d lr %0d sc %0d", ID, n_op[REQ_CBO], n_op[REQ_LR],
+                 n_op[REQ_SC]);
         $display("Mig6 stand-in %0d: SCs %0d ok %0d failed, counter %0d, LR/SC %0d (%0d failed)",
                  ID, n_sc_ok, n_sc_fail, n_counter, n_lrsc_ok, n_lrsc_fail);
         if (n_op[REQ_READ] == 0 || n_op[REQ_WRITE] == 0 || n_op[REQ_ATOMIC] == 0
-            || n_op[REQ_CBO] == 0 || n_op[REQ_LR] == 0 || n_op[REQ_SC] == 0 || n_sc_ok == 0
+            || n_op[REQ_CBO] == 0 || n_op[REQ_LR] == 0 || n_op[REQ_SC] == 0 || n_burst == 0
+            || n_sc_ok == 0
             || n_sc_fail == 0 || n_not_ready == 0 || n_counter != N_COUNTER
             || n_lrsc_ok != N_LRSC)
             $fatal(1, "Mig6 stand-in %0d: a case never happened (a count above is 0)", ID);

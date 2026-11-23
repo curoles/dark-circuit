@@ -89,24 +89,30 @@ library once the format settles, after the layer runs. A message's head is the l
 (the route, `dest_x` and `dest_y`, which the routers read), then the package's fields.
 
 ```
-  requests, 48-bit flits:
-    head    | dest 4 | op 3 | src 4 | size 3 | addr 32 | cmo 2 |
-    WRITE   | zero 12 | data 32 | strb 4 |       (body; an SC's the same)
-    ATOMIC  | zero 10 | operand 32 | atop 6 |   (body)
+  requests, 52-bit flits:
+    head    | dest 4 | op 3 | src 4 | size 3 | len 4 | addr 32 | cmo 2 |
+    WRITE   | zero 16 | data 32 | strb 4 |       (body; an SC's the same)
+    ATOMIC  | zero 14 | operand 32 | atop 6 |   (body)
 
   answers, 39-bit flits:
-    DATA    | dest 4 | op 3 | data 32 |
+    DATA    | dest 4 | op 3 | data 32 |         (a burst's first word)
+    body    | zero 7 | data 32 |                (a burst's next words, one a flit)
     ACK     | dest 4 | op 3 | status 32 |       (an SC's)
 ```
 
-- **A word at a time:** a request reads or writes up to a word (32 bits, 4 strobes). Lines
-  would be new opcodes of more flits, when a cache needs them.
-- **One or two flits:** READ, LR and CBO are a head alone, WRITE, SC and ATOMIC a head and
-  a body. An answer is one flit: the word of a READ or an LR, the old word of an ATOMIC
-  (DATA), an SC's status (ACK: RISC-V's SC result, 0 success, 1 failure, what the core
-  writes to rd; as AXI answers a write on B, OKAY or EXOKAY).
+- **A word at a time, or a burst of words:** a request reads or writes up to a word (32
+  bits, 4 strobes); a READ with `len` above 0 reads `len + 1` words, 4 bytes apart (the
+  request channel's `req_len`, AXI's ARLEN; every other request has `len` 0). The field is
+  in every request (user's choice 2026-11-23, the most generic: an opcode for bursts would
+  spend the free opcodes; kb rtl/design/mig6/bursts).
+- **Packets of one or more flits:** READ, LR and CBO are a head alone, WRITE, SC and ATOMIC
+  a head and a body. An answer is one packet: the word of a READ or an LR, the old word of
+  an ATOMIC (DATA), an SC's status (ACK: RISC-V's SC result, 0 success, 1 failure, what the
+  core writes to rd; as AXI answers a write on B, OKAY or EXOKAY); a burst's DATA is its
+  head with the first word and a body flit for each next. One packet, not a packet a word:
+  a router passes a head flit every 3 clocks and body flits one a clock.
 - **LR and SC are opcodes,** the exclusive READ and WRITE (the request channel's
-  `req_excl`): the head has no bit left for a flag (48 of 48).
+  `req_excl`).
 - **No IDs:** an answer goes to the request's `src`. A PE's requests and answers stay in
   order, so a PE matches answers to requests by counting. This holds while a PE talks to one
   destination (see Open questions).
@@ -123,13 +129,19 @@ AtomicUnit and a RAM.
 
 - **Mig6PeNetIf** turns a request into a head and a body flit, sent while the router has
   credits, and takes the request with its last flit. Answers go straight to the requester,
-  credits straight back: it holds no answer and limits nothing. Mig6Pe picks the word of
+  every flit an answer (a burst's `len + 1`), credits straight back: it holds no answer and
+  limits nothing. Mig6Pe picks the word of
   the core's line-wide port, as Mig3Cpu does for its devices (only uncached accesses of a
   word or less come).
-- **Mig6MemNetIf** buffers request flits (the credits it gives), passes a request on to
-  AtomicUnit and the RAM with its body, and drops CBOs (nothing caches the shared memory).
-  Answers have no ready, so a request that is answered is taken only when its answer has a
-  place: at most D owed (a FIFO of their sources, a FIFO of answers waiting for a credit).
+- **Mig6MemNetIf** buffers request flits (the credits it gives), passes a request on with
+  its body to a ReqBurstSplit (a burst READ as its words, one a clock) and from there to
+  AtomicUnit and the RAM, and drops CBOs (nothing caches the shared memory). Answers have no
+  ready, so a word that is answered goes to the memory only when its answer has a place: at
+  most D owed (the words in the memory, a FIFO of answer flits waiting for a credit), so a
+  burst of any length passes a word at a time. A burst's answer packet leaves as its words
+  come (cut-through): the answer network has this one source, so a pause inside a packet
+  blocks nobody; with more sources, packets of a bounded size, each sent once its words are
+  in (kb rtl/design/mig6/bursts).
 - **The exclusive monitor** is in Mig6MemNetIf, where every request to the shared memory
   passes with its source: a reservation per PE (a word). An LR reserves; any write, atomic
   or successful SC of the word ends every reservation of it; an SC is decided when no

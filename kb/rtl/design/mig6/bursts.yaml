@@ -1,0 +1,68 @@
+type: decision
+title: Mig6's network carries burst reads, a len in every request and one answer packet
+date: 2026-11-23
+question: >
+  After 9a-3 a router input passes one packet every 3 clocks (a head's route computation,
+  VC and switch allocation; one VC), and every Mig6 answer was a one-flit packet, so the
+  shared memory delivered about 0.3 words a clock to four PEs (kb rtl/lib/block/bursts).
+  The library's channel and DMA now make burst reads (kb rtl/lib/block/dma/read_bursts).
+  How does Mig6's network carry them: the length in the request, the answer's shape, how
+  the shared memory's interface sends it, the sizes?
+decision: >
+  (1) A len field (beats - 1, LEN_WIDTH 4: up to 16 words) in every request head, after
+  size; the request flit grows from 48 to 52 bits; only a READ has len above 0, of words
+  (req_len_ok, a_burst_read). (2) A burst's answer is one DATA packet: the head (route, op)
+  with the first word, a body flit {zero 7, data 32} for each next, the tail on the last;
+  Mig6PeNetIf gives every answer flit as one answer (the requester counts len + 1). (3)
+  Mig6MemNetIf passes the request to a ReqBurstSplit (kb rtl/lib/block/req_burst_split/
+  design) and its words through the owed < D gate (D in words, unchanged at 4: a burst of
+  any length passes); the src FIFO keeps {src, len} to frame the packet; the head leaves
+  with the first word, body flits as their words come (cut-through). (4) A max_burst knob
+  for the PEs' DMA, at most 1 << LEN_WIDTH, swept 1, 4, 8, 16 in 9b-3c with dma_depth kept
+  at 8 (the measurement isolates bursts). Mig6Pe keeps len 0 until 9b-3c.
+why: >
+  Generic before cheap (user, 2026-11-23): a burst opcode with the length in the size and
+  cmo bits would have kept 48 bits, but it spends both free opcodes (read and write bursts)
+  that coherence will need, gives bits a meaning per opcode, and a library format later
+  would be generic fields of parameter widths anyway; 4 wires on the request network only.
+  One answer packet because a router passes body flits one a clock and a head every 3: a
+  burst of B words costs about 3 + B - 1 clocks a router input, not 3 B (B = 8: 0.8 words a
+  clock against 0.33). The head carries the first word, so a plain read's answer is unchanged
+  and a burst is B flits, the fewest. Cut-through (user's choice, the smallest change):
+  today the answer network has one source and the memory answers in order, so a pause
+  inside a packet costs nothing a store-and-forward packet would save, and D need not hold
+  a whole burst.
+rejected:
+  - choice: A REQ_READ_BURST opcode with the length in the size and cmo bits
+    why_not: Spends the free opcodes (a write burst would need the second), meanings per
+      opcode, redone when the format moves to the library (my first recommendation; the user
+      asked whether it scales).
+  - choice: The answer as one packet a word
+    why_not: Every word pays the head's 3 clocks again; no gain.
+  - choice: A head with route, op and len but no data, then len + 1 data flits
+    why_not: One more flit a burst (about 11 % of the answer network for bursts of 8), plain
+      reads become two flits, and nothing on the PE side needs the length.
+  - choice: Store and forward the whole burst at Mig6MemNetIf
+    why_not: The answer FIFO would bound the burst length, and the first word comes len
+      clocks later.
+  - choice: Bounded packets of P words, each store and forward (as PCIe splits completions)
+    why_not: Not needed while the answer network has one source. TRIGGER to revisit, switching
+      to it in Mig6MemNetIf only (no format or PE change), is a second source of answers on the
+      answer network, such as other PEs' memories reachable as address windows or more
+      memory banks, where a packet paused in its middle would hold links other packets need.
+relies_on:
+  - rtl/lib/block/bursts
+  - rtl/lib/block/req_burst_split/design
+  - rtl/lib/block/dma/read_bursts
+  - rtl/design/mig6/dma_depth
+evidence: >
+  2026-11-23: design_mig6_net_if (one stand-in core, burst reads of 2 to 16 words in its
+  window, checked word by word against its shadow memory, D = 4): a burst's word held at
+  the gate 2 272 clocks, a body flit waiting for a credit 1 556; design_mig6_noc (four
+  stand-ins on the 2 x 2 meshes, multi-flit answers through the routers) pass; with len
+  tied to 0 in Mig6Pe the DMA programs print the same, cycles included. The measurements
+  come in 9b-3c.
+code:
+  - rtl/design/mig6/mig6_noc_pkg.sv#LEN_WIDTH
+  - rtl/design/mig6/mig6_mem_net_if.sv#u_burst_split
+  - rtl/design/mig6/mig6_pe_net_if.sv#in_packet

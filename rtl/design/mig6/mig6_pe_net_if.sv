@@ -7,17 +7,20 @@
  * taken), a write or a CBO without an answer. The opcode: a CBO when cmo is not CMO_NONE
  * (a write without strobes), else an ATOMIC when atop is not ATOP_NONE (a read with an
  * operand), else an SC or an LR when excl (a write or a read), else a WRITE when we, else a
- * READ. An answer is DATA (a read's, an LR's, an atomic's word) or ACK (an SC's status:
- * SC_SUCCESS, SC_FAIL); rsp_data is the word either way. A request goes out as its head,
- * then its body (WRITE, SC, ATOMIC), a flit a clock while the
+ * READ. A read may be a burst (req_len above 0: req_len + 1 words, kb rtl/lib/block/bursts),
+ * its len in the head. An answer is DATA (a read's, an LR's, an atomic's word) or ACK (an
+ * SC's status: SC_SUCCESS, SC_FAIL); a burst's DATA is one packet, its head with the first
+ * word and a body flit for each next. Every answer flit, head or body, is one answer:
+ * rsp_valid with its word (the requester counts a burst's req_len + 1). A request goes out as
+ * its head, then its body (WRITE, SC, ATOMIC), a flit a clock while the
  * request network's local input has a credit (a count from BUF_DEPTH, the router's buffer);
  * the request is taken (req_ready) with its last flit. An answer from the answer network
  * goes straight to rsp_valid and its credit straight back: it holds no answer, so it
  * limits nothing; a requester does (a ReqMux's pending FIFO).
  *
- *   req --> op_of --+--> head (route MEM_X, MEM_Y; src this PE) --+--> request network
- *                   \--> body (WRITE, SC, ATOMIC), after the head -+    (body_q)
- *   rsp <-- the answer's data <-- answer network, its credit back at once
+ *   req --> op_of --+--> head (route MEM_X, MEM_Y; src this PE; len) --+--> request network
+ *                   \--> body (WRITE, SC, ATOMIC), after the head ------+    (body_q)
+ *   rsp <-- each answer flit's word <-- answer network, its credit back at once
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -41,6 +44,7 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
     input  AtomicPkg::atop_t      req_atop,         // ATOP_NONE, or an atomic operation
     input  CachePkg::cmo_t        req_cmo,          // CMO_NONE, or a CBO's operation
     input  wire                   req_excl,         // exclusive: LR (a read), SC (a write)
+    input  wire [LEN_WIDTH-1:0]   req_len,          // beats - 1: above 0 only in a read
     // Read by an assertion only: the opcode says whether an answer comes.
     /* verilator lint_off UNUSEDSIGNAL */
     input  wire                   req_rsp,          // wants an answer
@@ -68,8 +72,13 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
     req_op_e                 op;
     logic                    has_body;
     logic                    send;          // a flit goes out
-    rsp_t                    rsp;
+    rsp_t                    rsp;           // an answer's head flit
     rsp_rest_t               answer;
+    // Its zero bits are not read.
+    /* verilator lint_off UNUSEDSIGNAL */
+    rsp_body_t               body;          // ... or body flit
+    /* verilator lint_on UNUSEDSIGNAL */
+    logic                    in_packet;     // a burst's head came, its tail not yet
 
     // The opcode of a request.
     function automatic req_op_e op_of(logic we, AtomicPkg::atop_t atop, CachePkg::cmo_t cmo,
@@ -88,6 +97,7 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
 
     // The head flit: the route to the shared memory, then where the answer goes.
     function automatic req_flit_t head_of(req_op_e o, logic tail, logic [SIZE_WIDTH-1:0] size,
+                                          logic [LEN_WIDTH-1:0] len,
                                           logic [ADDR_WIDTH-1:0] addr, CachePkg::cmo_t cmo);
         req_rest_t r;
         req_head_t h;
@@ -97,6 +107,7 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
         r.src_x  = MY_PE_GRID_X;
         r.src_y  = MY_PE_GRID_Y;
         r.size   = size;
+        r.len    = len;
         r.addr   = addr;
         r.cmo    = cmo;
         h.dest_x = MEM_X;
@@ -141,7 +152,8 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
     assign req_ready         = send && (body_q || !has_body);
     assign noc_req_fwd.valid = send;
     assign noc_req_fwd.flit  = body_q ? body_of(op, req_wdata, req_wstrb, req_atop)
-                                      : head_of(op, !has_body, req_size, req_addr, req_cmo);
+                                      : head_of(op, !has_body, req_size, req_len, req_addr,
+                                                req_cmo);
 
     always_ff @(posedge clk)
         if (!rst_n) begin
@@ -153,33 +165,46 @@ module Mig6PeNetIf import Mig6NocPkg::*; #(
                 body_q <= has_body && !body_q;
         end
 
-    // Answers: straight to the requester, the credit straight back.
+    // Answers: every flit's word straight to the requester, the credit straight back.
     assign rsp               = noc_rsp_fwd.flit.data;
     assign answer            = rsp.rest;
+    assign body              = noc_rsp_fwd.flit.data;
     assign rsp_valid         = noc_rsp_fwd.valid;
-    assign rsp_data          = answer.data;
+    assign rsp_data          = noc_rsp_fwd.flit.head ? answer.data : body.data;
     assign noc_rsp_bwd.valid = noc_rsp_fwd.valid;
     assign noc_rsp_bwd.vc    = '0;
+
+    always_ff @(posedge clk)
+        if (!rst_n)
+            in_packet <= 1'b0;
+        else if (noc_rsp_fwd.valid)
+            in_packet <= !noc_rsp_fwd.flit.tail;
 
     // Shared memory is uncached: only accesses of a word or less come (Mig6Pe picks the word).
     `DC_ASSERT(a_word_at_most, !(req_valid && req_size > SIZE_WORD))
     // An offer stays the same until taken (the body is sent from it a clock after the head).
     `DC_ASSERT_NEXT(a_offer_kept, send && !req_ready,
-                    req_valid && $stable({req_we, req_excl, req_addr, req_size, req_atop,
-                                          req_cmo, req_wdata}) &&
+                    req_valid && $stable({req_we, req_excl, req_len, req_addr, req_size,
+                                          req_atop, req_cmo, req_wdata}) &&
                     (!(op == REQ_WRITE || op == REQ_SC) || $stable(req_wstrb)))
     // A request wants an answer exactly when its opcode gets one.
     // @kb: rtl/lib/block/answered_writes
     `DC_ASSERT(a_rsp_kind, !(req_valid && req_rsp != req_answered(op)))
+    // Only a read is a burst, of words.
+    // @kb: rtl/lib/block/bursts
+    `DC_ASSERT(a_burst_read, !(req_valid && (!req_len_ok(op, req_len) ||
+                                             (req_len != '0 && req_size != SIZE_WORD))))
     // The router returns no more credits than it has slots.
     `DC_ASSERT(a_credits_at_most_depth,
                !(noc_req_bwd.valid && !send && credits_q == CREDIT_WIDTH'(BUF_DEPTH)))
-    // An answer is one DATA or ACK flit to this node.
-    `DC_ASSERT(a_answer_one_flit, !(noc_rsp_fwd.valid
-                                    && !(noc_rsp_fwd.flit.head && noc_rsp_fwd.flit.tail)))
-    `DC_ASSERT(a_answer_kind, !(noc_rsp_fwd.valid && answer.op != RSP_DATA &&
-                                answer.op != RSP_ACK))
-    `DC_ASSERT(a_answer_is_mine, !(noc_rsp_fwd.valid && (rsp.dest_x != MY_PE_GRID_X
-                                                         || rsp.dest_y != MY_PE_GRID_Y)))
+    // An answer is a DATA or ACK head to this node, then (a burst's DATA) body flits; a head
+    // only between packets, a body only inside one.
+    `DC_ASSERT(a_head_between, !(noc_rsp_fwd.valid && noc_rsp_fwd.flit.head == in_packet))
+    `DC_ASSERT(a_answer_kind, !(noc_rsp_fwd.valid && noc_rsp_fwd.flit.head &&
+                                answer.op != RSP_DATA && answer.op != RSP_ACK))
+    `DC_ASSERT(a_burst_is_data, !(noc_rsp_fwd.valid && noc_rsp_fwd.flit.head &&
+                                  !noc_rsp_fwd.flit.tail && answer.op != RSP_DATA))
+    `DC_ASSERT(a_answer_is_mine, !(noc_rsp_fwd.valid && noc_rsp_fwd.flit.head &&
+                                   (rsp.dest_x != MY_PE_GRID_X || rsp.dest_y != MY_PE_GRID_Y)))
 
 endmodule

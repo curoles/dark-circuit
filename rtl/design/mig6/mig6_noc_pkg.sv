@@ -1,23 +1,30 @@
 /* The messages of Mig6's network on chip, for now: memory requests and their answers, on two
  * networks (a NocMesh each, one VC): requests from the PEs to the shared memory, answers
- * back (rtl/design/mig6/README.md). A message is a NoC packet of one or two flits. Its head
- * is the library's (DC_NOC_HEAD_T): the route, dest_x and dest_y, then the rest, which is
- * this package's (req_rest_t, rsp_rest_t); so the route is where the routers read it by
+ * back (rtl/design/mig6/README.md). A message is a NoC packet of one or more flits. Its
+ * head is the library's (DC_NOC_HEAD_T): the route, dest_x and dest_y, then the rest, which
+ * is this package's (req_rest_t, rsp_rest_t); so the route is where the routers read it by
  * construction. A prototype: the layout may change; it moves to the library once it settles.
  *
- * Request network, 48-bit flit data:
+ * Request network, 52-bit flit data:
  *
- *   head     | dest_x 2 | dest_y 2 | op 3 | src_x 2 | src_y 2 | size 3 | addr 32 | cmo 2 |
- *   WRITE    | zero 12 | data 32 | strb 4 |             the body: a second flit, the tail
- *   SC       | zero 12 | data 32 | strb 4 |             the same body as a WRITE
- *   ATOMIC   | zero 10 | operand 32 | atop 6 |
+ *   head   | dest_x 2 | dest_y 2 | op 3 | src_x 2 | src_y 2 | size 3 | len 4 | addr 32 | cmo 2 |
+ *   WRITE  | zero 16 | data 32 | strb 4 |             the body: a second flit, the tail
+ *   SC     | zero 16 | data 32 | strb 4 |             the same body as a WRITE
+ *   ATOMIC | zero 14 | operand 32 | atop 6 |
  *
- * Answer network, 39-bit flit data, one flit:
+ * Answer network, 39-bit flit data:
  *
- *   DATA     | dest_x 2 | dest_y 2 | op 3 | data 32 |       a READ's, an LR's, an ATOMIC's
- *   ACK      | dest_x 2 | dest_y 2 | op 3 | status 32 |     an SC's (later acknowledged writes)
+ *   DATA   | dest_x 2 | dest_y 2 | op 3 | data 32 |   a READ's (its first word), an LR's, an
+ *                                                     ATOMIC's
+ *   body   | zero 7 | data 32 |                       a burst READ's next words, one a flit
+ *   ACK    | dest_x 2 | dest_y 2 | op 3 | status 32 | an SC's (later acknowledged writes)
  *
- * READ, LR and CBO are a head alone, WRITE, SC and ATOMIC a head and a body. LR and SC are
+ * READ, LR and CBO are a head alone, WRITE, SC and ATOMIC a head and a body. len is the
+ * request channel's req_len (beats - 1, kb rtl/lib/block/bursts), a field of every request
+ * (user's choice, 2026-11-23: the most generic, AXI's ARLEN): a READ of len L above 0 is a
+ * burst of L + 1 words at addr, 4 bytes apart (size a word), answered by one DATA packet of
+ * L + 1 flits, the head with the first word, a body flit for each next; every other request
+ * has len 0 (req_len_ok). An answer of one flit is a head and a tail. LR and SC are
  * the exclusive READ and WRITE (the request channel's req_excl; the head has no bit left
  * for a flag): the shared memory keeps a reservation per PE, src, and an SC writes only
  * while its PE's holds; its ACK's status is RISC-V's SC result (SC_SUCCESS 0, SC_FAIL 1),
@@ -45,6 +52,8 @@ package Mig6NocPkg;
     localparam DATA_WIDTH = 32;     // a word: written data, an operand, an answer
     localparam STRB_WIDTH = DATA_WIDTH / 8;
     localparam SIZE_WIDTH = 3;      // AXI's AxSIZE: 1 << size bytes
+    // @kb: rtl/design/mig6/bursts
+    localparam LEN_WIDTH  = 4;      // a request's len: a burst READ of up to 16 words
 
     // The mesh, NocMesh's coordinates (y grows north): PE p at node (p % MESH_X, p / MESH_X),
     // the mesh's local port p.
@@ -84,11 +93,12 @@ package Mig6NocPkg;
         logic [X_WIDTH-1:0]    src_x;   // the requester: where the answer goes
         logic [Y_WIDTH-1:0]    src_y;
         logic [SIZE_WIDTH-1:0] size;    // 1 << size bytes
+        logic [LEN_WIDTH-1:0]  len;     // beats - 1: above 0 only in a burst READ
         logic [ADDR_WIDTH-1:0] addr;    // byte address
         CachePkg::cmo_t        cmo;     // CMO_NONE, or a CBO's operation
     } req_rest_t;
 
-    localparam REQ_DATA_WIDTH = X_WIDTH + Y_WIDTH + $bits(req_rest_t);  // 48
+    localparam REQ_DATA_WIDTH = X_WIDTH + Y_WIDTH + $bits(req_rest_t);  // 52
 
     typedef `DC_NOC_HEAD_T(X_WIDTH, Y_WIDTH, REQ_DATA_WIDTH) req_head_t;  // rest: req_rest_t
 
@@ -115,6 +125,12 @@ package Mig6NocPkg;
 
     typedef `DC_NOC_HEAD_T(X_WIDTH, Y_WIDTH, RSP_DATA_WIDTH) rsp_t;       // rest: rsp_rest_t
 
+    // A body flit of an answer: a burst READ's next word.
+    typedef struct packed {
+        logic [RSP_DATA_WIDTH-DATA_WIDTH-1:0] zero;
+        logic [DATA_WIDTH-1:0]                data;
+    } rsp_body_t;
+
     // The flits and links of the two networks, by the library's macros.
     typedef `DC_NOC_FLIT_T(VC_WIDTH, REQ_DATA_WIDTH)     req_flit_t;
     typedef `DC_NOC_LINK_FWD_T(VC_WIDTH, REQ_DATA_WIDTH) req_link_fwd_t;
@@ -130,6 +146,11 @@ package Mig6NocPkg;
     // A request that gets an answer: all but a WRITE and a CBO.
     function automatic logic req_answered(req_op_e op);
         return op != REQ_WRITE && op != REQ_CBO;
+    endfunction
+
+    // Only a READ may be a burst (len above 0).
+    function automatic logic req_len_ok(req_op_e op, logic [LEN_WIDTH-1:0] len);
+        return len == '0 || op == REQ_READ;
     endfunction
 
 endpackage
