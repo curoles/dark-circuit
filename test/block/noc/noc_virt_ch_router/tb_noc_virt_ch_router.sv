@@ -1,22 +1,26 @@
 /* Test of NocVirtChRouter: flits end to end through one router.
  *
  * The router at (1, 1) of a 4 x 4 mesh, so every output port is some destination's route. On
- * every input a sender keeps a credit count per VC (BUF_DEPTH after reset, back with each credit
- * on in_bwd) and starts a packet only on a VC whose last packet's tail went (as VC allocation
- * upstream would); it sends a flit of a VC with a credit in most clocks, the VCs in random order,
- * packets of 1 to 4 flits to random destinations. Every flit carries its packet's id: a head's
- * data is the destination and the id, a body or tail flit's data the id and its index. On every
- * output a receiver takes the flits and returns a credit for each, 1 to 3 clocks later (one per
- * clock). Checked: a packet leaves through the port of its XY route; on an output VC its flits
- * come in order, head to tail, no other packet's flit between (wormhole); a receiver never holds
- * more than BUF_DEPTH flits of a VC (the router keeps the credits); a sender never gets more
- * credits than it spent; after the run every packet arrives. First a lone packet of two flits
- * from the west to the east port measures the latency: its head leaves 3 clocks after it came
- * (buffer write; route; VC allocation; switch allocation and the crossbar), its tail a clock
- * later. Every case must happen: packets from every input, to every output, two packets
- * interleaved on one output's VCs, a sender held back by its credits, packets of four flits.
- * NUM_VCS 2 and 3; Verilator 20000 clocks of traffic, Icarus 400. Stops at the first mismatch
- * with $fatal.
+ * every input a sender keeps a credit count per VC (BUF_DEPTH after reset, back with each
+ * credit on in_bwd) and starts a packet only on a VC whose last packet's tail went (as VC
+ * allocation upstream would); it sends a flit of a VC with a credit in most clocks, the VCs in
+ * random order, packets of 1 to 4 flits to random destinations. Every flit carries its
+ * packet's id: a head's data is the destination and the id, a body or tail flit's data the id
+ * and its index. On every output a receiver takes the flits and returns a credit for each, 1
+ * to 3 clocks later (one per clock). Checked: a packet leaves through the port of its XY
+ * route; on an output VC its flits come in order, head to tail, no other packet's flit between
+ * (wormhole); a receiver never holds more than BUF_DEPTH flits of a VC (the router keeps the
+ * credits); a sender never gets more credits than it spent; after the run every packet
+ * arrives. First a lone packet of two flits from the west to the east port measures the
+ * latency: its head leaves 3 clocks after it came (buffer write; route; VC allocation; switch
+ * allocation and the crossbar), its tail a clock later. Then a train of one-flit packets on
+ * one input VC, each sent as soon as a credit allows, measures the rate: the heads leave 1 + 2
+ * clocks apart (an input VC spends a clock on the head's route and one on its VC allocation
+ * besides the flit's pop; longer packets add a clock a flit, but this test's buffers of 2
+ * flits hold them back by the credits). Every case must happen: packets from every input, to
+ * every output, two packets interleaved on one output's VCs (with more than one VC), a sender
+ * held back by its credits, packets of four flits. NUM_VCS 1, 2 and 3; Verilator 20000 clocks
+ * of traffic, Icarus 400. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -42,6 +46,7 @@ module TbNocVirtChRouterCheck #(
     localparam MAX_PKTS   = 40000;
     localparam Q          = 16;                                 // credits waiting per receiver
     localparam HEAD_LAT   = 3;                                  // clocks, the lone packet's head
+    localparam PKT_GAP    = 2;      // clocks an input VC spends on a packet besides its flits
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
@@ -157,12 +162,25 @@ module TbNocVirtChRouterCheck #(
         n_from[p] = n_from[p] + 1;
     endtask
 
+    // Each receiver a credit that is due.
+    task automatic return_credits;
+        link_bwd_t b;
+        for (int r = 0; r < N; r++)
+            if (cq_count[r] > 0 && cq_due[r][cq_head[r]] <= k) begin
+                b.valid     = 1'b1;
+                b.vc        = VC_WIDTH'(cq_vc[r][cq_head[r]]);
+                out_bwd[r]  = b;
+                held[r][cq_vc[r][cq_head[r]]] = held[r][cq_vc[r][cq_head[r]]] - 1;
+                cq_head[r]  = (cq_head[r] + 1) % Q;
+                cq_count[r] = cq_count[r] - 1;
+            end
+    endtask
+
     // After the edge: each sender a flit, each receiver a credit that is due.
     task automatic drive;
         integer    v;
         integer    x;
         integer    y;
-        link_bwd_t b;
         in_fwd  = '0;
         out_bwd = '0;
         for (int p = 0; p < N; p++) begin
@@ -181,15 +199,7 @@ module TbNocVirtChRouterCheck #(
                     send(p, v, make_flit(s_pkt[p][v], s_idx[p][v], 0, 0, v));
             end
         end
-        for (int r = 0; r < N; r++)
-            if (cq_count[r] > 0 && cq_due[r][cq_head[r]] <= k) begin
-                b.valid     = 1'b1;
-                b.vc        = VC_WIDTH'(cq_vc[r][cq_head[r]]);
-                out_bwd[r]  = b;
-                held[r][cq_vc[r][cq_head[r]]] = held[r][cq_vc[r][cq_head[r]]] - 1;
-                cq_head[r]  = (cq_head[r] + 1) % Q;
-                cq_count[r] = cq_count[r] - 1;
-            end
+        return_credits();
     endtask
 
     // A flit f comes out of output r.
@@ -284,6 +294,64 @@ module TbNocVirtChRouterCheck #(
         out_bwd = '0;
     endtask
 
+    // A train: n packets of len flits from the west to (3, 1), the east port, on VC 0, each flit
+    // sent as soon as a credit allows; the heads must leave len + PKT_GAP clocks apart.
+    task automatic train(input integer len, input integer n);
+        integer    ids [8];
+        integer    next;            // the packet being sent
+        integer    heads;           // heads out so far
+        integer    last_head;       // the clock the last head left
+        link_fwd_t l;
+        for (int i = 0; i < n; i++)
+            ids[i] = new_packet(3, 1, len);
+        next      = 0;
+        heads     = 0;
+        last_head = -1;
+        for (int c = 0; c < 40 * n && heads < n; c++) begin
+            in_fwd  = '0;
+            out_bwd = '0;
+            return_credits();
+            if (next < n && credits[NocPkg::PORT_WEST][0] > 0) begin
+                if (s_pkt[NocPkg::PORT_WEST][0] < 0) begin
+                    s_pkt[NocPkg::PORT_WEST][0] = ids[next];
+                    s_idx[NocPkg::PORT_WEST][0] = 0;
+                end
+                send(NocPkg::PORT_WEST, 0, make_flit(ids[next], s_idx[NocPkg::PORT_WEST][0],
+                                                     3, 1, 0));
+                if (s_pkt[NocPkg::PORT_WEST][0] < 0)
+                    next = next + 1;
+            end
+            #1;
+            l = out_fwd[NocPkg::PORT_EAST];
+            if (l.valid && l.flit.head) begin
+                if (last_head >= 0 && c - last_head != len + PKT_GAP)
+                    $fatal(1, "Router %0d: %0d-flit train: heads %0d clocks apart, expected %0d",
+                           NUM_VCS, len, c - last_head, len + PKT_GAP);
+                last_head = c;
+                heads     = heads + 1;
+            end
+            check();
+            k = k + 1;
+            @(negedge clk);
+        end
+        // Drain: the last flits and the credits.
+        for (int c = 0; c < 20; c++) begin
+            in_fwd  = '0;
+            out_bwd = '0;
+            return_credits();
+            #1;
+            check();
+            k = k + 1;
+            @(negedge clk);
+        end
+        out_bwd = '0;
+        if (heads != n || !pk_done[ids[n - 1]])
+            $fatal(1, "Router %0d: train of %0d-flit packets: %0d of %0d heads out", NUM_VCS, len,
+                   heads, n);
+        $display("Router %0d VCs: train of %0d-flit packets: heads %0d clocks apart", NUM_VCS, len,
+                 len + PKT_GAP);
+    endtask
+
     initial begin
         done         = 1'b0;
         seed         = NUM_VCS * 23;
@@ -315,6 +383,7 @@ module TbNocVirtChRouterCheck #(
         @(negedge clk);
         rst_n = 1'b1;
         lone_packet();
+        train(1, 6);
         // Traffic, then a drain until every packet arrived.
         sending = 1'b1;
         for (int c = 0; c < N_CLOCKS + 2000 && (sending || n_done < n_pkts); c++) begin
@@ -331,7 +400,7 @@ module TbNocVirtChRouterCheck #(
             if (n_from[p] == 0 || n_to[p] == 0)
                 $fatal(1, "Router %0d: port %0d: %0d flits in, %0d packets out", NUM_VCS, p,
                        n_from[p], n_to[p]);
-        if (n_interleave == 0 || n_no_credit == 0 || n_four == 0)
+        if ((NUM_VCS > 1 && n_interleave == 0) || n_no_credit == 0 || n_four == 0)
             $fatal(1, "Router %0d: cases: interleave %0d, no credit %0d, four flits %0d",
                    NUM_VCS, n_interleave, n_no_credit, n_four);
         $display("Router %0d VCs: %0d packets through", NUM_VCS, n_done);
@@ -344,16 +413,18 @@ endmodule
 
 module TbNocVirtChRouter;
     wire clk;
+    wire done_1;
     wire done_2;
     wire done_3;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
+    TbNocVirtChRouterCheck #(.NUM_VCS(1)) u_check_1(.clk, .done(done_1));
     TbNocVirtChRouterCheck #(.NUM_VCS(2)) u_check_2(.clk, .done(done_2));
     TbNocVirtChRouterCheck #(.NUM_VCS(3)) u_check_3(.clk, .done(done_3));
 
     initial begin
-        wait (done_2 && done_3);
+        wait (done_1 && done_2 && done_3);
         $display("PASS");
         $finish;
     end

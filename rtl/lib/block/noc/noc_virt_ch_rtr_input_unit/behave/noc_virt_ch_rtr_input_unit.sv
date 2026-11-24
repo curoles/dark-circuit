@@ -58,9 +58,16 @@ module NocVirtChRtrInputUnit #(
 
     FLIT_VLD_T [NUM_VCS-1:0] front;             // the front flit of each VC
     VC_VLD_T                 credit_q;          // the credit of the flit popped a clock ago
+    // The popped VC's front flit and state: their flit and output VC are read (valid: pop's).
+    /* verilator lint_off UNUSEDSIGNAL */
+    FLIT_VLD_T               pop_front;
+    VC_STATE_T               pop_state;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     for (genvar v = 0; v < NUM_VCS; v++) begin: g_vc
         FLIT_VLD_T             push;            // the link's flit, when it is of this VC
+        FLIT_VLD_T             front_v;         // its front flit (a local: Icarus misreads a
+                                                // field of front[v] with one VC)
         // The front flit read as a head: only its destination is used.
         /* verilator lint_off UNUSEDSIGNAL */
         HEAD_T                 head;
@@ -69,14 +76,15 @@ module NocVirtChRtrInputUnit #(
 
         assign push.valid = in_fwd.valid && in_fwd.flit.vc == VC_WIDTH'(v);
         assign push.flit  = in_fwd.flit;
-        assign head       = front[v].flit.data;
+        assign front[v]   = front_v;
+        assign head       = front_v.flit.data;
 
         NocRouteXy #(.X_WIDTH(X_WIDTH), .Y_WIDTH(Y_WIDTH), .MY_X(MY_X), .MY_Y(MY_Y)) u_route(
             .dest_x(head.dest_x), .dest_y(head.dest_y), .port(route));
 
         NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
                       .PORT_WIDTH(PORT_WIDTH)) u_vc(
-            .clk, .rst_n, .push, .pop(pop.valid && pop.vc == VC_WIDTH'(v)), .front(front[v]),
+            .clk, .rst_n, .push, .pop(pop.valid && pop.vc == VC_WIDTH'(v)), .front(front_v),
             .front_route(route), .grant(vc_grant[v]), .state(vc_state[v]));
     end
 
@@ -88,8 +96,12 @@ module NocVirtChRtrInputUnit #(
         return g;
     endfunction
 
+    // The popped VC's front flit and state, whole elements first (Icarus misreads a field of an
+    // element picked by a variable index).
+    assign pop_front = front[pop.vc];
+    assign pop_state = vc_state[pop.vc];
     assign out.valid = pop.valid;
-    assign out.flit  = with_vc(front[pop.vc].flit, vc_state[pop.vc].out_vc);
+    assign out.flit  = with_vc(pop_front.flit, pop_state.out_vc);
 
     always_ff @(posedge clk)
         if (!rst_n) credit_q <= '0;

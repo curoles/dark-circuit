@@ -2,16 +2,16 @@
  *
  * The input port of the router at (1, 2) of a 4 x 4 mesh. An upstream sender keeps a credit
  * count per VC and sends a flit of a VC that has a credit in most clocks, the VCs in random
- * order, so the flits of packets of different VCs interleave (packets of 1 to 4 flits to random
- * destinations); a credit coming back on the link returns one. VC allocation grants a waiting
- * VC a random output VC in half of the clocks; switch allocation pops one active VC with a flit
- * in most clocks. A model keeps every VC's flits, state, route (XY, computed here from the
- * head's destination) and output VC; every clock each VC's state, the flit to the crossbar
- * (with the output VC in its vc field) and the credit on the link (the pop of the clock before)
- * must be the model's. Every case must happen: every VC used, a flit of one VC between flits of
- * a packet of another, routes to all five ports, two pops in a row. NUM_VCS 2 and 3 (vc values
- * that name no VC); Verilator 20000 clocks, Icarus 2000. Stops at the first mismatch with
- * $fatal.
+ * order, so the flits of packets of different VCs interleave (packets of 1 to 4 flits to
+ * random destinations); a credit coming back on the link returns one. VC allocation grants a
+ * waiting VC a random output VC in half of the clocks; switch allocation pops one active VC
+ * with a flit in most clocks. A model keeps every VC's flits, state, route (XY, computed here
+ * from the head's destination) and output VC; every clock each VC's state, the flit to the
+ * crossbar (with the output VC in its vc field) and the credit on the link (the pop of the
+ * clock before) must be the model's. Every case must happen: every VC used, a flit of one VC
+ * between flits of a packet of another (with more than one VC), routes to all five ports, two
+ * pops in a row. NUM_VCS 1 (Mig6's), 2 and 3 (vc values that name no VC); Verilator 20000
+ * clocks, Icarus 2000. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -273,7 +273,7 @@ module TbNocVirtChRtrInputUnitCheck #(
         for (int p = 0; p < NocPkg::MESH_PORTS; p++)
             if (n_port[p] == 0)
                 $fatal(1, "InputUnit %0d: no route to port %0d", NUM_VCS, p);
-        if (n_interleave == 0 || n_pop_pop == 0)
+        if ((NUM_VCS > 1 && n_interleave == 0) || n_pop_pop == 0)
             $fatal(1, "InputUnit %0d: cases: interleave %0d, pop after pop %0d", NUM_VCS,
                    n_interleave, n_pop_pop);
         done = 1'b1;
@@ -284,14 +284,16 @@ module TbNocVirtChRtrInputUnit;
     wire clk;
     wire done_2;
     wire done_3;
+    wire done_1;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
+    TbNocVirtChRtrInputUnitCheck #(.NUM_VCS(1)) u_check_1(.clk, .done(done_1));
     TbNocVirtChRtrInputUnitCheck #(.NUM_VCS(2)) u_check_2(.clk, .done(done_2));
     TbNocVirtChRtrInputUnitCheck #(.NUM_VCS(3)) u_check_3(.clk, .done(done_3));
 
     initial begin
-        wait (done_2 && done_3);
+        wait (done_1 && done_2 && done_3);
         $display("PASS");
         $finish;
     end

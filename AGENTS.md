@@ -322,6 +322,10 @@ Icarus means Icarus 13, the version the project uses.
   be written; read or write the element whole through a local. A multi-dimensional packed
   array can not be indexed by variables at all, not even to read (`g = grant[p][v]`): copy
   it to a flat vector and pick with `+:`; `$countones` of such a part-select counts wrong.
+  With ONE element (a per-VC array at NUM_VCS 1), even a constant index fails: an instance's
+  output connected to `front[v]` and read as `front[v].flit.data`, `front[v].valid` gives 0
+  (Verilator right; NocVirtChRtrInputUnit routed every head to port 0 on Icarus). Connect a
+  local of the element type, `.front(front_v)`, read the local, and copy it into the array.
 - Icarus says "sorry: constant selects in always_* processes are not fully supported"
   for `s.field` or `v[3:0]` inside `always_comb`; results are right (the process is
   sensitive to all bits). A function or an `assign` into a signal avoids the message.

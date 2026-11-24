@@ -1,17 +1,17 @@
 /* Test of NocVirtChAlloc.
  *
  * The input VCs and the output VCs around the allocator, as the router's units would be: an
- * idle input VC gets a head with a random route now and then and waits; a grant makes it active
- * and its output VC taken at the edge (as NocVirtChIn and NocVirtChOut take them); an active
- * input VC goes idle now and then, a taken output VC free (its tail left). Checked before every
- * rising edge, against the rules of VC allocation rather than a copy of the arbiter: a grant
- * only to a waiting input VC, at the port of its route, with a free VC of that port; at most one
- * grant per port; vc_alloc names exactly the VCs granted; a port that has a waiting input VC and
- * a free VC grants (work-conserving); an input VC that waits is granted within N * NUM_VCS - 1
- * grants of its port to others (round robin). Every case must happen: grants at every port, two
- * grants in one clock, two input VCs waiting for one port, a port with waiting input VCs and no
- * free VC. NUM_VCS 2 and 3; Verilator 20000 clocks, Icarus 700. Stops at the first mismatch
- * with $fatal.
+ * idle input VC gets a head with a random route now and then and waits; a grant makes it
+ * active and its output VC taken at the edge (as NocVirtChIn and NocVirtChOut take them); an
+ * active input VC goes idle now and then, a taken output VC free (its tail left). Checked
+ * before every rising edge, against the rules of VC allocation rather than a copy of the
+ * arbiter: a grant only to a waiting input VC, at the port of its route, with a free VC of
+ * that port; at most one grant per port; vc_alloc names exactly the VCs granted; a port that
+ * has a waiting input VC and a free VC grants (work-conserving); an input VC that waits is
+ * granted within N * NUM_VCS - 1 grants of its port to others (round robin). Every case must
+ * happen: grants at every port, two grants in one clock, two input VCs waiting for one port, a
+ * port with waiting input VCs and no free VC. NUM_VCS 1 (Mig6's), 2 and 3; Verilator 20000
+ * clocks, Icarus 700. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -224,14 +224,16 @@ module TbNocVirtChAlloc;
     wire clk;
     wire done_2;
     wire done_3;
+    wire done_1;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
+    TbNocVirtChAllocCheck #(.NUM_VCS(1)) u_check_1(.clk, .done(done_1));
     TbNocVirtChAllocCheck #(.NUM_VCS(2)) u_check_2(.clk, .done(done_2));
     TbNocVirtChAllocCheck #(.NUM_VCS(3)) u_check_3(.clk, .done(done_3));
 
     initial begin
-        wait (done_2 && done_3);
+        wait (done_1 && done_2 && done_3);
         $display("PASS");
         $finish;
     end

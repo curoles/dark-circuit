@@ -13,8 +13,9 @@
  * its output; before our VC the input serves each other VC once, and a VC that becomes eligible
  * ahead of the pick takes the pick over (its wait at the output starts again), once per other
  * VC. Every case must happen: two inputs whose
- * eligible VCs want one output, an input with two eligible VCs, a VC held back by its credit,
- * flits to every output, three or more flits in one clock. NUM_VCS 2 and 3; Verilator 20000
+ * eligible VCs want one output, an input with two eligible VCs (with more than one VC), a VC
+ * held back by its credit, flits to every output, three or more flits in one clock. NUM_VCS 1
+ * (Mig6's: no input-side arbiter), 2 and 3; Verilator 20000
  * clocks, Icarus 500. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
@@ -241,7 +242,8 @@ module TbNocSwitchAllocCheck #(
         for (int r = 0; r < N; r++)
             if (n_out[r] == 0)
                 $fatal(1, "NocSwitchAlloc %0d: no flit to output %0d", NUM_VCS, r);
-        if (n_contend == 0 || n_two_vcs == 0 || n_no_credit == 0 || n_three == 0)
+        if (n_contend == 0 || (NUM_VCS > 1 && n_two_vcs == 0) || n_no_credit == 0 ||
+            n_three == 0)
             $fatal(1, "NocSwitchAlloc %0d: cases: contention %0d, two VCs %0d, no credit %0d, three %0d",
                    NUM_VCS, n_contend, n_two_vcs, n_no_credit, n_three);
         done = 1'b1;
@@ -252,14 +254,16 @@ module TbNocSwitchAlloc;
     wire clk;
     wire done_2;
     wire done_3;
+    wire done_1;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
+    TbNocSwitchAllocCheck #(.NUM_VCS(1)) u_check_1(.clk, .done(done_1));
     TbNocSwitchAllocCheck #(.NUM_VCS(2)) u_check_2(.clk, .done(done_2));
     TbNocSwitchAllocCheck #(.NUM_VCS(3)) u_check_3(.clk, .done(done_3));
 
     initial begin
-        wait (done_2 && done_3);
+        wait (done_1 && done_2 && done_3);
         $display("PASS");
         $finish;
     end
