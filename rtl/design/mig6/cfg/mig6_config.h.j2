@@ -20,7 +20,10 @@
 #define MIG6_DMA_DONE_SOURCE(ch)  ({{ dma_source }}u + 2u * (ch))
 #define MIG6_DMA_ERROR_SOURCE(ch) ({{ dma_source }}u + 2u * (ch) + 1u)
 
-/* Each PE's DMA keeps up to MIG6_DMA_DEPTH transactions (beats of a word) in flight: a
- * transfer whose destination starts after its source by less than that many beats is
- * undefined, and a stop drains up to that many (sw/riscv/drivers/dma.h). */
+/* Each PE's DMA keeps up to MIG6_DMA_DEPTH transactions in flight, each a word or, from a
+ * source and a destination at word starts, a burst of up to MIG6_DMA_MAX_BURST words: a
+ * transfer whose destination starts after its source by less than MIG6_DMA_DEPTH *
+ * MIG6_DMA_MAX_BURST words is undefined, and a stop drains up to MIG6_DMA_DEPTH
+ * transactions (sw/riscv/drivers/dma.h). */
 #define MIG6_DMA_DEPTH {{ dma_depth }}u
+#define MIG6_DMA_MAX_BURST {{ dma_max_burst }}u

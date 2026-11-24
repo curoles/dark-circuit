@@ -185,8 +185,9 @@ AtomicUnit and a RAM.
   core's memory port reach the local memory and the network interface through a small
   crossbar of ReqDemux and ReqMux, so the core works on local memory while the DMA waits
   for the network, and the DMA's writes never wait behind the answers its reads are owed
-  (kb rtl/design/mig6/dma, dma_depth). A word a transaction, up to 8 in flight (cfg
-  dma_depth).
+  (kb rtl/design/mig6/dma, dma_depth). A word a transaction, or a burst of up to 8 words
+  where source and destination are at word starts (cfg dma_max_burst; kb
+  rtl/design/mig6/bursts), up to 8 in flight (cfg dma_depth).
 - **Network interface:** the PE's door to the NoC; requests to the shared memory leave
   through it as packets, answers come back.
 - **The same program on every PE** (SPMD): each finds its part from `mhartid`, the RISC-V
@@ -380,9 +381,15 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       issue_pointer); Mig6Pe with DmaSifiveSplit at depth 8, its reads and writes on their
       own demuxes (done 2026-11-20: kb rtl/design/mig6/dma_depth; dma_check 320 bytes on the
       far PE alone 2 296 to 408 cycles; fc_layer_dma four PEs 5 059 to 3 651 cycles, 1.82
-      to 2.52 times one PE). Next: trace again; the path now caps below the DMA's depth
-      (alone 5.1 cycles a word where 8 in flight would give about 3.6; four PEs at once
-      about 0.3 words a clock at a memory that takes one).
+      to 2.52 times one PE). Traced again: a router passes a packet every 3 clocks (one VC,
+      a head's 3-clock pipeline), so four PEs got about 0.3 words a clock at a memory that
+      takes one. Bursts, alone (the user's plan: bursts, then faster routers, then both):
+      the library's channel with req_len, the DMA's read bursts, ReqBurstSplit, Mig6's
+      network with a len in every request and an answer packet a burst (done 2026-11-23:
+      kb rtl/lib/block/bursts, dma/read_bursts, req_burst_split/design,
+      rtl/design/mig6/bursts; dma_max_burst 8: dma_check far PE alone 408 to 200 cycles,
+      all four at once 976 to 504; fc_layer_dma 3 651 to 3 163 cycles, 2.91 times one PE).
+      Next: Mig6MemNetIf's D and the edge link, measured; faster routers alone; both.
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),

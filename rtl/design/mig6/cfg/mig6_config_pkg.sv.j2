@@ -20,6 +20,7 @@ package Mig6ConfigPkg;
         int unsigned dma_source;           // its sources: DMA channel c's done, error at
                                            // dma_source + 2c, + 2c + 1
         int unsigned dma_depth;            // each PE's DMA: transactions in flight
+        int unsigned dma_max_burst;        // ... words of a read burst, a power of 2
     } mig6_cfg_t;
 
     localparam mig6_cfg_t MIG6_CFG = '{
@@ -32,7 +33,8 @@ package Mig6ConfigPkg;
         cache_line_words:  {{ cache_line_words }},   // {{ 4 * cache_line_words }} bytes a line
         plic_prio_width:   {{ plic_prio_width }},
         dma_source:        {{ dma_source }},
-        dma_depth:         {{ dma_depth }}
+        dma_depth:         {{ dma_depth }},
+        dma_max_burst:     {{ dma_max_burst }}
     };
 
 endpackage
