@@ -861,6 +861,7 @@ block:
       kind: package
       what: "NoC library package: port numbers of a 2D mesh router, the states of a virtual channel, the timing variants of the router"
       path: rtl/lib/block/noc/noc_pkg.sv
+      kb: [rtl/lib/block/noc/route_early]
     NocRouteXy:
       what: "XY route of a 2D mesh: the output port of a head flit at the router at (MY_X, MY_Y)"
       versions: [behave, struct]
@@ -881,7 +882,7 @@ block:
       versions: [behave, struct]
       path: rtl/lib/block/noc/noc_virt_ch_in
       test: test/block/noc/noc_virt_ch_in
-      kb: [rtl/lib/block/noc/allocation]
+      kb: [rtl/lib/block/noc/allocation, rtl/lib/block/noc/route_early]
     NocVirtChOut:
       what: "NoC virtual channel, the output end: one VC of the next router's input, as the sender sees it"
       versions: [behave, struct]

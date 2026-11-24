@@ -113,6 +113,7 @@ module NocVirtChIn #(
 
     // The requests to the allocators: an early head asks in VC_IDLE too, with its route now.
     // @kb: rtl/lib/block/noc/allocation
+    // @kb: rtl/lib/block/noc/route_early
     if (EARLY) begin: g_early
         assign va_req.valid = state_q == NocPkg::VC_WAIT_VC ||
                               (state_q == NocPkg::VC_IDLE && !empty && front_flit.head);

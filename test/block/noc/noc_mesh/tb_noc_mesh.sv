@@ -1,21 +1,21 @@
 /* Test of NocMesh: packets between the nodes of one slice.
  *
- * Every node has a network interface as the test sees it: a sender on its local input (a credit
- * count per VC, a new packet only on a VC whose last tail went, a flit of a VC with a credit in
- * most clocks, packets of 1 to 4 flits to random nodes of the slice) and a receiver on its local
- * output (a credit back for each flit, 1 to 3 clocks later). The edges are tied off: no flit
- * comes in, no credit goes back; every destination is in the slice, so no flit may leave by an
- * edge. Every flit carries its packet's id. Checked: a packet arrives at its destination node;
- * on a node's VC its flits come in order, head to tail (wormhole); a receiver never holds more
- * than BUF_DEPTH flits of a VC; a sender never gets more credits than it spent; after the run
- * every packet arrives. First a lone packet of two flits from router (0, 0) to the opposite
- * corner measures the latency: its head comes out 3 clocks per router on its way plus LINK_DELAY
- * per link after it went in, its tail a clock later. Every case must happen: packets from and to
- * every node. A 3 x 3 slice at (0, 0) with links of 1 clock and 2 VCs, a 3 x 2 slice at
- * (1, 1) with links of 2 clocks and 3 VCs, and a 2 x 2 slice at (0, 0) with links of 1 clock
- * and one VC (Mig6's two networks); 10000 clocks of traffic each (Verilator only, see its
- * CMake entry).
- * Stops at the first mismatch with $fatal.
+ * Every node has a network interface as the test sees it: a sender on its local input (a
+ * credit count per VC, a new packet only on a VC whose last tail went, a flit of a VC with a
+ * credit in most clocks, packets of 1 to 4 flits to random nodes of the slice) and a receiver
+ * on its local output (a credit back for each flit, 1 to 3 clocks later). The edges are tied
+ * off: no flit comes in, no credit goes back; every destination is in the slice, so no flit
+ * may leave by an edge. Every flit carries its packet's id. Checked: a packet arrives at its
+ * destination node; on a node's VC its flits come in order, head to tail (wormhole); a
+ * receiver never holds more than BUF_DEPTH flits of a VC; a sender never gets more credits
+ * than it spent; after the run every packet arrives. First a lone packet of two flits from
+ * router (0, 0) to the opposite corner measures the latency: its head comes out 3 clocks per
+ * router on its way (2 with ROUTE_EARLY) plus LINK_DELAY per link after it went in, its tail a
+ * clock later. Every case must happen: packets from and to every node. A 3 x 3 slice at (0, 0)
+ * with links of 1 clock and 2 VCs, a 3 x 2 slice at (1, 1) with links of 2 clocks and 3 VCs,
+ * and a 2 x 2 slice at (0, 0) with links of 1 clock and one VC (Mig6's two networks), and with
+ * ROUTE_EARLY the 2 x 2 slice of one VC and the 3 x 3 of 2 VCs; 10000 clocks of traffic each
+ * (Verilator only, see its CMake entry). Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -29,7 +29,8 @@ module TbNocMeshCheck #(
     parameter X0         = 0,
     parameter Y0         = 0,
     parameter NUM_VCS    = 2,
-    parameter LINK_DELAY = 1
+    parameter LINK_DELAY = 1,
+    parameter ROUTE      = NocPkg::ROUTE_REGISTERED
 )(
     input  wire  clk,
     output logic done
@@ -45,7 +46,8 @@ module TbNocMeshCheck #(
     localparam Q          = 16;                                 // credits waiting per receiver
     // The lone packet, (0, 0) to the opposite corner: routers and links on its way.
     localparam HOPS       = X_SIZE - 1 + Y_SIZE - 1;
-    localparam HEAD_LAT   = 3 * (HOPS + 1) + LINK_DELAY * HOPS;
+    localparam RTR_LAT    = (ROUTE == NocPkg::ROUTE_EARLY) ? 2 : 3;   // clocks a router
+    localparam HEAD_LAT   = RTR_LAT * (HOPS + 1) + LINK_DELAY * HOPS;
     localparam N_CLOCKS   = 10000;
 
     typedef `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH)            flit_t;
@@ -70,7 +72,7 @@ module TbNocMeshCheck #(
     // The edges tied off: no flit in, no credit back.
     NocMesh #(.X_SIZE(X_SIZE), .Y_SIZE(Y_SIZE), .X0(X0), .Y0(Y0), .X_WIDTH(X_WIDTH),
               .Y_WIDTH(Y_WIDTH), .NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH),
-              .DATA_WIDTH(DATA_WIDTH), .LINK_DELAY(LINK_DELAY)) u_mesh(
+              .DATA_WIDTH(DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE)) u_mesh(
         .clk, .rst_n, .local_in_fwd, .local_in_bwd, .local_out_fwd, .local_out_bwd,
         .north_in_fwd('0), .north_in_bwd, .north_out_fwd, .north_out_bwd('0),
         .south_in_fwd('0), .south_in_bwd, .south_out_fwd, .south_out_bwd('0),
@@ -345,6 +347,8 @@ module TbNocMesh;
     wire done_a;
     wire done_b;
     wire done_c;
+    wire done_d;
+    wire done_e;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
@@ -354,9 +358,13 @@ module TbNocMesh;
         u_check_b(.clk, .done(done_b));
     TbNocMeshCheck #(.X_SIZE(2), .Y_SIZE(2), .X0(0), .Y0(0), .NUM_VCS(1), .LINK_DELAY(1))
         u_check_c(.clk, .done(done_c));
+    TbNocMeshCheck #(.X_SIZE(2), .Y_SIZE(2), .X0(0), .Y0(0), .NUM_VCS(1), .LINK_DELAY(1),
+                     .ROUTE(NocPkg::ROUTE_EARLY)) u_check_d(.clk, .done(done_d));
+    TbNocMeshCheck #(.X_SIZE(3), .Y_SIZE(3), .X0(0), .Y0(0), .NUM_VCS(2), .LINK_DELAY(1),
+                     .ROUTE(NocPkg::ROUTE_EARLY)) u_check_e(.clk, .done(done_e));
 
     initial begin
-        wait (done_a && done_b && done_c);
+        wait (done_a && done_b && done_c && done_d && done_e);
         $display("PASS");
         $finish;
     end

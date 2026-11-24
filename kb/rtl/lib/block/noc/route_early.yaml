@@ -1,0 +1,49 @@
+type: decision
+title: ROUTE_EARLY, a head asks VC allocation in the clock it reaches the front of its VC
+date: 2026-11-24
+question: >
+  The router's head waited a clock at the front of its input VC while its route was
+  registered (route_q), then asked VC allocation (kb rtl/lib/block/noc/allocation): 3 clocks
+  a router, a one-flit packet every 3 clocks an input VC. The route is XY routing (NocRouteXy:
+  two compares of the destination with the router's coordinates), cheap. May the head ask in
+  the clock it reaches the front, with the route computed then? AGENTS.md's late signals:
+  the route then feeds VC allocation's arbiter in the same clock, so cycles times the
+  longest path must show the same-clock version faster.
+decision: >
+  A parameter ROUTE of NocVirtChIn (NocPkg::ROUTE_REGISTERED, ROUTE_EARLY), passed through
+  NocVirtChRtrInputUnit, NocVirtChRouter and NocMesh; default ROUTE_REGISTERED (the library's
+  users unchanged until each chooses). With ROUTE_EARLY a head at the front of an idle VC asks
+  in that clock with front_route (combinational); granted then, it goes to VC_ACTIVE in that
+  clock, else to VC_WAIT_VC and asks on with the stored route (a_va_req_held keeps holding:
+  the port is the same head's route). The state machine is shared; the early grant folds away
+  with ROUTE_REGISTERED. Whether a design uses it (Mig6) is its own decision.
+why: >
+  Measured 2026-11-24. Cycles: a lone head leaves 2 clocks after it came (3 registered); one-
+  flit packets on one input VC 2 clocks apart (3); a 2 x 2 mesh's lone packet over 2 hops 8
+  clocks (11), a 3 x 3's over 4 hops 14 (19). Longest path in the project's sky130 flow
+  (52-bit flits, 8-flit buffers): 1 VC 3.73 ns registered 3.83 (area 102 214 um2 against
+  101 808, +0.4 %), 2 VCs 4.69 against 4.74 ns: no longer, within ABC's spread of about 0.5 ns
+  between near-identical designs (cmake/abc_spread): the route compare is not on the router's
+  longest path. So cycles x path: fewer cycles at the same path. Mig6 with both meshes early
+  (scratch, its 20 tests pass): dma_check far PE alone 4 bytes 58 to 50 cycles, 320 bytes 160
+  to 144, all four at once 408 to 376; fc_layer_dma 3 075 to 3 016 cycles, 3.00 to 3.06 times
+  one PE (its fetch 392..531 to 368..483).
+rejected:
+  - choice: Lookahead routing first (the router before computes this router's route)
+    why_not: It needs a route field in every head (both Mig6 networks, every network
+      interface) and the neighbours' coordinates, to save a clock that the early route saves
+      without them, since the route compare is not on the longest path; kept for routing that
+      is slow to compute (tables, adaptive).
+  - choice: ROUTE_EARLY as the library's default
+    why_not: A change of every user's timing; each design chooses (Mig6 next).
+relies_on:
+  - rtl/lib/block/noc/allocation
+evidence: >
+  2026-11-24: the NoC tests on both simulators with ROUTE_EARLY added (the VC test's model
+  grants a head at the front; the router test at NUM_VCS 1, 2, 3 checks the 2-clock head and
+  rate; the mesh test a 2 x 2 of 1 VC and a 3 x 3 of 2 VCs); ROUTE_REGISTERED proven unchanged
+  by identical per-clock traces and equiv_make (NUM_VCS 1, 2, 3).
+code:
+  - rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv#g_early
+  - rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv#g_early
+  - rtl/lib/block/noc/noc_pkg.sv#ROUTE_EARLY

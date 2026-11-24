@@ -105,6 +105,7 @@ module NocVirtChIn #(
 
     // When the head asks: in VC_WAIT_VC (registered), or already at the front (early).
     // @kb: rtl/lib/block/noc/allocation
+    // @kb: rtl/lib/block/noc/route_early
     if (ROUTE == NocPkg::ROUTE_EARLY) begin: g_early
         wire va_valid;                          // it asks: at the front of an idle VC, waiting
         wire grant_n;

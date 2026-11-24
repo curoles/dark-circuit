@@ -13,14 +13,16 @@
  * credits); a sender never gets more credits than it spent; after the run every packet
  * arrives. First a lone packet of two flits from the west to the east port measures the
  * latency: its head leaves 3 clocks after it came (buffer write; route; VC allocation; switch
- * allocation and the crossbar), its tail a clock later. Then a train of one-flit packets on
- * one input VC, each sent as soon as a credit allows, measures the rate: the heads leave 1 + 2
- * clocks apart (an input VC spends a clock on the head's route and one on its VC allocation
- * besides the flit's pop; longer packets add a clock a flit, but this test's buffers of 2
- * flits hold them back by the credits). Every case must happen: packets from every input, to
- * every output, two packets interleaved on one output's VCs (with more than one VC), a sender
- * held back by its credits, packets of four flits. NUM_VCS 1, 2 and 3; Verilator 20000 clocks
- * of traffic, Icarus 400. Stops at the first mismatch with $fatal.
+ * allocation and the crossbar), 2 with ROUTE_EARLY (route and VC allocation in one clock), its
+ * tail a clock later. Then a train of one-flit packets on one input VC, each sent as soon as a
+ * credit allows, measures the rate: the heads leave 1 + 2 clocks apart (an input VC spends a
+ * clock on the head's route and one on its VC allocation besides the flit's pop), 1 + 1 with
+ * ROUTE_EARLY; longer packets add a clock a flit, but this test's buffers of 2 flits hold them
+ * back by the credits. Every case must happen: packets from every input, to every output, two
+ * packets interleaved on one output's VCs (with more than one VC), a sender held back by its
+ * credits, packets of four flits. NUM_VCS 1, 2 and 3, each with ROUTE_REGISTERED and
+ * ROUTE_EARLY; Verilator 20000 clocks of traffic, Icarus 400. Stops at the first mismatch with
+ * $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -29,7 +31,8 @@
 `include "../block/noc/dark_circuit_noc.svh"
 
 module TbNocVirtChRouterCheck #(
-    parameter NUM_VCS = 2
+    parameter NUM_VCS = 2,
+    parameter ROUTE   = NocPkg::ROUTE_REGISTERED
 )(
     input  wire  clk,
     output logic done
@@ -45,8 +48,10 @@ module TbNocVirtChRouterCheck #(
     localparam ID_WIDTH   = DATA_WIDTH - X_WIDTH - Y_WIDTH;     // a head's id; a body's: 20 + 4
     localparam MAX_PKTS   = 40000;
     localparam Q          = 16;                                 // credits waiting per receiver
-    localparam HEAD_LAT   = 3;                                  // clocks, the lone packet's head
-    localparam PKT_GAP    = 2;      // clocks an input VC spends on a packet besides its flits
+    localparam EARLY      = ROUTE == NocPkg::ROUTE_EARLY;
+    localparam HEAD_LAT   = EARLY ? 2 : 3;                      // clocks, the lone packet's head
+    localparam PKT_GAP    = EARLY ? 1 : 2;  // clocks an input VC spends on a packet besides flits
+    localparam NAME       = NUM_VCS + 10 * ROUTE;               // in messages
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
@@ -65,7 +70,8 @@ module TbNocVirtChRouterCheck #(
     link_bwd_t [N-1:0]   out_bwd;
 
     NocVirtChRouter #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
-                      .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X), .MY_Y(MY_Y))
+                      .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X), .MY_Y(MY_Y),
+                      .ROUTE(ROUTE))
         u_router(.clk, .rst_n, .in_fwd, .in_bwd, .out_fwd, .out_bwd);
 
     // Packets, by id.
@@ -109,7 +115,7 @@ module TbNocVirtChRouterCheck #(
     // A new packet: its id, its route's port, its length.
     function automatic integer new_packet(input integer x, input integer y, input integer len);
         if (n_pkts >= MAX_PKTS)
-            $fatal(1, "Router %0d: more than %0d packets", NUM_VCS, MAX_PKTS);
+            $fatal(1, "Router %0d: more than %0d packets", NAME, MAX_PKTS);
         pk_out[n_pkts]  = xy_port(x, y);
         pk_len[n_pkts]  = len;
         pk_done[n_pkts] = 1'b0;
@@ -210,10 +216,10 @@ module TbNocVirtChRouterCheck #(
         id = id_of(f);
         held[r][w] = held[r][w] + 1;
         if (held[r][w] > BUF_DEPTH)
-            $fatal(1, "Router %0d: output %0d VC %0d: %0d flits, more than its credits", NUM_VCS,
+            $fatal(1, "Router %0d: output %0d VC %0d: %0d flits, more than its credits", NAME,
                    r, w, held[r][w]);
         if (cq_count[r] == Q)
-            $fatal(1, "Router %0d: output %0d: credit queue full", NUM_VCS, r);
+            $fatal(1, "Router %0d: output %0d: credit queue full", NAME, r);
         cq_vc[r][(cq_head[r] + cq_count[r]) % Q]  = w;
         cq_due[r][(cq_head[r] + cq_count[r]) % Q] = k + 1 + {$random(seed)} % 3;
         cq_count[r] = cq_count[r] + 1;
@@ -222,16 +228,16 @@ module TbNocVirtChRouterCheck #(
         if (r_pkt[r][w] < 0) begin
             if (!f.head || id >= n_pkts || pk_done[id] || pk_out[id] != r)
                 $fatal(1, "Router %0d: output %0d VC %0d: flit of packet %0d, expected a head routed here",
-                       NUM_VCS, r, w, id);
+                       NAME, r, w, id);
             r_pkt[r][w] = id;
             r_idx[r][w] = 0;
         end else if (f.head || id != r_pkt[r][w] || int'(f.data[3:0]) != r_idx[r][w])
             $fatal(1, "Router %0d: output %0d VC %0d: flit %0d of packet %0d, expected flit %0d of %0d",
-                   NUM_VCS, r, w, int'(f.data[3:0]), id, r_idx[r][w], r_pkt[r][w]);
+                   NAME, r, w, int'(f.data[3:0]), id, r_idx[r][w], r_pkt[r][w]);
         r_idx[r][w] = r_idx[r][w] + 1;
         if (f.tail) begin
             if (r_idx[r][w] != pk_len[id])
-                $fatal(1, "Router %0d: packet %0d ended after %0d flits, has %0d", NUM_VCS, id,
+                $fatal(1, "Router %0d: packet %0d ended after %0d flits, has %0d", NAME, id,
                        r_idx[r][w], pk_len[id]);
             pk_done[id] = 1'b1;
             r_pkt[r][w] = -1;
@@ -256,7 +262,7 @@ module TbNocVirtChRouterCheck #(
                 credits[p][b.vc] = credits[p][b.vc] + 1;
                 if (credits[p][b.vc] > BUF_DEPTH)
                     $fatal(1, "Router %0d: input %0d VC %0d: %0d credits, more than spent",
-                           NUM_VCS, p, b.vc, credits[p][b.vc]);
+                           NAME, p, b.vc, credits[p][b.vc]);
             end
         end
     endtask
@@ -285,11 +291,11 @@ module TbNocVirtChRouterCheck #(
             k = k + 1;
             @(negedge clk);
         end
-        $display("Router %0d VCs: lone packet: head out %0d clocks after it came, tail %0d clock(s) after the head",
-                 NUM_VCS, head_out, tail_out - head_out);
+        $display("Router %0d: lone packet: head out %0d clocks after it came, tail %0d after it",
+                 NAME, head_out, tail_out - head_out);
         if (head_out != HEAD_LAT || tail_out != head_out + 1 || !pk_done[id])
             $fatal(1, "Router %0d: lone packet: head out at %0d, tail at %0d, expected %0d and %0d",
-                   NUM_VCS, head_out, tail_out, HEAD_LAT, HEAD_LAT + 1);
+                   NAME, head_out, tail_out, HEAD_LAT, HEAD_LAT + 1);
         // Its credits came back: the senders and receivers are as after reset.
         out_bwd = '0;
     endtask
@@ -326,7 +332,7 @@ module TbNocVirtChRouterCheck #(
             if (l.valid && l.flit.head) begin
                 if (last_head >= 0 && c - last_head != len + PKT_GAP)
                     $fatal(1, "Router %0d: %0d-flit train: heads %0d clocks apart, expected %0d",
-                           NUM_VCS, len, c - last_head, len + PKT_GAP);
+                           NAME, len, c - last_head, len + PKT_GAP);
                 last_head = c;
                 heads     = heads + 1;
             end
@@ -346,15 +352,15 @@ module TbNocVirtChRouterCheck #(
         end
         out_bwd = '0;
         if (heads != n || !pk_done[ids[n - 1]])
-            $fatal(1, "Router %0d: train of %0d-flit packets: %0d of %0d heads out", NUM_VCS, len,
+            $fatal(1, "Router %0d: train of %0d-flit packets: %0d of %0d heads out", NAME, len,
                    heads, n);
-        $display("Router %0d VCs: train of %0d-flit packets: heads %0d clocks apart", NUM_VCS, len,
+        $display("Router %0d: train of %0d-flit packets: heads %0d clocks apart", NAME, len,
                  len + PKT_GAP);
     endtask
 
     initial begin
         done         = 1'b0;
-        seed         = NUM_VCS * 23;
+        seed         = NUM_VCS * 23 + ROUTE;
         n_pkts       = 0;
         n_done       = 0;
         k            = 0;
@@ -395,15 +401,15 @@ module TbNocVirtChRouterCheck #(
             @(negedge clk);
         end
         if (n_done != n_pkts)
-            $fatal(1, "Router %0d: %0d of %0d packets arrived", NUM_VCS, n_done, n_pkts);
+            $fatal(1, "Router %0d: %0d of %0d packets arrived", NAME, n_done, n_pkts);
         for (int p = 0; p < N; p++)
             if (n_from[p] == 0 || n_to[p] == 0)
-                $fatal(1, "Router %0d: port %0d: %0d flits in, %0d packets out", NUM_VCS, p,
+                $fatal(1, "Router %0d: port %0d: %0d flits in, %0d packets out", NAME, p,
                        n_from[p], n_to[p]);
         if ((NUM_VCS > 1 && n_interleave == 0) || n_no_credit == 0 || n_four == 0)
             $fatal(1, "Router %0d: cases: interleave %0d, no credit %0d, four flits %0d",
-                   NUM_VCS, n_interleave, n_no_credit, n_four);
-        $display("Router %0d VCs: %0d packets through", NUM_VCS, n_done);
+                   NAME, n_interleave, n_no_credit, n_four);
+        $display("Router %0d: %0d packets through", NAME, n_done);
         // The links idle: the other check runs on.
         in_fwd  = '0;
         out_bwd = '0;
@@ -416,15 +422,24 @@ module TbNocVirtChRouter;
     wire done_1;
     wire done_2;
     wire done_3;
+    wire done_1e;
+    wire done_2e;
+    wire done_3e;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
     TbNocVirtChRouterCheck #(.NUM_VCS(1)) u_check_1(.clk, .done(done_1));
     TbNocVirtChRouterCheck #(.NUM_VCS(2)) u_check_2(.clk, .done(done_2));
     TbNocVirtChRouterCheck #(.NUM_VCS(3)) u_check_3(.clk, .done(done_3));
+    TbNocVirtChRouterCheck #(.NUM_VCS(1), .ROUTE(NocPkg::ROUTE_EARLY)) u_check_1e(.clk,
+                                                                              .done(done_1e));
+    TbNocVirtChRouterCheck #(.NUM_VCS(2), .ROUTE(NocPkg::ROUTE_EARLY)) u_check_2e(.clk,
+                                                                              .done(done_2e));
+    TbNocVirtChRouterCheck #(.NUM_VCS(3), .ROUTE(NocPkg::ROUTE_EARLY)) u_check_3e(.clk,
+                                                                              .done(done_3e));
 
     initial begin
-        wait (done_1 && done_2 && done_3);
+        wait (done_1 && done_2 && done_3 && done_1e && done_2e && done_3e);
         $display("PASS");
         $finish;
     end
