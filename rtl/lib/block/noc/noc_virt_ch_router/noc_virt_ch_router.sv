@@ -58,6 +58,7 @@ module NocVirtChRouter #(
     parameter  DATA_WIDTH = 32,                 // data of a flit
     parameter  MY_X       = 0,                  // where this router is
     parameter  MY_Y       = 0,
+    parameter  ROUTE      = NocPkg::ROUTE_REGISTERED,   // when a head asks VC allocation
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
@@ -93,7 +94,7 @@ module NocVirtChRouter #(
     for (genvar p = 0; p < N; p++) begin: g_in
         NocVirtChRtrInputUnit #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
                                 .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X),
-                                .MY_Y(MY_Y)) u_input(
+                                .MY_Y(MY_Y), .ROUTE(ROUTE)) u_input(
             .clk, .rst_n, .in_fwd(in_fwd[p]), .in_bwd(in_bwd[p]), .vc_state(in_vc_state[p]),
             .va_req(in_va_req[p]), .sa_req(in_sa_req[p]),
             .vc_grant(vc_grant[p]), .pop(pop[p]), .out(xbar_in[p]));

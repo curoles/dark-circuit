@@ -4,8 +4,14 @@
  * flit never comes while it is full) and the state of the packet at its front. A packet holds
  * the VC from its head flit to its tail flit:
  *   VC_IDLE    -> VC_WAIT_VC  a head flit is at the front: its route (front_route) is kept
+ *   VC_IDLE    -> VC_ACTIVE   ... and (ROUTE_EARLY) VC allocation grants it in that clock
  *   VC_WAIT_VC -> VC_ACTIVE   VC allocation grants the packet an output VC (grant): kept
  *   VC_ACTIVE  -> VC_IDLE     switch allocation sends the tail flit (pop)
+ * ROUTE says when the head asks VC allocation: ROUTE_REGISTERED in VC_WAIT_VC, the clock after
+ * it reached the front, with the stored route (a head leaves the router 3 clocks after it
+ * came); ROUTE_EARLY already in VC_IDLE, in the clock it reaches the front, with the route
+ * computed then (front_route, combinational: the route logic before VC allocation's arbiter in
+ * one clock), and on in VC_WAIT_VC with the stored one when not granted at once (2 clocks).
  * The route comes from outside (the input unit computes it from the head's destination), so
  * the block knows nothing about the topology: a network interface can use it too. A flit
  * popped frees a slot: the input unit returns a credit for this VC upstream. out_flit is the
@@ -27,6 +33,7 @@ module NocVirtChIn #(
     parameter  DATA_WIDTH = 32,
     parameter  BUF_DEPTH  = 4,                  // flits; the sender's credits start here
     parameter  PORT_WIDTH = 3,                  // bits of an output port number
+    parameter  ROUTE      = NocPkg::ROUTE_REGISTERED,   // when a head asks VC allocation
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
     localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
@@ -50,6 +57,9 @@ module NocVirtChIn #(
     localparam BUF_ADDR_WIDTH = (BUF_DEPTH > 1) ? $clog2(BUF_DEPTH) : 1;
 
     `DC_STATIC_ASSERT(a_buf_depth, BUF_DEPTH >= 1)
+    `DC_STATIC_ASSERT(a_route, ROUTE == NocPkg::ROUTE_REGISTERED || ROUTE == NocPkg::ROUTE_EARLY)
+
+    localparam EARLY = ROUTE == NocPkg::ROUTE_EARLY;
 
     FLIT_T                    front_flit;
     logic                     empty;
@@ -84,8 +94,12 @@ module NocVirtChIn #(
             case (state_q)
                 NocPkg::VC_IDLE:
                     if (front.valid && front.flit.head) begin
-                        state_q <= NocPkg::VC_WAIT_VC;
                         route_q <= front_route;
+                        if (EARLY && grant.valid) begin     // granted in this clock
+                            state_q  <= NocPkg::VC_ACTIVE;
+                            out_vc_q <= grant.vc;
+                        end else
+                            state_q <= NocPkg::VC_WAIT_VC;
                     end
                 NocPkg::VC_WAIT_VC:
                     if (grant.valid) begin
@@ -97,10 +111,16 @@ module NocVirtChIn #(
                         state_q <= NocPkg::VC_IDLE;
             endcase
 
-    // The requests to the allocators.
+    // The requests to the allocators: an early head asks in VC_IDLE too, with its route now.
     // @kb: rtl/lib/block/noc/allocation
-    assign va_req.valid = state_q == NocPkg::VC_WAIT_VC;
-    assign va_req.port  = route_q;
+    if (EARLY) begin: g_early
+        assign va_req.valid = state_q == NocPkg::VC_WAIT_VC ||
+                              (state_q == NocPkg::VC_IDLE && !empty && front_flit.head);
+        assign va_req.port  = (state_q == NocPkg::VC_IDLE) ? front_route : route_q;
+    end else begin: g_registered
+        assign va_req.valid = state_q == NocPkg::VC_WAIT_VC;
+        assign va_req.port  = route_q;
+    end
     assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && !empty;
     assign sa_req.port  = route_q;
     assign sa_req.vc    = out_vc_q;
@@ -111,12 +131,12 @@ module NocVirtChIn #(
     assign state.out_vc   = out_vc_q;
 
     // The protocol around the VC: credits keep the buffer from overflowing; a packet starts
-    // with a head flit; VC allocation grants only a waiting packet; switch allocation sends
+    // with a head flit; VC allocation grants only a packet that asks; switch allocation sends
     // only from an active VC that has a flit.
     `DC_ASSERT(a_no_push_when_full, !(push.valid && full))
     `DC_ASSERT(a_idle_front_is_head, !(state_q == NocPkg::VC_IDLE && front.valid &&
                                        !front.flit.head))
-    `DC_ASSERT(a_grant_when_waiting, !grant.valid || state_q == NocPkg::VC_WAIT_VC)
+    `DC_ASSERT(a_grant_when_asked, !grant.valid || va_req.valid)
     `DC_ASSERT(a_pop_when_active, !pop || (state_q == NocPkg::VC_ACTIVE && front.valid))
 
     // The requests' timing (what the allocators may rely on): a VA request not granted stays,

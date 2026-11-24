@@ -859,7 +859,7 @@ block:
       path: rtl/lib/block/noc/noc_mux_xbar.sv
     NocPkg:
       kind: package
-      what: "NoC library package: port numbers of a 2D mesh router, the states of a virtual channel"
+      what: "NoC library package: port numbers of a 2D mesh router, the states of a virtual channel, the timing variants of the router"
       path: rtl/lib/block/noc/noc_pkg.sv
     NocRouteXy:
       what: "XY route of a 2D mesh: the output port of a head flit at the router at (MY_X, MY_Y)"

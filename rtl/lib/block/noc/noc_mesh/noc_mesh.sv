@@ -45,6 +45,7 @@ module NocMesh #(
     parameter  BUF_DEPTH  = 4,                  // flits of an input buffer per VC
     parameter  DATA_WIDTH = 32,                 // data of a flit
     parameter  LINK_DELAY = 1,                  // clocks of each link between two routers
+    parameter  ROUTE      = NocPkg::ROUTE_REGISTERED,   // the routers' (NocVirtChIn's)
     localparam NODES      = X_SIZE * Y_SIZE,
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam type LINK_FWD_T = `DC_NOC_LINK_FWD_T(VC_WIDTH, DATA_WIDTH),
@@ -100,7 +101,7 @@ module NocMesh #(
 
             NocVirtChRouter #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
                               .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(X0 + x),
-                              .MY_Y(Y0 + y)) u_router(
+                              .MY_Y(Y0 + y), .ROUTE(ROUTE)) u_router(
                 .clk, .rst_n, .in_fwd(in_fwd[n]), .in_bwd(in_bwd[n]), .out_fwd(out_fwd[n]),
                 .out_bwd(out_bwd[n]));
 

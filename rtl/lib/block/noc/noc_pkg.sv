@@ -1,5 +1,6 @@
-/* NoC library package: port numbers of a 2D mesh router, the states of a virtual channel. The
- * flit, the link and the types that depend on widths: dark_circuit_noc.svh.
+/* NoC library package: port numbers of a 2D mesh router, the states of a virtual channel, the
+ * timing variants of the router. The flit, the link and the types that depend on widths:
+ * dark_circuit_noc.svh.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -22,6 +23,11 @@ package NocPkg;
     localparam logic [1:0] VC_IDLE    = 2'd0;   // no packet: waits for a head flit at the front
     localparam logic [1:0] VC_WAIT_VC = 2'd1;   // a head with its route: waits for an output VC
     localparam logic [1:0] VC_ACTIVE  = 2'd2;   // has an output VC: its flits go when allowed
+
+    // When a head asks VC allocation (NocVirtChIn's parameter ROUTE; kb
+    // rtl/lib/block/noc/allocation): plain constants, as above.
+    localparam ROUTE_REGISTERED = 0;    // the clock after it reaches the front, its route stored
+    localparam ROUTE_EARLY      = 1;    // in the clock it reaches the front, its route computed
     /* verilator lint_on UNUSEDPARAM */
 
     // State of an output VC (NocVirtChOut), for the allocators.

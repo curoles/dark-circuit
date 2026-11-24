@@ -2,7 +2,8 @@
  *
  * Random packets of 1 to 4 flits come in as fast as the sender's credits allow (a credit
  * returns when a flit is popped); a VC allocator grants a waiting packet a random output VC
- * after 0 or more clocks; a switch allocator pops the front flit of an active VC in most
+ * after 0 or more clocks (ROUTE_EARLY: also a head at the front of an idle VC, in that clock);
+ * a switch allocator pops the front flit of an active VC in most
  * clocks. The route of a head flit is the low bits of its data (as an input unit would compute
  * it). A model keeps the flits in the buffer and the state, route and output VC of the packet;
  * every clock the front flit and the state must be the model's, while the packet is active
@@ -11,7 +12,9 @@
  * route and the output VC. Every case must happen: packets
  * of one flit and of more, a grant in the first clock of waiting and a later one, a full
  * buffer, and (BUF_DEPTH > 1) a push and a pop in one clock and a tail popped with the next
- * head behind it. BUF_DEPTH 3 (FifoT rounds it up to 4) and 1; Verilator 20000 clocks, Icarus 2000.
+ * head behind it. BUF_DEPTH 3 (FifoT rounds it up to 4) and 1, each with ROUTE_REGISTERED and
+ * ROUTE_EARLY (where the first-clock grant is the one at the front); Verilator 20000 clocks,
+ * Icarus 2000.
  * Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
@@ -23,12 +26,15 @@
 module TbNocVirtChInCheck #(
     parameter VC_WIDTH   = 2,
     parameter DATA_WIDTH = 16,
-    parameter BUF_DEPTH  = 3
+    parameter BUF_DEPTH  = 3,
+    parameter ROUTE      = NocPkg::ROUTE_REGISTERED
 )(
     input  wire  clk,
     output logic done
 );
     localparam PORT_WIDTH = 3;
+    localparam EARLY      = ROUTE == NocPkg::ROUTE_EARLY;
+    localparam NAME       = BUF_DEPTH + 10 * ROUTE;     // in messages
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
@@ -54,7 +60,7 @@ module TbNocVirtChInCheck #(
     sa_req_t               sa_req;
 
     NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
-                  .PORT_WIDTH(PORT_WIDTH)) u_virt_ch_in(
+                  .PORT_WIDTH(PORT_WIDTH), .ROUTE(ROUTE)) u_virt_ch_in(
         .clk, .rst_n, .push, .pop, .front, .out_flit, .front_route, .grant, .state, .va_req,
         .sa_req);
 
@@ -96,6 +102,22 @@ module TbNocVirtChInCheck #(
     integer n_push_pop;         // a push and a pop in one clock
     integer n_back_to_back;     // a tail popped with the next head behind it
 
+    // A head at the front of an idle VC (the model's): only the flit's head bit is read.
+    function automatic logic head_at_front();
+        /* verilator lint_off UNUSEDSIGNAL */
+        flit_t f0;
+        /* verilator lint_on UNUSEDSIGNAL */
+        if (m_state != NocPkg::VC_IDLE || buffer.size() == 0)
+            return 1'b0;
+        f0 = buffer[0];
+        return f0.head;
+    endfunction
+
+    // The model's VA request: waiting for a VC; early also a head at the front.
+    function automatic logic va_expected();
+        return m_state == NocPkg::VC_WAIT_VC || (EARLY && head_at_front());
+    endfunction
+
     task automatic new_packet;
         integer len;
         flit_t  f;
@@ -121,7 +143,8 @@ module TbNocVirtChInCheck #(
             push.valid = 1'b1;
             push.flit  = to_send[0];
         end
-        if (m_state == NocPkg::VC_WAIT_VC && {$random(seed)} % 2 == 0) begin
+        if ((m_state == NocPkg::VC_WAIT_VC || (EARLY && head_at_front())) &&
+            {$random(seed)} % 2 == 0) begin
             grant.valid = 1'b1;
             grant.vc    = VC_WIDTH'($random(seed));
         end
@@ -143,10 +166,11 @@ module TbNocVirtChInCheck #(
             out_flit !== with_vc(buffer[0], m_out_vc))
             $fatal(1, "NocVirtChIn %0d: out_flit %h, expected %h", BUF_DEPTH, out_flit,
                    with_vc(buffer[0], m_out_vc));
-        if (va_req.valid !== (m_state == NocPkg::VC_WAIT_VC) ||
-            (va_req.valid && va_req.port !== m_route))
-            $fatal(1, "NocVirtChIn %0d: va_req %b %0d, expected %b %0d", BUF_DEPTH, va_req.valid,
-                   va_req.port, m_state == NocPkg::VC_WAIT_VC, m_route);
+        if (va_req.valid !== va_expected() ||
+            (va_req.valid && va_req.port !== (m_state == NocPkg::VC_IDLE ? route_of(buffer[0])
+                                                                          : m_route)))
+            $fatal(1, "NocVirtChIn %0d: va_req %b %0d, expected %b", NAME, va_req.valid,
+                   va_req.port, va_expected());
         if (sa_req.valid !== (m_state == NocPkg::VC_ACTIVE && buffer.size() > 0) ||
             (sa_req.valid && (sa_req.port !== m_route || sa_req.vc !== m_out_vc)))
             $fatal(1, "NocVirtChIn %0d: sa_req %b %0d %0d, expected %b %0d %0d", BUF_DEPTH,
@@ -168,9 +192,14 @@ module TbNocVirtChInCheck #(
         case (m_state)
             NocPkg::VC_IDLE:
                 if (buffer.size() > 0 && f0.head) begin
-                    m_state = NocPkg::VC_WAIT_VC;
                     m_route = route_of(f0);
                     waited  = 0;
+                    if (EARLY && grant.valid) begin     // granted at the front
+                        m_state       = NocPkg::VC_ACTIVE;
+                        m_out_vc      = grant.vc;
+                        n_grant_first = n_grant_first + 1;
+                    end else
+                        m_state = NocPkg::VC_WAIT_VC;
                 end
             NocPkg::VC_WAIT_VC:
                 if (grant.valid) begin
@@ -200,7 +229,7 @@ module TbNocVirtChInCheck #(
 
     initial begin
         done           = 1'b0;
-        seed           = BUF_DEPTH * 7 + VC_WIDTH;
+        seed           = BUF_DEPTH * 7 + VC_WIDTH + 100 * ROUTE;
         credits        = BUF_DEPTH;
         m_state        = NocPkg::VC_IDLE;
         m_route        = '0;
@@ -242,14 +271,20 @@ module TbNocVirtChIn;
     wire clk;
     wire done_3;
     wire done_1;
+    wire done_3e;
+    wire done_1e;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
     TbNocVirtChInCheck #(.BUF_DEPTH(3)) u_check_3(.clk, .done(done_3));
     TbNocVirtChInCheck #(.BUF_DEPTH(1), .VC_WIDTH(1)) u_check_1(.clk, .done(done_1));
+    TbNocVirtChInCheck #(.BUF_DEPTH(3), .ROUTE(NocPkg::ROUTE_EARLY)) u_check_3e(.clk,
+                                                                          .done(done_3e));
+    TbNocVirtChInCheck #(.BUF_DEPTH(1), .VC_WIDTH(1), .ROUTE(NocPkg::ROUTE_EARLY)) u_check_1e(
+        .clk, .done(done_1e));
 
     initial begin
-        wait (done_3 && done_1);
+        wait (done_3 && done_1 && done_3e && done_1e);
         $display("PASS");
         $finish;
     end
