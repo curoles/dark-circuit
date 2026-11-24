@@ -6,7 +6,8 @@
  * one MuxN on pop.vc picks the flit that leaves (no multiplexer with one VC).
  *
  *   in_fwd.vc --> Decoder (en: in_fwd.valid) --> push[v] --+  +-----------------+
- *   in_fwd.flit ------------------------------------------+-->| NocVirtChIn [v] |--> vc_state[v]
+ *   in_fwd.flit ------------------------------------------+-->| NocVirtChIn [v] |--> vc_state[v],
+ *                                                             |                 |  va_req, sa_req
  *   pop.vc -----> Decoder (en: pop.valid) ----> pop[v] ------>|  [NUM_VCS]      |
  *   vc_grant[v] --------------------------------------------->|                 |
  *                             NocRouteXy [v] --> route ------>|                 |
@@ -40,13 +41,17 @@ module NocVirtChRtrInputUnit #(
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
     localparam type LINK_FWD_T = `DC_NOC_LINK_FWD_T(VC_WIDTH, DATA_WIDTH),
     localparam type LINK_BWD_T = `DC_NOC_LINK_BWD_T(VC_WIDTH),
-    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH),
+    localparam type VA_REQ_T   = `DC_NOC_VA_REQ_T(PORT_WIDTH),
+    localparam type SA_REQ_T   = `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)
 )(
     input  wire                     clk,
     input  wire                     rst_n,      // synchronous reset, active low
     input  LINK_FWD_T               in_fwd,     // the link into the port: flits in
     output LINK_BWD_T               in_bwd,     //   and credits back
     output VC_STATE_T [NUM_VCS-1:0] vc_state,   // every VC: state, flit, route, output VC
+    output VA_REQ_T   [NUM_VCS-1:0] va_req,     // every VC: its request to VC allocation
+    output SA_REQ_T   [NUM_VCS-1:0] sa_req,     // ... to switch allocation
     input  VC_VLD_T   [NUM_VCS-1:0] vc_grant,   // VC allocation: a waiting VC's output VC
     input  VC_VLD_T                 pop,        // switch allocation: send VC pop.vc's flit
     output FLIT_VLD_T               out         // that flit, with its output VC, to the crossbar
@@ -78,6 +83,8 @@ module NocVirtChRtrInputUnit #(
         /* verilator lint_on UNUSEDSIGNAL */
         logic [PORT_WIDTH-1:0] route;
         FLIT_T                 out_flit;        // the front flit as it leaves
+        VA_REQ_T               va_req_v;        // its requests
+        SA_REQ_T               sa_req_v;
 
         assign push.valid = push_vc[v];
         assign push.flit  = in_fwd.flit;
@@ -89,10 +96,12 @@ module NocVirtChRtrInputUnit #(
         NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
                       .PORT_WIDTH(PORT_WIDTH)) u_vc(
             .clk, .rst_n, .push, .pop(pop_vc[v]), .front, .out_flit, .front_route(route),
-            .grant(vc_grant[v]), .state);
+            .grant(vc_grant[v]), .state, .va_req(va_req_v), .sa_req(sa_req_v));
 
         assign cand[v]     = out_flit;
         assign vc_state[v] = state;
+        assign va_req[v]   = va_req_v;
+        assign sa_req[v]   = sa_req_v;
     end
 
     if (NUM_VCS == 1) begin: g_one_vc

@@ -5,8 +5,10 @@
  * after 0 or more clocks; a switch allocator pops the front flit of an active VC in most
  * clocks. The route of a head flit is the low bits of its data (as an input unit would compute
  * it). A model keeps the flits in the buffer and the state, route and output VC of the packet;
- * every clock the front flit and the state must be the model's, and while the packet is active
- * out_flit the front flit with its output VC in the vc field. Every case must happen: packets
+ * every clock the front flit and the state must be the model's, while the packet is active
+ * out_flit the front flit with its output VC in the vc field, and the requests the model's:
+ * va_req while waiting for a VC, with the route; sa_req while active with a flit, with the
+ * route and the output VC. Every case must happen: packets
  * of one flit and of more, a grant in the first clock of waiting and a later one, a full
  * buffer, and (BUF_DEPTH > 1) a push and a pop in one clock and a tail popped with the next
  * head behind it. BUF_DEPTH 3 (FifoT rounds it up to 4) and 1; Verilator 20000 clocks, Icarus 2000.
@@ -37,6 +39,8 @@ module TbNocVirtChInCheck #(
     typedef `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH)        flit_vld_t;
     typedef `DC_NOC_VC_VLD_T(VC_WIDTH)                      vc_vld_t;
     typedef `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)     state_t;
+    typedef `DC_NOC_VA_REQ_T(PORT_WIDTH)                    va_req_t;
+    typedef `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)          sa_req_t;
 
     logic                  rst_n;
     flit_vld_t             push;
@@ -46,10 +50,13 @@ module TbNocVirtChInCheck #(
     logic [PORT_WIDTH-1:0] front_route;
     vc_vld_t               grant;
     state_t                state;
+    va_req_t               va_req;
+    sa_req_t               sa_req;
 
     NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
                   .PORT_WIDTH(PORT_WIDTH)) u_virt_ch_in(
-        .clk, .rst_n, .push, .pop, .front, .out_flit, .front_route, .grant, .state);
+        .clk, .rst_n, .push, .pop, .front, .out_flit, .front_route, .grant, .state, .va_req,
+        .sa_req);
 
     // Route of a head flit, as an input unit computes it: here the low bits of its data (the
     // rest of the flit is not used).
@@ -136,6 +143,15 @@ module TbNocVirtChInCheck #(
             out_flit !== with_vc(buffer[0], m_out_vc))
             $fatal(1, "NocVirtChIn %0d: out_flit %h, expected %h", BUF_DEPTH, out_flit,
                    with_vc(buffer[0], m_out_vc));
+        if (va_req.valid !== (m_state == NocPkg::VC_WAIT_VC) ||
+            (va_req.valid && va_req.port !== m_route))
+            $fatal(1, "NocVirtChIn %0d: va_req %b %0d, expected %b %0d", BUF_DEPTH, va_req.valid,
+                   va_req.port, m_state == NocPkg::VC_WAIT_VC, m_route);
+        if (sa_req.valid !== (m_state == NocPkg::VC_ACTIVE && buffer.size() > 0) ||
+            (sa_req.valid && (sa_req.port !== m_route || sa_req.vc !== m_out_vc)))
+            $fatal(1, "NocVirtChIn %0d: sa_req %b %0d %0d, expected %b %0d %0d", BUF_DEPTH,
+                   sa_req.valid, sa_req.port, sa_req.vc,
+                   m_state == NocPkg::VC_ACTIVE && buffer.size() > 0, m_route, m_out_vc);
         if (buffer.size() == BUF_DEPTH)
             n_full = n_full + 1;
     endtask

@@ -6,9 +6,10 @@
  * random destinations); a credit coming back on the link returns one. VC allocation grants a
  * waiting VC a random output VC in half of the clocks; switch allocation pops one active VC
  * with a flit in most clocks. A model keeps every VC's flits, state, route (XY, computed here
- * from the head's destination) and output VC; every clock each VC's state, the flit to the
- * crossbar (with the output VC in its vc field) and the credit on the link (the pop of the
- * clock before) must be the model's. Every case must happen: every VC used, a flit of one VC
+ * from the head's destination) and output VC; every clock each VC's state and requests
+ * (va_req while waiting for a VC, sa_req while active with a flit), the flit to the crossbar
+ * (with the output VC in its vc field) and the credit on the link (the pop of the clock before)
+ * must be the model's. Every case must happen: every VC used, a flit of one VC
  * between flits of a packet of another (with more than one VC), routes to all five ports, two
  * pops in a row. NUM_VCS 1 (Mig6's), 2 and 3 (vc values that name no VC); Verilator 20000
  * clocks, Icarus 2000. Stops at the first mismatch with $fatal.
@@ -45,11 +46,15 @@ module TbNocVirtChRtrInputUnitCheck #(
     typedef `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH)        flit_vld_t;
     typedef `DC_NOC_VC_VLD_T(VC_WIDTH)                      vc_vld_t;
     typedef `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)     vc_state_t;
+    typedef `DC_NOC_VA_REQ_T(PORT_WIDTH)                    va_req_t;
+    typedef `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)          sa_req_t;
 
     logic                     rst_n;
     flit_vld_t                in_fwd;
     vc_vld_t                  in_bwd;
     vc_state_t [NUM_VCS-1:0]  vc_state;
+    va_req_t   [NUM_VCS-1:0]  va_req;
+    sa_req_t   [NUM_VCS-1:0]  sa_req;
     vc_vld_t   [NUM_VCS-1:0]  vc_grant;
     vc_vld_t                  pop;
     flit_vld_t                out;
@@ -57,7 +62,7 @@ module TbNocVirtChRtrInputUnitCheck #(
     NocVirtChRtrInputUnit #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
                             .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X),
                             .MY_Y(MY_Y)) u_input_unit(
-        .clk, .rst_n, .in_fwd, .in_bwd, .vc_state, .vc_grant, .pop, .out);
+        .clk, .rst_n, .in_fwd, .in_bwd, .vc_state, .va_req, .sa_req, .vc_grant, .pop, .out);
 
     // XY route of a head flit seen from (MY_X, MY_Y), written as the cases of the mesh (only the
     // destination of the flit is used).
@@ -166,8 +171,22 @@ module TbNocVirtChRtrInputUnitCheck #(
     // Outputs of this clock: those of the model (an element read whole, then its fields).
     task automatic check;
         vc_state_t s;
+        va_req_t   va;
+        sa_req_t   sa;
         for (int v = 0; v < NUM_VCS; v++) begin
-            s = vc_state[v];
+            s  = vc_state[v];
+            va = va_req[v];
+            sa = sa_req[v];
+            if (va.valid !== (m_state[v] == NocPkg::VC_WAIT_VC) ||
+                (va.valid && va.port !== m_route[v]))
+                $fatal(1, "InputUnit %0d: VC %0d va_req %b %0d, expected %b %0d", NUM_VCS, v,
+                       va.valid, va.port, m_state[v] == NocPkg::VC_WAIT_VC, m_route[v]);
+            if (sa.valid !== (m_state[v] == NocPkg::VC_ACTIVE && m_count[v] > 0) ||
+                (sa.valid && (sa.port !== m_route[v] || sa.vc !== m_out_vc[v])))
+                $fatal(1, "InputUnit %0d: VC %0d sa_req %b %0d %0d, expected %b %0d %0d",
+                       NUM_VCS, v, sa.valid, sa.port, sa.vc,
+                       m_state[v] == NocPkg::VC_ACTIVE && m_count[v] > 0, m_route[v],
+                       m_out_vc[v]);
             if (s.state !== m_state[v] || s.has_flit !== (m_count[v] > 0) ||
                 (m_state[v] != NocPkg::VC_IDLE && s.route !== m_route[v]) ||
                 (m_state[v] == NocPkg::VC_ACTIVE && s.out_vc !== m_out_vc[v]))

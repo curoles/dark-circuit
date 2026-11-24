@@ -61,6 +61,8 @@ module NocVirtChRouter #(
     localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
     localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH),
+    localparam type VA_REQ_T   = `DC_NOC_VA_REQ_T(PORT_WIDTH),
+    localparam type SA_REQ_T   = `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH),
     localparam type LINK_FWD_T = `DC_NOC_LINK_FWD_T(VC_WIDTH, DATA_WIDTH),
     localparam type LINK_BWD_T = `DC_NOC_LINK_BWD_T(VC_WIDTH)
 )(
@@ -76,6 +78,12 @@ module NocVirtChRouter #(
     // Input side: per input port, the state of its VCs, the grants of VC allocation, the pop of
     // switch allocation and the flit it sends to the crossbar.
     VC_STATE_T [N-1:0][NUM_VCS-1:0] in_vc_state;
+    // Every input VC's requests to the allocators; not read yet (the allocators decode the
+    // states).
+    /* verilator lint_off UNUSEDSIGNAL */
+    VA_REQ_T   [N-1:0][NUM_VCS-1:0] in_va_req;
+    SA_REQ_T   [N-1:0][NUM_VCS-1:0] in_sa_req;
+    /* verilator lint_on UNUSEDSIGNAL */
     FLIT_VLD_T [N-1:0]              xbar_in;
     VC_VLD_T   [N-1:0][NUM_VCS-1:0] vc_grant;
     VC_VLD_T   [N-1:0]              pop;
@@ -85,6 +93,7 @@ module NocVirtChRouter #(
                                 .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X),
                                 .MY_Y(MY_Y)) u_input(
             .clk, .rst_n, .in_fwd(in_fwd[p]), .in_bwd(in_bwd[p]), .vc_state(in_vc_state[p]),
+            .va_req(in_va_req[p]), .sa_req(in_sa_req[p]),
             .vc_grant(vc_grant[p]), .pop(pop[p]), .out(xbar_in[p]));
     end
 

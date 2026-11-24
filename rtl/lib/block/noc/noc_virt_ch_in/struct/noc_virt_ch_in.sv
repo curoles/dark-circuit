@@ -19,6 +19,8 @@
  *   done    --> sel[2] +----------+ in2: VC_IDLE   en ->| (VC_IDLE)    |
  *   start, granted, done --> Or3 -----------------------+--------------+
  *
+ *   va_req = {is_wait, route_q};  sa_req = {And2(is_active, has_flit), route_q, out_vc_q}
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
@@ -34,7 +36,9 @@ module NocVirtChIn #(
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
     localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
-    localparam type STATE_T    = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type STATE_T    = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH),
+    localparam type VA_REQ_T   = `DC_NOC_VA_REQ_T(PORT_WIDTH),
+    localparam type SA_REQ_T   = `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)
 )(
     input  wire                  clk,
     input  wire                  rst_n,         // synchronous reset, active low
@@ -44,7 +48,9 @@ module NocVirtChIn #(
     output FLIT_T                out_flit,      // ... as it leaves: vc = the output VC
     input  wire [PORT_WIDTH-1:0] front_route,   // route of the front flit, when it is a head
     input  VC_VLD_T              grant,         // VC allocation: the packet's output VC
-    output STATE_T               state          // state, flit, route, output VC: for allocators
+    output STATE_T               state,         // state, flit, route, output VC: for allocators
+    output VA_REQ_T              va_req,        // to VC allocation: an output VC of the route
+    output SA_REQ_T              sa_req         // to switch allocation: send the front flit
 );
     // FifoT holds a power of 2 entries, at least 2: BUF_DEPTH rounded up.
     localparam BUF_ADDR_WIDTH = (BUF_DEPTH > 1) ? $clog2(BUF_DEPTH) : 1;
@@ -72,6 +78,7 @@ module NocVirtChIn #(
     wire [1:0]                state_next;       // the target of the one that happens
     wire [PORT_WIDTH-1:0]     route_q;
     wire [VC_WIDTH-1:0]       out_vc_q;
+    wire                      sa_valid;         // active with a flit: asks the switch
 
     FifoT #(.T(FLIT_T), .ADDR_WIDTH(BUF_ADDR_WIDTH)) u_buf(
         .clk, .rst_n, .write(push.valid), .data_in(push.flit), .read(pop),
@@ -104,6 +111,14 @@ module NocVirtChIn #(
     assign out_flit.tail  = front_flit.tail;
     assign out_flit.vc    = out_vc_q;
     assign out_flit.data  = front_flit.data;
+
+    // The requests to the allocators.
+    And2 #(1) u_and2_sa_valid(.in1(is_active), .in2(has_flit), .out(sa_valid));
+    assign va_req.valid = is_wait;
+    assign va_req.port  = route_q;
+    assign sa_req.valid = sa_valid;
+    assign sa_req.port  = route_q;
+    assign sa_req.vc    = out_vc_q;
 
     assign state.state    = state_q;
     assign state.has_flit = has_flit;

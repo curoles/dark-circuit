@@ -10,7 +10,10 @@
  * the block knows nothing about the topology: a network interface can use it too. A flit
  * popped frees a slot: the input unit returns a credit for this VC upstream. out_flit is the
  * front flit as it leaves: its vc field the packet's output VC (made here, so that a variant
- * that grants and sends in one clock can bypass the grant to it).
+ * that grants and sends in one clock can bypass the grant to it). va_req and sa_req are what
+ * the VC asks of the allocators, made here from its state: VC_WAIT_VC asks an output VC of its
+ * route; VC_ACTIVE with a flit asks the switch, to its route on its output VC (switch
+ * allocation checks the credit). Their fields are kept whether valid or not.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -27,7 +30,9 @@ module NocVirtChIn #(
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
     localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
-    localparam type STATE_T    = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type STATE_T    = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH),
+    localparam type VA_REQ_T   = `DC_NOC_VA_REQ_T(PORT_WIDTH),
+    localparam type SA_REQ_T   = `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)
 )(
     input  wire                  clk,
     input  wire                  rst_n,         // synchronous reset, active low
@@ -37,7 +42,9 @@ module NocVirtChIn #(
     output FLIT_T                out_flit,      // ... as it leaves: vc = the output VC
     input  wire [PORT_WIDTH-1:0] front_route,   // route of the front flit, when it is a head
     input  VC_VLD_T              grant,         // VC allocation: the packet's output VC
-    output STATE_T               state          // state, flit, route, output VC: for allocators
+    output STATE_T               state,         // state, flit, route, output VC: for allocators
+    output VA_REQ_T              va_req,        // to VC allocation: an output VC of the route
+    output SA_REQ_T              sa_req         // to switch allocation: send the front flit
 );
     // FifoT holds a power of 2 entries, at least 2: BUF_DEPTH rounded up.
     localparam BUF_ADDR_WIDTH = (BUF_DEPTH > 1) ? $clog2(BUF_DEPTH) : 1;
@@ -89,6 +96,13 @@ module NocVirtChIn #(
                     if (pop && front.flit.tail)
                         state_q <= NocPkg::VC_IDLE;
             endcase
+
+    // The requests to the allocators.
+    assign va_req.valid = state_q == NocPkg::VC_WAIT_VC;
+    assign va_req.port  = route_q;
+    assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && !empty;
+    assign sa_req.port  = route_q;
+    assign sa_req.vc    = out_vc_q;
 
     assign state.state    = state_q;
     assign state.has_flit = !empty;

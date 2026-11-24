@@ -10,8 +10,9 @@
  * valid, vc: a credit for that VC of the receiver's input buffer).
  * Signals that travel together become a struct: a flit with valid (DC_NOC_FLIT_VLD_T: also the
  * link's forward wires), a VC number with valid (DC_NOC_VC_VLD_T: also the link's backward
- * wires, and a VC grant), the state of an input VC (DC_NOC_VC_IN_STATE_T); a lone control bit
- * stays a bit.
+ * wires, and a VC grant), the state of an input VC (DC_NOC_VC_IN_STATE_T), an input VC's
+ * requests to VC allocation and to switch allocation (DC_NOC_VA_REQ_T, DC_NOC_SA_REQ_T); a lone
+ * control bit stays a bit.
  * The blocks of the library build their types from their parameters, as localparam types in
  * the parameter list (localparam type FLIT_T = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH)); a design
  * does the same in its configuration package, with the same numbers:
@@ -83,6 +84,23 @@
         logic                    has_flit;           \
         logic [(port_width)-1:0] route;              \
         logic [(vc_width)-1:0]   out_vc;             \
+    }
+
+// An input VC's request to VC allocation (NocVirtChIn): an output VC of output port port, for
+// the head at its front.
+`define DC_NOC_VA_REQ_T(port_width)          \
+    struct packed {                          \
+        logic                    valid;      \
+        logic [(port_width)-1:0] port;       \
+    }
+
+// An input VC's request to switch allocation (NocVirtChIn): its front flit through output port
+// port, on output VC vc (switch allocation checks that VC's credit).
+`define DC_NOC_SA_REQ_T(port_width, vc_width) \
+    struct packed {                           \
+        logic                    valid;       \
+        logic [(port_width)-1:0] port;        \
+        logic [(vc_width)-1:0]   vc;          \
     }
 
 `endif
