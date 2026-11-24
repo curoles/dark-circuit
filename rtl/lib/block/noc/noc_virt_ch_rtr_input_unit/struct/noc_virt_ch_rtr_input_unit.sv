@@ -116,6 +116,9 @@ module NocVirtChRtrInputUnit #(
 
     DffSyncRst #($bits(VC_VLD_T)) u_dff_sync_rst_credit(.clk, .rst_n, .in(pop), .out(in_bwd));
 
+    // A popped flit's credit goes back on the link in the clock after, for its VC.
+    `DC_ASSERT_NEXT(a_credit_next, pop.valid, in_bwd.valid && in_bwd.vc == $past(pop.vc))
+
     // The sender keeps to the link's VCs and switch allocation names one of them: a check only
     // when some vc values name no VC (NUM_VCS not a power of 2); one bit wider for NUM_VCS.
     if (NUM_VCS < (1 << VC_WIDTH)) begin: g_vc_check

@@ -841,6 +841,7 @@ block:
       kind: macros
       what: "The flit and the link of the NoC library: their layouts in one place, built from numbers"
       path: rtl/lib/block/noc/dark_circuit_noc.svh
+      kb: [rtl/lib/block/noc/allocation]
     NocConfigPkg:
       kind: package
       what: "Configuration of the NoC of a design: its numbers, and its flit and link built from them with the library's macros (later generated from YAML, as Mig2ConfigPkg is)"
@@ -880,6 +881,7 @@ block:
       versions: [behave, struct]
       path: rtl/lib/block/noc/noc_virt_ch_in
       test: test/block/noc/noc_virt_ch_in
+      kb: [rtl/lib/block/noc/allocation]
     NocVirtChOut:
       what: "NoC virtual channel, the output end: one VC of the next router's input, as the sender sees it"
       versions: [behave, struct]
@@ -892,6 +894,7 @@ block:
     NocVirtChRtrAlloc:
       what: "Allocation of the NoC router with virtual channels: VC allocation and switch allocation of all its ports, from the input VCs' requests, wiring only"
       path: rtl/lib/block/noc/noc_virt_ch_rtr_alloc
+      kb: [rtl/lib/block/noc/allocation]
     NocVirtChRtrInputUnit:
       what: "Input unit of the NoC router with virtual channels: one input port"
       versions: [behave, struct]

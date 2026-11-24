@@ -87,7 +87,7 @@
     }
 
 // An input VC's request to VC allocation (NocVirtChIn): an output VC of output port port, for
-// the head at its front.
+// the head at its front (allocators serve requests, not states: kb rtl/lib/block/noc/allocation).
 `define DC_NOC_VA_REQ_T(port_width)          \
     struct packed {                          \
         logic                    valid;      \

@@ -1,0 +1,47 @@
+type: mutants
+title: Mutants of the NoC tests (the router's parts, behave and struct versions)
+date: 2026-11-24
+tests: [block_noc_virt_ch_in_behave, block_noc_virt_ch_in_struct]
+mutants:
+  - name: NocVirtChIn behave, the SA request without a flit at the front (2026-11-24, requests)
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv
+        old: "assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && !empty;"
+        new: "assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && (!empty || 1'b1);"
+    tests: [block_noc_virt_ch_in_behave]
+  - name: NocVirtChIn struct, the SA request's port from the front flit, not the packet's route
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv
+        old: "assign sa_req.port  = route_q;"
+        new: "assign sa_req.port  = front_route;"
+    tests: [block_noc_virt_ch_in_struct]
+  - name: NocVirtChIn struct, the SA request's VC the grant's, not the packet's
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv
+        old: "assign sa_req.vc    = out_vc_q;"
+        new: "assign sa_req.vc    = grant.vc | (out_vc_q & '0);"
+    tests: [block_noc_virt_ch_in_struct]
+  - name: NocVirtChOut behave, a one-flit packet given its VC and sent at once keeps it
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_out/behave/noc_virt_ch_out.sv
+        old: "else        taken <= (taken || alloc) && !(send && send_tail);"
+        new: "else        taken <= alloc || (taken && !(send && send_tail));"
+    tests: [block_noc_virt_ch_out_behave]
+  - name: NocVirtChAlloc behave, a port asked without a valid request
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_alloc/behave/noc_virt_ch_alloc.sv
+        old: "assign req[r][p * NUM_VCS + v] = q.valid && q.port == PORT_WIDTH'(r);"
+        new: "assign req[r][p * NUM_VCS + v] = (q.valid || 1'b1) && q.port == PORT_WIDTH'(r);"
+    tests: [block_noc_virt_ch_alloc_behave]
+  - name: NocSwitchAlloc struct, a request eligible without its credit
+    edits:
+      - file: rtl/lib/block/noc/noc_switch_alloc/struct/noc_switch_alloc.sv
+        old: ".in1(q.valid), .in2(vc_credit), .out(eligible[v])"
+        new: ".in1(q.valid), .in2(vc_credit | 1'b1), .out(eligible[v])"
+    tests: [block_noc_switch_alloc_struct]
+  - name: NocVirtChRtrInputUnit struct, the credit for the wrong VC
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_rtr_input_unit/struct/noc_virt_ch_rtr_input_unit.sv
+        old: ".in(pop), .out(in_bwd)"
+        new: ".in({pop.valid, ~pop.vc}), .out(in_bwd)"
+    tests: [block_noc_virt_ch_rtr_input_unit_struct]

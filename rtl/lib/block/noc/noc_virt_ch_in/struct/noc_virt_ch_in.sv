@@ -131,4 +131,11 @@ module NocVirtChIn #(
     `DC_ASSERT(a_grant_when_waiting, !grant.valid || is_wait)
     `DC_ASSERT(a_pop_when_active, !pop || (is_active && has_flit))
 
+    // The requests' timing (what the allocators may rely on): a VA request not granted stays,
+    // for the same port; an SA request not popped stays, for the same port and output VC.
+    `DC_ASSERT_NEXT(a_va_req_held, va_req.valid && !grant.valid,
+                    va_req.valid && $stable(va_req.port))
+    `DC_ASSERT_NEXT(a_sa_req_held, sa_req.valid && !pop,
+                    sa_req.valid && $stable({sa_req.port, sa_req.vc}))
+
 endmodule

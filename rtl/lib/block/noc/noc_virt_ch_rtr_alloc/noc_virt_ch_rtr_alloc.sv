@@ -45,6 +45,7 @@ module NocVirtChRtrAlloc #(
     output logic                  [N-1:0][PORT_WIDTH-1:0] xbar_sel,     // per output: its input
     output logic                  [N-1:0]                 xbar_valid    // per output: a flit goes
 );
+    // @kb: rtl/lib/block/noc/allocation
     // VC allocation: a head gets a free output VC of its port.
     NocVirtChAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_vc_alloc(
         .clk, .rst_n, .va_req, .out_vc_state, .vc_grant, .vc_alloc);

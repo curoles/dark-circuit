@@ -98,6 +98,7 @@ module NocVirtChIn #(
             endcase
 
     // The requests to the allocators.
+    // @kb: rtl/lib/block/noc/allocation
     assign va_req.valid = state_q == NocPkg::VC_WAIT_VC;
     assign va_req.port  = route_q;
     assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && !empty;
@@ -117,5 +118,12 @@ module NocVirtChIn #(
                                        !front.flit.head))
     `DC_ASSERT(a_grant_when_waiting, !grant.valid || state_q == NocPkg::VC_WAIT_VC)
     `DC_ASSERT(a_pop_when_active, !pop || (state_q == NocPkg::VC_ACTIVE && front.valid))
+
+    // The requests' timing (what the allocators may rely on): a VA request not granted stays,
+    // for the same port; an SA request not popped stays, for the same port and output VC.
+    `DC_ASSERT_NEXT(a_va_req_held, va_req.valid && !grant.valid,
+                    va_req.valid && $stable(va_req.port))
+    `DC_ASSERT_NEXT(a_sa_req_held, sa_req.valid && !pop,
+                    sa_req.valid && $stable({sa_req.port, sa_req.vc}))
 
 endmodule

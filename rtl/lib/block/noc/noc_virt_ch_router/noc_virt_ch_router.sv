@@ -14,9 +14,11 @@
  * per output each clock; the popped flits cross the crossbar (NocMuxXbar) to out_fwd in the
  * same clock.
  *
- * The router has no logic of its own, only its parts and the wiring between them: a feature
- * that needs logic (a bypass, lookahead routing, a pipeline stage) gets a block of its own,
- * with behave and struct versions, so this one file serves both flists.
+ * The router has no logic of its own, only its parts and the wiring between them, so this one
+ * file serves both flists. A variant of its timing lives in its parts, not here: an input VC
+ * that asks the allocators sooner (its requests, NocVirtChIn), an allocation that couples VC
+ * and switch allocation (NocVirtChRtrAlloc); the allocators serve requests and know nothing of
+ * the input VCs' states (kb rtl/lib/block/noc/allocation).
  *
  * The pipeline of a head flit, measured (TbNocVirtChRouter, a lone packet), and the textbook's
  * stages: a head leaves 3 clocks after it came; a body or tail flit 1 clock after the flit before

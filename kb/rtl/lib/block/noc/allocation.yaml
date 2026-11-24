@@ -1,0 +1,63 @@
+type: decision
+title: The NoC router's allocators serve the input VCs' requests, not their states
+date: 2026-11-24
+question: >
+  The router's head flit takes 3 clocks (its route registered, VC allocation, switch
+  allocation), and the faster variants planned for it (kb rtl/design/mig6/noc_buffers: next,
+  faster routers) change when an input VC asks the allocators: a route computed in the same
+  clock (early), the route sent by the router before (lookahead), VC and switch allocation in
+  one clock (speculative). The allocators read each input VC's state (DC_NOC_VC_IN_STATE_T)
+  and decoded from it what it asked (VC_WAIT_VC: an output VC of route_q; VC_ACTIVE with a
+  flit: the switch), which ties them to today's timing. How do the parts meet so that every
+  variant fits, for any number of VCs (coherence will want several)?
+decision: >
+  An input VC (NocVirtChIn) makes its requests itself: va_req {valid, port} (DC_NOC_VA_REQ_T,
+  an output VC of that port) and sa_req {valid, port, vc} (DC_NOC_SA_REQ_T, the switch on that
+  output VC; switch allocation checks the credit); the allocators (NocVirtChAlloc,
+  NocSwitchAlloc) serve requests and the output VCs' state only. One part, NocVirtChRtrAlloc,
+  holds both allocations (wiring only), so a variant that couples them changes that part, not
+  the router. Contracts at the requests (DC_ASSERT_NEXT in NocVirtChIn): a VA request not
+  granted stays, same port; an SA request not popped stays, same port and VC. The timing
+  variants will be parameters of the parts (user's structure (c), 2026-11-23: a ROUTE choice
+  of registered, early, lookahead; an ALLOC choice of separate, speculative), the router
+  wiring only. Prepared with it, behaviour the same today: NocVirtChOut's taken next is
+  (taken | alloc) & keep (a one-flit packet given its VC and sent in one clock leaves it free;
+  a new gate Oa21), and NocVirtChIn makes the flit as it leaves (out_flit, its output VC in
+  the vc field), where a same-clock grant can be bypassed to it. VC classes (message classes
+  on VCs for a coherence protocol) are a later change of VC allocation (a mask of the VCs a
+  request may get, with its own per-requester free check); a VA request carries only a port
+  today.
+why: >
+  Compute once, carry forward: what an input VC wants is known where its state is; making the
+  request there keeps the allocators free of the VC's timing, so an input VC that asks earlier
+  needs no allocator change, and the allocators' tests check requests rather than states.
+  Wrapping both allocators makes the router's wiring final across the ALLOC variants (a
+  second opinion by a reading agent showed speculation needs a link from VC to switch
+  allocation, which requests alone do not carry). Done as a refactor in steps, each proven:
+  the NoC tests on both simulators, identical per-clock traces of every router link in the
+  router and mesh tests (behave and struct), and yosys's equiv_make of the old router against
+  the new at NUM_VCS 1, 2 and 3 (fully proven after each step but the one that changed the
+  taken flags, which the old allocators never exercise).
+rejected:
+  - choice: The allocators keep decoding the input VCs' states, each variant adding its own case
+    why_not: Every timing variant would change the allocators too; their tests stay tied to
+      the VC's states.
+  - choice: Several router modules with the same ports, one per timing
+    why_not: The wiring three times over, drifting apart; the variants differ in parts, not in
+      the wiring (user chose parameters of the parts).
+  - choice: VC classes now (a mask in the VA request, all ones)
+    why_not: A VA change no test could exercise yet; kept for when coherence needs it.
+relies_on:
+  - rtl/design/mig6/noc_buffers
+evidence: >
+  2026-11-24, the baseline before the variants: a lone head leaves 3 clocks after it came;
+  one-flit packets on one input VC leave 3 clocks apart (TbNocVirtChRouter's train, NUM_VCS
+  1, 2 and 3); in the project's sky130 flow (yosys, ABC) a router with 52-bit flits and 8-flit
+  buffers is 101 765 um2 with a longest path of 3.79 ns at 1 VC (Mig6's), 195 491 um2 and
+  4.46 ns at 2 VCs, against Mig3's 5.5 ns clock. Tests at NUM_VCS 1 added on the way found
+  the behave input unit routing every head to port 0 on Icarus (AGENTS.md trap: a
+  one-element struct array). Mutants: kb test/block/noc/mutants.
+code:
+  - rtl/lib/block/noc/noc_virt_ch_rtr_alloc/noc_virt_ch_rtr_alloc.sv#u_vc_alloc
+  - rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv#va_req
+  - rtl/lib/block/noc/dark_circuit_noc.svh#DC_NOC_VA_REQ_T
