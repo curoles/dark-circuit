@@ -1,7 +1,9 @@
 /* Test of NocVirtChAlloc.
  *
  * The input VCs and the output VCs around the allocator, as the router's units would be: an
- * idle input VC gets a head with a random route now and then and waits; a grant makes it
+ * idle input VC gets a head with a random route now and then and waits (its request, va_req:
+ * valid while waiting, the route as its port; idle and active VCs show their route with valid
+ * 0); a grant makes it
  * active and its output VC taken at the edge (as NocVirtChIn and NocVirtChOut take them); an
  * active input VC goes idle now and then, a taken output VC free (its tail left). Checked
  * before every rising edge, against the rules of VC allocation rather than a copy of the
@@ -36,14 +38,14 @@ module TbNocVirtChAllocCheck #(
 `endif
 
     typedef `DC_NOC_VC_VLD_T(VC_WIDTH)                  vc_vld_t;
-    typedef `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH) vc_state_t;
+    typedef `DC_NOC_VA_REQ_T(PORT_WIDTH)                va_req_t;
 
-    localparam SW = $bits(vc_state_t);              // bits of an element of each port
+    localparam SW = $bits(va_req_t);                // bits of an element of each port
     localparam OW = $bits(NocPkg::vc_out_state_t);
     localparam GW = $bits(vc_vld_t);
 
     logic                                        rst_n;
-    vc_state_t             [N-1:0][NUM_VCS-1:0]  in_vc_state;
+    va_req_t               [N-1:0][NUM_VCS-1:0]  va_req;
     NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0]  out_vc_state;
     vc_vld_t               [N-1:0][NUM_VCS-1:0]  vc_grant;
     logic                  [N-1:0][NUM_VCS-1:0]  vc_alloc;
@@ -54,13 +56,13 @@ module TbNocVirtChAllocCheck #(
     wire  [R*GW-1:0] grant_flat;
     wire  [R-1:0]    alloc_flat;
 
-    assign in_vc_state  = in_flat;
+    assign va_req       = in_flat;
     assign out_vc_state = out_flat;
     assign grant_flat   = vc_grant;
     assign alloc_flat   = vc_alloc;
 
     NocVirtChAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_alloc(
-        .clk, .rst_n, .in_vc_state, .out_vc_state, .vc_grant, .vc_alloc);
+        .clk, .rst_n, .va_req, .out_vc_state, .vc_grant, .vc_alloc);
 
     // The units around the allocator (plain arrays; the ports are driven from them).
     logic [1:0] in_state [N][NUM_VCS];
@@ -77,13 +79,12 @@ module TbNocVirtChAllocCheck #(
 
     // The ports from the arrays.
     task automatic drive_ports;
-        vc_state_t             s;
+        va_req_t               s;
         NocPkg::vc_out_state_t o;
         for (int p = 0; p < N; p++)
             for (int v = 0; v < NUM_VCS; v++) begin
-                s       = '0;
-                s.state = in_state[p][v];
-                s.route = PORT_WIDTH'(in_route[p][v]);
+                s.valid = in_state[p][v] == NocPkg::VC_WAIT_VC;
+                s.port  = PORT_WIDTH'(in_route[p][v]);
                 o.free       = !taken[p][v];
                 o.has_credit = 1'b1;
                 in_flat[(p * NUM_VCS + v) * SW +: SW]  = s;

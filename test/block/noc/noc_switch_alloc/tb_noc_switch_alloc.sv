@@ -1,22 +1,23 @@
 /* Test of NocSwitchAlloc.
  *
- * The input VCs as the input units would show them: a VC gets a packet now and then (active,
- * a route, an output VC) and keeps it while it has flits; its front flit is there in most clocks;
- * a pop takes a flit, after which the packet may end. Idle and waiting VCs come with random
- * fields. Checked before every rising edge, by the rules of switch allocation rather than a copy
- * of the arbiters: a pop only from an eligible VC (active, a flit, a credit for its route and
- * output VC); the inputs that pop and the outputs that take a flit match one to one, each output
- * taking an input whose popped VC wants it; a flit goes whenever a VC is eligible. In the first
- * half of the run the credits are random; in the second every output VC has one, so an eligible
- * VC stays eligible, and it must pop within (2 * NUM_VCS - 1) * N clocks: round robin at both
- * stages, the input's order moving only when its pick wins, so a pick waits at most N clocks at
- * its output; before our VC the input serves each other VC once, and a VC that becomes eligible
- * ahead of the pick takes the pick over (its wait at the output starts again), once per other
- * VC. Every case must happen: two inputs whose
- * eligible VCs want one output, an input with two eligible VCs (with more than one VC), a VC
- * held back by its credit, flits to every output, three or more flits in one clock. NUM_VCS 1
- * (Mig6's: no input-side arbiter), 2 and 3; Verilator 20000
- * clocks, Icarus 500. Stops at the first mismatch with $fatal.
+ * The input VCs' requests as the input units would make them (sa_req: valid while active with
+ * a front flit, the route as its port, the output VC): a VC gets a packet now and then
+ * (active, a route, an output VC) and keeps it while it has flits; its front flit is there in
+ * most clocks; a pop takes a flit, after which the packet may end. Idle and waiting VCs come
+ * with random fields and valid 0. Checked before every rising edge, by the rules of switch
+ * allocation rather than a copy of the arbiters: a pop only from an eligible VC (active, a
+ * flit, a credit for its route and output VC); the inputs that pop and the outputs that take a
+ * flit match one to one, each output taking an input whose popped VC wants it; a flit goes
+ * whenever a VC is eligible. In the first half of the run the credits are random; in the
+ * second every output VC has one, so an eligible VC stays eligible, and it must pop within (2
+ * * NUM_VCS - 1) * N clocks: round robin at both stages, the input's order moving only when
+ * its pick wins, so a pick waits at most N clocks at its output; before our VC the input
+ * serves each other VC once, and a VC that becomes eligible ahead of the pick takes the pick
+ * over (its wait at the output starts again), once per other VC. Every case must happen: two
+ * inputs whose eligible VCs want one output, an input with two eligible VCs (with more than
+ * one VC), a VC held back by its credit, flits to every output, three or more flits in one
+ * clock. NUM_VCS 1 (Mig6's: no input-side arbiter), 2 and 3; Verilator 20000 clocks, Icarus
+ * 500. Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -41,13 +42,13 @@ module TbNocSwitchAllocCheck #(
 `endif
 
     typedef `DC_NOC_VC_VLD_T(VC_WIDTH)                  vc_vld_t;
-    typedef `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH) vc_state_t;
+    typedef `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)      sa_req_t;
 
-    localparam SW = $bits(vc_state_t);
+    localparam SW = $bits(sa_req_t);
     localparam OW = $bits(NocPkg::vc_out_state_t);
 
     logic                                           rst_n;
-    vc_state_t             [N-1:0][NUM_VCS-1:0]     in_vc_state;
+    sa_req_t               [N-1:0][NUM_VCS-1:0]     sa_req;
     NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0]     out_vc_state;
     vc_vld_t               [N-1:0]                  pop;
     logic                  [N-1:0][PORT_WIDTH-1:0]  xbar_sel;
@@ -57,17 +58,16 @@ module TbNocSwitchAllocCheck #(
     logic [R*OW-1:0]         out_flat;
     wire  [N*PORT_WIDTH-1:0] sel_flat;
 
-    assign in_vc_state  = in_flat;
+    assign sa_req       = in_flat;
     assign out_vc_state = out_flat;
     assign sel_flat     = xbar_sel;
 
     NocSwitchAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_alloc(
-        .clk, .rst_n, .in_vc_state, .out_vc_state, .pop, .xbar_sel, .xbar_valid);
+        .clk, .rst_n, .sa_req, .out_vc_state, .pop, .xbar_sel, .xbar_valid);
 
     // The input VCs (plain arrays; the ports are driven from them).
     logic   active  [N][NUM_VCS];       // holds a packet
     logic   flit    [N][NUM_VCS];       // a flit at the front
-    logic   other   [N][NUM_VCS];       // when not active: waiting (1) or idle (0)
     integer route   [N][NUM_VCS];
     integer out_vc  [N][NUM_VCS];
     logic   credit  [N][NUM_VCS];       // output VCs
@@ -103,7 +103,6 @@ module TbNocSwitchAllocCheck #(
                     waited[p][v] = 0;
                 end
                 if (!active[p][v]) begin
-                    other[p][v]  = {$random(seed)} % 2 == 0;
                     route[p][v]  = {$random(seed)} % N;
                     out_vc[p][v] = {$random(seed)} % NUM_VCS;
                 end
@@ -114,15 +113,13 @@ module TbNocSwitchAllocCheck #(
     endtask
 
     task automatic drive_ports;
-        vc_state_t             s;
+        sa_req_t               s;
         NocPkg::vc_out_state_t o;
         for (int p = 0; p < N; p++)
             for (int v = 0; v < NUM_VCS; v++) begin
-                s.state    = active[p][v] ? NocPkg::VC_ACTIVE :
-                             other[p][v]  ? NocPkg::VC_WAIT_VC : NocPkg::VC_IDLE;
-                s.has_flit = flit[p][v];
-                s.route    = PORT_WIDTH'(route[p][v]);
-                s.out_vc   = VC_WIDTH'(out_vc[p][v]);
+                s.valid = active[p][v] && flit[p][v];
+                s.port  = PORT_WIDTH'(route[p][v]);
+                s.vc    = VC_WIDTH'(out_vc[p][v]);
                 o.free       = 1'b0;
                 o.has_credit = credit[p][v];
                 in_flat[(p * NUM_VCS + v) * SW +: SW]  = s;
@@ -218,7 +215,6 @@ module TbNocSwitchAllocCheck #(
             for (int v = 0; v < NUM_VCS; v++) begin
                 active[p][v] = 1'b0;
                 flit[p][v]   = 1'b0;
-                other[p][v]  = 1'b0;
                 route[p][v]  = 0;
                 out_vc[p][v] = 0;
                 credit[p][v] = 1'b0;

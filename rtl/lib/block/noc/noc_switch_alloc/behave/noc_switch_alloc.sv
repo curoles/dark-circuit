@@ -1,7 +1,9 @@
 /* Switch allocation of the NoC router, behavioral: which flits cross the crossbar this clock.
  *
- * An input VC may send when it is active, has a flit at the front and its output VC (route,
- * out_vc) has a credit at the next router. At most one flit leaves an input port and at most one
+ * An input VC may send when it asks the switch (sa_req, NocVirtChIn's: active with a flit at
+ * the front) and its output VC (the request's port and vc) has a credit at the next router;
+ * the allocator knows nothing of the input VCs' states. At most one flit leaves an input port
+ * and at most one
  * enters an output port per clock: a separable allocator, input first. Stage 1: each input port
  * picks one of its eligible VCs (RoundRobinArbiter over its VCs); the pick wants its route.
  * Stage 2: each output port picks one of the inputs whose pick wants it (RoundRobinArbiter over
@@ -13,11 +15,11 @@
  * on out_fwd, in this clock (switch allocation and traversal in one clock).
  *
  *  stage 1, per input port p                       stage 2, per output port r
- *  in_vc_state[p][v] --+
- *  (active, a flit)    +--> eligible --> RoundRobinArbiter [p] --> pick, wants route r
+ *  sa_req[p][v] -------+
+ *  (valid)             +--> eligible --> RoundRobinArbiter [p] --> pick, wants port r
  *  out_vc_state[r][w] -+                 (over its VCs;                |
- *  (credit of route,                      advance: pick won)           v
- *   out_vc)                  inputs whose pick wants r --> RoundRobinArbiter [r] --> xbar_sel[r]
+ *  (credit of port,                       advance: pick won)           v
+ *   vc)                      inputs whose pick wants r --> RoundRobinArbiter [r] --> xbar_sel[r]
  *                                                          (over the inputs)      xbar_valid[r]
  *                  pop[p] = {valid: p's pick won, vc: the pick} <----+
  *
@@ -34,11 +36,11 @@ module NocSwitchAlloc #(
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
-    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type SA_REQ_T   = `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)
 )(
     input  wire                                        clk,
     input  wire                                        rst_n,        // synchronous, active low
-    input  VC_STATE_T             [N-1:0][NUM_VCS-1:0] in_vc_state,  // active, a flit, route, VC
+    input  SA_REQ_T               [N-1:0][NUM_VCS-1:0] sa_req,       // input VCs: port, output VC
     input  NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state, // has_credit
     output VC_VLD_T               [N-1:0]              pop,          // per input: VC that sends
     output logic                  [N-1:0][PORT_WIDTH-1:0] xbar_sel,  // per output: its input
@@ -90,12 +92,11 @@ module NocSwitchAlloc #(
         logic [NUM_VCS*PORT_WIDTH-1:0] routes;  // the route of each VC
 
         for (genvar v = 0; v < NUM_VCS; v++) begin: g_in_vc
-            VC_STATE_T s;
+            SA_REQ_T q;                         // the input VC's request
 
-            assign s = in_vc_state[p][v];
-            assign routes[v * PORT_WIDTH +: PORT_WIDTH] = s.route;
-            assign eligible[v] = s.state == NocPkg::VC_ACTIVE && s.has_flit &&
-                                 credit[int'(s.route) * NUM_VCS + int'(s.out_vc)];
+            assign q = sa_req[p][v];
+            assign routes[v * PORT_WIDTH +: PORT_WIDTH] = q.port;
+            assign eligible[v] = q.valid && credit[int'(q.port) * NUM_VCS + int'(q.vc)];
         end
 
         // One VC: it is the pick when eligible (an arbiter needs two requesters).

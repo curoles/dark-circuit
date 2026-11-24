@@ -1,16 +1,16 @@
 /* Switch allocation of the NoC router, made of blocks and gates.
  *
  * Same ports, parameters and behavior as the behave version (see there). An input VC's credit
- * is picked in two steps, the credits of its route's port, then the bit of its output VC (one
- * MuxN on route * NUM_VCS + out_vc would need a multiplier when NUM_VCS is not a power of 2).
+ * is picked in two steps, the credits of its request's port, then the bit of its output VC (one
+ * MuxN on port * NUM_VCS + vc would need a multiplier when NUM_VCS is not a power of 2).
  * A one-hot pick or grant becomes an index with a PriorityEncoder (the index of its one bit),
  * whose valid says there is one. A pick's route, decoded (Decoder, enabled by "a pick"), is
  * what the input wants of every output port at once.
  *
  *   per input VC (p, v):
- *     credit --> MuxN (sel: route) --> MuxN (sel: out_vc) --> its credit --+
- *     state --> CmpEq VC_ACTIVE ---------------------------------------->+--> And3 --> eligible
- *     has_flit ------------------------------------------------------------+
+ *     credit --> MuxN (sel: sa_req.port) --> MuxN (sel: sa_req.vc) --> its credit --+
+ *     sa_req.valid ------------------------------------------------------------>+--> And2
+ *                                                                                     --> eligible
  *   per input port p, stage 1:
  *     eligible --> RoundRobinArbiter (advance: won[p]) --> pick[p] (one-hot)
  *     pick[p] --> PriorityEncoder --> pick_vc[p], has_pick[p]
@@ -34,11 +34,11 @@ module NocSwitchAlloc #(
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
-    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type SA_REQ_T   = `DC_NOC_SA_REQ_T(PORT_WIDTH, VC_WIDTH)
 )(
     input  wire                                        clk,
     input  wire                                        rst_n,        // synchronous, active low
-    input  VC_STATE_T             [N-1:0][NUM_VCS-1:0] in_vc_state,  // active, a flit, route, VC
+    input  SA_REQ_T               [N-1:0][NUM_VCS-1:0] sa_req,       // input VCs: port, output VC
     input  NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state, // has_credit
     output VC_VLD_T               [N-1:0]              pop,          // per input: VC that sends
     output logic                  [N-1:0][PORT_WIDTH-1:0] xbar_sel,  // per output: its input
@@ -77,27 +77,24 @@ module NocSwitchAlloc #(
         /* verilator lint_on UNUSEDSIGNAL */
 
         for (genvar v = 0; v < NUM_VCS; v++) begin: g_in_vc
-            // out_vc is not read with one VC (g_one_vc: VC 0 is the only one).
+            // The request's vc is not read with one VC (g_one_vc: VC 0 is the only one).
             /* verilator lint_off UNUSEDSIGNAL */
-            VC_STATE_T         s;
+            SA_REQ_T           q;               // the input VC's request
             /* verilator lint_on UNUSEDSIGNAL */
-            wire               active;
-            wire [NUM_VCS-1:0] port_credit;     // the credits of its route's port
+            wire [NUM_VCS-1:0] port_credit;     // the credits of its request's port
             wire               vc_credit;       // ... of its output VC
 
-            assign s         = in_vc_state[p][v];
-            assign routes[v] = s.route;
-            CmpEq #(2) u_cmp_eq_active(.in1(s.state), .in2(NocPkg::VC_ACTIVE), .eq(active));
+            assign q         = sa_req[p][v];
+            assign routes[v] = q.port;
             MuxN #(.N(N), .WIDTH(NUM_VCS)) u_mux_n_port_credit(
-                .in(credit), .sel(s.route), .out(port_credit));
+                .in(credit), .sel(q.port), .out(port_credit));
             if (NUM_VCS == 1) begin: g_one_vc
                 assign vc_credit = port_credit[0];
             end else begin: g_vcs
                 MuxN #(.N(NUM_VCS), .WIDTH(1)) u_mux_n_vc_credit(
-                    .in(port_credit), .sel(s.out_vc), .out(vc_credit));
+                    .in(port_credit), .sel(q.vc), .out(vc_credit));
             end
-            And3 #(1) u_and3_eligible(.in1(active), .in2(s.has_flit), .in3(vc_credit),
-                                      .out(eligible[v]));
+            And2 #(1) u_and2_eligible(.in1(q.valid), .in2(vc_credit), .out(eligible[v]));
         end
 
         // One VC: it is the pick when eligible (an arbiter needs two requesters).

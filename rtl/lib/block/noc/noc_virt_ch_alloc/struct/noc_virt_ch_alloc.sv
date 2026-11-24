@@ -1,16 +1,17 @@
 /* VC allocation of the NoC router, made of blocks and gates.
  *
- * Same ports, parameters and behavior as the behave version (see there). A waiting input VC's
- * route, decoded (Decoder, enabled by "waiting"), is its request to every output port at once.
+ * Same ports, parameters and behavior as the behave version (see there). An input VC's
+ * request's port, decoded (Decoder, enabled by its valid), is its request to every output port
+ * at once.
  * Per output port the free VC it gives is the highest free one (PriorityEncoder, whose valid
  * says the port has one); the vc an input VC gets is the free VC of its route's port (MuxN).
  *
  *   per input VC (p, v), requester p * NUM_VCS + v:
- *     state --> CmpEq VC_WAIT_VC --> en +---------+
- *     route ----------------------> in  | Decoder |--> req[r][p * NUM_VCS + v], every port r
- *                                       +---------+
+ *     va_req.valid --> en +---------+
+ *     va_req.port ---> in  | Decoder |--> req[r][p * NUM_VCS + v], every port r
+ *                          +---------+
  *     win[r][p * NUM_VCS + v], every r --> OrReduce --> vc_grant.valid
- *     free_vc[r], every r --> MuxN (sel: route) ------> vc_grant.vc
+ *     free_vc[r], every r --> MuxN (sel: va_req.port) --> vc_grant.vc
  *
  *   per output port r:
  *     free of its VCs --> PriorityEncoder --> free_vc[r], any_free[r]
@@ -30,11 +31,11 @@ module NocVirtChAlloc #(
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
-    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type VA_REQ_T   = `DC_NOC_VA_REQ_T(PORT_WIDTH)
 )(
     input  wire                                        clk,
     input  wire                                        rst_n,         // synchronous, active low
-    input  VC_STATE_T             [N-1:0][NUM_VCS-1:0] in_vc_state,   // waiting VCs, their route
+    input  VA_REQ_T               [N-1:0][NUM_VCS-1:0] va_req,        // input VCs: a VC of a port
     input  NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state,  // free output VCs
     output VC_VLD_T               [N-1:0][NUM_VCS-1:0] vc_grant,      // to an input VC: its VC
     output logic                  [N-1:0][NUM_VCS-1:0] vc_alloc       // an output VC taken
@@ -49,19 +50,16 @@ module NocVirtChAlloc #(
 
     for (genvar p = 0; p < N; p++) begin: g_in_port
         for (genvar v = 0; v < NUM_VCS; v++) begin: g_in_vc
-            // The input VC's state: only its state and route are read here.
-            /* verilator lint_off UNUSEDSIGNAL */
-            VC_STATE_T         s;
+            VA_REQ_T           q;               // the input VC's request
             // The decoder's outputs at N and above are never set (a route is a port).
+            /* verilator lint_off UNUSEDSIGNAL */
             wire [PORT_N-1:0]  route_req;
             /* verilator lint_on UNUSEDSIGNAL */
-            wire               waiting;
             wire [N-1:0]       won;             // per output port: this input VC won there
             VC_VLD_T           g;
 
-            assign s = in_vc_state[p][v];
-            CmpEq #(2) u_cmp_eq_waiting(.in1(s.state), .in2(NocPkg::VC_WAIT_VC), .eq(waiting));
-            Decoder #(.SIZE(PORT_WIDTH)) u_decoder_req(.in(s.route), .en(waiting),
+            assign q = va_req[p][v];
+            Decoder #(.SIZE(PORT_WIDTH)) u_decoder_req(.in(q.port), .en(q.valid),
                                                       .out(route_req));
             for (genvar r = 0; r < N; r++) begin: g_out_port
                 assign req[r][p * NUM_VCS + v] = route_req[r];
@@ -70,7 +68,7 @@ module NocVirtChAlloc #(
 
             // It asked one port: the VC is that port's free VC.
             OrReduce #(N) u_or_reduce_valid(.in(won), .out(g.valid));
-            MuxN #(.N(N), .WIDTH(VC_WIDTH)) u_mux_n_vc(.in(free_vc), .sel(s.route), .out(g.vc));
+            MuxN #(.N(N), .WIDTH(VC_WIDTH)) u_mux_n_vc(.in(free_vc), .sel(q.port), .out(g.vc));
             assign vc_grant[p][v] = g;
 
             `DC_ASSERT(a_wins_one_port, $onehot0(won))

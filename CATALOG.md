@@ -889,6 +889,9 @@ block:
       what: "NoC router of a 2D mesh with virtual channels, made of the NoC blocks (behave or struct, whichever versions the flist has)"
       path: rtl/lib/block/noc/noc_virt_ch_router
       test: test/block/noc/noc_virt_ch_router
+    NocVirtChRtrAlloc:
+      what: "Allocation of the NoC router with virtual channels: VC allocation and switch allocation of all its ports, from the input VCs' requests, wiring only"
+      path: rtl/lib/block/noc/noc_virt_ch_rtr_alloc
     NocVirtChRtrInputUnit:
       what: "Input unit of the NoC router with virtual channels: one input port"
       versions: [behave, struct]

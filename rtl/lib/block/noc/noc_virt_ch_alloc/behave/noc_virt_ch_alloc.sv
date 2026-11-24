@@ -1,15 +1,18 @@
 /* VC allocation of the NoC router, behavioral: a packet's head gets an output VC.
  *
- * Requesters are the input VCs waiting for an output VC (VC_WAIT_VC), each for one output port,
- * its route: XY routing is deterministic, so an input VC asks one port and can win at one port
+ * Requesters are the input VCs' requests (va_req, NocVirtChIn's: a head waiting for an output
+ * VC), each for one output port, its route: XY routing is deterministic, so an input VC asks one
+ * port and can win at one port
  * only, and an arbiter per output port is the whole allocator (no input-side arbitration). Each
  * port with a free output VC grants one waiting input VC per clock (RoundRobinArbiter over all
  * input VCs) and gives it a free VC, the highest; a second head for the same port waits a clock.
  * The grant goes to the input VC (vc_grant: valid, the output VC) and to the output VC
  * (vc_alloc); both take it at the next edge (NocVirtChIn becomes active, NocVirtChOut taken),
- * so an output VC is never given twice. The states read come from flops.
+ * so an output VC is never given twice. The requests are made from the input VCs' flops; the
+ * allocator knows nothing of their states, so a variant of the input VC that asks earlier needs
+ * no change here.
  *
- *   in_vc_state[p][v] -- waiting, route == r --> req[r][p*NUM_VCS+v] --+
+ *   va_req[p][v] -- valid, port == r ---------> req[r][p*NUM_VCS+v] --+
  *                                                                      v
  *   out_vc_state[r][w] -- free --> a free VC? --> RoundRobinArbiter [r] --> winner (p, v)
  *                                  the highest free: w                       |
@@ -29,11 +32,11 @@ module NocVirtChAlloc #(
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
-    localparam type VC_STATE_T = `DC_NOC_VC_IN_STATE_T(PORT_WIDTH, VC_WIDTH)
+    localparam type VA_REQ_T   = `DC_NOC_VA_REQ_T(PORT_WIDTH)
 )(
     input  wire                                        clk,
     input  wire                                        rst_n,         // synchronous, active low
-    input  VC_STATE_T             [N-1:0][NUM_VCS-1:0] in_vc_state,   // waiting VCs, their route
+    input  VA_REQ_T               [N-1:0][NUM_VCS-1:0] va_req,        // input VCs: a VC of a port
     input  NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0] out_vc_state,  // free output VCs
     output VC_VLD_T               [N-1:0][NUM_VCS-1:0] vc_grant,      // to an input VC: its VC
     output logic                  [N-1:0][NUM_VCS-1:0] vc_alloc       // an output VC taken
@@ -56,23 +59,19 @@ module NocVirtChAlloc #(
 
     for (genvar p = 0; p < N; p++) begin: g_in_port
         for (genvar v = 0; v < NUM_VCS; v++) begin: g_in_vc
-            // The input VC's state: only its state and route are read here.
-            /* verilator lint_off UNUSEDSIGNAL */
-            VC_STATE_T    s;
-            /* verilator lint_on UNUSEDSIGNAL */
+            VA_REQ_T      q;                    // the input VC's request
             logic [N-1:0] won;                  // per output port: this input VC won there
             VC_VLD_T      g;
 
-            assign s = in_vc_state[p][v];
+            assign q = va_req[p][v];
             for (genvar r = 0; r < N; r++) begin: g_out_port
-                assign req[r][p * NUM_VCS + v] = s.state == NocPkg::VC_WAIT_VC &&
-                                                 s.route == PORT_WIDTH'(r);
+                assign req[r][p * NUM_VCS + v] = q.valid && q.port == PORT_WIDTH'(r);
                 assign won[r] = win[r][p * NUM_VCS + v];
             end
 
             // It asked one port: the VC is that port's free VC.
             assign g.valid        = |won;
-            assign g.vc           = free_vc[s.route];
+            assign g.vc           = free_vc[q.port];
             assign vc_grant[p][v] = g;
 
             `DC_ASSERT(a_wins_one_port, $onehot0(won))

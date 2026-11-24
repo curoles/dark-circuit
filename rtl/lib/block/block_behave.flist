@@ -86,6 +86,7 @@
 -F noc/noc_link_wire/behave/noc_link_wire.flist
 -F noc/noc_virt_ch_alloc/behave/noc_virt_ch_alloc.flist
 -F noc/noc_switch_alloc/behave/noc_switch_alloc.flist
+-F noc/noc_virt_ch_rtr_alloc/behave/noc_virt_ch_rtr_alloc.flist
 -F noc/noc_virt_ch_router/behave/noc_virt_ch_router.flist
 -F noc/noc_mesh/behave/noc_mesh.flist
 -F line_code/line_code.flist

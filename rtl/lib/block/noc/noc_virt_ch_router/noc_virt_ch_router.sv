@@ -8,10 +8,11 @@
  * NocVirtChOut per VC): a credit count, BUF_DEPTH after reset, and whether a packet holds the
  * VC. It follows the link itself:
  * a flit sent on out_fwd takes a credit (its tail frees the VC), a credit on out_bwd returns
- * one; VC allocation (NocVirtChAlloc) gives a waiting head a free output VC of its route's port.
- * Switch allocation (NocSwitchAlloc) lets active input VCs with a flit and a credit send, one
- * flit per input and per output each clock; the popped flits cross the crossbar (NocMuxXbar) to
- * out_fwd in the same clock.
+ * one. Allocation (NocVirtChRtrAlloc) serves the input VCs' requests: VC allocation
+ * (NocVirtChAlloc) gives a waiting head a free output VC of its route's port; switch allocation
+ * (NocSwitchAlloc) lets active input VCs with a flit and a credit send, one flit per input and
+ * per output each clock; the popped flits cross the crossbar (NocMuxXbar) to out_fwd in the
+ * same clock.
  *
  * The router has no logic of its own, only its parts and the wiring between them: a feature
  * that needs logic (a bypass, lookahead routing, a pipeline stage) gets a block of its own,
@@ -31,11 +32,11 @@
  *   in_bwd <---| [N]: VC buffers,      |           +----------+   |
  *   (credits)  | routes, credits back  |                ^ sel     | flits sent
  *              +-----------------------+                |         v
- *                in_vc_state |  ^ vc_grant, pop         |   +--------------+
+ *         va_req, sa_req |  ^ vc_grant, pop         |   +--------------+
  *                            v  |                       |   | NocVirtChRtr |<--- out_bwd
  *              +----------------------------------------+   | OutputUnit   |    (credits)
- *              | NocVirtChAlloc (VC allocation),        |<--| [N]: credits,|
- *              | NocSwitchAlloc (switch allocation)     |-->| free per VC  |
+ *              | NocVirtChRtrAlloc: NocVirtChAlloc (VC  |<--| [N]: credits,|
+ *              | allocation), NocSwitchAlloc (switch)   |-->| free per VC  |
  *              +----------------------------------------+   +--------------+
  *              (allocation reads out_vc_state and drives vc_alloc)
  *
@@ -75,14 +76,13 @@ module NocVirtChRouter #(
 );
     `DC_STATIC_ASSERT(a_mesh_ports, N == NocPkg::MESH_PORTS)
 
-    // Input side: per input port, the state of its VCs, the grants of VC allocation, the pop of
-    // switch allocation and the flit it sends to the crossbar.
-    VC_STATE_T [N-1:0][NUM_VCS-1:0] in_vc_state;
-    // Every input VC's requests to the allocators; not read yet (the allocators decode the
-    // states).
-    /* verilator lint_off UNUSEDSIGNAL */
+    // Input side: per input port, its VCs' requests to the allocators, the grants of VC
+    // allocation, the pop of switch allocation and the flit it sends to the crossbar.
     VA_REQ_T   [N-1:0][NUM_VCS-1:0] in_va_req;
     SA_REQ_T   [N-1:0][NUM_VCS-1:0] in_sa_req;
+    // The VCs' states: for the input units' users that watch them; allocation reads requests.
+    /* verilator lint_off UNUSEDSIGNAL */
+    VC_STATE_T [N-1:0][NUM_VCS-1:0] in_vc_state;
     /* verilator lint_on UNUSEDSIGNAL */
     FLIT_VLD_T [N-1:0]              xbar_in;
     VC_VLD_T   [N-1:0][NUM_VCS-1:0] vc_grant;
@@ -109,20 +109,20 @@ module NocVirtChRouter #(
             .vc_alloc(vc_alloc[p]), .vc_state(out_vc_state[p]));
     end
 
-    // VC allocation: a waiting head gets a free output VC of its route's port.
-    NocVirtChAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_vc_alloc(
-        .clk, .rst_n, .in_vc_state, .out_vc_state, .vc_grant, .vc_alloc);
-
-    // Switch allocation and the crossbar: the popped flits go to their outputs.
-    //   pop[p] ---> input unit p ---> xbar_in[p].flit ---> NocMuxXbar ---> out_fwd[r].flit
-    //   xbar_sel[r] (the input of output r) ------------------^        xbar_valid[r] -> .valid
+    // Allocation: VC allocation (a waiting head gets a free output VC of its route's port) and
+    // switch allocation (the flits that cross the crossbar this clock).
     logic  [N-1:0][PORT_WIDTH-1:0] xbar_sel;
     logic  [N-1:0]                 xbar_valid;
+
+    NocVirtChRtrAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_alloc(
+        .clk, .rst_n, .va_req(in_va_req), .sa_req(in_sa_req), .out_vc_state, .vc_grant,
+        .vc_alloc, .pop, .xbar_sel, .xbar_valid);
+
+    // The crossbar: the popped flits go to their outputs.
+    //   pop[p] ---> input unit p ---> xbar_in[p].flit ---> NocMuxXbar ---> out_fwd[r].flit
+    //   xbar_sel[r] (the input of output r) ------------------^        xbar_valid[r] -> .valid
     FLIT_T [N-1:0]                 xbar_flit;   // the flits into the crossbar
     FLIT_T [N-1:0]                 xbar_out;    // its outputs
-
-    NocSwitchAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_sw_alloc(
-        .clk, .rst_n, .in_vc_state, .out_vc_state, .pop, .xbar_sel, .xbar_valid);
 
     for (genvar p = 0; p < N; p++) begin: g_xbar_in
         assign xbar_flit[p] = xbar_in[p].flit;
