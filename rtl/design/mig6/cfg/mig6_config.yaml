@@ -10,7 +10,8 @@ cache_line_words: 2           # words in a line of both caches and of the memory
 plic_prio_width: 2            # each PE's PLIC: priorities 1 to 3 (0: never)
 dma_source:      1            # its sources: DMA channel c's done at 1 + 2c, its error 2 + 2c
 dma_depth:       8            # each PE's DMA: transactions in flight (kb rtl/design/mig6/dma_depth)
-dma_max_burst:   8            # ... words of a read burst, 1 (none) to 16 (kb rtl/design/mig6/bursts)
+dma_max_burst:   8            # ... read bursts, 1 (none) to 16 words (kb rtl/design/mig6/bursts)
+noc_buf_depth:   8            # router input buffers, flits a VC (kb rtl/design/mig6/noc_buffers)
 
 # Generated files: template in this directory -> output relative to repository root.
 generate:

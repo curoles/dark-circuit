@@ -1,0 +1,48 @@
+type: decision
+title: Mig6's routers buffer 8 flits a VC, more than a credit's round trip
+date: 2026-11-23
+question: >
+  After the bursts (kb rtl/design/mig6/bursts) four PEs fetched about 0.65 to 0.8 words a
+  clock from the shared memory, and bursts of 4 and 8 gave the same 504 cycles in dma_check
+  with all four PEs: a per-packet cost (the head's 3 clocks a router) could not be the
+  limit there. Mig6MemNetIf's D (answers owed) 4, 8 and 16 changed nothing: its gate closed
+  in the clocks its answers had no credit. What holds the answer network back, and what is
+  the cheapest cure?
+decision: >
+  The credit loop. A link's sender may send only with a credit, and a credit comes back
+  about 5 clocks after its flit left (the link register, the buffer write, the pop, the
+  credit flop, the link back; traced in the code by a reading agent, 2026-11-23; loops
+  through a network interface are longer): with 4 credits a VC (Mig6's BUF_DEPTH 4) a link
+  carries at most 4 flits in 5 clocks, 0.8 a clock, however fast the routers are. Mig6's
+  routers' input buffers, and with them the credits of every link and network interface,
+  are 8 flits a VC: a config knob noc_buf_depth (cfg/mig6_config.yaml; Mig6's BUF_DEPTH
+  module parameter gone), 8 (user's go, 2026-11-23).
+why: >
+  Measured with bursts of 8 and D 4, BUF_DEPTH 4 / 5 / 8: dma_check all four PEs at once
+  (the slowest) 504 / 472 / 408 cycles, the far PE alone 320 bytes 200 / 184 / 160, a
+  4-byte copy 58 throughout (latency is the routers'); fc_layer_dma four PEs 3 163 / 3 132 /
+  3 075 cycles, 2.91 / 2.94 / 3.00 times one PE; clocks an answer waited for a credit 542 /
+  426 / 231. 5, the bare round trip, is not enough (some loops are longer); 8 is also what
+  the buffers hold anyway at 5 (FifoT rounds to a power of 2). The cost: 4 more flits a VC
+  in 5 ports of 4 routers on both networks (52 and 39-bit flits), about 7 300 flops, and
+  the network interfaces' buffers.
+rejected:
+  - choice: A larger D in Mig6MemNetIf
+    why_not: Measured, nothing changes; the answers wait for credits, not for room.
+  - choice: Faster routers first (the head's 3 clocks a router)
+    why_not: They shorten latency and the gaps between packets, but a link still carries
+      0.8 flits a clock with 4 credits; the buffers are the cheaper, larger step for
+      streaming. The router track comes next, on top of this.
+  - choice: BUF_DEPTH 5, the bare round trip
+    why_not: Only part of the gain (504 to 472), and it costs the same 8-entry buffers.
+relies_on:
+  - rtl/design/mig6/bursts
+  - rtl/design/mig6/dma_depth
+evidence: >
+  2026-11-23: the measurement above (scratch: a counting probe bound into Mig6MemNetIf,
+  BUF_DEPTH set in Mig6); with noc_buf_depth 8 Mig6's 20 tests pass and dma_check and
+  fc_layer_dma print the numbers above. Pre-bursts (9a-3), 12-flit buffers changed nothing:
+  then the head's 3 clocks a packet bound, as every answer was one flit.
+code:
+  - rtl/design/mig6/mig6.sv#BUF_DEPTH
+  - rtl/design/mig6/cfg/mig6_config.yaml#noc_buf_depth

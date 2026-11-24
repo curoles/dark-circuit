@@ -73,8 +73,9 @@ evidence: >
   network); fc_layer_dma four PEs with the fetch 3 651 / 3 182 / 3 163 / 3 109 cycles,
   2.52 / 2.90 / 2.91 / 2.97 times one PE (the ceiling with the data preloaded 3.63), a
   PE's fetch 848..1 107 cycles before, 416..619 at 8, its compute 2 450. Past 4 the gain is
-  small: the head's 3 clocks no longer bind; next suspects Mig6MemNetIf's D = 4 and the
-  edge link (to measure), then faster routers alone and both (the user's plan).
+  small; measured after (2026-11-23): Mig6MemNetIf's D 4 / 8 / 16 changes nothing, the
+  limit was the routers' 4-flit buffers against a credit's round trip (kb
+  rtl/design/mig6/noc_buffers).
 code:
   - rtl/design/mig6/mig6_noc_pkg.sv#LEN_WIDTH
   - rtl/design/mig6/mig6_mem_net_if.sv#u_burst_split

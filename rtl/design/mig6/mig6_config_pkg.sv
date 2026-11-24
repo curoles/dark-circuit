@@ -21,6 +21,7 @@ package Mig6ConfigPkg;
                                            // dma_source + 2c, + 2c + 1
         int unsigned dma_depth;            // each PE's DMA: transactions in flight
         int unsigned dma_max_burst;        // ... words of a read burst, a power of 2
+        int unsigned noc_buf_depth;        // the routers' input buffers: flits a VC, credits
     } mig6_cfg_t;
 
     localparam mig6_cfg_t MIG6_CFG = '{
@@ -34,7 +35,8 @@ package Mig6ConfigPkg;
         plic_prio_width:   2,
         dma_source:        1,
         dma_depth:         8,
-        dma_max_burst:     8
+        dma_max_burst:     8,
+        noc_buf_depth:     8
     };
 
 endpackage

@@ -389,7 +389,14 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       kb rtl/lib/block/bursts, dma/read_bursts, req_burst_split/design,
       rtl/design/mig6/bursts; dma_max_burst 8: dma_check far PE alone 408 to 200 cycles,
       all four at once 976 to 504; fc_layer_dma 3 651 to 3 163 cycles, 2.91 times one PE).
-      Next: Mig6MemNetIf's D and the edge link, measured; faster routers alone; both.
+      Then measured: Mig6MemNetIf's D 4, 8, 16 changes nothing (its gate waits on the
+      answer network's credits); the routers' buffers of 4 flits a VC are shorter than a
+      credit's round trip (5 clocks and more), so a link carried at most about 0.8 flits a
+      clock: 8 flits a VC (cfg noc_buf_depth; done 2026-11-23: kb
+      rtl/design/mig6/noc_buffers; dma_check all four 504 to 408 cycles, far PE alone 200
+      to 160; fc_layer_dma 3 163 to 3 075 cycles, 3.00 times one PE). Next: faster
+      routers (the head's 3 clocks a router: latency, small packets), alone and with the
+      rest.
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),

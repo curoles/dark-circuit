@@ -6,7 +6,9 @@
  * takes the requests to AtomicUnit (the AMOs, the barrier, done where the one copy lives) in
  * front of a SimLatencyRAM of the region's size (latency 1, always ready); a request's
  * address inside the region is the RAM's address. Each PE's debug port and traces come out
- * as arrays, PE p at index p.
+ * as arrays, PE p at index p. The routers' input buffers, and so the credits of every link
+ * and network interface, are CFG.noc_buf_depth flits a VC: 8, more than a credit's round
+ * trip, so a link streams a packet's body flits (kb rtl/design/mig6/noc_buffers).
  *
  *   Mig6PeGrid u_grid ==edge==> Mig6MemNetIf u_shared_net_if --> AtomicUnit u_atomic_unit
  *                     <=======                                     --> SimLatencyRAM u_shared
@@ -20,7 +22,6 @@
 // Mig6Pkg alone is imported: Mig6NocPkg names a few of the same constants (STRB_WIDTH).
 module Mig6 import Mig6Pkg::*; #(
     parameter mig6_cfg_t CFG        = MIG6_CFG, // configuration, see Mig6ConfigPkg
-    parameter            BUF_DEPTH  = 4,        // the routers' input buffers: credits
     parameter            LINK_DELAY = 1         // clocks of a link between two routers
 )(
     input  wire                                 clk,
@@ -33,6 +34,8 @@ module Mig6 import Mig6Pkg::*; #(
     output dbg_rsp_t    [Mig6NocPkg::N_PES-1:0] dbg_rsp
 );
     localparam SHARED_ADDR_WIDTH = Mig6PmaPkg::SHARED_ADDR_WIDTH;   // 1 << it bytes
+    // @kb: rtl/design/mig6/noc_buffers
+    localparam BUF_DEPTH = CFG.noc_buf_depth;  // the routers' input buffers: credits
     localparam AW = Mig6NocPkg::ADDR_WIDTH;    // the shared memory's channel: a byte address,
     localparam DW = Mig6NocPkg::DATA_WIDTH;    // a word with its strobes, a size
     localparam SW = Mig6NocPkg::STRB_WIDTH;
