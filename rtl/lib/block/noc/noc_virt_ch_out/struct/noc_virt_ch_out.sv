@@ -4,14 +4,15 @@
  * in use, not those left: Counter resets to 0 (the receiver's buffer is empty), and has_credit
  * is "in use != BUF_DEPTH". The count moves only when exactly one of a send (up) and a credit
  * (down) happens; both in one clock leave it. A packet takes the VC on alloc and keeps it until
- * its tail goes: taken_next = alloc | (taken & keep), keep = !(send & send_tail), one Ao21.
+ * its tail goes, also in the clock of its alloc: taken_next = (taken | alloc) & keep, keep =
+ * !(send & send_tail), one Oa21.
  *
  *   send ---+--> Xor2 ------------> count_en +---------+
  *   credit -|------^                         | Counter |--> used --> CmpNe --> has_credit
  *           +-----------------------> up_down +---------+        BUF_DEPTH --^
  *
  *   send -----> Nand2 --> keep --> +------+             +------------+
- *   send_tail ----^      taken --> | Ao21 |--> taken -->| DffSyncRst |--+--> Inv --> free
+ *   send_tail ----^      taken --> | Oa21 |--> taken -->| DffSyncRst |--+--> Inv --> free
  *   alloc ------------------------>|      |    _next    +------------+  |
  *                          ^       +------+                             |
  *                          +--------------------------------- taken ----+
@@ -57,7 +58,7 @@ module NocVirtChOut #(
         .in1(used), .in2(CREDIT_WIDTH'(BUF_DEPTH)), .ne(has_credit));
 
     Nand2      #(1) u_nand2_keep(.in1(send), .in2(send_tail), .out(keep));
-    Ao21       #(1) u_ao21_taken_next(.in1(taken), .in2(keep), .in3(alloc), .out(taken_next));
+    Oa21       #(1) u_oa21_taken_next(.in1(taken), .in2(alloc), .in3(keep), .out(taken_next));
     DffSyncRst #(1) u_dff_sync_rst_taken(.clk, .rst_n, .in(taken_next), .out(taken));
     Inv        #(1) u_inv_free(.in(taken), .out(free));
 
@@ -66,7 +67,7 @@ module NocVirtChOut #(
 
     // The protocol around the VC, as in the behave version.
     `DC_ASSERT(a_alloc_when_free, !(alloc && taken))
-    `DC_ASSERT(a_send_when_taken, !(send && !taken))
+    `DC_ASSERT(a_send_when_taken, !(send && !taken && !alloc))
     `DC_ASSERT(a_send_with_credit, !(send && !has_credit))
     `DC_ASSERT(a_tail_is_sent, !(send_tail && !send))
     `DC_ASSERT(a_credits_at_most_depth, !(credit && !send && used == '0))

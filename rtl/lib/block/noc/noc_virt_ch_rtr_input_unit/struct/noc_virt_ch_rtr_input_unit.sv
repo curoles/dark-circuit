@@ -2,8 +2,8 @@
  *
  * Same ports, parameters and behavior as the behave version (see there). The link's vc and
  * switch allocation's pop.vc are decoded (Decoder, enabled by their valid) into a push and a
- * pop per VC. Each VC's front flit gets its output VC in the vc field before the multiplexer,
- * so one MuxN on pop.vc picks the flit that leaves (no multiplexer with one VC).
+ * pop per VC. Each VC gives its front flit with its output VC in the vc field (out_flit), so
+ * one MuxN on pop.vc picks the flit that leaves (no multiplexer with one VC).
  *
  *   in_fwd.vc --> Decoder (en: in_fwd.valid) --> push[v] --+  +-----------------+
  *   in_fwd.flit ------------------------------------------+-->| NocVirtChIn [v] |--> vc_state[v]
@@ -11,9 +11,9 @@
  *   vc_grant[v] --------------------------------------------->|                 |
  *                             NocRouteXy [v] --> route ------>|                 |
  *                                   ^ front head's dest       +-----------------+
- *                                   |                            | front[v]  | out_vc
+ *                                   |                            | front[v]  | out_flit[v]
  *                                   +----------------------------+           v
- *                                                       flit with vc = out_vc: cand[v]
+ *                                                       the flit as it leaves: cand[v]
  *   pop.vc --> MuxN (cand) --> out.flit;  pop.valid --> out.valid
  *   pop --> DffSyncRst --> in_bwd (the credit, a clock later)
  *
@@ -61,7 +61,7 @@ module NocVirtChRtrInputUnit #(
     wire [VC_N-1:0]                  pop_vc;    // per VC: switch allocation sends its flit
     /* verilator lint_on UNUSEDSIGNAL */
     wire [NUM_VCS-1:0][$bits(FLIT_T)-1:0] cand; // per VC: its front flit with its output VC
-    FLIT_T                           out_flit;
+    FLIT_T                           pop_flit;
 
     Decoder #(.SIZE(VC_WIDTH)) u_decoder_push(.in(in_fwd.flit.vc), .en(in_fwd.valid),
                                               .out(push_vc));
@@ -70,14 +70,14 @@ module NocVirtChRtrInputUnit #(
     for (genvar v = 0; v < NUM_VCS; v++) begin: g_vc
         FLIT_VLD_T             push;            // the link's flit, when it is of this VC
         VC_STATE_T             state;
-        // The front flit: its valid is state's has_flit (the allocators read that one) and its
-        // vc is replaced; read as a head, only its destination is used.
+        // The front flit: its valid is state's has_flit (the allocators read that one); read
+        // as a head, only its destination is used (its vc: out_flit's).
         /* verilator lint_off UNUSEDSIGNAL */
         FLIT_VLD_T             front;
         HEAD_T                 head;
         /* verilator lint_on UNUSEDSIGNAL */
         logic [PORT_WIDTH-1:0] route;
-        FLIT_T                 with_out_vc;     // the front flit as it leaves
+        FLIT_T                 out_flit;        // the front flit as it leaves
 
         assign push.valid = push_vc[v];
         assign push.flit  = in_fwd.flit;
@@ -88,26 +88,22 @@ module NocVirtChRtrInputUnit #(
 
         NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
                       .PORT_WIDTH(PORT_WIDTH)) u_vc(
-            .clk, .rst_n, .push, .pop(pop_vc[v]), .front, .front_route(route),
+            .clk, .rst_n, .push, .pop(pop_vc[v]), .front, .out_flit, .front_route(route),
             .grant(vc_grant[v]), .state);
 
-        assign with_out_vc.head = front.flit.head;
-        assign with_out_vc.tail = front.flit.tail;
-        assign with_out_vc.vc   = state.out_vc;
-        assign with_out_vc.data = front.flit.data;
-        assign cand[v]          = with_out_vc;
-        assign vc_state[v]      = state;
+        assign cand[v]     = out_flit;
+        assign vc_state[v] = state;
     end
 
     if (NUM_VCS == 1) begin: g_one_vc
-        assign out_flit = cand[0];
+        assign pop_flit = cand[0];
     end else begin: g_mux
         MuxN #(.N(NUM_VCS), .WIDTH($bits(FLIT_T))) u_mux_n_out(
-            .in(cand), .sel(pop.vc), .out(out_flit));
+            .in(cand), .sel(pop.vc), .out(pop_flit));
     end
 
     assign out.valid = pop.valid;
-    assign out.flit  = out_flit;
+    assign out.flit  = pop_flit;
 
     DffSyncRst #($bits(VC_VLD_T)) u_dff_sync_rst_credit(.clk, .rst_n, .in(pop), .out(in_bwd));
 

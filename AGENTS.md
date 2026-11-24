@@ -226,7 +226,7 @@ the chunk that establishes it:
 - Equality with a constant: `CmpEq` with the package's name, `.in2(Pkg::NAME)`
   (`block/cache/insn_data_cache_arbiter/struct`).
 - Complex gates (`Ao21`, `Aoi21`, `Oai21`, ...) where the logic is one, not only to save
-  gates: a next state `a | (b & c)` is one `Ao21`, not an enabled flop with `And2` and `Or2`
+  gates: a next state `(a | b) & c` is one `Oa21`, not an enabled flop with `Or2` and `And2`
   (`block/noc/noc_virt_ch_out/struct`). A generic gate need not invert like its cell: its cell
   version adds an `INV` (`gate/cell/ao21.sv`).
 - Existing blocks for common jobs: index of the highest one `PriorityEncoder`, index to

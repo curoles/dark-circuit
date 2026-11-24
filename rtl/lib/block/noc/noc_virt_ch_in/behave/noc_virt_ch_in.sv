@@ -8,7 +8,9 @@
  *   VC_ACTIVE  -> VC_IDLE     switch allocation sends the tail flit (pop)
  * The route comes from outside (the input unit computes it from the head's destination), so
  * the block knows nothing about the topology: a network interface can use it too. A flit
- * popped frees a slot: the input unit returns a credit for this VC upstream.
+ * popped frees a slot: the input unit returns a credit for this VC upstream. out_flit is the
+ * front flit as it leaves: its vc field the packet's output VC (made here, so that a variant
+ * that grants and sends in one clock can bypass the grant to it).
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -32,6 +34,7 @@ module NocVirtChIn #(
     input  FLIT_VLD_T            push,          // a flit of this VC comes in on the link
     input  wire                  pop,           // switch allocation sends the front flit
     output FLIT_VLD_T            front,         // the flit at the front; valid: not empty
+    output FLIT_T                out_flit,      // ... as it leaves: vc = the output VC
     input  wire [PORT_WIDTH-1:0] front_route,   // route of the front flit, when it is a head
     input  VC_VLD_T              grant,         // VC allocation: the packet's output VC
     output STATE_T               state          // state, flit, route, output VC: for allocators
@@ -60,6 +63,12 @@ module NocVirtChIn #(
 
     assign front.valid = !empty;
     assign front.flit  = front_flit;
+
+    // The front flit as it leaves, with the packet's output VC.
+    always_comb begin
+        out_flit    = front_flit;
+        out_flit.vc = out_vc_q;
+    end
 
     always_ff @(posedge clk)
         if (!rst_n)

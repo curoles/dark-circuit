@@ -4,7 +4,8 @@
  * vc). Each VC's front head flit gets its route (NocRouteXy). The state of every VC goes to the
  * allocators (vc_state); VC allocation answers a waiting VC with its output VC (vc_grant);
  * switch allocation sends the front flit of one VC per clock (pop): it leaves for the crossbar
- * with the output VC of its packet in its vc field (out), and its slot is free: a credit for its
+ * with the output VC of its packet in its vc field (out; the VC's out_flit), and its slot is
+ * free: a credit for its
  * VC goes back upstream on the link, a clock later (a flop keeps the switch allocation off the
  * link's backward wires).
  *
@@ -56,18 +57,18 @@ module NocVirtChRtrInputUnit #(
 );
     `DC_STATIC_ASSERT(a_vcs, NUM_VCS >= 1)
 
-    FLIT_VLD_T [NUM_VCS-1:0] front;             // the front flit of each VC
+    FLIT_T     [NUM_VCS-1:0] out_flits;         // each VC's front flit as it leaves
+    FLIT_T                   pop_flit;          // ... of the VC popped
     VC_VLD_T                 credit_q;          // the credit of the flit popped a clock ago
-    // The popped VC's front flit and state: their flit and output VC are read (valid: pop's).
-    /* verilator lint_off UNUSEDSIGNAL */
-    FLIT_VLD_T               pop_front;
-    VC_STATE_T               pop_state;
-    /* verilator lint_on UNUSEDSIGNAL */
 
     for (genvar v = 0; v < NUM_VCS; v++) begin: g_vc
         FLIT_VLD_T             push;            // the link's flit, when it is of this VC
-        FLIT_VLD_T             front_v;         // its front flit (a local: Icarus misreads a
-                                                // field of front[v] with one VC)
+        // Its front flit (a local: Icarus misreads a field of an array's element with one VC):
+        // only the head's destination is read (its valid: the state's has_flit).
+        /* verilator lint_off UNUSEDSIGNAL */
+        FLIT_VLD_T             front_v;
+        /* verilator lint_on UNUSEDSIGNAL */
+        FLIT_T                 out_flit_v;      // ... as it leaves
         // The front flit read as a head: only its destination is used.
         /* verilator lint_off UNUSEDSIGNAL */
         HEAD_T                 head;
@@ -76,8 +77,8 @@ module NocVirtChRtrInputUnit #(
 
         assign push.valid = in_fwd.valid && in_fwd.flit.vc == VC_WIDTH'(v);
         assign push.flit  = in_fwd.flit;
-        assign front[v]   = front_v;
-        assign head       = front_v.flit.data;
+        assign out_flits[v] = out_flit_v;
+        assign head         = front_v.flit.data;
 
         NocRouteXy #(.X_WIDTH(X_WIDTH), .Y_WIDTH(Y_WIDTH), .MY_X(MY_X), .MY_Y(MY_Y)) u_route(
             .dest_x(head.dest_x), .dest_y(head.dest_y), .port(route));
@@ -85,23 +86,14 @@ module NocVirtChRtrInputUnit #(
         NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
                       .PORT_WIDTH(PORT_WIDTH)) u_vc(
             .clk, .rst_n, .push, .pop(pop.valid && pop.vc == VC_WIDTH'(v)), .front(front_v),
+            .out_flit(out_flit_v),
             .front_route(route), .grant(vc_grant[v]), .state(vc_state[v]));
     end
 
-    // A flit with its vc field set to vc.
-    function automatic FLIT_T with_vc(input FLIT_T f, input logic [VC_WIDTH-1:0] vc);
-        FLIT_T g;
-        g    = f;
-        g.vc = vc;
-        return g;
-    endfunction
-
-    // The popped VC's front flit and state, whole elements first (Icarus misreads a field of an
-    // element picked by a variable index).
-    assign pop_front = front[pop.vc];
-    assign pop_state = vc_state[pop.vc];
+    // The popped VC's flit as it leaves.
+    assign pop_flit  = out_flits[pop.vc];
     assign out.valid = pop.valid;
-    assign out.flit  = with_vc(pop_front.flit, pop_state.out_vc);
+    assign out.flit  = pop_flit;
 
     always_ff @(posedge clk)
         if (!rst_n) credit_q <= '0;

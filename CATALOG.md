@@ -1192,6 +1192,11 @@ gate:
     versions: [cell, generic]
     path: rtl/lib/gate/generic/nor_reduce.sv
     test: test/gate
+  Oa21:
+    what: "OR-AND, out = (in1 | in2) & in3"
+    versions: [cell, generic]
+    path: rtl/lib/gate/generic/oa21.sv
+    test: test/gate
   Oai21:
     what: "OR-AND-Invert, out = ~((in1 | in2) & in3)"
     versions: [cell, generic]

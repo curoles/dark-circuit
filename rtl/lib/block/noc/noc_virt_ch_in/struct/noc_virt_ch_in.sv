@@ -7,7 +7,7 @@
  *
  *   push --> write +-------+ data_out --> front.flit (head, tail)
  *   pop ---> read  | FifoT | empty --> Inv --> front.valid, has_flit
- *                  +-------+
+ *                  +-------+  data_out with vc = out_vc_q --> out_flit (as it leaves)
  *
  *   state_q --> CmpEq VC_IDLE, VC_WAIT_VC, VC_ACTIVE --> is_idle, is_wait, is_active
  *   start   = And3(is_idle, front.valid, head) ---> en of route_q  (DffEn: front_route)
@@ -41,6 +41,7 @@ module NocVirtChIn #(
     input  FLIT_VLD_T            push,          // a flit of this VC comes in on the link
     input  wire                  pop,           // switch allocation sends the front flit
     output FLIT_VLD_T            front,         // the flit at the front; valid: not empty
+    output FLIT_T                out_flit,      // ... as it leaves: vc = the output VC
     input  wire [PORT_WIDTH-1:0] front_route,   // route of the front flit, when it is a head
     input  VC_VLD_T              grant,         // VC allocation: the packet's output VC
     output STATE_T               state          // state, flit, route, output VC: for allocators
@@ -97,6 +98,12 @@ module NocVirtChIn #(
 
     DffEn #(PORT_WIDTH) u_dff_en_route (.clk, .en(start),   .in(front_route), .out(route_q));
     DffEn #(VC_WIDTH)   u_dff_en_out_vc(.clk, .en(granted), .in(grant.vc),    .out(out_vc_q));
+
+    // The front flit as it leaves, with the packet's output VC.
+    assign out_flit.head  = front_flit.head;
+    assign out_flit.tail  = front_flit.tail;
+    assign out_flit.vc    = out_vc_q;
+    assign out_flit.data  = front_flit.data;
 
     assign state.state    = state_q;
     assign state.has_flit = has_flit;

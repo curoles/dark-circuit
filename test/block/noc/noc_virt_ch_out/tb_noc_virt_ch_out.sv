@@ -1,11 +1,13 @@
 /* Test of NocVirtChOut.
  *
  * A VC allocator gives the free VC to a packet now and then; a switch allocator sends its flits
- * while there are credits, the last one as the tail (packets of 1 to 4 flits); the receiver
+ * while there are credits, the last one as the tail (packets of 1 to 4 flits), now and then
+ * its first in the clock of the alloc (as an allocator that grants and sends at once); the receiver
  * returns a credit for a flit it holds in most clocks. A model keeps the credits and whether the
  * VC is taken; every clock free and has_credit must be the model's. Every case must happen: no
  * credit left, all credits back, a send and a credit in one clock, an alloc in the clock after
- * a tail (BUF_DEPTH > 1 for the send and the credit). BUF_DEPTH 3 and 1; Verilator 20000
+ * a tail (BUF_DEPTH > 1 for the send and the credit), an alloc with a send, an alloc with a
+ * one-flit packet's send (the VC stays free). BUF_DEPTH 3 and 1; Verilator 20000
  * clocks, Icarus 2000. Stops at the first mismatch
  * with $fatal.
  *
@@ -46,14 +48,23 @@ module TbNocVirtChOutCheck #(
     integer n_all_back;
     integer n_send_credit;
     integer n_alloc_after_tail;
+    integer n_alloc_send;               // a send in the clock of the alloc
+    integer n_alloc_send_tail;          // ... of a one-flit packet
+    integer new_len;                    // the length of the packet given the VC now
 
     task automatic drive;
         alloc     = 1'b0;
         send      = 1'b0;
         send_tail = 1'b0;
         credit    = 1'b0;
-        if (!taken && {$random(seed)} % 3 == 0)
-            alloc = 1'b1;
+        if (!taken && {$random(seed)} % 3 == 0) begin
+            alloc   = 1'b1;
+            new_len = 1 + {$random(seed)} % 4;
+            if (credits > 0 && {$random(seed)} % 3 == 0) begin      // its first flit at once
+                send      = 1'b1;
+                send_tail = (new_len == 1);
+            end
+        end
         if (taken && credits > 0 && {$random(seed)} % 10 < 7) begin
             send      = 1'b1;
             send_tail = (left == 1);
@@ -75,10 +86,14 @@ module TbNocVirtChOutCheck #(
             n_alloc_after_tail = n_alloc_after_tail + 1;
         if (send && credit)
             n_send_credit = n_send_credit + 1;
+        if (alloc && send)
+            n_alloc_send = n_alloc_send + 1;
+        if (alloc && send && send_tail)
+            n_alloc_send_tail = n_alloc_send_tail + 1;
         tail_before = send && send_tail;
         if (alloc) begin
             taken = 1'b1;
-            left  = 1 + {$random(seed)} % 4;
+            left  = new_len;
         end
         if (send) begin
             credits = credits - 1;
@@ -101,6 +116,9 @@ module TbNocVirtChOutCheck #(
         n_all_back         = 0;
         n_send_credit      = 0;
         n_alloc_after_tail = 0;
+        n_alloc_send       = 0;
+        n_alloc_send_tail  = 0;
+        new_len            = 0;
         rst_n              = 1'b0;
         alloc              = 1'b0;
         send               = 1'b0;
@@ -118,9 +136,10 @@ module TbNocVirtChOutCheck #(
         end
         // With one credit a send and a credit can not meet: the credit needs the flit sent.
         if (n_no_credit == 0 || n_all_back == 0 || (BUF_DEPTH > 1 && n_send_credit == 0) ||
-            n_alloc_after_tail == 0)
-            $fatal(1, "NocVirtChOut %0d: cases: no credit %0d, back %0d, send+credit %0d, %0d",
-                   BUF_DEPTH, n_no_credit, n_all_back, n_send_credit, n_alloc_after_tail);
+            n_alloc_after_tail == 0 || n_alloc_send == 0 || n_alloc_send_tail == 0)
+            $fatal(1, "NocVirtChOut %0d: cases %0d %0d %0d %0d, alloc+send %0d %0d",
+                   BUF_DEPTH, n_no_credit, n_all_back, n_send_credit, n_alloc_after_tail,
+                   n_alloc_send, n_alloc_send_tail);
         done = 1'b1;
     end
 endmodule

@@ -4,7 +4,9 @@
  * A credit count, BUF_DEPTH after reset (the receiver's buffer is empty): a flit sent takes
  * one, a credit coming back (the receiver sent a flit of this VC on) returns one; a flit may go
  * only while the count is above 0 (has_credit). And free: VC allocation gives the VC to a
- * packet (alloc), which holds it until its tail flit is sent.
+ * packet (alloc), which holds it until its tail flit is sent; a packet may send in the clock it
+ * is given the VC (an allocator that grants and sends in one clock), and a one-flit packet given
+ * the VC and sent in one clock leaves it free.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -35,17 +37,17 @@ module NocVirtChOut #(
         else        credits <= credits - CREDIT_WIDTH'(send) + CREDIT_WIDTH'(credit);
 
     always_ff @(posedge clk)
-        if (!rst_n)                 taken <= 1'b0;
-        else if (alloc)             taken <= 1'b1;
-        else if (send && send_tail) taken <= 1'b0;
+        if (!rst_n) taken <= 1'b0;
+        else        taken <= (taken || alloc) && !(send && send_tail);
 
     assign state.free       = !taken;
     assign state.has_credit = credits != '0;
 
     // The protocol around the VC: VC allocation gives only a free VC; switch allocation sends
-    // only on a taken VC with a credit; the receiver returns no more credits than it has slots.
+    // only on a taken VC (or one given in this clock) with a credit; the receiver returns no
+    // more credits than it has slots.
     `DC_ASSERT(a_alloc_when_free, !(alloc && taken))
-    `DC_ASSERT(a_send_when_taken, !(send && !taken))
+    `DC_ASSERT(a_send_when_taken, !(send && !taken && !alloc))
     `DC_ASSERT(a_send_with_credit, !(send && credits == '0))
     `DC_ASSERT(a_tail_is_sent, !(send_tail && !send))
     `DC_ASSERT(a_credits_at_most_depth, !(credit && !send && credits == CREDIT_WIDTH'(BUF_DEPTH)))

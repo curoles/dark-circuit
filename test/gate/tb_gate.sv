@@ -31,6 +31,7 @@ module TbGate;
     wire [W-1:0] aoi21;
     wire [W-1:0] aoi22;
     wire [W-1:0] aoi31;
+    wire [W-1:0] oa21;
     wire [W-1:0] oai21;
     wire [W-1:0] oai22;
     wire [W-1:0] ind2;
@@ -102,6 +103,7 @@ module TbGate;
     Aoi21 #(W) u_aoi21(.in1(a), .in2(b), .in3(c), .out(aoi21));
     Aoi22 #(W) u_aoi22(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi22));
     Aoi31 #(W) u_aoi31(.in1(a), .in2(b), .in3(c), .in4(d), .out(aoi31));
+    Oa21  #(W) u_oa21 (.in1(a), .in2(b), .in3(c), .out(oa21));
     Oai21 #(W) u_oai21(.in1(a), .in2(b), .in3(c), .out(oai21));
     Oai22 #(W) u_oai22(.in1(a), .in2(b), .in3(c), .in4(d), .out(oai22));
     Ind2  #(W) u_ind2 (.in1(a), .in2(b), .out(ind2));
@@ -178,6 +180,8 @@ module TbGate;
                 $fatal(1, "Aoi22: a=%b b=%b c=%b d=%b got=%b", a, b, c, d, aoi22);
             if (aoi31 !== ~((a & b & c) | d))
                 $fatal(1, "Aoi31: a=%b b=%b c=%b d=%b got=%b", a, b, c, d, aoi31);
+            if (oa21  !== ((a | b) & c))
+                $fatal(1, "Oa21: a=%b b=%b c=%b got=%b", a, b, c, oa21);
             if (oai21 !== ~((a | b) & c))
                 $fatal(1, "Oai21: a=%b b=%b c=%b got=%b", a, b, c, oai21);
             if (oai22 !== ~((a | b) & (c | d)))
