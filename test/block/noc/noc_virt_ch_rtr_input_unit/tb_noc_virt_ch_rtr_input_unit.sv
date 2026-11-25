@@ -182,7 +182,8 @@ module TbNocVirtChRtrInputUnitCheck #(
                 $fatal(1, "InputUnit %0d: VC %0d va_req %b %0d, expected %b %0d", NUM_VCS, v,
                        va.valid, va.port, m_state[v] == NocPkg::VC_WAIT_VC, m_route[v]);
             if (sa.valid !== (m_state[v] == NocPkg::VC_ACTIVE && m_count[v] > 0) ||
-                (sa.valid && (sa.port !== m_route[v] || sa.vc !== m_out_vc[v])))
+                (sa.valid && (sa.port !== m_route[v] || sa.vc !== m_out_vc[v] ||
+                              sa.need_vc !== 1'b0)))
                 $fatal(1, "InputUnit %0d: VC %0d sa_req %b %0d %0d, expected %b %0d %0d",
                        NUM_VCS, v, sa.valid, sa.port, sa.vc,
                        m_state[v] == NocPkg::VC_ACTIVE && m_count[v] > 0, m_route[v],

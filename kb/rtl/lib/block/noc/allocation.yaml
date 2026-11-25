@@ -26,7 +26,14 @@ decision: >
   the vc field), where a same-clock grant can be bypassed to it. VC classes (message classes
   on VCs for a coherence protocol) are a later change of VC allocation (a mask of the VCs a
   request may get, with its own per-requester free check); a VA request carries only a port
-  today.
+  today. The routing assumption, written in the router's and the allocators' headers
+  (2026-11-25): deterministic routing (one output port per head, NocRouteXy) and any free VC
+  of that port may carry a packet, so VC allocation is a selection per output port
+  (NocVirtChAlloc), not a general matching; this is what lets a variant give the VC at the
+  switch (combined allocation, NocPkg::ALLOC_COMBINED; SA requests carry need_vc for it).
+  Adaptive routing, escape or dateline VCs, or VC sets beyond classes need a general VC
+  allocator first, and then a speculative variant (VC and switch allocation in parallel, the
+  textbook's) for a router of one clock.
 why: >
   Compute once, carry forward: what an input VC wants is known where its state is; making the
   request there keeps the allocators free of the VC's timing, so an input VC that asks earlier

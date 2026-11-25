@@ -145,6 +145,7 @@ module NocVirtChIn #(
     assign sa_req.valid = sa_valid;
     assign sa_req.port  = route_q;
     assign sa_req.vc    = out_vc_q;
+    assign sa_req.need_vc = 1'b0;           // an active VC has its output VC
 
     assign state.state    = state_q;
     assign state.has_flit = has_flit;

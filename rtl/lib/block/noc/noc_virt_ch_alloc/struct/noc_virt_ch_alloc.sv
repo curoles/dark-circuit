@@ -5,6 +5,7 @@
  * at once.
  * Per output port the free VC it gives is the highest free one (PriorityEncoder, whose valid
  * says the port has one); the vc an input VC gets is the free VC of its route's port (MuxN).
+ * A selection per port, as the behave version says (deterministic routing, any free VC).
  *
  *   per input VC (p, v), requester p * NUM_VCS + v:
  *     va_req.valid --> en +---------+

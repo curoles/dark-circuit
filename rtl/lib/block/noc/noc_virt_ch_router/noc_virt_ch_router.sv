@@ -20,6 +20,14 @@
  * and switch allocation (NocVirtChRtrAlloc); the allocators serve requests and know nothing of
  * the input VCs' states (kb rtl/lib/block/noc/allocation).
  *
+ * The router's allocation assumes deterministic routing, as NocRouteXy's XY: a head asks one
+ * output port, and any free VC of that port may carry it (VC classes, later, would restrict it
+ * to the VCs of its class). VC allocation is therefore a selection per output port, not a
+ * general matching of input VCs to sets of output VCs; that is what lets a variant give the VC
+ * at the switch, in the clock the head wins it (combined allocation). Adaptive routing, escape
+ * or dateline VCs, or VC sets beyond classes need a general VC allocator, and then a
+ * speculative variant for a router of one clock (kb rtl/lib/block/noc/allocation).
+ *
  * The pipeline of a head flit, measured (TbNocVirtChRouter, a lone packet), and the textbook's
  * stages: a head leaves 3 clocks after it came; a body or tail flit 1 clock after the flit before
  * it, as it has no route or VC to get (it goes with its head's).

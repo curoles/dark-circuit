@@ -117,7 +117,8 @@ module TbNocSwitchAllocCheck #(
         NocPkg::vc_out_state_t o;
         for (int p = 0; p < N; p++)
             for (int v = 0; v < NUM_VCS; v++) begin
-                s.valid = active[p][v] && flit[p][v];
+                s.valid   = active[p][v] && flit[p][v];
+                s.need_vc = 1'b0;
                 s.port  = PORT_WIDTH'(route[p][v]);
                 s.vc    = VC_WIDTH'(out_vc[p][v]);
                 o.free       = 1'b0;

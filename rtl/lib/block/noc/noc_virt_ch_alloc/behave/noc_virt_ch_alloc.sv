@@ -6,6 +6,9 @@
  * only, and an arbiter per output port is the whole allocator (no input-side arbitration). Each
  * port with a free output VC grants one waiting input VC per clock (RoundRobinArbiter over all
  * input VCs) and gives it a free VC, the highest; a second head for the same port waits a clock.
+ * It is a selection, not a general matching: valid for deterministic routing with any free VC
+ * of the port allowed (NocVirtChRouter's assumption); adaptive routing or restricted VC sets
+ * need a general allocator.
  * The grant goes to the input VC (vc_grant: valid, the output VC) and to the output VC
  * (vc_alloc); both take it at the next edge (NocVirtChIn becomes active, NocVirtChOut taken),
  * so an output VC is never given twice. The requests are made from the input VCs' flops; the

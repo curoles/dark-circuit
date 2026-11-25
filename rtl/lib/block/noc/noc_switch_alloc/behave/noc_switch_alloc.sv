@@ -2,7 +2,9 @@
  *
  * An input VC may send when it asks the switch (sa_req, NocVirtChIn's: active with a flit at
  * the front) and its output VC (the request's port and vc) has a credit at the next router;
- * the allocator knows nothing of the input VCs' states. At most one flit leaves an input port
+ * the allocator knows nothing of the input VCs' states. A request with need_vc (a head without
+ * an output VC, combined allocation) is not served here yet (a_no_need_vc). At most one flit
+ * leaves an input port
  * and at most one
  * enters an output port per clock: a separable allocator, input first. Stage 1: each input port
  * picks one of its eligible VCs (RoundRobinArbiter over its VCs); the pick wants its route.
@@ -97,6 +99,8 @@ module NocSwitchAlloc #(
             assign q = sa_req[p][v];
             assign routes[v * PORT_WIDTH +: PORT_WIDTH] = q.port;
             assign eligible[v] = q.valid && credit[int'(q.port) * NUM_VCS + int'(q.vc)];
+
+            `DC_ASSERT(a_no_need_vc, !(q.valid && q.need_vc))
         end
 
         // One VC: it is the pick when eligible (an arbiter needs two requesters).

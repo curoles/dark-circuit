@@ -95,10 +95,13 @@
     }
 
 // An input VC's request to switch allocation (NocVirtChIn): its front flit through output port
-// port, on output VC vc (switch allocation checks that VC's credit).
+// port, on output VC vc (switch allocation checks that VC's credit); need_vc: a head that has
+// no output VC yet, to be given the free VC of its port as it wins the switch (combined
+// allocation, NocPkg::ALLOC_COMBINED; then vc is not read).
 `define DC_NOC_SA_REQ_T(port_width, vc_width) \
     struct packed {                           \
         logic                    valid;       \
+        logic                    need_vc;     \
         logic [(port_width)-1:0] port;        \
         logic [(vc_width)-1:0]   vc;          \
     }

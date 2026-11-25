@@ -172,7 +172,8 @@ module TbNocVirtChInCheck #(
             $fatal(1, "NocVirtChIn %0d: va_req %b %0d, expected %b", NAME, va_req.valid,
                    va_req.port, va_expected());
         if (sa_req.valid !== (m_state == NocPkg::VC_ACTIVE && buffer.size() > 0) ||
-            (sa_req.valid && (sa_req.port !== m_route || sa_req.vc !== m_out_vc)))
+            (sa_req.valid && (sa_req.port !== m_route || sa_req.vc !== m_out_vc ||
+                              sa_req.need_vc !== 1'b0)))
             $fatal(1, "NocVirtChIn %0d: sa_req %b %0d %0d, expected %b %0d %0d", BUF_DEPTH,
                    sa_req.valid, sa_req.port, sa_req.vc,
                    m_state == NocPkg::VC_ACTIVE && buffer.size() > 0, m_route, m_out_vc);

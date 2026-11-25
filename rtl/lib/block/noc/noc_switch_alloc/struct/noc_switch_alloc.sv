@@ -95,6 +95,8 @@ module NocSwitchAlloc #(
                     .in(port_credit), .sel(q.vc), .out(vc_credit));
             end
             And2 #(1) u_and2_eligible(.in1(q.valid), .in2(vc_credit), .out(eligible[v]));
+
+            `DC_ASSERT(a_no_need_vc, !(q.valid && q.need_vc))
         end
 
         // One VC: it is the pick when eligible (an arbiter needs two requesters).

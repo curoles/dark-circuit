@@ -28,6 +28,11 @@ package NocPkg;
     // rtl/lib/block/noc/allocation): plain constants, as above.
     localparam ROUTE_REGISTERED = 0;    // the clock after it reaches the front, its route stored
     localparam ROUTE_EARLY      = 1;    // in the clock it reaches the front, its route computed
+
+    // How a head gets its output VC (NocVirtChRtrAlloc's and NocVirtChIn's parameter ALLOC; kb
+    // rtl/lib/block/noc/allocation): plain constants.
+    localparam ALLOC_SEPARATE   = 0;    // VC allocation, then switch allocation in a later clock
+    localparam ALLOC_COMBINED   = 1;    // the free VC of its port given as it wins the switch
     /* verilator lint_on UNUSEDPARAM */
 
     // State of an output VC (NocVirtChOut), for the allocators.
