@@ -1,0 +1,60 @@
+type: decision
+title: ALLOC_COMBINED, a head gets its output VC from switch allocation, in the clock it wins
+date: 2026-11-25
+question: >
+  With ROUTE_EARLY (kb rtl/lib/block/noc/route_early) a head still takes 2 clocks a router:
+  VC allocation in the clock it reaches the front, then switch allocation. The textbook way to
+  one clock is speculation: switch allocation in parallel with VC allocation, a speculative
+  win cancelled when the VC is not granted, with a separate priority for non-speculative
+  requests. Is there a simpler cut for the library's router, and when is it valid?
+decision: >
+  A parameter ALLOC of NocVirtChRtrAlloc (NocPkg::ALLOC_SEPARATE, ALLOC_COMBINED; default
+  ALLOC_SEPARATE, the library's users unchanged until each chooses). With ALLOC_COMBINED
+  there is no VC allocation stage: a head asks switch allocation with need_vc set
+  (DC_NOC_SA_REQ_T); it is eligible when its output port has a free output VC with a credit
+  (instead of the credit of its own VC), and when it wins the switch it gets that port's
+  highest free VC with a credit in the same clock (NocSwitchAlloc's vc_grant to the input VC,
+  vc_alloc to the output VC). The switch gives an output port to one input a clock, so one
+  output VC a port a clock is taken and no two heads can get the same VC. Nothing is guessed
+  and cancelled: no speculation, no second priority. Valid under the routing assumption in
+  the router's and the allocators' headers (kb rtl/lib/block/noc/allocation): deterministic
+  routing (one output port per head) and any free VC of that port may carry the packet; then
+  VC allocation is only a selection per port, which switch allocation can make as it picks
+  the port's winner. A per-class mask (message classes on VCs for coherence) keeps it valid:
+  the eligible check and the pick become "a free VC of the head's class". Trigger for the
+  textbook's SPECULATIVE instead: adaptive routing, escape or dateline VCs, or any VC set
+  that is not "every free VC of one port", where VC allocation becomes a general matching
+  that cannot be folded into the switch's pick.
+why: >
+  User's choice (b), 2026-11-24, after the textbook comparison: speculation is the general
+  answer because textbook routers allow adaptive routing and escape VCs; under deterministic
+  routing it buys nothing over the combined pick and costs a cancel path and two priorities.
+  The library keeps the general structure (NocVirtChAlloc stays and is the default) and the
+  special case is a named variant with its conditions written where it is used, so it is not
+  tailored into the library silently. Done in steps (R4a..R4d), each proven: R4a the need_vc
+  field (always 0) and the assumption in the headers; R4b switch allocation's combined pick
+  and the ALLOC parameter of NocVirtChRtrAlloc (ALLOC_SEPARATE proven unchanged).
+rejected:
+  - choice: SPECULATIVE (VC and switch allocation in parallel, cancel on a VC miss)
+    why_not: The general answer for routing this library does not do; a cancel path, a
+      second priority and a lost switch slot on every miss, for no cycle over the combined
+      pick under deterministic routing. Kept as the trigger above.
+  - choice: Combined allocation as the library's only allocation
+    why_not: It holds only under the routing assumption; the general VC allocator stays the
+      default so a design that breaks the assumption has the path to speculation.
+relies_on:
+  - rtl/lib/block/noc/allocation
+  - rtl/lib/block/noc/route_early
+evidence: >
+  2026-11-25, R4b: NocSwitchAlloc's test drives heads with need_vc beside active VCs, output
+  VCs taken and freed at random, and checks that a popped head gets its port's highest free
+  VC with a credit, that vc_alloc marks exactly the VCs given, and nothing else (NUM_VCS 1,
+  2, 3, behave and struct; coverage fails it unless heads both go and are blocked); the NoC
+  and gate tests pass on both simulators; ALLOC_SEPARATE proven unchanged by identical
+  per-clock traces of every router link and equiv_make (NUM_VCS 1, 2, 3). The input VC's
+  side (R4c) and the cycles and sky130 timing (R4d) are to come.
+code:
+  - rtl/lib/block/noc/noc_switch_alloc/behave/noc_switch_alloc.sv#free_vc
+  - rtl/lib/block/noc/noc_switch_alloc/struct/noc_switch_alloc.sv#g_alloc
+  - rtl/lib/block/noc/noc_virt_ch_rtr_alloc/noc_virt_ch_rtr_alloc.sv#g_combined
+  - rtl/lib/block/noc/noc_pkg.sv#ALLOC_COMBINED

@@ -36,8 +36,15 @@ mutants:
   - name: NocSwitchAlloc struct, a request eligible without its credit
     edits:
       - file: rtl/lib/block/noc/noc_switch_alloc/struct/noc_switch_alloc.sv
-        old: ".in1(q.valid), .in2(vc_credit), .out(eligible[v])"
-        new: ".in1(q.valid), .in2(vc_credit | 1'b1), .out(eligible[v])"
+        old: "u_mux2_can_go(.in0(vc_credit),"
+        new: "u_mux2_can_go(.in0(vc_credit | 1'b1),"
+    tests: [block_noc_switch_alloc_struct]
+  - name: NocSwitchAlloc struct, a head eligible when its port has no free VC with a credit
+      (2026-11-25, combined allocation)
+    edits:
+      - file: rtl/lib/block/noc/noc_switch_alloc/struct/noc_switch_alloc.sv
+        old: ".in1(port_free), .sel(q.need_vc),"
+        new: ".in1(port_free | 1'b1), .sel(q.need_vc),"
     tests: [block_noc_switch_alloc_struct]
   - name: NocVirtChRtrInputUnit struct, the credit for the wrong VC
     edits:
