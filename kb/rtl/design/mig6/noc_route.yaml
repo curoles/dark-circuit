@@ -1,0 +1,30 @@
+type: decision
+title: Mig6's routers ask VC allocation in the clock a head reaches the front (ROUTE_EARLY)
+date: 2026-11-24
+question: >
+  The library's router can let a head ask VC allocation in the clock it reaches the front of
+  its input VC (kb rtl/lib/block/noc/route_early: 2 clocks a router instead of 3, the same
+  longest path). Should Mig6 use it, and how is it chosen?
+decision: >
+  Yes (user's choice (a), 2026-11-24): a knob noc_route in cfg/mig6_config.yaml (registered or
+  early; an enum, noc_route_e, in Mig6ConfigPkg), early; Mig6Noc reads it from the config
+  struct and gives both meshes NocPkg::ROUTE_EARLY. Registered stays one line away.
+why: >
+  Measured with Mig6's buffers of 8 and bursts of 8: dma_check far PE alone 4 bytes 58 to 50
+  cycles, 64 bytes 74 to 66, 320 bytes 160 to 144, all four PEs at once 408 to 376 (local to
+  local 192 throughout: no network); fc_layer_dma 3 075 to 3 016 cycles, 3.00 to 3.06 times one
+  PE (a PE's fetch 392..531 to 368..483 cycles); the router's longest path no longer (3.73 ns
+  against 3.83 in sky130, within ABC's spread). The speculative allocation (next) is measured
+  on this base: a router of 1 clock needs both.
+rejected:
+  - choice: Keep registered until the speculative allocation, then choose among all variants
+    why_not: Measured faster at the same path now; the knob keeps the choice open.
+relies_on:
+  - rtl/lib/block/noc/route_early
+  - rtl/design/mig6/noc_buffers
+evidence: >
+  2026-11-24: Mig6's 20 tests pass with noc_route early; dma_check and fc_layer_dma print the
+  numbers above.
+code:
+  - rtl/design/mig6/cfg/mig6_config.yaml#noc_route
+  - rtl/design/mig6/mig6_noc.sv#ROUTE

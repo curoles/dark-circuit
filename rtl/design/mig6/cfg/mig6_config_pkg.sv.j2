@@ -7,6 +7,12 @@
 // (cfg/mig6_pma.yaml).
 package Mig6ConfigPkg;
 
+    // When a router's head asks VC allocation (the library's NocPkg::ROUTE_*).
+    typedef enum logic [1:0] {
+        NOC_ROUTE_REGISTERED = 2'd0,   // the clock after it reaches the front: 3 clocks a router
+        NOC_ROUTE_EARLY      = 2'd1    // in the clock it reaches the front: 2 clocks a router
+    } noc_route_e;
+
     typedef struct packed {
         logic [31:0] rst_addr;         // PC after reset, byte address
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
@@ -22,6 +28,7 @@ package Mig6ConfigPkg;
         int unsigned dma_depth;            // each PE's DMA: transactions in flight
         int unsigned dma_max_burst;        // ... words of a read burst, a power of 2
         int unsigned noc_buf_depth;        // the routers' input buffers: flits a VC, credits
+        noc_route_e  noc_route;            // ... when a head asks VC allocation
     } mig6_cfg_t;
 
     localparam mig6_cfg_t MIG6_CFG = '{
@@ -36,7 +43,8 @@ package Mig6ConfigPkg;
         dma_source:        {{ dma_source }},
         dma_depth:         {{ dma_depth }},
         dma_max_burst:     {{ dma_max_burst }},
-        noc_buf_depth:     {{ noc_buf_depth }}
+        noc_buf_depth:     {{ noc_buf_depth }},
+        noc_route:         NOC_ROUTE_{{ noc_route | upper }}
     };
 
 endpackage

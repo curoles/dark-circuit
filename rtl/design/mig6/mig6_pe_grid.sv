@@ -47,7 +47,7 @@ module Mig6PeGrid import Mig6Pkg::*, Mig6NocPkg::*; #(
             .noc_rsp_fwd(pe_rsp_fwd[p]), .noc_rsp_bwd(pe_rsp_bwd[p]));
     end
 
-    Mig6Noc #(.BUF_DEPTH(BUF_DEPTH), .LINK_DELAY(LINK_DELAY)) u_noc(
+    Mig6Noc #(.CFG(CFG), .BUF_DEPTH(BUF_DEPTH), .LINK_DELAY(LINK_DELAY)) u_noc(
         .clk, .rst_n, .pe_req_fwd, .pe_req_bwd, .pe_rsp_fwd, .pe_rsp_bwd,
         .mem_req_fwd, .mem_req_bwd, .mem_rsp_fwd, .mem_rsp_bwd);
 

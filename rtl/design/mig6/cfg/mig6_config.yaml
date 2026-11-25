@@ -12,6 +12,7 @@ dma_source:      1            # its sources: DMA channel c's done at 1 + 2c, its
 dma_depth:       8            # each PE's DMA: transactions in flight (kb rtl/design/mig6/dma_depth)
 dma_max_burst:   8            # ... read bursts, 1 (none) to 16 words (kb rtl/design/mig6/bursts)
 noc_buf_depth:   8            # router input buffers, flits a VC (kb rtl/design/mig6/noc_buffers)
+noc_route:       early        # ... registered or early (kb rtl/design/mig6/noc_route)
 
 # Generated files: template in this directory -> output relative to repository root.
 generate:

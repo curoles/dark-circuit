@@ -394,9 +394,13 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       credit's round trip (5 clocks and more), so a link carried at most about 0.8 flits a
       clock: 8 flits a VC (cfg noc_buf_depth; done 2026-11-23: kb
       rtl/design/mig6/noc_buffers; dma_check all four 504 to 408 cycles, far PE alone 200
-      to 160; fc_layer_dma 3 163 to 3 075 cycles, 3.00 times one PE). Next: faster
-      routers (the head's 3 clocks a router: latency, small packets), alone and with the
-      rest.
+      to 160; fc_layer_dma 3 163 to 3 075 cycles, 3.00 times one PE). Then faster routers:
+      the library's allocators serve requests (kb rtl/lib/block/noc/allocation), a head may
+      ask VC allocation in the clock it reaches the front (kb rtl/lib/block/noc/route_early:
+      2 clocks a router instead of 3, the same longest path); Mig6 uses it (cfg noc_route;
+      done 2026-11-24: kb rtl/design/mig6/noc_route; a far 4-byte copy 58 to 50 cycles,
+      fc_layer_dma 3 075 to 3 016 cycles, 3.06 times one PE). Next: speculative allocation
+      (VC and switch allocation in one clock: 1 clock a router).
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),
