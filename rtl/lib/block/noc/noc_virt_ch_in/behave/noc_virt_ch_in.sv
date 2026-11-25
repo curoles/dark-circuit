@@ -4,9 +4,11 @@
  * flit never comes while it is full) and the state of the packet at its front. A packet holds
  * the VC from its head flit to its tail flit:
  *   VC_IDLE    -> VC_WAIT_VC  a head flit is at the front: its route (front_route) is kept
- *   VC_IDLE    -> VC_ACTIVE   ... and (ROUTE_EARLY) VC allocation grants it in that clock
- *   VC_WAIT_VC -> VC_ACTIVE   VC allocation grants the packet an output VC (grant): kept
+ *   VC_IDLE    -> VC_ACTIVE   ... and (ROUTE_EARLY) it is granted an output VC in that clock
+ *   VC_WAIT_VC -> VC_ACTIVE   the packet is granted an output VC (grant): kept
  *   VC_ACTIVE  -> VC_IDLE     switch allocation sends the tail flit (pop)
+ * (ALLOC_COMBINED: a head granted is sent in that clock; when it is also the tail, the VC goes
+ * to, or stays in, VC_IDLE instead of VC_ACTIVE.)
  * ROUTE says when the head asks VC allocation: ROUTE_REGISTERED in VC_WAIT_VC, the clock after
  * it reached the front, with the stored route (a head leaves the router 3 clocks after it
  * came); ROUTE_EARLY already in VC_IDLE, in the clock it reaches the front, with the route
@@ -21,6 +23,14 @@
  * route; VC_ACTIVE with a flit asks the switch, to its route on its output VC (switch
  * allocation checks the credit). Their fields are kept whether valid or not.
  *
+ * ALLOC says who gives the head its output VC (NocVirtChRtrAlloc's parameter, the same value):
+ * ALLOC_SEPARATE, VC allocation (va_req, the grant in a clock before the head is sent);
+ * ALLOC_COMBINED, switch allocation: a head asks the switch instead (sa_req with need_vc, when
+ * and to the port it would ask VC allocation; va_req never valid) and, when it wins, is popped
+ * and granted its output VC in the same clock; out_flit takes the grant's VC in that clock (a
+ * bypass of out_vc_q) and out_vc_q keeps it for the packet's other flits. Valid under the
+ * router's routing assumption (kb rtl/lib/block/noc/combined_alloc).
+ *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
  */
@@ -34,6 +44,7 @@ module NocVirtChIn #(
     parameter  BUF_DEPTH  = 4,                  // flits; the sender's credits start here
     parameter  PORT_WIDTH = 3,                  // bits of an output port number
     parameter  ROUTE      = NocPkg::ROUTE_REGISTERED,   // when a head asks VC allocation
+    parameter  ALLOC      = NocPkg::ALLOC_SEPARATE,     // who gives a head its output VC
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
     localparam type FLIT_VLD_T = `DC_NOC_FLIT_VLD_T(VC_WIDTH, DATA_WIDTH),
     localparam type VC_VLD_T   = `DC_NOC_VC_VLD_T(VC_WIDTH),
@@ -48,7 +59,7 @@ module NocVirtChIn #(
     output FLIT_VLD_T            front,         // the flit at the front; valid: not empty
     output FLIT_T                out_flit,      // ... as it leaves: vc = the output VC
     input  wire [PORT_WIDTH-1:0] front_route,   // route of the front flit, when it is a head
-    input  VC_VLD_T              grant,         // VC allocation: the packet's output VC
+    input  VC_VLD_T              grant,         // the packet's output VC (ALLOC's allocator)
     output STATE_T               state,         // state, flit, route, output VC: for allocators
     output VA_REQ_T              va_req,        // to VC allocation: an output VC of the route
     output SA_REQ_T              sa_req         // to switch allocation: send the front flit
@@ -58,8 +69,10 @@ module NocVirtChIn #(
 
     `DC_STATIC_ASSERT(a_buf_depth, BUF_DEPTH >= 1)
     `DC_STATIC_ASSERT(a_route, ROUTE == NocPkg::ROUTE_REGISTERED || ROUTE == NocPkg::ROUTE_EARLY)
+    `DC_STATIC_ASSERT(a_alloc, ALLOC == NocPkg::ALLOC_SEPARATE || ALLOC == NocPkg::ALLOC_COMBINED)
 
-    localparam EARLY = ROUTE == NocPkg::ROUTE_EARLY;
+    localparam EARLY    = ROUTE == NocPkg::ROUTE_EARLY;
+    localparam COMBINED = ALLOC == NocPkg::ALLOC_COMBINED;
 
     FLIT_T                    front_flit;
     logic                     empty;
@@ -73,6 +86,8 @@ module NocVirtChIn #(
     logic [1:0]               state_q;
     logic [PORT_WIDTH-1:0]    route_q;
     logic [VC_WIDTH-1:0]      out_vc_q;
+    logic                     ask_vc;           // a head asks for its output VC
+    logic [PORT_WIDTH-1:0]    ask_port;         // ... of this port
 
     FifoT #(.T(FLIT_T), .ADDR_WIDTH(BUF_ADDR_WIDTH)) u_buf(
         .clk, .rst_n, .write(push.valid), .data_in(push.flit), .read(pop),
@@ -81,10 +96,11 @@ module NocVirtChIn #(
     assign front.valid = !empty;
     assign front.flit  = front_flit;
 
-    // The front flit as it leaves, with the packet's output VC.
+    // The front flit as it leaves, with the packet's output VC; a head given its VC as it
+    // leaves (ALLOC_COMBINED) has it from the grant.
     always_comb begin
         out_flit    = front_flit;
-        out_flit.vc = out_vc_q;
+        out_flit.vc = (COMBINED && grant.valid) ? grant.vc : out_vc_q;
     end
 
     always_ff @(posedge clk)
@@ -96,14 +112,17 @@ module NocVirtChIn #(
                     if (front.valid && front.flit.head) begin
                         route_q <= front_route;
                         if (EARLY && grant.valid) begin     // granted in this clock
-                            state_q  <= NocPkg::VC_ACTIVE;
+                            // (Combined: sent now; a one-flit packet is done.)
+                            state_q  <= (COMBINED && pop && front.flit.tail) ? NocPkg::VC_IDLE
+                                                                             : NocPkg::VC_ACTIVE;
                             out_vc_q <= grant.vc;
                         end else
                             state_q <= NocPkg::VC_WAIT_VC;
                     end
                 NocPkg::VC_WAIT_VC:
                     if (grant.valid) begin
-                        state_q  <= NocPkg::VC_ACTIVE;
+                        state_q  <= (COMBINED && pop && front.flit.tail) ? NocPkg::VC_IDLE
+                                                                         : NocPkg::VC_ACTIVE;
                         out_vc_q <= grant.vc;
                     end
                 default:    // NocPkg::VC_ACTIVE
@@ -111,21 +130,36 @@ module NocVirtChIn #(
                         state_q <= NocPkg::VC_IDLE;
             endcase
 
-    // The requests to the allocators: an early head asks in VC_IDLE too, with its route now.
+    // When a head asks for its output VC: in VC_WAIT_VC with its stored route; an early head
+    // in VC_IDLE too, with its route now.
     // @kb: rtl/lib/block/noc/allocation
     // @kb: rtl/lib/block/noc/route_early
     if (EARLY) begin: g_early
-        assign va_req.valid = state_q == NocPkg::VC_WAIT_VC ||
-                              (state_q == NocPkg::VC_IDLE && !empty && front_flit.head);
-        assign va_req.port  = (state_q == NocPkg::VC_IDLE) ? front_route : route_q;
+        assign ask_vc   = state_q == NocPkg::VC_WAIT_VC ||
+                          (state_q == NocPkg::VC_IDLE && !empty && front_flit.head);
+        assign ask_port = (state_q == NocPkg::VC_IDLE) ? front_route : route_q;
     end else begin: g_registered
-        assign va_req.valid = state_q == NocPkg::VC_WAIT_VC;
-        assign va_req.port  = route_q;
+        assign ask_vc   = state_q == NocPkg::VC_WAIT_VC;
+        assign ask_port = route_q;
     end
-    assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && !empty;
-    assign sa_req.port  = route_q;
-    assign sa_req.vc    = out_vc_q;
-    assign sa_req.need_vc = 1'b0;           // an active VC has its output VC
+
+    // Whom it asks: VC allocation, or (combined) the switch with need_vc. ask_port is route_q
+    // but in VC_IDLE, where only an asking head makes a request.
+    // @kb: rtl/lib/block/noc/combined_alloc
+    if (COMBINED) begin: g_combined
+        assign va_req.valid   = 1'b0;
+        assign va_req.port    = ask_port;
+        assign sa_req.valid   = (state_q == NocPkg::VC_ACTIVE && !empty) || ask_vc;
+        assign sa_req.port    = ask_port;
+        assign sa_req.need_vc = ask_vc;
+    end else begin: g_separate
+        assign va_req.valid   = ask_vc;
+        assign va_req.port    = ask_port;
+        assign sa_req.valid   = state_q == NocPkg::VC_ACTIVE && !empty;
+        assign sa_req.port    = route_q;
+        assign sa_req.need_vc = 1'b0;       // an active VC has its output VC
+    end
+    assign sa_req.vc = out_vc_q;
 
     assign state.state    = state_q;
     assign state.has_flit = !empty;
@@ -134,18 +168,25 @@ module NocVirtChIn #(
 
     // The protocol around the VC: credits keep the buffer from overflowing; a packet starts
     // with a head flit; VC allocation grants only a packet that asks; switch allocation sends
-    // only from an active VC that has a flit.
+    // only from an active VC that has a flit. Combined: the switch sends only a VC that asks,
+    // and grants a VC exactly when it sends a head that asks for one.
     `DC_ASSERT(a_no_push_when_full, !(push.valid && full))
     `DC_ASSERT(a_idle_front_is_head, !(state_q == NocPkg::VC_IDLE && front.valid &&
                                        !front.flit.head))
-    `DC_ASSERT(a_grant_when_asked, !grant.valid || va_req.valid)
-    `DC_ASSERT(a_pop_when_active, !pop || (state_q == NocPkg::VC_ACTIVE && front.valid))
+    if (COMBINED) begin: g_combined_protocol
+        `DC_ASSERT(a_pop_when_asked, !pop || sa_req.valid)
+        `DC_ASSERT(a_grant_when_head_pops, grant.valid == (pop && sa_req.need_vc))
+    end else begin: g_separate_protocol
+        `DC_ASSERT(a_grant_when_asked, !grant.valid || va_req.valid)
+        `DC_ASSERT(a_pop_when_active, !pop || (state_q == NocPkg::VC_ACTIVE && front.valid))
+    end
 
     // The requests' timing (what the allocators may rely on): a VA request not granted stays,
-    // for the same port; an SA request not popped stays, for the same port and output VC.
+    // for the same port; an SA request not popped stays, for the same port and output VC (a
+    // head's, combined: the same port, still asking for a VC).
     `DC_ASSERT_NEXT(a_va_req_held, va_req.valid && !grant.valid,
                     va_req.valid && $stable(va_req.port))
     `DC_ASSERT_NEXT(a_sa_req_held, sa_req.valid && !pop,
-                    sa_req.valid && $stable({sa_req.port, sa_req.vc}))
+                    sa_req.valid && $stable({sa_req.port, sa_req.vc, sa_req.need_vc}))
 
 endmodule

@@ -14,7 +14,12 @@ decision: >
   (DC_NOC_SA_REQ_T); it is eligible when its output port has a free output VC with a credit
   (instead of the credit of its own VC), and when it wins the switch it gets that port's
   highest free VC with a credit in the same clock (NocSwitchAlloc's vc_grant to the input VC,
-  vc_alloc to the output VC). The switch gives an output port to one input a clock, so one
+  vc_alloc to the output VC). The input VC (NocVirtChIn, the same ALLOC) makes the head's
+  request to the switch instead of to VC allocation, when and to the port it would ask VC
+  allocation (ROUTE_REGISTERED or ROUTE_EARLY); popped and granted in one clock, its flit
+  leaves with the grant's VC (out_flit bypasses out_vc_q) and a one-flit packet is done at once
+  (the VC stays idle; NocVirtChOut's taken flag already frees a VC given and sent in one clock,
+  R1b). The switch gives an output port to one input a clock, so one
   output VC a port a clock is taken and no two heads can get the same VC. Nothing is guessed
   and cancelled: no speculation, no second priority. Valid under the routing assumption in
   the router's and the allocators' headers (kb rtl/lib/block/noc/allocation): deterministic
@@ -33,7 +38,8 @@ why: >
   special case is a named variant with its conditions written where it is used, so it is not
   tailored into the library silently. Done in steps (R4a..R4d), each proven: R4a the need_vc
   field (always 0) and the assumption in the headers; R4b switch allocation's combined pick
-  and the ALLOC parameter of NocVirtChRtrAlloc (ALLOC_SEPARATE proven unchanged).
+  and the ALLOC parameter of NocVirtChRtrAlloc (ALLOC_SEPARATE proven unchanged); R4c the
+  input VC's side (NocVirtChIn's ALLOC).
 rejected:
   - choice: SPECULATIVE (VC and switch allocation in parallel, cancel on a VC miss)
     why_not: The general answer for routing this library does not do; a cancel path, a
@@ -51,10 +57,16 @@ evidence: >
   VC with a credit, that vc_alloc marks exactly the VCs given, and nothing else (NUM_VCS 1,
   2, 3, behave and struct; coverage fails it unless heads both go and are blocked); the NoC
   and gate tests pass on both simulators; ALLOC_SEPARATE proven unchanged by identical
-  per-clock traces of every router link and equiv_make (NUM_VCS 1, 2, 3). The input VC's
-  side (R4c) and the cycles and sky130 timing (R4d) are to come.
+  per-clock traces of every router link and equiv_make (NUM_VCS 1, 2, 3). R4c: NocVirtChIn's
+  test in ALLOC_COMBINED (BUF_DEPTH 3 with both ROUTEs, BUF_DEPTH 1 early): a grant comes with
+  the head's pop; it checks the requests (sa_req with need_vc, no va_req), the head leaving
+  with the grant's VC, and a one-flit packet granted and sent in one clock (coverage); two
+  mutants of that path caught; ALLOC_SEPARATE proven unchanged as in R4b. The router and mesh
+  in ALLOC_COMBINED, the cycles and sky130 timing (R4d) are to come.
 code:
   - rtl/lib/block/noc/noc_switch_alloc/behave/noc_switch_alloc.sv#free_vc
   - rtl/lib/block/noc/noc_switch_alloc/struct/noc_switch_alloc.sv#g_alloc
   - rtl/lib/block/noc/noc_virt_ch_rtr_alloc/noc_virt_ch_rtr_alloc.sv#g_combined
   - rtl/lib/block/noc/noc_pkg.sv#ALLOC_COMBINED
+  - rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv#g_combined
+  - rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv#g_combined

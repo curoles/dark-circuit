@@ -6,21 +6,34 @@ mutants:
   - name: NocVirtChIn behave, the SA request without a flit at the front (2026-11-24, requests)
     edits:
       - file: rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv
-        old: "assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && !empty;"
-        new: "assign sa_req.valid = state_q == NocPkg::VC_ACTIVE && (!empty || 1'b1);"
+        old: "assign sa_req.valid   = state_q == NocPkg::VC_ACTIVE && !empty;"
+        new: "assign sa_req.valid   = state_q == NocPkg::VC_ACTIVE && (!empty || 1'b1);"
     tests: [block_noc_virt_ch_in_behave]
   - name: NocVirtChIn struct, the SA request's port from the front flit, not the packet's route
     edits:
       - file: rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv
-        old: "assign sa_req.port  = route_q;"
-        new: "assign sa_req.port  = front_route;"
+        old: "assign sa_req.port    = route_q;"
+        new: "assign sa_req.port    = front_route;"
     tests: [block_noc_virt_ch_in_struct]
   - name: NocVirtChIn struct, the SA request's VC the grant's, not the packet's
     edits:
       - file: rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv
-        old: "assign sa_req.vc    = out_vc_q;"
-        new: "assign sa_req.vc    = grant.vc | (out_vc_q & '0);"
+        old: "assign sa_req.vc = out_vc_q;"
+        new: "assign sa_req.vc = grant.vc | (out_vc_q & '0);"
     tests: [block_noc_virt_ch_in_struct]
+  - name: NocVirtChIn struct, combined, a one-flit packet granted and sent goes active
+      (2026-11-25, combined allocation)
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv
+        old: "And2 #(1) u_and2_done(.in1(pop), .in2(front_flit.tail), .out(done));"
+        new: "And3 #(1) u_and2_done(.in1(pop), .in2(front_flit.tail), .in3(is_active), .out(done));"
+    tests: [block_noc_virt_ch_in_struct]
+  - name: NocVirtChIn behave, combined, a head leaves without the VC it is granted
+    edits:
+      - file: rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv
+        old: "out_flit.vc = (COMBINED && grant.valid) ? grant.vc : out_vc_q;"
+        new: "out_flit.vc = out_vc_q;"
+    tests: [block_noc_virt_ch_in_behave]
   - name: NocVirtChOut behave, a one-flit packet given its VC and sent at once keeps it
     edits:
       - file: rtl/lib/block/noc/noc_virt_ch_out/behave/noc_virt_ch_out.sv
