@@ -28,6 +28,14 @@
  * or dateline VCs, or VC sets beyond classes need a general VC allocator, and then a
  * speculative variant for a router of one clock (kb rtl/lib/block/noc/allocation).
  *
+ * ROUTE and ALLOC choose the head's timing (passed to the input VCs and the allocation):
+ * ROUTE_REGISTERED and ALLOC_SEPARATE, the pipeline below, 3 clocks; ROUTE_EARLY, the route
+ * computed as the head reaches the front and VC allocation in that clock, 2 (kb
+ * rtl/lib/block/noc/route_early); ALLOC_COMBINED, no VC allocation stage: the head asks the
+ * switch and is given its output VC as it wins, 1 clock with ROUTE_EARLY, 2 with
+ * ROUTE_REGISTERED; a one-flit packet then leaves an input VC every clock (kb
+ * rtl/lib/block/noc/combined_alloc). Valid under the routing assumption above.
+ *
  * The pipeline of a head flit, measured (TbNocVirtChRouter, a lone packet), and the textbook's
  * stages: a head leaves 3 clocks after it came; a body or tail flit 1 clock after the flit before
  * it, as it has no route or VC to get (it goes with its head's).
@@ -67,6 +75,7 @@ module NocVirtChRouter #(
     parameter  MY_X       = 0,                  // where this router is
     parameter  MY_Y       = 0,
     parameter  ROUTE      = NocPkg::ROUTE_REGISTERED,   // when a head asks VC allocation
+    parameter  ALLOC      = NocPkg::ALLOC_SEPARATE,     // who gives a head its output VC
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(N),
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
@@ -102,7 +111,7 @@ module NocVirtChRouter #(
     for (genvar p = 0; p < N; p++) begin: g_in
         NocVirtChRtrInputUnit #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
                                 .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X),
-                                .MY_Y(MY_Y), .ROUTE(ROUTE)) u_input(
+                                .MY_Y(MY_Y), .ROUTE(ROUTE), .ALLOC(ALLOC)) u_input(
             .clk, .rst_n, .in_fwd(in_fwd[p]), .in_bwd(in_bwd[p]), .vc_state(in_vc_state[p]),
             .va_req(in_va_req[p]), .sa_req(in_sa_req[p]),
             .vc_grant(vc_grant[p]), .pop(pop[p]), .out(xbar_in[p]));
@@ -125,7 +134,7 @@ module NocVirtChRouter #(
     logic  [N-1:0][PORT_WIDTH-1:0] xbar_sel;
     logic  [N-1:0]                 xbar_valid;
 
-    NocVirtChRtrAlloc #(.N(N), .NUM_VCS(NUM_VCS)) u_alloc(
+    NocVirtChRtrAlloc #(.N(N), .NUM_VCS(NUM_VCS), .ALLOC(ALLOC)) u_alloc(
         .clk, .rst_n, .va_req(in_va_req), .sa_req(in_sa_req), .out_vc_state, .vc_grant,
         .vc_alloc, .pop, .xbar_sel, .xbar_valid);
 

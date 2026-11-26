@@ -10,11 +10,13 @@
  * receiver never holds more than BUF_DEPTH flits of a VC; a sender never gets more credits
  * than it spent; after the run every packet arrives. First a lone packet of two flits from
  * router (0, 0) to the opposite corner measures the latency: its head comes out 3 clocks per
- * router on its way (2 with ROUTE_EARLY) plus LINK_DELAY per link after it went in, its tail a
+ * router on its way (2 with ROUTE_EARLY or ALLOC_COMBINED, 1 with both) plus LINK_DELAY per
+ * link after it went in, its tail a
  * clock later. Every case must happen: packets from and to every node. A 3 x 3 slice at (0, 0)
  * with links of 1 clock and 2 VCs, a 3 x 2 slice at (1, 1) with links of 2 clocks and 3 VCs,
  * and a 2 x 2 slice at (0, 0) with links of 1 clock and one VC (Mig6's two networks), and with
- * ROUTE_EARLY the 2 x 2 slice of one VC and the 3 x 3 of 2 VCs; 10000 clocks of traffic each
+ * ROUTE_EARLY the 2 x 2 slice of one VC and the 3 x 3 of 2 VCs, ALLOC_SEPARATE and
+ * ALLOC_COMBINED; 10000 clocks of traffic each
  * (Verilator only, see its CMake entry). Stops at the first mismatch with $fatal.
  *
  * @author    Igor Lesik
@@ -30,7 +32,8 @@ module TbNocMeshCheck #(
     parameter Y0         = 0,
     parameter NUM_VCS    = 2,
     parameter LINK_DELAY = 1,
-    parameter ROUTE      = NocPkg::ROUTE_REGISTERED
+    parameter ROUTE      = NocPkg::ROUTE_REGISTERED,
+    parameter ALLOC      = NocPkg::ALLOC_SEPARATE
 )(
     input  wire  clk,
     output logic done
@@ -46,7 +49,8 @@ module TbNocMeshCheck #(
     localparam Q          = 16;                                 // credits waiting per receiver
     // The lone packet, (0, 0) to the opposite corner: routers and links on its way.
     localparam HOPS       = X_SIZE - 1 + Y_SIZE - 1;
-    localparam RTR_LAT    = (ROUTE == NocPkg::ROUTE_EARLY) ? 2 : 3;   // clocks a router
+    localparam RTR_LAT    = 3 - (ROUTE == NocPkg::ROUTE_EARLY)        // clocks a router
+                              - (ALLOC == NocPkg::ALLOC_COMBINED);
     localparam HEAD_LAT   = RTR_LAT * (HOPS + 1) + LINK_DELAY * HOPS;
     localparam N_CLOCKS   = 10000;
 
@@ -72,7 +76,8 @@ module TbNocMeshCheck #(
     // The edges tied off: no flit in, no credit back.
     NocMesh #(.X_SIZE(X_SIZE), .Y_SIZE(Y_SIZE), .X0(X0), .Y0(Y0), .X_WIDTH(X_WIDTH),
               .Y_WIDTH(Y_WIDTH), .NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH),
-              .DATA_WIDTH(DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE)) u_mesh(
+              .DATA_WIDTH(DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE),
+              .ALLOC(ALLOC)) u_mesh(
         .clk, .rst_n, .local_in_fwd, .local_in_bwd, .local_out_fwd, .local_out_bwd,
         .north_in_fwd('0), .north_in_bwd, .north_out_fwd, .north_out_bwd('0),
         .south_in_fwd('0), .south_in_bwd, .south_out_fwd, .south_out_bwd('0),
@@ -349,6 +354,8 @@ module TbNocMesh;
     wire done_c;
     wire done_d;
     wire done_e;
+    wire done_f;
+    wire done_g;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
@@ -362,9 +369,15 @@ module TbNocMesh;
                      .ROUTE(NocPkg::ROUTE_EARLY)) u_check_d(.clk, .done(done_d));
     TbNocMeshCheck #(.X_SIZE(3), .Y_SIZE(3), .X0(0), .Y0(0), .NUM_VCS(2), .LINK_DELAY(1),
                      .ROUTE(NocPkg::ROUTE_EARLY)) u_check_e(.clk, .done(done_e));
+    TbNocMeshCheck #(.X_SIZE(2), .Y_SIZE(2), .X0(0), .Y0(0), .NUM_VCS(1), .LINK_DELAY(1),
+                     .ROUTE(NocPkg::ROUTE_EARLY), .ALLOC(NocPkg::ALLOC_COMBINED))
+        u_check_f(.clk, .done(done_f));
+    TbNocMeshCheck #(.X_SIZE(3), .Y_SIZE(3), .X0(0), .Y0(0), .NUM_VCS(2), .LINK_DELAY(1),
+                     .ROUTE(NocPkg::ROUTE_EARLY), .ALLOC(NocPkg::ALLOC_COMBINED))
+        u_check_g(.clk, .done(done_g));
 
     initial begin
-        wait (done_a && done_b && done_c && done_d && done_e);
+        wait (done_a && done_b && done_c && done_d && done_e && done_f && done_g);
         $display("PASS");
         $finish;
     end

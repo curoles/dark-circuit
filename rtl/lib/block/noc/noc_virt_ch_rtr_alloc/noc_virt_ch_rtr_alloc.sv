@@ -46,7 +46,10 @@ module NocVirtChRtrAlloc #(
 )(
     input  wire                                           clk,
     input  wire                                           rst_n,        // synchronous, active low
+    // (Not read with ALLOC_COMBINED: no VC allocation; the input VCs never make them.)
+    /* verilator lint_off UNUSEDSIGNAL */
     input  VA_REQ_T               [N-1:0][NUM_VCS-1:0]    va_req,       // input VCs: a VC of a port
+    /* verilator lint_on UNUSEDSIGNAL */
     input  SA_REQ_T               [N-1:0][NUM_VCS-1:0]    sa_req,       // ... the switch
     input  NocPkg::vc_out_state_t [N-1:0][NUM_VCS-1:0]    out_vc_state, // output VCs: free, credit
     output VC_VLD_T               [N-1:0][NUM_VCS-1:0]    vc_grant,     // to an input VC: its VC

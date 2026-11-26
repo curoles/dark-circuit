@@ -13,16 +13,20 @@
  * credits); a sender never gets more credits than it spent; after the run every packet
  * arrives. First a lone packet of two flits from the west to the east port measures the
  * latency: its head leaves 3 clocks after it came (buffer write; route; VC allocation; switch
- * allocation and the crossbar), 2 with ROUTE_EARLY (route and VC allocation in one clock), its
- * tail a clock later. Then a train of one-flit packets on one input VC, each sent as soon as a
- * credit allows, measures the rate: the heads leave 1 + 2 clocks apart (an input VC spends a
- * clock on the head's route and one on its VC allocation besides the flit's pop), 1 + 1 with
- * ROUTE_EARLY; longer packets add a clock a flit, but this test's buffers of 2 flits hold them
- * back by the credits. Every case must happen: packets from every input, to every output, two
+ * allocation and the crossbar), 2 with ROUTE_EARLY (route and VC allocation in one clock), 1
+ * with ROUTE_EARLY and ALLOC_COMBINED (the VC given with the switch; 2 with ROUTE_REGISTERED),
+ * its tail a clock later. Then a train of one-flit packets on one input VC, each sent as soon
+ * as a credit allows, measures the rate: the heads leave 1 + 2 clocks apart (an input VC spends
+ * a clock on the head's route and one on its VC allocation besides the flit's pop), 1 + 1 with
+ * ROUTE_EARLY or ALLOC_COMBINED, 1 + 0 with both; longer packets add a clock a flit, but this
+ * test's buffers of 2 flits hold them back by the credits. With ALLOC_COMBINED the buffers
+ * hold 3 flits and the train's receiver returns its credits at once (else the credit loops,
+ * not the router, would set the rate of one a clock). Every case must happen: packets from every input, to every output, two
  * packets interleaved on one output's VCs (with more than one VC), a sender held back by its
  * credits, packets of four flits. NUM_VCS 1, 2 and 3, each with ROUTE_REGISTERED and
- * ROUTE_EARLY; Verilator 20000 clocks of traffic, Icarus 400. Stops at the first mismatch with
- * $fatal.
+ * ROUTE_EARLY, ALLOC_SEPARATE; ALLOC_COMBINED with ROUTE_EARLY at NUM_VCS 1, 2, 3 and with
+ * ROUTE_REGISTERED at NUM_VCS 2; Verilator 20000 clocks of traffic, Icarus 400. Stops at the
+ * first mismatch with $fatal.
  *
  * @author    Igor Lesik
  * @copyright 2026 Igor Lesik, MIT License
@@ -32,13 +36,16 @@
 
 module TbNocVirtChRouterCheck #(
     parameter NUM_VCS = 2,
-    parameter ROUTE   = NocPkg::ROUTE_REGISTERED
+    parameter ROUTE   = NocPkg::ROUTE_REGISTERED,
+    parameter ALLOC   = NocPkg::ALLOC_SEPARATE
 )(
     input  wire  clk,
     output logic done
 );
     localparam N          = NocPkg::MESH_PORTS;
-    localparam BUF_DEPTH  = 2;
+    // Two flits a VC; three with ALLOC_COMBINED, the least for one flit a clock (an input VC's
+    // credit loop: the flit written, popped, its credit back a clock later).
+    localparam BUF_DEPTH  = (ALLOC == NocPkg::ALLOC_COMBINED) ? 3 : 2;
     localparam X_WIDTH    = 2;
     localparam Y_WIDTH    = 2;
     localparam DATA_WIDTH = 24;
@@ -49,9 +56,10 @@ module TbNocVirtChRouterCheck #(
     localparam MAX_PKTS   = 40000;
     localparam Q          = 16;                                 // credits waiting per receiver
     localparam EARLY      = ROUTE == NocPkg::ROUTE_EARLY;
-    localparam HEAD_LAT   = EARLY ? 2 : 3;                      // clocks, the lone packet's head
-    localparam PKT_GAP    = EARLY ? 1 : 2;  // clocks an input VC spends on a packet besides flits
-    localparam NAME       = NUM_VCS + 10 * ROUTE;               // in messages
+    localparam COMBINED   = ALLOC == NocPkg::ALLOC_COMBINED;
+    localparam HEAD_LAT   = 3 - EARLY - COMBINED;               // clocks, the lone packet's head
+    localparam PKT_GAP    = 2 - EARLY - COMBINED;   // clocks of an input VC a packet, flits aside
+    localparam NAME       = NUM_VCS + 10 * ROUTE + 100 * ALLOC; // in messages
 `ifdef VERILATOR
     localparam N_CLOCKS   = 20000;
 `else
@@ -71,7 +79,7 @@ module TbNocVirtChRouterCheck #(
 
     NocVirtChRouter #(.NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH), .X_WIDTH(X_WIDTH),
                       .Y_WIDTH(Y_WIDTH), .DATA_WIDTH(DATA_WIDTH), .MY_X(MY_X), .MY_Y(MY_Y),
-                      .ROUTE(ROUTE))
+                      .ROUTE(ROUTE), .ALLOC(ALLOC))
         u_router(.clk, .rst_n, .in_fwd, .in_bwd, .out_fwd, .out_bwd);
 
     // Packets, by id.
@@ -85,6 +93,7 @@ module TbNocVirtChRouterCheck #(
     integer s_idx     [N][NUM_VCS];     // index of its next flit
     integer credits   [N][NUM_VCS];
     logic   sending;                    // new packets may start
+    logic   fast_credits;               // receivers return credits in the next clock
     // Receivers, per output and VC; per output the credits waiting.
     integer r_pkt     [N][NUM_VCS];     // the packet coming, -1: none
     integer r_idx     [N][NUM_VCS];     // index of its next flit
@@ -221,7 +230,8 @@ module TbNocVirtChRouterCheck #(
         if (cq_count[r] == Q)
             $fatal(1, "Router %0d: output %0d: credit queue full", NAME, r);
         cq_vc[r][(cq_head[r] + cq_count[r]) % Q]  = w;
-        cq_due[r][(cq_head[r] + cq_count[r]) % Q] = k + 1 + {$random(seed)} % 3;
+        cq_due[r][(cq_head[r] + cq_count[r]) % Q] =
+            k + 1 + (fast_credits ? 0 : {$random(seed)} % 3);
         cq_count[r] = cq_count[r] + 1;
         for (int u = 0; u < NUM_VCS; u++)
             if (u != w && r_pkt[r][u] >= 0) n_interleave = n_interleave + 1;
@@ -360,7 +370,8 @@ module TbNocVirtChRouterCheck #(
 
     initial begin
         done         = 1'b0;
-        seed         = NUM_VCS * 23 + ROUTE;
+        seed         = NUM_VCS * 23 + ROUTE + 1000 * ALLOC;
+        fast_credits = 1'b0;
         n_pkts       = 0;
         n_done       = 0;
         k            = 0;
@@ -389,7 +400,9 @@ module TbNocVirtChRouterCheck #(
         @(negedge clk);
         rst_n = 1'b1;
         lone_packet();
+        fast_credits = COMBINED;
         train(1, 6);
+        fast_credits = 1'b0;
         // Traffic, then a drain until every packet arrived.
         sending = 1'b1;
         for (int c = 0; c < N_CLOCKS + 2000 && (sending || n_done < n_pkts); c++) begin
@@ -425,6 +438,10 @@ module TbNocVirtChRouter;
     wire done_1e;
     wire done_2e;
     wire done_3e;
+    wire done_1ec;
+    wire done_2ec;
+    wire done_3ec;
+    wire done_2c;
 
     SimClkGen #(.HALF_PERIOD(5)) u_sim_clk_gen(.clk);
 
@@ -438,8 +455,18 @@ module TbNocVirtChRouter;
     TbNocVirtChRouterCheck #(.NUM_VCS(3), .ROUTE(NocPkg::ROUTE_EARLY)) u_check_3e(.clk,
                                                                               .done(done_3e));
 
+    TbNocVirtChRouterCheck #(.NUM_VCS(1), .ROUTE(NocPkg::ROUTE_EARLY),
+                             .ALLOC(NocPkg::ALLOC_COMBINED)) u_check_1ec(.clk, .done(done_1ec));
+    TbNocVirtChRouterCheck #(.NUM_VCS(2), .ROUTE(NocPkg::ROUTE_EARLY),
+                             .ALLOC(NocPkg::ALLOC_COMBINED)) u_check_2ec(.clk, .done(done_2ec));
+    TbNocVirtChRouterCheck #(.NUM_VCS(3), .ROUTE(NocPkg::ROUTE_EARLY),
+                             .ALLOC(NocPkg::ALLOC_COMBINED)) u_check_3ec(.clk, .done(done_3ec));
+    TbNocVirtChRouterCheck #(.NUM_VCS(2), .ALLOC(NocPkg::ALLOC_COMBINED)) u_check_2c(.clk,
+                                                                              .done(done_2c));
+
     initial begin
-        wait (done_1 && done_2 && done_3 && done_1e && done_2e && done_3e);
+        wait (done_1 && done_2 && done_3 && done_1e && done_2e && done_3e &&
+              done_1ec && done_2ec && done_3ec && done_2c);
         $display("PASS");
         $finish;
     end

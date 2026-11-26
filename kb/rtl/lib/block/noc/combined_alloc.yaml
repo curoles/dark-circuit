@@ -29,7 +29,12 @@ decision: >
   the eligible check and the pick become "a free VC of the head's class". Trigger for the
   textbook's SPECULATIVE instead: adaptive routing, escape or dateline VCs, or any VC set
   that is not "every free VC of one port", where VC allocation becomes a general matching
-  that cannot be folded into the switch's pick.
+  that cannot be folded into the switch's pick. ALLOC passes through NocVirtChRtrInputUnit,
+  NocVirtChRouter and NocMesh beside ROUTE. The cost is one clock's chain: with ROUTE_EARLY the
+  front flit's route compare, switch allocation, the grant and the crossbar in one clock
+  (evidence); a design takes it where its clock has room (Mig6 at 1 VC, user's choice
+  2026-11-25). For more VCs at the same clock, the lever is lookahead routing (the route from
+  a flop, sent by the router before), which takes the route compare off that chain.
 why: >
   User's choice (b), 2026-11-24, after the textbook comparison: speculation is the general
   answer because textbook routers allow adaptive routing and escape VCs; under deterministic
@@ -39,7 +44,8 @@ why: >
   tailored into the library silently. Done in steps (R4a..R4d), each proven: R4a the need_vc
   field (always 0) and the assumption in the headers; R4b switch allocation's combined pick
   and the ALLOC parameter of NocVirtChRtrAlloc (ALLOC_SEPARATE proven unchanged); R4c the
-  input VC's side (NocVirtChIn's ALLOC).
+  input VC's side (NocVirtChIn's ALLOC); R4d ALLOC through the router and mesh, their tests,
+  the timing.
 rejected:
   - choice: SPECULATIVE (VC and switch allocation in parallel, cancel on a VC miss)
     why_not: The general answer for routing this library does not do; a cancel path, a
@@ -61,8 +67,21 @@ evidence: >
   test in ALLOC_COMBINED (BUF_DEPTH 3 with both ROUTEs, BUF_DEPTH 1 early): a grant comes with
   the head's pop; it checks the requests (sa_req with need_vc, no va_req), the head leaving
   with the grant's VC, and a one-flit packet granted and sent in one clock (coverage); two
-  mutants of that path caught; ALLOC_SEPARATE proven unchanged as in R4b. The router and mesh
-  in ALLOC_COMBINED, the cycles and sky130 timing (R4d) are to come.
+  mutants of that path caught; ALLOC_SEPARATE proven unchanged as in R4b. R4d, cycles
+  (TbNocVirtChRouter, TbNocMesh, behave and struct, both simulators for the router): a lone
+  head leaves a router 1 clock after it came with ROUTE_EARLY (2 with ALLOC_SEPARATE, 3
+  registered), 2 with ROUTE_REGISTERED; one-flit packets leave an input VC every clock (every
+  2 with ROUTE_EARLY alone), shown with 3-flit buffers, the least for that rate (an input VC's
+  credit loop is 3 clocks: written, popped, the credit back a clock later); a 2 x 2 mesh's lone
+  packet over 2 hops 5 clocks (8 with ROUTE_EARLY alone, 11 registered), a 3 x 3's over 4 hops
+  9 (14, 19). Longest path in the project's sky130 flow (yosys, ABC; 52-bit flits, 8-flit
+  buffers, ROUTE_EARLY), separate against combined: 1 VC 3.76 against 5.18 ns (area 102 197
+  against 101 739 um2), 2 VCs 4.69 against 6.35 ns (195 314 against 191 746 um2); combined
+  with ROUTE_REGISTERED (the route from a flop, as lookahead would give) 4.53 ns at 1 VC and
+  5.45 ns at 2 VCs. The combined path starts at an input buffer's front flit (registered
+  route: at an output VC's credit count) and ends at out_fwd through switch allocation and
+  the crossbar. Against Mig3's 5.5 ns clock 1 VC fits with 0.3 ns, less than ABC's spread
+  (kb cmake/abc_spread); 2 VCs do not.
 code:
   - rtl/lib/block/noc/noc_switch_alloc/behave/noc_switch_alloc.sv#free_vc
   - rtl/lib/block/noc/noc_switch_alloc/struct/noc_switch_alloc.sv#g_alloc
@@ -70,3 +89,4 @@ code:
   - rtl/lib/block/noc/noc_pkg.sv#ALLOC_COMBINED
   - rtl/lib/block/noc/noc_virt_ch_in/behave/noc_virt_ch_in.sv#g_combined
   - rtl/lib/block/noc/noc_virt_ch_in/struct/noc_virt_ch_in.sv#g_combined
+  - rtl/lib/block/noc/noc_virt_ch_router/noc_virt_ch_router.sv#ALLOC

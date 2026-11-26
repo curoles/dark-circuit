@@ -34,6 +34,7 @@ module NocVirtChRtrInputUnit #(
     parameter  MY_X       = 0,                  // where the router is
     parameter  MY_Y       = 0,
     parameter  ROUTE      = NocPkg::ROUTE_REGISTERED,   // when a head asks VC allocation
+    parameter  ALLOC      = NocPkg::ALLOC_SEPARATE,     // who gives a head its output VC
     localparam VC_WIDTH   = `DC_NOC_VC_WIDTH(NUM_VCS),
     localparam PORT_WIDTH = `DC_NOC_PORT_WIDTH(NocPkg::MESH_PORTS),
     localparam type FLIT_T     = `DC_NOC_FLIT_T(VC_WIDTH, DATA_WIDTH),
@@ -95,7 +96,7 @@ module NocVirtChRtrInputUnit #(
             .dest_x(head.dest_x), .dest_y(head.dest_y), .port(route));
 
         NocVirtChIn #(.VC_WIDTH(VC_WIDTH), .DATA_WIDTH(DATA_WIDTH), .BUF_DEPTH(BUF_DEPTH),
-                      .PORT_WIDTH(PORT_WIDTH), .ROUTE(ROUTE)) u_vc(
+                      .PORT_WIDTH(PORT_WIDTH), .ROUTE(ROUTE), .ALLOC(ALLOC)) u_vc(
             .clk, .rst_n, .push, .pop(pop_vc[v]), .front, .out_flit, .front_route(route),
             .grant(vc_grant[v]), .state, .va_req(va_req_v), .sa_req(sa_req_v));
 
