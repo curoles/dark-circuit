@@ -131,9 +131,10 @@ AtomicUnit and a RAM.
 - **Mig6PeNetIf** turns a request into a head and a body flit, sent while the router has
   credits, and takes the request with its last flit. Answers go straight to the requester,
   every flit an answer (a burst's `len + 1`), credits straight back: it holds no answer and
-  limits nothing. Mig6Pe picks the word of
-  the core's line-wide port, as Mig3Cpu does for its devices (only uncached accesses of a
-  word or less come).
+  limits nothing. The core's line-wide port reaches it through the library's
+  ReqDataWidthDown (a line read a burst of its words answered as a line, a line write its
+  strobed word, a word or less the word its address names; kb
+  rtl/lib/block/req_data_width_down/design).
 - **Mig6MemNetIf** buffers request flits (the credits it gives), passes a request on with
   its body to a ReqBurstSplit (a burst READ as its words, one a clock) and from there to
   AtomicUnit and the RAM, and drops CBOs (nothing caches the shared memory). Answers have no

@@ -38,8 +38,13 @@
  * word read from it is picked from the line by the word index kept when the read's beat was
  * taken, right while the local memory answers in the clock after (a_dma_local_next),
  * however many reads the DMA keeps in flight. The network interface takes a word: the
- * core's word is the one of its line the address names, and the answer goes into every word
- * of the line, as for the DMA's registers.
+ * core's requests to it pass a ReqDataWidthDown (u_net_down; kb
+ * rtl/lib/block/req_data_width_down/design): a line read (a D-cache refill, from a far
+ * region that may be cached) is a read burst of the line's words, answered as one line; a
+ * line write (a write-through store to such a region) the one word with its bytes; a
+ * request of a word or less the word its address names, its answer in every word of the
+ * line. The DMA's and the PLIC's registers take the core's word the same way (core_wdata),
+ * their answers in every word.
  *
  * LR/SC on the local memory are decided at its port, where every request to it passes (the
  * core's data, the I-cache's misses, the DMA's), by an exclusive monitor (the library's
@@ -62,7 +67,7 @@
  *
  *   Mig6Core --lmem (data, local)-----------------------------> u_local_mux 0 --+
  *            --mem--> u_req_demux --local---------------------> u_local_mux 1   |
- *                                 --net ---> u_net_mux 0 --+                   |
+ *                                 --net ---> u_net_down --> u_net_mux 0 --+    |
  *                                 --u_dma's, u_plic's regs |                   |
  *   u_dma write --> u_dma_wr_demux --local -------------------> u_local_mux 2   |
  *                                  --net ---> u_net_mux 2 --+                   |
@@ -154,8 +159,22 @@ module Mig6Pe import Mig6Pkg::*; #(
     logic [3:0]       tgt_valid;
     logic [3:0]       tgt_ready;
     logic [3:0]       tgt_rsp_valid;
-    word_t            core_wdata;   // the word of the core's line the address names
-    strb_t            core_wstrb;
+    word_t            core_wdata;   // the word of the core's line the address names: to
+    strb_t            core_wstrb;   //   the DMA's and the PLIC's registers
+    // The core's requests to the network, a word wide (u_net_down): fields as the core's.
+    localparam DOWN_FIELDS = $bits(AtomicPkg::atop_t) + $bits(CachePkg::cmo_t) + 1;
+    line_t            down_rsp_data;    // the network's answer to the core: a line
+    wire              down_valid;
+    wire              down_we;
+    wire              down_rsp;
+    wire [NET_LW-1:0] down_len;         // a line read's burst
+    word_t            down_addr;
+    size_t            down_size;
+    word_t            down_wdata;
+    strb_t            down_wstrb;
+    AtomicPkg::atop_t down_atop;
+    CachePkg::cmo_t   down_cmo;
+    logic             down_excl;
 
     // The DMA and the PLIC.
     wire              dma_reg_ready;
@@ -295,8 +314,8 @@ module Mig6Pe import Mig6Pkg::*; #(
         .req_len('0),
         .req_sel(sel), .rsp_valid(mem_rsp.valid), .rsp_data(mem_rsp.data),
         .tgt_req_valid(tgt_valid), .tgt_req_ready(tgt_ready), .tgt_rsp_valid(tgt_rsp_valid),
-        .tgt_rsp_data({{LINE_WORDS{plic_rdata}}, {LINE_WORDS{dma_rdata}},
-                       {LINE_WORDS{net_rsp_data}}, local_rsp_data}));
+        .tgt_rsp_data({{LINE_WORDS{plic_rdata}}, {LINE_WORDS{dma_rdata}}, down_rsp_data,
+                       local_rsp_data}));
 
     // The DMA's reads and writes, each by its region's target: the local memory or the
     // network. The reads' demux keeps the answers of DMA_DEPTH bursts in order (a word each);
@@ -323,7 +342,7 @@ module Mig6Pe import Mig6Pkg::*; #(
         .tgt_req_valid(wr_tgt_valid), .tgt_req_ready(wr_tgt_ready),
         .tgt_rsp_valid(2'b00), .tgt_rsp_data({2{word_t'(0)}}));
 
-    // Words and lines: the core's word of its line (to the network, the DMA's registers);
+    // Words and lines: the core's word of its line (to the DMA's and the PLIC's registers);
     // the DMA's word into a line (to the local memory) and out of the local memory's line.
     if (LINE_WORDS == 1) begin: g_one_word
         assign core_wdata    = mem_req.wdata;
@@ -443,11 +462,30 @@ module Mig6Pe import Mig6Pkg::*; #(
         .req_addr({ram_line, {LINE_START{1'b0}}}), .req_wdata(ram_wdata),
         .req_wstrb(ram_wstrb), .rsp_valid(mem_rsp_valid), .rsp_data(mem_rsp_data));
 
-    // The network interface's requesters, round-robin: the core's, the DMA's reads (bursts:
-    // their len to the network interface), its writes; room for the DMA's reads and the
-    // core's (requests: each with all its answers).
-    assign ni_fields[0] = {mem_req.addr, mem_req.size, mem_req.atop, mem_req.cmo, mem_req.excl,
-                           NET_LW'(0), core_wdata, core_wstrb};
+    // The core's requests to the network, a line wide, as the network interface's word: a
+    // line read a burst of its words, a line write its strobed word, a word or less itself;
+    // its answers back as lines. Room for as many answered requests as its demux's.
+    // @kb: rtl/lib/block/req_data_width_down/design
+    ReqDataWidthDown #(.ADDR_WIDTH($bits(word_t)), .WORD_WIDTH($bits(word_t)),
+                       .LINE_WORDS(LINE_WORDS), .FIELDS_WIDTH(DOWN_FIELDS),
+                       .LEN_WIDTH(NET_LW), .PENDING_WIDTH(1)) u_net_down(
+        .clk, .rst_n,
+        .req_valid(tgt_valid[NET]), .req_ready(tgt_ready[NET]), .req_we(mem_req.we),
+        .req_rsp(mem_req.rsp), .req_addr(mem_req.addr), .req_size(mem_req.size),
+        .req_wdata(mem_req.wdata), .req_wstrb(mem_req.wstrb),
+        .req_fields({mem_req.atop, mem_req.cmo, mem_req.excl}),
+        .rsp_valid(tgt_rsp_valid[NET]), .rsp_data(down_rsp_data),
+        .tgt_req_valid(down_valid), .tgt_req_ready(ni_ready[0]), .tgt_req_we(down_we),
+        .tgt_req_rsp(down_rsp), .tgt_req_len(down_len), .tgt_req_addr(down_addr),
+        .tgt_req_size(down_size), .tgt_req_wdata(down_wdata), .tgt_req_wstrb(down_wstrb),
+        .tgt_req_fields({down_atop, down_cmo, down_excl}),
+        .tgt_rsp_valid(ni_rsp_valid[0]), .tgt_rsp_data(net_rsp_data));
+
+    // The network interface's requesters, round-robin: the core's (a line read a burst),
+    // the DMA's reads (bursts: their len to the network interface), its writes; room for the
+    // DMA's reads and the core's (requests: each with all its answers).
+    assign ni_fields[0] = {down_addr, down_size, down_atop, down_cmo, down_excl, down_len,
+                           down_wdata, down_wstrb};
     assign ni_fields[1] = {rd_addr, rd_size, AtomicPkg::ATOP_NONE, CachePkg::CMO_NONE, 1'b0,
                            NET_LW'(rd_len), word_t'(0), strb_t'(0)};
     assign ni_fields[2] = {wr_addr, wr_size, AtomicPkg::ATOP_NONE, CachePkg::CMO_NONE, 1'b0,
@@ -455,18 +493,16 @@ module Mig6Pe import Mig6Pkg::*; #(
     ReqMux #(.N_REQ(3), .REQ_WIDTH(NI_FIELDS), .RSP_WIDTH($bits(word_t)),
              .PENDING_WIDTH(DMA_PW + 1), .LEN_WIDTH(NET_LW)) u_net_mux(
             .clk, .rst_n,
-            .req_valid({wr_tgt_valid[NET], rd_tgt_valid[NET], tgt_valid[NET]}),
+            .req_valid({wr_tgt_valid[NET], rd_tgt_valid[NET], down_valid}),
             .req_ready(ni_ready),
-            .req_we({1'b1, 1'b0, mem_req.we}), .req_rsp({1'b0, 1'b1, mem_req.rsp}),
-            .req_len({NET_LW'(0), NET_LW'(rd_len), NET_LW'(0)}),
+            .req_we({1'b1, 1'b0, down_we}), .req_rsp({1'b0, 1'b1, down_rsp}),
+            .req_len({NET_LW'(0), NET_LW'(rd_len), down_len}),
             .req_fields(ni_fields), .rsp_valid(ni_rsp_valid), .rsp_data(net_rsp_data),
             .tgt_req_valid(net_valid), .tgt_req_ready(net_ready), .tgt_req_we(net_we),
             .tgt_req_rsp(net_rsp), .tgt_req_fields(net_fields),
             .tgt_rsp_valid(net_if_rsp_valid), .tgt_rsp_data(net_if_rsp_data));
     assign {net_addr, net_size, net_atop, net_cmo, net_excl, net_len, net_wdata, net_wstrb} =
            net_fields;
-    assign tgt_ready[NET]         = ni_ready[0];
-    assign tgt_rsp_valid[NET]     = ni_rsp_valid[0];
     assign rd_tgt_ready[NET]      = ni_ready[1];
     assign rd_tgt_rsp_valid[NET]  = ni_rsp_valid[1];
     assign wr_tgt_ready[NET]      = ni_ready[2];
