@@ -484,6 +484,12 @@ block:
     path: rtl/lib/block/req_burst_split
     test: test/block/req_burst_split
     kb: [rtl/lib/block/req_burst_split/design]
+  ReqDataWidthDown:
+    what: "Request data width downsizer: a request channel a line wide (LINE_WORDS words) to one a word wide that takes read bursts"
+    versions: [behave, struct]
+    path: rtl/lib/block/req_data_width_down
+    test: test/block/req_data_width_down
+    kb: [rtl/lib/block/req_data_width_down/design]
   ReqDemux:
     what: "Request demultiplexer: one request channel to one of N_TARGETS targets by a one-hot select, the answers back in order"
     versions: [behave, struct]
@@ -883,7 +889,7 @@ block:
       versions: [behave, struct]
       path: rtl/lib/block/noc/noc_virt_ch_in
       test: test/block/noc/noc_virt_ch_in
-      kb: [rtl/lib/block/noc/allocation, rtl/lib/block/noc/route_early]
+      kb: [rtl/lib/block/noc/allocation, rtl/lib/block/noc/combined_alloc, rtl/lib/block/noc/route_early]
     NocVirtChOut:
       what: "NoC virtual channel, the output end: one VC of the next router's input, as the sender sees it"
       versions: [behave, struct]
@@ -893,6 +899,7 @@ block:
       what: "NoC router of a 2D mesh with virtual channels, made of the NoC blocks (behave or struct, whichever versions the flist has)"
       path: rtl/lib/block/noc/noc_virt_ch_router
       test: test/block/noc/noc_virt_ch_router
+      kb: [rtl/lib/block/noc/combined_alloc]
     NocVirtChRtrAlloc:
       what: "Allocation of the NoC router with virtual channels: VC allocation and switch allocation of all its ports, from the input VCs' requests, wiring only"
       path: rtl/lib/block/noc/noc_virt_ch_rtr_alloc

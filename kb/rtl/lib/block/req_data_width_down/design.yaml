@@ -1,0 +1,54 @@
+type: decision
+title: ReqDataWidthDown turns a line-wide request channel into a word-wide one with read bursts
+date: 2026-11-25
+question: >
+  A cache's memory side is a line wide (Mig6's D-cache: 2 words); Mig6's network, its
+  interface Mig6PeNetIf and the shared memory behind it are a word wide and take read bursts
+  (kb rtl/lib/block/bursts). To cache the shared memory (the cached alias, Mig6 step A1) a
+  line must be read as a burst and answered as a line, and a write-through cache's stores
+  (a line write with strobes on the stored bytes only: kb rtl/lib/block/cache/uncached, the
+  cache control's memory side) must reach the word-wide memory. Where does the width change?
+decision: >
+  A library block, ReqDataWidthDown #(ADDR_WIDTH, WORD_WIDTH, LINE_WORDS, FIELDS_WIDTH,
+  LEN_WIDTH, PENDING_WIDTH), between the line-wide channel and the word-wide one (user's
+  choice (i), 2026-11-25; the name after Xilinx's AXI Data Width Converter, the direction
+  added; Arm calls it a downsizer, PULP axi_dw_downsizer, Rocket Chip TLWidthWidget). One
+  wide request is one narrow request: a line read a read burst of LINE_WORDS words at the
+  line, its words gathered into one line answer in the clock the last comes (bypassed); a
+  line write the one word with strobes, at its address, with its strobes (a CBO, no
+  strobes: word 0); a request of a word or less itself, the word its address names, its
+  answer word in every word of the line. A Fifo keeps whether each answered request is a
+  line read (answers in order); while full an answered request waits. Other sizes, a line
+  not aligned, a line read not answered and a line write spanning two words are assertions.
+  With LINE_WORDS 1 the block is wires. Struct: CmpEq, OrReduce per word, PriorityEncoder,
+  Mux2, MuxN, a Fifo, a Counter (wraps after the last word), a Decoder and a DffEn per
+  gathered word.
+why: >
+  The caches stay as they are (a line-wide memory side, used by Mig3 with a line-wide memory)
+  and a narrower memory gets the converter in front, as AXI systems do; a longer line
+  (Mig4) is a longer burst, nothing else. A line write needs no write burst (the channel has
+  none: one wdata a request) because a store never spans two words and the cache sends only
+  stores as line writes. One narrow request per wide request keeps the order and the
+  requester's records simple (taken in the same clock, answered in order).
+rejected:
+  - choice: Inside Mig6PeNetIf (a line-wide network interface)
+    why_not: Mig6 only; the DMA's word channel and the core's line channel would meet a
+      mixed-width interface.
+  - choice: The caches refill by bursts (a word-wide memory side, a line filled beat by beat)
+    why_not: The textbook end state, but every cache variant and Mig3's use of them change,
+      the largest step, for no gain at Mig6's 2-word lines.
+relies_on:
+  - rtl/lib/block/bursts
+  - rtl/lib/block/req_burst_split/design
+evidence: >
+  2026-11-25: test/block/req_data_width_down (behave and struct, Verilator and Icarus): random
+  line reads, line writes (one word's bytes or none), reads and writes of 1, 2 or 4 bytes
+  answered or not, held until taken; each take in the clock the target takes the expected
+  narrow request; the target answers every word in order 1 to 3 clocks apart, each word a
+  fixed function of its address, and every wide answer is checked in order; LINE_WORDS 2
+  (PENDING_WIDTH 1), 4 (2) and 1; covered: every kind, a line write with no strobes, an
+  answered request held by a full queue, a take in a clock with an answer. Mutants caught
+  (kb test/block/req_data_width_down/mutants).
+code:
+  - rtl/lib/block/req_data_width_down/behave/req_data_width_down.sv#g_words
+  - rtl/lib/block/req_data_width_down/struct/req_data_width_down.sv#u_fifo_kind

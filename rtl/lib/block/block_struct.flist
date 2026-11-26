@@ -6,6 +6,7 @@
 -F req_demux/struct/req_demux.flist
 -F req_mux/struct/req_mux.flist
 -F req_burst_split/struct/req_burst_split.flist
+-F req_data_width_down/struct/req_data_width_down.flist
 -F priority_encoder/struct/priority_encoder.flist
 -F shift_reg/struct/shift_reg.flist
 -F delay_line/struct/delay_line.flist

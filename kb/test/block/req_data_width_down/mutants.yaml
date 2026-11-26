@@ -1,0 +1,28 @@
+type: mutants
+title: Mutants of the ReqDataWidthDown test (behave and struct versions)
+date: 2026-11-25
+tests: [block_req_data_width_down_behave, block_req_data_width_down_struct]
+mutants:
+  - name: behave, a line read's burst a word short
+    edits:
+      - file: rtl/lib/block/req_data_width_down/behave/req_data_width_down.sv
+        old: "assign tgt_req_len    = line_rd ? LEN_WIDTH'(LINE_WORDS - 1) : '0;"
+        new: "assign tgt_req_len    = line_rd ? LEN_WIDTH'(LINE_WORDS - 2) : '0;"
+    expect: model
+  - name: behave, the gathered line's words in the wrong order
+    edits:
+      - file: rtl/lib/block/req_data_width_down/behave/req_data_width_down.sv
+        old: "assign rsp_data  = kind ? {tgt_rsp_data, gath} : {LINE_WORDS{tgt_rsp_data}};"
+        new: "assign rsp_data  = kind ? {gath, tgt_rsp_data} : {LINE_WORDS{tgt_rsp_data}};"
+    expect: model
+  - name: struct, a line write goes as the word its address names, not the strobed one
+    edits:
+      - file: rtl/lib/block/req_data_width_down/struct/req_data_width_down.sv
+        old: ".sel(line_wr), .out(idx)"
+        new: ".sel(line_wr & 1'b0), .out(idx)"
+    expect: model
+  - name: struct, a full queue does not hold an answered request back
+    edits:
+      - file: rtl/lib/block/req_data_width_down/struct/req_data_width_down.sv
+        old: ".in1(req_rsp), .in2(full), .out(blocked)"
+        new: ".in1(req_rsp), .in2(full & 1'b0), .out(blocked)"

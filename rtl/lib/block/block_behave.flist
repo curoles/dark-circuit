@@ -6,6 +6,7 @@
 -F req_demux/behave/req_demux.flist
 -F req_mux/behave/req_mux.flist
 -F req_burst_split/behave/req_burst_split.flist
+-F req_data_width_down/behave/req_data_width_down.flist
 -F priority_encoder/behave/priority_encoder.flist
 -F shift_reg/behave/shift_reg.flist
 -F delay_line/behave/delay_line.flist
