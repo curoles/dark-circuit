@@ -9,7 +9,7 @@
 #pragma once
 {% for r in regions %}
 
-/* {{ r.name }}: {{ r.desc }} (target: {{ r.target }}) */
+/* {{ r.name }}: {{ r.desc }} (target: {{ r.target }}{{ ", alias of " ~ r.alias_of if r.alias_of }}) */
 #define MIG6_PMA_{{ r.NAME }}_BASE {{ r.base | c_hex }}
 #define MIG6_PMA_{{ r.NAME }}_SIZE {{ r.size | c_hex }}
 #define MIG6_PMA_{{ r.NAME }}_ADDR_WIDTH {{ r.addr_width }}

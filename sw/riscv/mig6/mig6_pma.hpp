@@ -144,6 +144,32 @@ namespace shared {
     inline volatile T* at(uint32_t offset) { return reinterpret_cast<volatile T*>(base + offset); }
 }   // namespace shared
 
+// shared_cached: the shared memory, cacheable
+namespace shared_cached {
+    constexpr uint32_t base       = MIG6_PMA_SHARED_CACHED_BASE;
+    constexpr uint32_t size       = MIG6_PMA_SHARED_CACHED_SIZE;
+    constexpr uint32_t addr_width = MIG6_PMA_SHARED_CACHED_ADDR_WIDTH;
+    constexpr bool     cacheable  = MIG6_PMA_SHARED_CACHED_CACHEABLE;
+    constexpr bool     io         = MIG6_PMA_SHARED_CACHED_IO;
+    constexpr bool     atomics    = MIG6_PMA_SHARED_CACHED_ATOMICS;
+    constexpr bool     reservable = MIG6_PMA_SHARED_CACHED_RESERVABLE;
+    constexpr target_t target     = target_t::net;
+    constexpr attributes_t attributes = {true, cacheable, io, atomics, reservable, target};
+
+    constexpr bool contains(uint32_t addr) { return addr - base < size; }
+
+    template <typename T, uint32_t offset>
+    inline volatile T* at()
+    {
+        static_assert(offset < size && sizeof(T) <= size - offset,
+                      "at<T, offset>: the T at offset is not inside the region shared_cached");
+        return reinterpret_cast<volatile T*>(base + offset);
+    }
+
+    template <typename T>
+    inline volatile T* at(uint32_t offset) { return reinterpret_cast<volatile T*>(base + offset); }
+}   // namespace shared_cached
+
 // The attributes of the region that holds addr; hit false (all false) when none does.
 constexpr attributes_t pma_of(uint32_t addr)
 {
@@ -155,6 +181,8 @@ constexpr attributes_t pma_of(uint32_t addr)
         return dma::attributes;
     if (shared::contains(addr))
         return shared::attributes;
+    if (shared_cached::contains(addr))
+        return shared_cached::attributes;
     return {false, false, false, false, false, target_t::local};
 }
 

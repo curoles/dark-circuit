@@ -6,7 +6,9 @@
 // inside it) and <NAME>_PMA, its attributes (pma_t). pma_of(addr) gives the attributes of
 // the region that holds addr (hit 1), or all 0 when none does; a region decodes by its top
 // address bits, a base being a multiple of its size. The parts ask the attributes by name:
-// the caches cacheable, a PE target, the assertions atomics and io.
+// the caches cacheable, a PE target, the assertions atomics and io. phys_of(addr) is the
+// address beyond the PE: an alias's (a second window onto a region, alias_of in the YAML)
+// in the region it aliases, so the network and the memory see one address per byte.
 package Mig6PmaPkg;
 
     // Where a PE sends an access.
@@ -51,5 +53,15 @@ package Mig6PmaPkg;
         return '0;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
+
+    // The address an access has beyond the PE (its network interface, the memory): in an
+    // alias, the same offset in the region it aliases; any other address as it is.
+    function automatic logic [31:0] phys_of(logic [31:0] addr);
+{% for r in regions if r.alias %}
+        if (addr[31:{{ r.addr_width }}] == {{ r.top | sv_hex(32 - r.addr_width) }})   // {{ r.name }}
+            return {{ '{' }}{{ r.alias.top | sv_hex(32 - r.addr_width) }}, addr[{{ r.addr_width - 1 }}:0]{{ '}' }};   // {{ r.alias.name }}
+{% endfor %}
+        return addr;
+    endfunction
 
 endpackage

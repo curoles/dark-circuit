@@ -44,7 +44,9 @@
  * line write (a write-through store to such a region) the one word with its bytes; a
  * request of a word or less the word its address names, its answer in every word of the
  * line. The DMA's and the PLIC's registers take the core's word the same way (core_wdata),
- * their answers in every word.
+ * their answers in every word. A request to the network leaves with its address in the
+ * region it aliases when its region is an alias (shared_cached: shared's; Mig6PmaPkg's
+ * phys_of), so the network and the shared memory see one address per byte.
  *
  * LR/SC on the local memory are decided at its port, where every request to it passes (the
  * core's data, the I-cache's misses, the DMA's), by an exclusive monitor (the library's
@@ -507,11 +509,14 @@ module Mig6Pe import Mig6Pkg::*; #(
     assign rd_tgt_rsp_valid[NET]  = ni_rsp_valid[1];
     assign wr_tgt_ready[NET]      = ni_ready[2];
 
+    // The network interface: an alias's address (shared_cached) leaves as the region's it
+    // aliases (Mig6PmaPkg::phys_of), so the network and the shared memory see one address
+    // per byte, the core's requests and the DMA's alike.
     Mig6PeNetIf #(.MY_PE_GRID_X(MY_PE_GRID_X), .MY_PE_GRID_Y(MY_PE_GRID_Y),
                   .BUF_DEPTH(NOC_BUF_DEPTH)) u_net_if(
         .clk, .rst_n,
         .req_valid(net_valid), .req_ready(net_ready), .req_we(net_we),
-        .req_addr(net_addr), .req_size(net_size), .req_atop(net_atop),
+        .req_addr(Mig6PmaPkg::phys_of(net_addr)), .req_size(net_size), .req_atop(net_atop),
         .req_cmo(net_cmo), .req_excl(net_excl), .req_len(net_len), .req_rsp(net_rsp),
         .req_wdata(net_wdata), .req_wstrb(net_wstrb),
         .rsp_valid(net_if_rsp_valid), .rsp_data(net_if_rsp_data),

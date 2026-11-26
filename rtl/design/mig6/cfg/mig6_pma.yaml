@@ -7,10 +7,16 @@
 #   cacheable   the core's caches may hold it
 #   io          accesses have side effects: never speculated, merged or repeated
 #   atomics     AMOs allowed (an AtomicUnit at the target does them)
-#   reservable  LR/SC allowed (a reservation works for it: the core's when cacheable,
-#               the memory's exclusive monitor when not)
+#   reservable  LR/SC allowed (the caches send them to the target, cached or not: its
+#               exclusive monitor holds the reservation)
 #   target      where a PE sends the access: local (its local memory), net (its network
 #               interface: the shared memory), devices (none in Mig6 yet)
+# Optional:
+#   alias_of    the region is a second window onto that region (the same memory, the same
+#               size and target), as MIPS's kseg0 and kseg1: a PE uses either address,
+#               and beyond its network interface the access has the other region's
+#               (Mig6PmaPkg::phys_of), so the network and the memory see one address per
+#               byte (their exclusive monitor among them)
 # Addresses in no region are an error (an access fault, later).
 
 regions:
@@ -46,7 +52,7 @@ regions:
 
   - name: shared
     base: 0x80000000        # where RISC-V platforms put main memory
-    size: 0x00100000        # 1 MiB: the shared RAM, no mirroring
+    size: 0x00100000        # 1 MiB: the shared RAM (shared_cached: a second window onto it)
     desc: the shared memory at the mesh's edge, one copy that all PEs share
     # Mig6Pe: a_no_net, until its network interface is wired
     target: net
@@ -54,6 +60,17 @@ regions:
     io: no
     atomics: yes            # the AtomicUnit in front of the shared RAM: the barrier
     reservable: yes         # LR/SC at the memory, its exclusive monitor (far: not cached)
+
+  - name: shared_cached
+    base: 0x90000000
+    size: 0x00100000        # 1 MiB: shared's
+    desc: the shared memory, cacheable
+    alias_of: shared        # the PE's network interface sends shared's address
+    target: net
+    cacheable: yes          # the D-cache, write-through: only stale reads, cbo.inval
+    io: no
+    atomics: yes            # at shared's AtomicUnit (the cache drops its copy of the line)
+    reservable: yes         # at shared's monitor, the same address (the cache drops the line)
 
 # Generated files: template in this directory -> output relative to repository root.
 generate:

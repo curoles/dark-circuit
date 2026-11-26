@@ -217,8 +217,10 @@ writes it. Mig6 keeps one copy of everything, for now:
 
 - **Local memory is private, and no cache holds it:** a scratchpad on the core's data
   port (code is copied into the I-cache, read only, as code always is).
-- **Shared memory is never cached.** Every load and store to it goes through the NoC to the
-  memory (Mig3's uncached requests); the only copy is there.
+- **Shared memory is not cached** through its region `shared`: every load and store to it
+  goes through the NoC to the memory (Mig3's uncached requests); the only copy is there.
+  Data a program chooses to cache goes through a second window, `shared_cached` (Ways to
+  cache shared data, below).
 - **Synchronization by atomics at the memory:** a barrier is an `amoadd` on a counter in
   shared memory, done by AtomicUnit next to the RAM, the only place the counter lives.
 
@@ -244,18 +246,25 @@ the next) is worth a fast copy. Two ways, both meant to be used, each where it f
   spins on a cached copy would spin forever. One alias per address within a phase: a store
   through the uncached region does not update a copy cached through the other.
 
-For now only the uncached region exists; the alias is one more row of the map when a
-measured case needs it. Should shared data ever stay cached without such rules, coherence
-comes back as a choice: a directory protocol (MSI/MESI).
+The alias is the region `shared_cached` (step A1, 2026-11-26): the same 1 MiB at
+`0x90000000`, `alias_of: shared`. A PE's caches see its own address (the D-cache keeps its
+lines); beyond the PE's network interface the access has shared's address (Mig6PmaPkg's
+`phys_of`: the top bits replaced, the offset kept), so the network and the shared memory
+see one address per byte: an LR through one window and a store through the other meet at
+the exclusive monitor, and AMOs and LR/SC are allowed through either (the cache sends them
+to the memory and drops its copy of the line). A line fill is one read burst
+(ReqDataWidthDown in front of the network interface). Should shared data ever stay cached
+without such rules, coherence comes back as a choice: a directory protocol (MSI/MESI).
 
 ## The memory map, for now
 
 `cfg/mig6_pma.yaml`, PMA-style (physical memory attributes, as the RISC-V privileged spec
 names them): every region with the properties hardware asks, each by name, so that no part
 decides by "is it I/O?". `tools/pma_gen.py` checks the map (no overlaps, sizes powers of 2,
-bases multiples of their sizes, an io region not cacheable) and generates Mig6PmaPkg
-(`pma_of(addr)` for the caches, Mig6Pe and its assertions), `sw/riscv/mig6/mig6_pma.h` and
-`mig6_pma.hpp` for programs, and the linker script `mig6.ld`.
+bases multiples of their sizes, an io region not cacheable, an alias onto a region of its
+size and target) and generates Mig6PmaPkg (`pma_of(addr)` for the caches, Mig6Pe and its
+assertions; `phys_of(addr)` for the network interface's address), `sw/riscv/mig6/mig6_pma.h`
+and `mig6_pma.hpp` for programs, and the linker script `mig6.ld`.
 
 - **local** at `0x00000000`, 64 KiB: a PE's local memory, code and data, the same addresses
   in every PE (one binary for all); not cacheable: a scratchpad on the core's data port;
@@ -271,6 +280,10 @@ bases multiples of their sizes, an io region not cacheable) and generates Mig6Pm
   memory at the mesh's edge, through the PE's network interface; never cached (one copy);
   AMOs (the AtomicUnit in front of it); reservable, LR/SC done at the memory by its
   exclusive monitor (a reservable region behind the network: the core sends them far).
+- **shared_cached** at `0x90000000`, 1 MiB: the shared memory again (`alias_of: shared`),
+  cacheable: the D-cache keeps its lines; the PE's network interface sends shared's
+  address, so AMOs and LR/SC work as through shared. For data written in one phase and
+  read in the next, `cbo.inval` of the range after the barrier (Ways to cache shared data).
 - **Other PEs' local memories** over the NoC: not needed by the first target; later, as more
   regions with target net.
 

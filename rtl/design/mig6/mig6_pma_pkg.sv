@@ -6,7 +6,9 @@
 // inside it) and <NAME>_PMA, its attributes (pma_t). pma_of(addr) gives the attributes of
 // the region that holds addr (hit 1), or all 0 when none does; a region decodes by its top
 // address bits, a base being a multiple of its size. The parts ask the attributes by name:
-// the caches cacheable, a PE target, the assertions atomics and io.
+// the caches cacheable, a PE target, the assertions atomics and io. phys_of(addr) is the
+// address beyond the PE: an alias's (a second window onto a region, alias_of in the YAML)
+// in the region it aliases, so the network and the memory see one address per byte.
 package Mig6PmaPkg;
 
     // Where a PE sends an access.
@@ -60,6 +62,14 @@ package Mig6PmaPkg;
     // hit, cacheable, io, atomics, reservable, target
     localparam pma_t        SHARED_PMA        =
         pma_t'({1'b1, 1'b0, 1'b0, 1'b1, 1'b1, TARGET_NET});
+
+    // shared_cached: the shared memory, cacheable
+    localparam logic [31:0] SHARED_CACHED_BASE       = 32'h9000_0000;
+    localparam logic [31:0] SHARED_CACHED_SIZE       = 32'h0010_0000;
+    localparam int          SHARED_CACHED_ADDR_WIDTH = 20;
+    // hit, cacheable, io, atomics, reservable, target
+    localparam pma_t        SHARED_CACHED_PMA        =
+        pma_t'({1'b1, 1'b1, 1'b0, 1'b1, 1'b1, TARGET_NET});
     /* verilator lint_on UNUSEDPARAM */
 
     // The attributes of the region that holds addr, all 0 (hit 0) when none does. A region
@@ -74,8 +84,18 @@ package Mig6PmaPkg;
             return DMA_PMA;
         if (addr[31:20] == 12'h800)
             return SHARED_PMA;
+        if (addr[31:20] == 12'h900)
+            return SHARED_CACHED_PMA;
         return '0;
     endfunction
     /* verilator lint_on UNUSEDSIGNAL */
+
+    // The address an access has beyond the PE (its network interface, the memory): in an
+    // alias, the same offset in the region it aliases; any other address as it is.
+    function automatic logic [31:0] phys_of(logic [31:0] addr);
+        if (addr[31:20] == 12'h900)   // shared_cached
+            return {12'h800, addr[19:0]};   // shared
+        return addr;
+    endfunction
 
 endpackage
