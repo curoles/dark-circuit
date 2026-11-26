@@ -110,7 +110,8 @@ library once the format settles, after the layer runs. A message's head is the l
   an ATOMIC (DATA), an SC's status (ACK: RISC-V's SC result, 0 success, 1 failure, what the
   core writes to rd; as AXI answers a write on B, OKAY or EXOKAY); a burst's DATA is its
   head with the first word and a body flit for each next. One packet, not a packet a word:
-  a router passes a head flit every 3 clocks and body flits one a clock.
+  when this was decided a router passed a head flit every 3 clocks and body flits one a
+  clock (now 1 clock a head: kb rtl/design/mig6/noc_alloc), and a head costs its fields.
 - **LR and SC are opcodes,** the exclusive READ and WRITE (the request channel's
   `req_excl`).
 - **No IDs:** an answer goes to the request's `src`. A PE's requests and answers stay in
@@ -399,8 +400,14 @@ Every hart ends its program with a semihosting exit; each PE's debugger in the t
       ask VC allocation in the clock it reaches the front (kb rtl/lib/block/noc/route_early:
       2 clocks a router instead of 3, the same longest path); Mig6 uses it (cfg noc_route;
       done 2026-11-24: kb rtl/design/mig6/noc_route; a far 4-byte copy 58 to 50 cycles,
-      fc_layer_dma 3 075 to 3 016 cycles, 3.06 times one PE). Next: speculative allocation
-      (VC and switch allocation in one clock: 1 clock a router).
+      fc_layer_dma 3 075 to 3 016 cycles, 3.06 times one PE). Then combined allocation
+      instead of the textbook's speculative one (a head given its output VC as it wins the
+      switch, valid for XY routing with any free VC of a port: kb
+      rtl/lib/block/noc/combined_alloc; 1 clock a router, the router's longest path 3.76 to
+      5.18 ns at one VC, under Mig6Core's 5.5): Mig6 uses it (cfg noc_alloc; done
+      2026-11-25: kb rtl/design/mig6/noc_alloc; a far 4-byte copy 50 to 42 cycles, all four
+      PEs 376 to 344, fc_layer_dma 3 016 to 2 956 cycles, 3.12 times one PE). The router
+      track ends here; lookahead routing is the lever if a network needs more VCs.
    c. The cached alias of the shared memory (a region, the D-cache's first use): the weights
       by loads through the D-cache, a third way to compare.
 9. Then the engine in a PE (a small int8 matrix unit, the systolic sketch in rtl/lib/ai),

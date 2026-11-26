@@ -48,6 +48,10 @@ module Mig6Noc import Mig6NocPkg::*; #(
     // @kb: rtl/design/mig6/noc_route
     localparam ROUTE = (CFG.noc_route == Mig6ConfigPkg::NOC_ROUTE_EARLY) ? NocPkg::ROUTE_EARLY
                                                                         : NocPkg::ROUTE_REGISTERED;
+    // Who gives their heads the output VC (CFG.noc_alloc; kb rtl/design/mig6/noc_alloc).
+    // @kb: rtl/design/mig6/noc_alloc
+    localparam ALLOC = (CFG.noc_alloc == Mig6ConfigPkg::NOC_ALLOC_COMBINED) ? NocPkg::ALLOC_COMBINED
+                                                                           : NocPkg::ALLOC_SEPARATE;
 
     // The edge links of the two meshes, per side. Only the memory's carry anything: the
     // others' credits are not read, nor their flits but for valid (a_no_stray_flit).
@@ -89,7 +93,8 @@ module Mig6Noc import Mig6NocPkg::*; #(
 
     NocMesh #(.X_SIZE(MESH_X), .Y_SIZE(MESH_Y), .X0(0), .Y0(0), .X_WIDTH(X_WIDTH),
               .Y_WIDTH(Y_WIDTH), .NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH),
-              .DATA_WIDTH(REQ_DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE)) u_req_mesh(
+              .DATA_WIDTH(REQ_DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE),
+              .ALLOC(ALLOC)) u_req_mesh(
         .clk, .rst_n,
         .local_in_fwd(pe_req_fwd), .local_in_bwd(pe_req_bwd),
         .local_out_fwd(req_local_out_fwd), .local_out_bwd('0),
@@ -104,7 +109,8 @@ module Mig6Noc import Mig6NocPkg::*; #(
 
     NocMesh #(.X_SIZE(MESH_X), .Y_SIZE(MESH_Y), .X0(0), .Y0(0), .X_WIDTH(X_WIDTH),
               .Y_WIDTH(Y_WIDTH), .NUM_VCS(NUM_VCS), .BUF_DEPTH(BUF_DEPTH),
-              .DATA_WIDTH(RSP_DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE)) u_rsp_mesh(
+              .DATA_WIDTH(RSP_DATA_WIDTH), .LINK_DELAY(LINK_DELAY), .ROUTE(ROUTE),
+              .ALLOC(ALLOC)) u_rsp_mesh(
         .clk, .rst_n,
         .local_in_fwd('0), .local_in_bwd(rsp_local_in_bwd),
         .local_out_fwd(pe_rsp_fwd), .local_out_bwd(pe_rsp_bwd),

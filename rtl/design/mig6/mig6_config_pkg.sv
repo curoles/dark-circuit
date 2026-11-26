@@ -13,6 +13,12 @@ package Mig6ConfigPkg;
         NOC_ROUTE_EARLY      = 2'd1    // in the clock it reaches the front: 2 clocks a router
     } noc_route_e;
 
+    // Who gives a router's head its output VC (the library's NocPkg::ALLOC_*).
+    typedef enum logic [1:0] {
+        NOC_ALLOC_SEPARATE   = 2'd0,   // VC allocation, then the switch in a later clock
+        NOC_ALLOC_COMBINED   = 2'd1    // the switch, as the head wins it: a clock less a router
+    } noc_alloc_e;
+
     typedef struct packed {
         logic [31:0] rst_addr;         // PC after reset, byte address
         int unsigned btb_index_width;  // BTB in IF: 1 << btb_index_width entries
@@ -29,6 +35,7 @@ package Mig6ConfigPkg;
         int unsigned dma_max_burst;        // ... words of a read burst, a power of 2
         int unsigned noc_buf_depth;        // the routers' input buffers: flits a VC, credits
         noc_route_e  noc_route;            // ... when a head asks VC allocation
+        noc_alloc_e  noc_alloc;            // ... who gives a head its output VC
     } mig6_cfg_t;
 
     localparam mig6_cfg_t MIG6_CFG = '{
@@ -44,7 +51,8 @@ package Mig6ConfigPkg;
         dma_depth:         8,
         dma_max_burst:     8,
         noc_buf_depth:     8,
-        noc_route:         NOC_ROUTE_EARLY
+        noc_route:         NOC_ROUTE_EARLY,
+        noc_alloc:         NOC_ALLOC_COMBINED
     };
 
 endpackage

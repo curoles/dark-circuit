@@ -1,0 +1,40 @@
+type: decision
+title: Mig6's routers give a head its output VC at the switch (ALLOC_COMBINED), 1 clock a router
+date: 2026-11-25
+question: >
+  The library's router can give a head its output VC in the clock it wins the switch, with no
+  VC allocation stage (kb rtl/lib/block/noc/combined_alloc): with ROUTE_EARLY 1 clock a router
+  instead of 2, at the price of a longer path (sky130, 1 VC: 3.76 to 5.18 ns, against Mig3's
+  5.5 ns clock; 2 VCs 6.35 ns, which does not fit). Should Mig6, whose two networks have one
+  VC each, use it?
+decision: >
+  Yes (user's choice (a), 2026-11-25): a knob noc_alloc in cfg/mig6_config.yaml (separate or
+  combined; an enum, noc_alloc_e, in Mig6ConfigPkg), combined; Mig6Noc reads it from the
+  config struct and gives both meshes NocPkg::ALLOC_COMBINED, with ROUTE_EARLY (noc_route).
+  Separate stays one line away. The router track ends here for Mig6: a router of 1 clock.
+why: >
+  Measured on the base of kb rtl/design/mig6/noc_route (buffers of 8, bursts of 8, early
+  routes): dma_check far PE alone 4 bytes 50 to 42 cycles, 64 bytes 66 to 58, 320 bytes 144
+  to 128, all four PEs at once 376 to 344 (local to local 192 throughout: no network);
+  fc_layer_dma 3 016 to 2 956 cycles, 3.06 to 3.12 times one PE (a PE's fetch 368..483 to
+  320..435 cycles). The router's longest path, 5.18 ns at 1 VC, stays under Mig6Core's own
+  (5.5 ns, design_mig6 synthesis: the ID/EX register to the rs1 read, no router in it), so
+  the clock is not the router's; the margin is 0.3 ns, less than ABC's spread (kb
+  cmake/abc_spread), to be watched when the router or the core changes.
+rejected:
+  - choice: Lookahead routing first (the route from a flop, about 4.5 ns at 1 VC)
+    why_not: A route field in every head of both networks and every network interface, for
+      margin Mig6 does not need at one VC; it is the lever when a design needs more VCs at
+      this clock (kb rtl/lib/block/noc/combined_alloc).
+  - choice: Keep separate allocation (3.76 ns, 2 clocks a router)
+    why_not: Gives up the clock a hop that the router track set out to cut, while the path
+      still fits under the core's.
+relies_on:
+  - rtl/lib/block/noc/combined_alloc
+  - rtl/design/mig6/noc_route
+evidence: >
+  2026-11-25: Mig6's 20 tests pass with noc_alloc combined; dma_check and fc_layer_dma print
+  the numbers above (fc_layer_dma rounds 0..2: 2 975, 2 956, 2 969 cycles; 3.10, 3.12, 3.09).
+code:
+  - rtl/design/mig6/cfg/mig6_config.yaml#noc_alloc
+  - rtl/design/mig6/mig6_noc.sv#ALLOC
